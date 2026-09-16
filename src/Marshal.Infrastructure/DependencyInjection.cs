@@ -1,7 +1,9 @@
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
+using Marshal.Infrastructure.Calendar;
 using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Notifications;
 using Marshal.Infrastructure.Repositories;
@@ -73,6 +75,14 @@ public static class DependencyInjection
         services.AddSingleton<IReminderLog, ReminderLog>();
         services.AddSingleton<InAppNotifier>();
         services.AddSingleton<INotifier>(sp => sp.GetRequiredService<InAppNotifier>());
+
+        services.AddSingleton<ICalendarStore, CalendarStore>();
+        services.AddSingleton<CalendarSyncService>();
+
+        // Kanał iCal działa bez żadnych poświadczeń, więc jest podłączony od razu.
+        // Kalendarz Google dochodzi dopiero po zalogowaniu — zob. GoogleDriveFactory.
+        services.AddSingleton<HttpClient>();
+        services.AddSingleton<ICalendarFeed, IcalFeed>();
 
         services.AddSingleton<IReviewQueries, ReviewQueries>();
         services.AddSingleton<IReviewSessionRepository, ReviewSessionRepository>();
