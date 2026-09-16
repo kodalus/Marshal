@@ -45,3 +45,7 @@ KEEP|src/Marshal.UI/Themes/tokens/Colors.axaml
 KEEP|src/Marshal.Application/UseCases/Exports/ExportBackup.cs
 KEEP|src/Marshal.Infrastructure/Google/TokenStore.cs
 KEEP|tests/Marshal.Tests/fixtures/backups/sample.json
+KEEP|src/Marshal.Infrastructure/Backup/BackupService.cs
+KEEP|src/Marshal.UI/Views/Backup/BackupView.axaml
+KEEP|tests/Marshal.Tests/Backup/BackupServiceTests.cs
+IGN|Backup1/Marshal.csproj

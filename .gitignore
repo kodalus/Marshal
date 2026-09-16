@@ -255,7 +255,13 @@ Generated_Code/
 
 # Backup & report files from converting an old project file
 _UpgradeReport_Files/
-Backup*/
+# Zakotwiczone w korzeniu. Niezakotwiczone „Backup*/" pochłonęło katalog
+# src/Marshal.Infrastructure/Backup — bez śladu w `git status`, bo katalog
+# ignorowany nie jest nawet wymieniany. Wyszło dopiero w CI, jako brak
+# przestrzeni nazw. Śmieć studia, którego ten wzorzec nie złapie, zobaczę
+# w `git status`; źródła, które pochłonie, nie zobaczę nigdzie.
+/Backup*/
+/_UpgradeReport_Files/
 UpgradeLog*.XML
 UpgradeLog*.htm
 ServiceFabricBackup/
