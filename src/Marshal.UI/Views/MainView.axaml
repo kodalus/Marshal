@@ -56,6 +56,9 @@
       <Button Classes="nav" Command="{Binding ShowProjectsCommand}" Content="Projekty" />
     </StackPanel>
 
+    <!-- Ekrany leżą na sobie w jednej komórce; widoczny jest zawsze jeden. -->
+    <Grid>
+
     <!-- Skrzynka -->
     <DockPanel IsVisible="{Binding IsInbox}">
       <Button DockPanel.Dock="Bottom" Margin="0,12,0,0"
@@ -75,9 +78,9 @@
     </DockPanel>
 
     <!-- Przetwarzanie: jedna pozycja, bez listy w tle -->
-    <ScrollViewer IsVisible="{Binding IsClarify}" DataContext="{Binding Clarify}"
+    <ScrollViewer IsVisible="{Binding IsClarify}" DataContext="{Binding Clarify}">
+      <StackPanel MaxWidth="560" HorizontalAlignment="Center"
                   x:DataType="vm:ClarifyViewModel">
-      <StackPanel MaxWidth="560" HorizontalAlignment="Center">
 
         <TextBlock Classes="hint" HorizontalAlignment="Center"
                    Text="{Binding Remaining, StringFormat='Do rozstrzygnięcia: {0}'}" />
@@ -149,5 +152,6 @@
       </ListBox.ItemTemplate>
     </ListBox>
 
+    </Grid>
   </DockPanel>
 </UserControl>
