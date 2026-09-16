@@ -1,9 +1,11 @@
 using FluentAssertions;
 using Marshal.Application.Abstractions;
+using Marshal.Application.Sync;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Sync;
+using Marshal.Infrastructure.Sync.Google;
 using Marshal.Infrastructure.Time;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +27,11 @@ public sealed class SyncEngineTests : IDisposable
     private sealed class Urzadzenie : IDisposable
     {
         public Urzadzenie(string id, string katalog)
+            : this(id, new LocalFolderTransport(katalog))
+        {
+        }
+
+        public Urzadzenie(string id, ISyncTransport skladnica)
         {
             Id = id;
             Connection = new SqliteConnection("Filename=:memory:");
@@ -36,7 +43,7 @@ public sealed class SyncEngineTests : IDisposable
                     .Options);
             Db.Database.Migrate();
             Hlc = new HlcSource(Zegar, id);
-            Engine = new SyncEngine(Db, new LocalFolderTransport(katalog), Hlc, id);
+            Engine = new SyncEngine(Db, skladnica, Hlc, id);
         }
 
         public string Id { get; }
@@ -257,6 +264,30 @@ public sealed class SyncEngineTests : IDisposable
         await _telefon.Engine.SyncAsync();
 
         _telefon.Db.Tasks.Select(t => t.Title).Should().BeEquivalentTo(["pierwsze", "drugie"]);
+    }
+
+    [Fact]
+    public async Task Cala_droga_dziala_tak_samo_przez_skladnice_Dysku()
+    {
+        // Ten sam scenariusz co przez katalog, ale na kształcie, który narzuca Dysk:
+        // płaskie nazwy plików zamiast katalogów na urządzenie. Jeśli scalanie zależy
+        // od czegoś, co daje tylko system plików, to pęknie tutaj.
+        var dysk = new FakeDrive();
+        using var biurko = new Urzadzenie("biurko", new GoogleDriveTransport(dysk));
+        using var telefon = new Urzadzenie("telefon", new GoogleDriveTransport(dysk));
+
+        var id = Dodaj(biurko, "Zadzwonić do przychodni");
+        await biurko.Engine.SyncAsync();
+        await telefon.Engine.SyncAsync();
+
+        telefon.Zadanie(id)!.Title.Should().Be("Zadzwonić do przychodni");
+
+        telefon.Db.Tasks.Single(t => t.Id == id).Rename("Umówić wizytę", telefon.Hlc.Next());
+        telefon.Db.SaveChanges();
+        await telefon.Engine.SyncAsync();
+        await biurko.Engine.SyncAsync();
+
+        biurko.Zadanie(id)!.Title.Should().Be("Umówić wizytę");
     }
 
     [Fact]

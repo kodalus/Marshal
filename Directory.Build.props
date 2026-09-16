@@ -8,5 +8,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <AvaloniaVersion>11.*</AvaloniaVersion>
     <EfCoreVersion>10.0.11</EfCoreVersion>
+    <GoogleApisVersion>1.76.0</GoogleApisVersion>
+    <!-- Pakiety wygenerowane z opisu API mają czwarty człon wersji własny dla każdego API. -->
+    <GoogleDriveVersion>1.76.0.4261</GoogleDriveVersion>
   </PropertyGroup>
 </Project>
