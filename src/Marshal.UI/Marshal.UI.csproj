@@ -10,7 +10,7 @@
     <PackageReference Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.*" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="$(EfCoreVersion)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Marshal.Infrastructure\Marshal.Infrastructure.csproj" />
