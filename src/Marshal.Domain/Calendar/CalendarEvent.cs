@@ -31,7 +31,12 @@ public sealed class CalendarEvent
         DateTimeOffset startsAt,
         DateTimeOffset endsAt,
         bool isAllDay,
-        string? location = null)
+        string? location = null,
+
+        // Odwołane od razu przy pierwszym zobaczeniu. Brak tego parametru sprawiał, że
+        // wydarzenie utworzone i odwołane **między dwoma pobraniami** zapisywało się jako
+        // żywe i stawało na siatce jako spotkanie, którego nie ma.
+        bool cancelled = false)
     {
         SourceId = sourceId;
         ExternalId = externalId;
@@ -40,6 +45,7 @@ public sealed class CalendarEvent
         EndsAt = endsAt;
         IsAllDay = isAllDay;
         Location = location;
+        Cancelled = cancelled;
     }
 
     public Guid SourceId { get; private set; }

@@ -78,7 +78,7 @@ public sealed class CalendarStore(MarshalDbContext db) : ICalendarStore
                 db.CalendarEvents.Add(new CalendarEvent(
                     sourceId, wydarzenie.ExternalId, wydarzenie.Title,
                     wydarzenie.StartsAt, wydarzenie.EndsAt, wydarzenie.IsAllDay,
-                    wydarzenie.Location));
+                    wydarzenie.Location, wydarzenie.Cancelled));
             }
         }
     }
