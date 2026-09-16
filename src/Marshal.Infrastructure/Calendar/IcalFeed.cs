@@ -1,6 +1,6 @@
-using Ical.Net.CalendarComponents;
 using Marshal.Application.Calendar;
 using Marshal.Domain.Calendar;
+using IcalEvent = Ical.Net.CalendarComponents.CalendarEvent;
 
 namespace Marshal.Infrastructure.Calendar;
 
@@ -13,8 +13,8 @@ namespace Marshal.Infrastructure.Calendar;
 /// odświeżanym co godzinę to kilkadziesiąt kilobajtów i nie ma czego optymalizować.
 /// </para>
 /// <para>
-/// <b>Nie sprawdzone na żywym kanale.</b> Rozbiór treści ma testy na wpisanym wprost
-/// pliku; nieprzetestowane zostaje samo pobranie po sieci.
+/// <b>Nie sprawdzone na żywym kanale.</b> Rozbiór treści ma testy na pliku wpisanym
+/// wprost; nieprzetestowane zostaje samo pobranie po sieci.
 /// </para>
 /// </remarks>
 public sealed class IcalFeed(HttpClient http) : ICalendarFeed
@@ -47,34 +47,32 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
         var kalendarz = Ical.Net.Calendar.Load(content);
         var wynik = new List<FeedEvent>();
 
-        foreach (var wystapienie in kalendarz.GetOccurrences(now.AddMonths(-WindowMonths), now.AddMonths(WindowMonths)))
+        var wystapienia = kalendarz.GetOccurrences(
+            now.AddMonths(-WindowMonths), now.AddMonths(WindowMonths));
+
+        foreach (var wystapienie in wystapienia)
         {
-            if (wystapienie.Source is not CalendarEvent wydarzenie)
+            if (wystapienie.Source is not IcalEvent wydarzenie)
             {
                 continue;
             }
 
-            var start = new DateTimeOffset(wystapienie.Period.StartTime.AsDateTimeOffset.DateTime,
-                wystapienie.Period.StartTime.AsDateTimeOffset.Offset);
-            var koniec = wystapienie.Period.EndTime is { } k
-                ? new DateTimeOffset(k.AsDateTimeOffset.DateTime, k.AsDateTimeOffset.Offset)
-                : start.AddHours(1);
-
-            // Wydarzenie całodniowe poznaje się w iCal po dacie bez pory dnia,
-            // nie po osobnym polu.
-            var calodniowe = !wystapienie.Period.StartTime.HasTime;
-
-            // Identyfikator musi rozróżniać wystąpienia serii: wszystkie mają ten sam
-            // UID, więc bez daty w kluczu cotygodniowe spotkanie zapisałoby się raz.
-            var id = $"{wydarzenie.Uid}|{start:yyyy-MM-ddTHH:mm:ssK}";
+            var start = wystapienie.Period.StartTime.AsDateTimeOffset;
+            var koniec = wystapienie.Period.EndTime?.AsDateTimeOffset ?? start.AddHours(1);
 
             wynik.Add(new FeedEvent(
-                id,
+                // Identyfikator musi rozróżniać wystąpienia serii: wszystkie mają ten sam
+                // UID, więc bez daty w kluczu cotygodniowe spotkanie zapisałoby się raz.
+                $"{wydarzenie.Uid}|{start:yyyy-MM-ddTHH:mm:ssK}",
                 string.IsNullOrWhiteSpace(wydarzenie.Summary) ? "(bez tytułu)" : wydarzenie.Summary,
                 start,
                 koniec,
-                calodniowe,
+                wydarzenie.IsAllDay,
                 wydarzenie.Location,
+
+                // Odwołanie w kanale iCal nie przychodzi jako zdarzenie, tylko jako brak
+                // wydarzenia w kolejnym pobraniu. Sprzątaniem zajmuje się usługa, która
+                // wie, że odczyt był pełny.
                 Cancelled: false));
         }
 

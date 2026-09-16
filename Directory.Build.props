@@ -12,6 +12,11 @@
     <!-- Pakiety wygenerowane z opisu API mają czwarty człon wersji własny dla każdego API. -->
     <GoogleDriveVersion>1.76.0.4261</GoogleDriveVersion>
     <GoogleCalendarVersion>1.75.0.4206</GoogleCalendarVersion>
-    <IcalNetVersion>5.2.3</IcalNetVersion>
+    <!-- Celowo 4.x, nie 5.x. Piąta wersja przepisała API dat: zniknęło
+         AsDateTimeOffset, a rozwijanie powtórzeń przyjmuje własny typ daty zamiast
+         zwykłego. Nie jest gorsza — jest inna, a tutaj nie ma lokalnego kompilatora,
+         więc każde nietrafione założenie o jej kształcie kosztuje pełny przebieg CI.
+         Do przejścia wtedy, gdy będzie się co przy tym oprzeć. -->
+    <IcalNetVersion>4.3.1</IcalNetVersion>
   </PropertyGroup>
 </Project>
