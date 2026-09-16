@@ -194,6 +194,14 @@ godzinowa (dzień / 3 dni / tydzień) z zadaniami i wydarzeniami, kopia kalendar
 z odczytem przyrostowym, kanały iCal. Niesprawdzone zostaje wołanie API Google
 i pobieranie kanału po sieci — jedno i drugie wymaga czegoś z zewnątrz.
 
+**Etap 8 zamknięty 16.09.2026** poza jednym: notatki z edytorem i podglądem, gałąź
+„materiał referencyjny" w drzewku, przypięte notatki w kroku zerowym przeglądu, oraz
+składowanie załączników adresowane treścią, z osobną drogą przenoszenia plików.
+
+Brakuje **wyboru pliku z dysku**. Ta część wymaga systemowego okna wyboru — na Androidzie
+i Windowsie wygląda inaczej, potrzebuje uchwytu okna i nie da się jej sprawdzić inaczej
+niż na sprzęcie. Cała reszta drogi załącznika działa i ma testy.
+
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
 zaczyna się od etapu 3. Przerwa między etapem 2 a 3 to najbardziej prawdopodobny moment
@@ -487,6 +495,54 @@ i **nie podlegają synchronizacji przez Dysk** — każde urządzenie pobiera je
 ze źródła. Lokalna kopia to bufor, nie dane.
 
 `ExternalId`, `SourceId`, `Title`, `Start`, `End`, `IsAllDay`, `Location`, `EtagOrVersion`.
+
+### 5.6a Note (agregat)
+
+Materiał referencyjny: rzecz, której **nie trzeba robić**, tylko mieć pod ręką. Powstaje
+najczęściej z drzewka przetwarzania (rozdz. 7).
+
+| Pole | Typ | Uwagi |
+|---|---|---|
+| `Title` | `string` | |
+| `Content` | `string` | Markdown |
+| `AreaId` | `Guid?` | **opcjonalny**, inaczej niż przy zadaniu |
+| `FromTaskId` | `Guid?` | z czego powstała przy przetwarzaniu |
+| `IsPinned` | `bool` | wchodzi do kroku zerowego przeglądu |
+
+Obszar jest **opcjonalny**, i to jest różnica wobec zadania (N11). Notatka bywa ogólna —
+„numer do przychodni" nie należy do żadnego obszaru odpowiedzialności bardziej niż do
+innego, a wymuszony wybór byłby zmyśleniem. Przy zadaniu obszar jest wymagany, bo zadanie
+bez obszaru psuje tabelę równowagi; notatka w żadnej liczbie nie występuje.
+
+**Notatka przypięta to czwarty i piąty horyzont GTD** (1.8): wizja i sens, czyli rzeczy,
+których nie da się odhaczyć. Dlatego w kroku zerowym przeglądu nie mają przy sobie
+żadnego przycisku — są tam po to, żeby reszta działa się po ich przeczytaniu.
+
+Konwersja z zadania wysyła je do kosza, a nie kasuje: kosz jest nagrobkiem, więc przy
+scalaniu widać, że pozycja została rozstrzygnięta, a nie że przepadła.
+
+### 5.6b Attachment (agregat)
+
+| Pole | Typ | Uwagi |
+|---|---|---|
+| `Sha256` | `string` | skrót treści — **to jest adres pliku** |
+| `FileName` | `string` | nazwa do pokazania, nie do adresowania |
+| `Size` | `long` | |
+| `TaskId` / `NoteId` | `Guid?` | przynajmniej jedno wymagane |
+
+**Adresowany treścią.** Dwa takie same zdjęcia wgrane przy dwóch zadaniach zajmują jedno
+miejsce, a plik raz zapisany nigdy się nie zmienia — ta sama własność, na której stoją
+porcje dziennika (9.2), tylko tu wynika wprost z adresowania, a nie z umowy.
+
+**Wpis wędruje dziennikiem, treść osobną drogą.** Dziennik jest tekstem i ma dać się
+przeczytać notatnikiem; wrzucenie w niego zdjęcia rozsadziłoby format co do zasady.
+Skutek: na drugim urządzeniu wpis potrafi być **przed** plikiem, i to jest stan normalny.
+Załącznik bez treści pokazuje się jako „jeszcze się nie ściągnął", a nie znika i nie
+wyrzuca błędu.
+
+Usunięcie zostawia treść w składnicy. Dwa wpisy mogą wskazywać ten sam plik, a ustalanie,
+który był ostatni, wymagałoby przejścia po całej bazie przy każdym usunięciu — za to samo
+płaci się kilkoma kilobajtami.
 
 ### 5.7 Recurrence (typ własny, nie RRULE)
 
@@ -1237,6 +1293,25 @@ i czyszczona razem z dniem wykonania, bo bez dnia nie znaczy nic.
 
 **Tydzień zaczyna się w poniedziałek**, a nie „od dziś przez siedem dni": tydzień, który
 zaczyna się w środę, nie wygląda jak tydzień.
+
+### 11.4 Notatki
+
+**Edytor i podgląd obok siebie, nie na przemian.** Przełącznik „pisz / oglądaj" każe
+pamiętać, w którym trybie się jest — a przy notatce pisanej raz i czytanej dziesięć razy
+to pytanie zadawane bez potrzeby.
+
+Obsługiwany podzbiór Markdown: nagłówki, akapity, listy punktowane i numerowane, cytaty,
+kod, pogrubienie, kursywa, odsyłacze. Tabele, obrazy i przypisy **nie** — notatka osobista
+ich nie potrzebuje, a każdy z nich to osobny sposób rysowania.
+
+Rozbiór robi Markdig; własny parser Markdown kończy się tym, że po roku obsługuje
+osiemdziesiąt procent formatu, a każdy kolejny przypadek jest poprawką. Po naszej stronie
+zostaje spłaszczenie drzewa do **płaskiej listy bloków** — podgląd notatki nie potrzebuje
+pełnego modelu dokumentu, tylko czegoś, co da się przelecieć jednym przebiegiem, a poziom
+zagnieżdżenia listy niesie sam blok.
+
+Wyróżnienia **nie zagnieżdżają się**: pogrubiony kursywny odsyłacz jest w notatce
+osobistej rzeczą, której nie ma, a jego obsługa oznaczałaby drzewo zamiast listy.
 
 ---
 
