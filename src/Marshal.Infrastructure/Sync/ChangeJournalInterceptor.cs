@@ -60,6 +60,14 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
 
     private static void Journal(DbContext context)
     {
+        // Zmiany przychodzące ze scalania nie są zmianami tego urządzenia.
+        // Zapisanie ich do dziennika odesłałoby je z powrotem i dwa urządzenia
+        // odbijałyby sobie te same wpisy bez końca — zob. SyncScope.
+        if (SyncScope.IsApplyingRemote)
+        {
+            return;
+        }
+
         // Migawka przed dopisaniem czegokolwiek: dopisywanie wierszy dziennika
         // zmienia śledzenie zmian, a modyfikowanie kolekcji w trakcie jej
         // przechodzenia kończy się wyjątkiem.
