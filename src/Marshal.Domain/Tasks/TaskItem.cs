@@ -76,6 +76,16 @@ public sealed class TaskItem : Entity
     /// <summary>Puste = weź <c>Area.DefaultNudgeDays</c>.</summary>
     public int? WaitingNudgeDays { get; private set; }
 
+    /// <summary>
+    /// Chwila przypomnienia. Chwila, nie dzień — o to właśnie chodzi w przypomnieniu.
+    /// </summary>
+    /// <remarks>
+    /// Osobna od <see cref="DoDate"/> i od <see cref="Deadline"/>, bo znaczy co innego niż
+    /// obie: „kiedy chcę o tym usłyszeć". Zadanie na wtorek może chcieć przypomnienia
+    /// w poniedziałek wieczorem, a zadanie z terminem za miesiąc — na tydzień przed.
+    /// </remarks>
+    public DateTimeOffset? ReminderAt { get; private set; }
+
     /// <summary>Waga, bez limitu (spec 1.6).</summary>
     public Priority Priority { get; private set; } = Priority.None;
 
@@ -169,6 +179,12 @@ public sealed class TaskItem : Entity
         Touch(stamp);
     }
 
+    public void SetReminder(DateTimeOffset? at, Hlc stamp)
+    {
+        ReminderAt = at;
+        Touch(stamp);
+    }
+
     public void SetDeadline(DateOnly? deadline, Hlc stamp)
     {
         Deadline = deadline;
@@ -240,6 +256,13 @@ public sealed class TaskItem : Entity
         if (Deadline is { } termin && DoDate is { } planowana)
         {
             nastepne.Deadline = doDate.AddDays(termin.DayNumber - planowana.DayNumber);
+        }
+
+        // Przypomnienie tak samo: „w przeddzień o dwudziestej" ma zostać przeddniem
+        // o dwudziestej, a nie przenieść się co do daty i odezwać się natychmiast.
+        if (ReminderAt is { } przypomnienie && DoDate is { } dzien)
+        {
+            nastepne.ReminderAt = przypomnienie.AddDays(doDate.DayNumber - dzien.DayNumber);
         }
 
         nastepne.SetRecurrence(rule, stamp);
@@ -382,6 +405,7 @@ public sealed class TaskItem : Entity
         DeferUntil = null;
         CarriedSince = null;
         RollCount = 0;
+        ReminderAt = null;
         ClearWaiting();
         Touch(stamp);
     }

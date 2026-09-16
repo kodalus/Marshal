@@ -2,6 +2,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Data;
+using Marshal.Infrastructure.Notifications;
 using Marshal.Infrastructure.Repositories;
 using Marshal.Infrastructure.Sync;
 using Marshal.Infrastructure.Time;
@@ -67,7 +68,12 @@ public static class DependencyInjection
         services.AddSingleton<ITagRepository, TagRepository>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
+        services.AddSingleton<IReminderLog, ReminderLog>();
+        services.AddSingleton<InAppNotifier>();
+        services.AddSingleton<INotifier>(sp => sp.GetRequiredService<InAppNotifier>());
+
         services.AddSingleton<DayRolloverService>();
+        services.AddSingleton<ReminderService>();
         services.AddSingleton<InboxService>();
         services.AddSingleton<TagService>();
 

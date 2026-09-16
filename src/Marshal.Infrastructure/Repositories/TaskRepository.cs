@@ -73,6 +73,15 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .OrderBy(t => t.DoDate)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<TaskItem>> DueRemindersAsync(
+        DateTimeOffset now, CancellationToken ct = default) =>
+        await Otwarte()
+            .Where(t => t.ReminderAt != null && t.ReminderAt <= now)
+            // Najdawniejsze pierwsze: gdy uzbierało się kilka, kolejność ma być taka,
+            // w jakiej miały się odezwać.
+            .OrderBy(t => t.ReminderAt)
+            .ToListAsync(ct);
+
     /// <summary>Zadania nierozstrzygnięte: poza skrzynką, koszem i wykonanymi.</summary>
     private IQueryable<TaskItem> Otwarte() =>
         db.Tasks.Where(t => !t.Deleted

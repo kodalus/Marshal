@@ -35,5 +35,8 @@ public interface ITaskRepository
     /// </summary>
     Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(DateOnly today, CancellationToken ct = default);
 
+    /// <summary>Zadania otwarte z chwilą przypomnienia nie późniejszą niż podana.</summary>
+    Task<IReadOnlyList<TaskItem>> DueRemindersAsync(DateTimeOffset now, CancellationToken ct = default);
+
     void Add(TaskItem task);
 }

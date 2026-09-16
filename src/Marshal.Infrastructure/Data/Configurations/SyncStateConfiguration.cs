@@ -27,3 +27,15 @@ public sealed class LocalSettingConfiguration : IEntityTypeConfiguration<LocalSe
         builder.Property(s => s.Value).IsRequired();
     }
 }
+
+public sealed class ReminderShownConfiguration : IEntityTypeConfiguration<ReminderShown>
+{
+    public void Configure(EntityTypeBuilder<ReminderShown> builder)
+    {
+        builder.ToTable("ReminderShown");
+        builder.HasKey(r => r.TaskId);
+
+        builder.Property(r => r.ReminderAt).IsRequired();
+        builder.Property(r => r.ShownAt).IsRequired();
+    }
+}

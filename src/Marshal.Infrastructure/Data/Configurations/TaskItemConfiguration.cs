@@ -23,6 +23,7 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.Deleted).IsRequired();
         builder.Property(t => t.RecurrenceJson).HasMaxLength(500);
         builder.Property(t => t.RollCount).IsRequired();
+        builder.HasIndex(t => t.ReminderAt);
 
         // Reguła jest w bazie jednym tekstem (RecurrenceJson); to tylko jej odczytana
         // postać. Zmapowana byłaby drugą, niespójną kopią tej samej rzeczy.

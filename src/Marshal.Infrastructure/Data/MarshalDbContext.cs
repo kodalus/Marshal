@@ -39,6 +39,9 @@ public sealed class MarshalDbContext : DbContext
     /// <summary>Ustawienia tego urządzenia — identyfikator, ostatni znacznik zegara.</summary>
     public DbSet<LocalSetting> LocalSettings => Set<LocalSetting>();
 
+    /// <summary>Przypomnienia pokazane przez to urządzenie. Lokalne, niesynchronizowane.</summary>
+    public DbSet<ReminderShown> ReminderShown => Set<ReminderShown>();
+
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy
     /// obcych**. Nie jest to niedopatrzenie: przy synchronizacji plikowej (spec 9) zmiany
