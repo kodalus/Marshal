@@ -33,6 +33,12 @@ public sealed class MarshalDbContext : DbContext
     /// <summary>Znaczniki zegara dla bieżących wartości pól. Warunek scalania per pole.</summary>
     public DbSet<FieldStamp> FieldStamps => Set<FieldStamp>();
 
+    /// <summary>Dokąd doczytaliśmy plik każdego z pozostałych urządzeń.</summary>
+    public DbSet<SyncCursor> SyncCursors => Set<SyncCursor>();
+
+    /// <summary>Ustawienia tego urządzenia — identyfikator, ostatni znacznik zegara.</summary>
+    public DbSet<LocalSetting> LocalSettings => Set<LocalSetting>();
+
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy
     /// obcych**. Nie jest to niedopatrzenie: przy synchronizacji plikowej (spec 9) zmiany
