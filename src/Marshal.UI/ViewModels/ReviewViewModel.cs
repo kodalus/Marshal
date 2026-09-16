@@ -45,6 +45,10 @@ public sealed partial class ReviewViewModel(
     [ObservableProperty]
     public partial bool IsFinished { get; set; }
 
+    /// <summary>Ile pozycji zostało w całym przeglądzie, nie tylko w tym kroku.</summary>
+    [ObservableProperty]
+    public partial int TotalRemaining { get; set; }
+
     public ObservableCollection<ReviewItem> Items { get; } = [];
 
     public ObservableCollection<AreaBalance> Balance { get; } = [];
@@ -61,6 +65,20 @@ public sealed partial class ReviewViewModel(
 
     public bool IsPinnedStep => Steps[StepIndex].Step == ReviewStep.Pinned;
 
+    /// <summary>
+    /// Krok skrzynki działa inaczej: pozycji nie odhacza się, tylko się je przetwarza.
+    /// </summary>
+    /// <remarks>
+    /// Oznaczenie wrzutu jako „rozpatrzony" bez podjęcia decyzji zostawiłoby go
+    /// w skrzynce — a za tydzień trzeba by go oznaczyć znowu. Bieżnia zamiast
+    /// opróżniania. Ten krok prowadzi więc do drzewka przetwarzania (rozdz. 7),
+    /// a licznik schodzi sam, w miarę jak skrzynka pustoszeje.
+    /// </remarks>
+    public bool IsInboxStep => Steps[StepIndex].Step == ReviewStep.Inbox;
+
+    /// <summary>Kroki, w których nie ma czego odhaczać: tekst i tabela.</summary>
+    public bool HasChecklist => !IsPinnedStep && !IsBalanceStep && !IsInboxStep;
+
     public bool CanGoBack => StepIndex > 0;
 
     public bool IsLastStep => StepIndex == Steps.Length - 1;
@@ -69,9 +87,21 @@ public sealed partial class ReviewViewModel(
     /// Ile pozycji zostało w tym kroku. Zero **nie jest** powodem do pochwały ani do
     /// czerwieni — to po prostu krok bez pracy.
     /// </summary>
-    public string Remaining => Items.Count == 0 ? "nic do rozpatrzenia" : $"{Items.Count} do rozpatrzenia";
+    public string Remaining => Items.Count switch
+    {
+        0 when IsInboxStep => "skrzynka jest pusta",
+        0 => "nic do rozpatrzenia",
+        var n when IsInboxStep => $"{n} w skrzynce",
+        var n => $"{n} do rozpatrzenia",
+    };
 
     public event EventHandler? Changed;
+
+    /// <summary>Krok skrzynki prosi o przejście do drzewka przetwarzania.</summary>
+    public event EventHandler? InboxRequested;
+
+    [RelayCommand]
+    private void ProcessInbox() => InboxRequested?.Invoke(this, EventArgs.Empty);
 
     public async Task OpenAsync()
     {
@@ -170,6 +200,7 @@ public sealed partial class ReviewViewModel(
             }
         }
 
+        TotalRemaining = (await review.CountsAsync()).Total;
         RefreshCounters();
     }
 
@@ -180,6 +211,8 @@ public sealed partial class ReviewViewModel(
         OnPropertyChanged(nameof(StepNumber));
         OnPropertyChanged(nameof(IsBalanceStep));
         OnPropertyChanged(nameof(IsPinnedStep));
+        OnPropertyChanged(nameof(IsInboxStep));
+        OnPropertyChanged(nameof(HasChecklist));
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(IsLastStep));
     }

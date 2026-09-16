@@ -70,6 +70,10 @@ public sealed partial class MainViewModel : ObservableObject
         // Przegląd zmienia stan zadań i projektów, więc ekran pod spodem musi się
         // przeliczyć — także liczniki niezmienników w „Dzisiaj".
         Review.Changed += async (_, _) => await ReloadAsync();
+
+        // Krok skrzynki prowadzi do drzewka przetwarzania. Przegląd zostaje otwarty —
+        // wznowi się na tym samym kroku, bo jego stan siedzi w bazie, a nie w ekranie.
+        Review.InboxRequested += async (_, _) => await ShowClarifyAsync();
     }
 
     public ClarifyViewModel Clarify { get; }

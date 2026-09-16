@@ -395,7 +395,9 @@
           <TextBlock Classes="hint" Text="{Binding StepHint}" TextWrapping="Wrap"
                      HorizontalAlignment="Center" TextAlignment="Center" />
           <TextBlock Classes="hint" Text="{Binding Remaining}" Margin="0,10,0,0"
-                     HorizontalAlignment="Center" />
+                     HorizontalAlignment="Center" IsVisible="{Binding !IsPinnedStep}" />
+          <TextBlock Classes="hint" HorizontalAlignment="Center" Margin="0,2,0,0"
+                     Text="{Binding TotalRemaining, StringFormat='w całym przeglądzie: {0}'}" />
 
           <!-- Krok zerowy: sam tekst, bez żadnej akcji. Jest po to, żeby reszta
                przeglądu działa się po jego przeczytaniu, a nie żeby coś z nim zrobić. -->
@@ -432,9 +434,28 @@
             </ItemsControl>
           </StackPanel>
 
+          <!-- Krok skrzynki: pozycji się nie odhacza, tylko się je przetwarza.
+               Oznaczenie wrzutu jako „rozpatrzony" zostawiłoby go w skrzynce,
+               a za tydzień trzeba by go oznaczyć znowu. -->
+          <StackPanel IsVisible="{Binding IsInboxStep}" Margin="0,16,0,0">
+            <ItemsControl ItemsSource="{Binding Items}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="rev:ReviewItem">
+                  <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Margin="0,3" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button HorizontalAlignment="Stretch" Margin="0,12,0,0" Padding="14,10"
+                    Command="{Binding ProcessInboxCommand}" IsEnabled="{Binding HasItems}"
+                    Content="Przetwórz skrzynkę" />
+            <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                       Text="Przegląd zostaje otwarty — wróci na ten sam krok." />
+          </StackPanel>
+
           <!-- Pozycje kroku. Odhaczenie zapisuje się natychmiast — to jest cały
                mechanizm wznawialności, a nie optymalizacja. -->
-          <ItemsControl ItemsSource="{Binding Items}" Margin="0,16,0,0">
+          <ItemsControl ItemsSource="{Binding Items}" Margin="0,16,0,0"
+                        IsVisible="{Binding HasChecklist}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="rev:ReviewItem">
                 <Border Margin="0,0,0,8" Padding="14,10" CornerRadius="8" Background="#18808080">
