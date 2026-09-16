@@ -78,7 +78,12 @@
     </DockPanel>
 
     <!-- Przetwarzanie: jedna pozycja, bez listy w tle -->
-    <ScrollViewer IsVisible="{Binding IsClarify}" DataContext="{Binding Clarify}">
+    <!-- Widoczność i podmiana kontekstu muszą siedzieć na różnych elementach:
+         DataContext ustawiony na elemencie obowiązuje też dla pozostałych powiązań
+         na tym samym elemencie, więc IsVisible szukałoby właściwości w modelu
+         przetwarzania zamiast w głównym. -->
+    <Panel IsVisible="{Binding IsClarify}">
+    <ScrollViewer DataContext="{Binding Clarify}">
       <StackPanel MaxWidth="560" HorizontalAlignment="Center"
                   x:DataType="vm:ClarifyViewModel">
 
@@ -127,6 +132,7 @@
                    TextWrapping="Wrap" IsVisible="{Binding HasProblem}" />
       </StackPanel>
     </ScrollViewer>
+    </Panel>
 
     <!-- Następne akcje -->
     <ListBox IsVisible="{Binding IsNext}" ItemsSource="{Binding NextActions}">
