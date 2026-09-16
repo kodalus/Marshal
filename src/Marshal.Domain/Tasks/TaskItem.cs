@@ -86,6 +86,9 @@ public sealed class TaskItem : Entity
     /// <summary>Pozycja ręczna; wstawienie między sąsiadów to średnia ich wartości.</summary>
     public double SortOrder { get; private set; }
 
+    /// <summary>Dla interfejsu: czy pokazać wiersz z terminem.</summary>
+    public bool HasDeadline => Deadline is not null;
+
     public void Rename(string title, Hlc stamp)
     {
         Title = NormalizeTitle(title);

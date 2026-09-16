@@ -1,19 +1,25 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
-using Marshal.Domain.Projects;
+using Marshal.Domain.Areas;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.UI.ViewModels;
 
 public enum Screen
 {
+    Today,
     Inbox,
     Clarify,
     Next,
+    Plans,
     Projects,
+    Someday,
+    Areas,
+    Archive,
 }
 
 public sealed partial class MainViewModel : ObservableObject
@@ -21,16 +27,22 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly InboxService _inbox;
     private readonly ITaskRepository _tasks;
     private readonly IProjectRepository _projects;
+    private readonly IAreaRepository _areas;
+    private readonly IClock _clock;
 
     public MainViewModel(
         InboxService inbox,
         ITaskRepository tasks,
         IProjectRepository projects,
+        IAreaRepository areas,
+        IClock clock,
         ClarifyViewModel clarify)
     {
         _inbox = inbox;
         _tasks = tasks;
         _projects = projects;
+        _areas = areas;
+        _clock = clock;
         Clarify = clarify;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
     }
@@ -41,10 +53,21 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<TaskItem> NextActions { get; } = [];
 
-    public ObservableCollection<Project> Projects { get; } = [];
+    public ObservableCollection<TaskItem> TodayItems { get; } = [];
 
+    public ObservableCollection<TaskItem> PlanItems { get; } = [];
+
+    public ObservableCollection<TaskItem> SomedayItems { get; } = [];
+
+    public ObservableCollection<TaskItem> ArchiveItems { get; } = [];
+
+    public ObservableCollection<Area> AreaItems { get; } = [];
+
+    public ObservableCollection<ProjectRow> ProjectRows { get; } = [];
+
+    /// <summary>„Dzisiaj" jest ekranem startowym — to on odpowiada na pytanie „co teraz".</summary>
     [ObservableProperty]
-    public partial Screen Current { get; set; } = Screen.Inbox;
+    public partial Screen Current { get; set; } = Screen.Today;
 
     [ObservableProperty]
     public partial int InboxCount { get; set; }
@@ -56,25 +79,44 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Avalonia nie zamienia liczby na wartość logiczną — potrzebne wprost.</summary>
     public bool HasInbox => InboxCount > 0;
 
+    public bool IsToday => Current == Screen.Today;
+
     public bool IsInbox => Current == Screen.Inbox;
 
     public bool IsClarify => Current == Screen.Clarify;
 
     public bool IsNext => Current == Screen.Next;
 
+    public bool IsPlans => Current == Screen.Plans;
+
     public bool IsProjects => Current == Screen.Projects;
+
+    public bool IsSomeday => Current == Screen.Someday;
+
+    public bool IsAreas => Current == Screen.Areas;
+
+    public bool IsArchive => Current == Screen.Archive;
 
     partial void OnInboxCountChanged(int value) => OnPropertyChanged(nameof(HasInbox));
 
     partial void OnCurrentChanged(Screen value)
     {
+        OnPropertyChanged(nameof(IsToday));
         OnPropertyChanged(nameof(IsInbox));
         OnPropertyChanged(nameof(IsClarify));
         OnPropertyChanged(nameof(IsNext));
+        OnPropertyChanged(nameof(IsPlans));
         OnPropertyChanged(nameof(IsProjects));
+        OnPropertyChanged(nameof(IsSomeday));
+        OnPropertyChanged(nameof(IsAreas));
+        OnPropertyChanged(nameof(IsArchive));
     }
 
-    public Task InitializeAsync() => ShowInboxAsync();
+    public async Task InitializeAsync()
+    {
+        await RefreshInboxAsync();
+        await ShowTodayAsync();
+    }
 
     /// <summary>
     /// Wrzut. Dostępny z każdego ekranu poza przetwarzaniem — myśl przychodzi wtedy,
@@ -127,10 +169,64 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowProjectsAsync()
     {
         Current = Screen.Projects;
-        Projects.Clear();
-        foreach (var project in await _projects.ActiveAsync())
+        ProjectRows.Clear();
+
+        var rows = ProjectTree.Build(await _areas.ActiveAsync(), await _projects.ActiveAsync());
+        foreach (var row in rows)
         {
-            Projects.Add(project);
+            ProjectRows.Add(row);
+        }
+    }
+
+    [RelayCommand]
+    private async Task ShowTodayAsync()
+    {
+        Current = Screen.Today;
+        await Fill(TodayItems, _tasks.TodayAsync(Today()));
+    }
+
+    [RelayCommand]
+    private async Task ShowPlansAsync()
+    {
+        Current = Screen.Plans;
+        var dzis = Today();
+        await Fill(PlanItems, _tasks.UpcomingAsync(dzis, dzis.AddDays(30)));
+    }
+
+    [RelayCommand]
+    private async Task ShowSomedayAsync()
+    {
+        Current = Screen.Someday;
+        await Fill(SomedayItems, _tasks.ByStateAsync(TaskState.Someday));
+    }
+
+    [RelayCommand]
+    private async Task ShowArchiveAsync()
+    {
+        Current = Screen.Archive;
+        await Fill(ArchiveItems, _tasks.ArchiveAsync(limit: 200));
+    }
+
+    [RelayCommand]
+    private async Task ShowAreasAsync()
+    {
+        Current = Screen.Areas;
+        AreaItems.Clear();
+        foreach (var area in await _areas.AllAsync())
+        {
+            AreaItems.Add(area);
+        }
+    }
+
+    private DateOnly Today() => DateOnly.FromDateTime(_clock.Now.Date);
+
+    private static async Task Fill(ObservableCollection<TaskItem> target, Task<IReadOnlyList<TaskItem>> source)
+    {
+        var items = await source;
+        target.Clear();
+        foreach (var item in items)
+        {
+            target.Add(item);
         }
     }
 

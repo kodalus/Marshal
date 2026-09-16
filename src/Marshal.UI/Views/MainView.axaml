@@ -2,7 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Marshal.UI.ViewModels"
              xmlns:tasks="using:Marshal.Domain.Tasks"
-             xmlns:projects="using:Marshal.Domain.Projects"
+             xmlns:areas="using:Marshal.Domain.Areas"
+             xmlns:uc="using:Marshal.Application.UseCases"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
@@ -41,8 +42,8 @@
                  Text="Bez pól, bez decyzji — obszar i reszta dochodzą przy przetwarzaniu." />
     </StackPanel>
 
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,16"
-                IsVisible="{Binding !IsClarify}">
+    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,16" IsVisible="{Binding !IsClarify}">
+      <Button Classes="nav" Command="{Binding ShowTodayCommand}" Content="Dzisiaj" />
       <Button Classes="nav" Command="{Binding ShowInboxCommand}">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <TextBlock Text="Skrzynka" />
@@ -53,8 +54,12 @@
         </StackPanel>
       </Button>
       <Button Classes="nav" Command="{Binding ShowNextCommand}" Content="Następne" />
+      <Button Classes="nav" Command="{Binding ShowPlansCommand}" Content="Plany" />
       <Button Classes="nav" Command="{Binding ShowProjectsCommand}" Content="Projekty" />
-    </StackPanel>
+      <Button Classes="nav" Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
+      <Button Classes="nav" Command="{Binding ShowAreasCommand}" Content="Obszary" />
+      <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
+    </WrapPanel>
 
     <!-- Ekrany leżą na sobie w jednej komórce; widoczny jest zawsze jeden. -->
     <Grid>
@@ -149,14 +154,97 @@
       </ListBox.ItemTemplate>
     </ListBox>
 
-    <!-- Projekty -->
-    <ListBox IsVisible="{Binding IsProjects}" ItemsSource="{Binding Projects}">
+    <!-- Dzisiaj -->
+    <DockPanel IsVisible="{Binding IsToday}">
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                 Text="Zadania na dziś i po terminie. Terminy pierwsze — to fakt zewnętrzny, nie decyzja." />
+      <ListBox ItemsSource="{Binding TodayItems}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="tasks:TaskItem">
+            <StackPanel Spacing="2" Padding="0,4">
+              <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+              <TextBlock Classes="hint" Text="{Binding Deadline, StringFormat='termin {0:yyyy-MM-dd}'}"
+                         IsVisible="{Binding HasDeadline}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <!-- Plany -->
+    <DockPanel IsVisible="{Binding IsPlans}">
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" Text="Najbliższe trzydzieści dni." />
+      <ListBox ItemsSource="{Binding PlanItems}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="tasks:TaskItem">
+            <StackPanel Spacing="2" Padding="0,4">
+              <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+              <TextBlock Classes="hint" Text="{Binding DoDate, StringFormat='{}{0:yyyy-MM-dd}'}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <!-- Kiedyś-może -->
+    <DockPanel IsVisible="{Binding IsSomeday}">
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                 Text="Bez presji i bez terminu. Wraca, gdy dojrzeje." />
+      <ListBox ItemsSource="{Binding SomedayItems}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="tasks:TaskItem">
+            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Padding="0,4" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <!-- Projekty: obszar, cel, projekt -->
+    <ListBox IsVisible="{Binding IsProjects}" ItemsSource="{Binding ProjectRows}">
       <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="projects:Project">
-          <TextBlock Text="{Binding Outcome}" TextWrapping="Wrap" Padding="0,6" />
+        <DataTemplate x:DataType="uc:ProjectRow">
+          <StackPanel Orientation="Horizontal" Padding="0,5">
+            <Border Width="{Binding Indent}" />
+            <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+          </StackPanel>
         </DataTemplate>
       </ListBox.ItemTemplate>
     </ListBox>
+
+    <!-- Obszary -->
+    <DockPanel IsVisible="{Binding IsAreas}">
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                 Text="Cisza — po ilu dniach bez ruchu obszar się zgłasza. Ponaglenie — po ilu dniach przypomnieć o oczekiwaniu." />
+      <ListBox ItemsSource="{Binding AreaItems}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="areas:Area">
+            <Grid ColumnDefinitions="*,Auto" Padding="0,5">
+              <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
+                <TextBlock Classes="hint" Text="{Binding QuietDays, StringFormat='cisza {0} dni'}" />
+                <TextBlock Classes="hint" Text="{Binding DefaultNudgeDays, StringFormat='ponaglenie {0} dni'}" />
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <!-- Archiwum -->
+    <DockPanel IsVisible="{Binding IsArchive}">
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                 Text="Wykonane i wyrzucone, najnowsze pierwsze. Nic nie znika z bazy." />
+      <ListBox ItemsSource="{Binding ArchiveItems}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="tasks:TaskItem">
+            <Grid ColumnDefinitions="*,Auto" Padding="0,4">
+              <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap" Opacity="0.75" />
+              <TextBlock Grid.Column="1" Classes="hint" Text="{Binding State}" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
 
     </Grid>
   </DockPanel>
