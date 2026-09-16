@@ -8,6 +8,7 @@
              xmlns:rev="using:Marshal.Application.Review"
              xmlns:sys="using:System"
              xmlns:dn="using:Marshal.Domain.Notes"
+             xmlns:df="using:Marshal.Domain.Filters"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
@@ -105,6 +106,7 @@
       <Button Classes="nav" Command="{Binding ShowReviewCommand}" Content="Przegląd" />
       <Button Classes="nav" Command="{Binding ShowCalendarCommand}" Content="Kalendarz" />
       <Button Classes="nav" Command="{Binding ShowNotesCommand}" Content="Notatki" />
+      <Button Classes="nav" Command="{Binding ShowFiltersCommand}" Content="Filtry" />
       <Button Classes="nav" Command="{Binding ShowAreasCommand}" Content="Obszary" />
       <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
     </WrapPanel>
@@ -647,6 +649,168 @@
         </DockPanel>
 
       </Grid>
+    </DockPanel>
+    </Panel>
+
+    <!-- Filtry: konstruktor warunków i Ulubione (spec 11.5). Wszystkie osie widoczne
+         naraz, każda domyślnie wyłączona — zamiast przycisku „dodaj warunek", który
+         prowadzi do listy pól, a z niej do edytora zależnego od wybranego pola. Tu
+         widać w jednym spojrzeniu, czym filtr jest, łącznie z tym, co nieustawione. -->
+    <!-- Widoczność i podmiana kontekstu na osobnych elementach, x:DataType dopiero
+         na dzieciach: na elemencie z DataContext obowiązywałby też dla samego
+         {Binding Filters}. -->
+    <Panel IsVisible="{Binding IsFilters}">
+    <DockPanel DataContext="{Binding Filters}">
+
+      <!-- Ulubione na górze: zapas gotowych odpowiedzi na pytanie „co teraz",
+           ułożonych wtedy, kiedy dało się myśleć. -->
+      <StackPanel DockPanel.Dock="Top" x:DataType="vm:FiltersViewModel"
+                  Margin="0,0,0,10" IsVisible="{Binding HasFavourites}">
+        <TextBlock Classes="label" Text="Ulubione" />
+        <ItemsControl ItemsSource="{Binding Favourites}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="df:SavedFilter">
+              <Button Classes="nav" Margin="0,4,8,0" Content="{Binding Name}"
+                      Command="{Binding $parent[ItemsControl].((vm:FiltersViewModel)DataContext).OpenCommand}"
+                      CommandParameter="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <!-- Zapis na dole, bo jest ostatnim krokiem układania, a nie pierwszym. -->
+      <Grid DockPanel.Dock="Bottom" x:DataType="vm:FiltersViewModel"
+            ColumnDefinitions="*,Auto,Auto" Margin="0,10,0,0">
+        <TextBox Grid.Column="0" Text="{Binding Name}"
+                 Watermark="Nazwa widoku, np. „Kwadrans przed wyjściem”" />
+        <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10" Content="Zapisz"
+                Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" />
+        <Button Grid.Column="2" Margin="6,0,0,0" Padding="14,10" Content="Wyczyść"
+                Command="{Binding ResetCommand}" />
+      </Grid>
+
+      <ScrollViewer x:DataType="vm:FiltersViewModel">
+        <StackPanel>
+
+          <TextBlock Classes="label" Text="Stan" />
+          <ItemsControl ItemsSource="{Binding States}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:FilterToggle">
+                <ToggleButton Margin="0,0,6,6" Padding="12,6"
+                              Content="{Binding Label}" IsChecked="{Binding IsOn}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Classes="label" Text="Obszar" />
+          <ComboBox ItemsSource="{Binding Areas}" SelectedItem="{Binding Area}"
+                    HorizontalAlignment="Stretch" />
+
+          <TextBlock Classes="label" Text="Projekt" />
+          <ComboBox ItemsSource="{Binding Projects}" SelectedItem="{Binding Project}"
+                    HorizontalAlignment="Stretch" />
+
+          <TextBlock Classes="label" Text="Tagi" />
+          <ItemsControl ItemsSource="{Binding Tags}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:FilterToggle">
+                <ToggleButton Margin="0,0,6,6" Padding="12,6"
+                              Content="{Binding Label}" IsChecked="{Binding IsOn}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Classes="label" Text="Termin" />
+          <ComboBox ItemsSource="{Binding Windows}" SelectedItem="{Binding Deadline}"
+                    HorizontalAlignment="Stretch" />
+
+          <TextBlock Classes="label" Text="Dzień wykonania" />
+          <ComboBox ItemsSource="{Binding Windows}" SelectedItem="{Binding DoDate}"
+                    HorizontalAlignment="Stretch" />
+          <!-- Okna liczone względem dzisiaj, nie datą z kalendarza: data wpisana
+               w zapisany widok przestaje cokolwiek znaczyć po kilku dniach, nadal
+               wyglądając na działającą. -->
+          <TextBlock Classes="hint" Margin="2,4,0,0"
+                     Text="Zawsze względem dzisiaj — zapisany widok ma być prawdziwy także za miesiąc." />
+
+          <TextBlock Classes="label" Text="Mieści się w" />
+          <ComboBox ItemsSource="{Binding MinuteOptions}" SelectedItem="{Binding Minutes}"
+                    HorizontalAlignment="Stretch" />
+          <TextBlock Classes="hint" Margin="2,4,0,0"
+                     Text="Nieoszacowane nie mieści się w niczym — tak samo jak w „Teraz”." />
+
+          <TextBlock Classes="label" Text="Waga" />
+          <ItemsControl ItemsSource="{Binding Priorities}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:FilterToggle">
+                <ToggleButton Margin="0,0,6,6" Padding="12,6"
+                              Content="{Binding Label}" IsChecked="{Binding IsOn}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Classes="label" Text="Energia" />
+          <ItemsControl ItemsSource="{Binding Energies}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:FilterToggle">
+                <ToggleButton Margin="0,0,6,6" Padding="12,6"
+                              Content="{Binding Label}" IsChecked="{Binding IsOn}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Classes="label" Text="Szukany tekst" />
+          <TextBox Text="{Binding Text}" Watermark="W tytule albo w notatce zadania" />
+
+          <TextBlock Classes="label" Margin="0,18,0,0" Text="Wyniki" />
+          <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Empty}"
+                     IsVisible="{Binding !HasResults}" />
+          <ItemsControl ItemsSource="{Binding Results}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:TaskRow">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                  <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                    <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
+                               IsVisible="{Binding HasBadges}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Content="Szczegół" Padding="10,4"
+                          VerticalAlignment="Center"
+                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).OpenCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+        </StackPanel>
+      </ScrollViewer>
+
     </DockPanel>
     </Panel>
 

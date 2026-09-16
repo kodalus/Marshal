@@ -24,6 +24,7 @@ public enum Screen
     Waiting,
     Calendar,
     Notes,
+    Filters,
     Areas,
     Archive,
     Review,
@@ -56,7 +57,8 @@ public sealed partial class MainViewModel : ObservableObject
         ReviewViewModel review,
         NowViewModel nowVm,
         CalendarViewModel calendar,
-        NotesViewModel notes)
+        NotesViewModel notes,
+        FiltersViewModel filters)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -73,6 +75,7 @@ public sealed partial class MainViewModel : ObservableObject
         Now = nowVm;
         Calendar = calendar;
         Notes = notes;
+        Filters = filters;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
@@ -100,6 +103,8 @@ public sealed partial class MainViewModel : ObservableObject
     public CalendarViewModel Calendar { get; }
 
     public NotesViewModel Notes { get; }
+
+    public FiltersViewModel Filters { get; }
 
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
@@ -193,6 +198,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsNotes => Current == Screen.Notes;
 
+    public bool IsFilters => Current == Screen.Filters;
+
     public bool IsReview => Current == Screen.Review;
 
     public bool HasNudges => Nudges.Count > 0;
@@ -218,6 +225,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWaiting));
         OnPropertyChanged(nameof(IsCalendar));
         OnPropertyChanged(nameof(IsNotes));
+        OnPropertyChanged(nameof(IsFilters));
         OnPropertyChanged(nameof(IsReview));
         OnPropertyChanged(nameof(IsAreas));
         OnPropertyChanged(nameof(IsArchive));
@@ -272,6 +280,7 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Waiting => ShowWaitingAsync(),
             Screen.Calendar => Calendar.LoadAsync(),
             Screen.Notes => Notes.LoadAsync(),
+            Screen.Filters => Filters.RunCommand.ExecuteAsync(null),
             Screen.Areas => ShowAreasAsync(),
             _ => Task.CompletedTask,
         };
@@ -446,6 +455,14 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Notes;
         await Notes.LoadAsync();
+    }
+
+    /// <summary>Własne widoki — konstruktor warunków i Ulubione (spec 11.5).</summary>
+    [RelayCommand]
+    private async Task ShowFiltersAsync()
+    {
+        Current = Screen.Filters;
+        await Filters.LoadAsync();
     }
 
     /// <summary>Kalendarz godzinowy — wydarzenia i zadania na jednej siatce.</summary>

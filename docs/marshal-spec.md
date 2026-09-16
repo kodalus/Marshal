@@ -1218,7 +1218,7 @@ Token odświeżania w `DPAPI` (Windows) i `EncryptedSharedPreferences` (Android)
 | **Oczekiwane** | `Waiting`, sortowane po liczbie dni, z progiem ponaglenia obszaru |
 | **Kalendarz** | Godzinowo: dzień / 3 dni / tydzień. Wydarzenia pełne, zadania półprzezroczyste (11.3) |
 | **Notatki** | Markdown, edytor i podgląd, tagi, szukanie |
-| **Filtry** | Konstruktor warunków, zapisywanie do Ulubionych |
+| **Filtry** | Konstruktor warunków, zapisywanie do Ulubionych (11.5) |
 | **Przegląd** | Kreator siedmiu kroków (8.3) |
 | **Archiwum** | `Done` i `Trashed`, szukanie, przywracanie |
 | **Ustawienia** | Konto Google, kalendarze, kopia, motyw, strefa |
@@ -1312,6 +1312,71 @@ zagnieżdżenia listy niesie sam blok.
 
 Wyróżnienia **nie zagnieżdżają się**: pogrubiony kursywny odsyłacz jest w notatce
 osobistej rzeczą, której nie ma, a jego obsługa oznaczałaby drzewo zamiast listy.
+
+### 11.5 Filtry
+
+**Płaska lista warunków, nie drzewo wyrażeń.** „Albo" mieszka **wewnątrz** pojedynczego
+warunku (stan: następne albo zaplanowane), „i" **między** warunkami. Pełne wyrażenie
+logiczne z nawiasami jest mocniejsze i w konstruktorze graficznym praktycznie nieużywane:
+żeby je złożyć, trzeba myśleć o priorytetach operatorów, a żeby złożone przeczytać —
+rozwinąć nawiasy w głowie. Ten podział ról pokrywa każdy widok, jaki faktycznie się układa,
+i daje się przeczytać jednym zdaniem.
+
+Jeden warunek na pole. Dwa warunki na to samo pole połączone „i" dawałyby zbiór pusty
+w każdym ciekawym przypadku, a konstruktor, w którym da się kliknąć warunek gwarantujący
+zero wyników, uczy nieufności do całego ekranu — więc drugi warunek zastępuje pierwszy.
+
+**Daty wyłącznie względne.** Zaległe, dzisiaj, w tym tygodniu, w ciągu 30 dni, kiedyś
+później, ustawione, nieustawione. Wybieraka daty nie ma i nie jest to uproszczenie do
+nadrobienia: warunek „termin przed 20 września" zapisany do Ulubionych jest poprawny przez
+cztery dni, a potem po cichu przestaje cokolwiek znaczyć — nadal się uruchamia, nadal coś
+zwraca i nadal wygląda na działający. Zapisany widok musi opisywać położenie względem
+dzisiaj, bo tylko takie zdanie jest prawdziwe również za miesiąc.
+
+„W tym tygodniu" to **dziś i sześć następnych dni**, nie tydzień kalendarzowy. Tydzień
+kalendarzowy kurczy się z każdym dniem i w sobotę pokazuje jeden dzień albo zero, czyli
+filtr byłby najbardziej pusty wtedy, kiedy się go otwiera przy planowaniu weekendu.
+
+**Wykonane i wyrzucone nie wchodzą, dopóki filtr sam o ten stan nie poprosi.** Cmentarz
+i archiwum rosną bez końca i po roku są większe niż wszystko inne razem; gdyby wchodziły
+domyślnie, każdy filtr trzeba by zaczynać od odejmowania — a filtr zaczynany od wykluczania
+jest filtrem napisanym od tyłu. Wpisanie stanu do warunku działa dosłownie: „pokaż
+wykonane" pokaże wykonane. Nagrobek (`Deleted`) nie wchodzi nigdy.
+
+**Filtr bez warunków nie pasuje do niczego.** Logika mówi co innego — „i" po pustym zbiorze
+jest prawdą — ale wszystko to tu kilkaset pozycji wysypanych na ekran w chwili, w której nie
+poproszono jeszcze o nic. Pusty konstruktor znaczy „nie zaczęłam", a nie „pokaż bazę".
+
+**Warunki sprawdzane w pamięci, nie tłumaczone na SQL.** Przetłumaczenie konstruktora na
+wyrażenie, które EF Core umie zamienić na zapytanie, znaczyłoby drzewo z gałęzią na każde
+pole i każde okno czasowe — najbardziej podatną na błędy część aplikacji, przy czym błąd
+objawia się wyjątkiem dopiero przy uruchomieniu konkretnej kombinacji. Po drugiej stronie
+wagi stoi baza jednej osoby: kilka tysięcy zadań to rząd wielkości jednego odczytu z dysku.
+Przy stu tysiącach decyzja byłaby inna.
+
+**Zapisany widok jest agregatem synchronizowanym**, a warunki siedzą w jednej kolumnie
+JSON — z tego samego powodu co reguła powtarzania (5.7): filtr jest **jedną decyzją**,
+więc wygrywa albo przegrywa w całości. Scalanie per pole potrafiłoby złożyć widok
+z połówek dwóch różnych: warunek obszaru z telefonu i warunek stanu z komputera.
+Kolejność warunków w zapisie jest ustalona, żeby ta sama decyzja dawała ten sam tekst.
+
+Warunek nieczytelny — bo powstał w nowszej wersji aplikacji — odpada **pojedynczo**,
+a reszta widoku działa. Widok nieczytelny w całości zostaje w Ulubionych z nazwą, zamiast
+zniknąć bez słowa: wtedy wiadomo, co przepadło i co ułożyć na nowo.
+
+Sens zapisywania nie jest w oszczędzeniu kliknięć. Filtr ułożony raz i nazwany
+(„Telefony", „Kwadrans przed wyjściem", „Zaległe w domu") jest decyzją podjętą na spokojnie,
+z której można skorzystać w chwili, w której na układanie warunków nie ma ani cierpliwości,
+ani uwagi. Ulubione to zapas gotowych odpowiedzi na pytanie „co teraz", zrobiony wtedy,
+kiedy dało się myśleć.
+
+W ekranie wszystkie osie widoczne naraz, każda domyślnie wyłączona — zamiast przycisku
+„dodaj warunek", który prowadzi do listy pól, a z niej do edytora zależnego od wybranego
+pola. Tamta droga jest ogólniejsza i kosztuje trzy kliknięcia oraz pamiętanie, czego się
+jeszcze nie ustawiło. Tutaj widać w jednym spojrzeniu, **czym filtr jest** — łącznie z tym,
+co w nim nieustawione. Wyniki przeliczane po każdej zmianie, bez przycisku „szukaj":
+filtr układa się metodą prób, a przycisk zamieniłby każdą próbę w osobną decyzję
+„czy warto sprawdzić".
 
 ---
 

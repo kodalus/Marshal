@@ -29,6 +29,7 @@ public static class AppServices
         services.AddSingleton<NowViewModel>();
         services.AddSingleton<CalendarViewModel>();
         services.AddSingleton<NotesViewModel>();
+        services.AddSingleton<FiltersViewModel>();
         services.AddSingleton<MainViewModel>();
 
         _provider = services.BuildServiceProvider();
