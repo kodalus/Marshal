@@ -79,6 +79,8 @@ public static class DependencyInjection
         services.AddSingleton<ReviewService>();
 
         services.AddSingleton<TaskEditService>();
+        services.AddSingleton<FocusService>();
+        services.AddSingleton<NowService>();
         services.AddSingleton<DayRolloverService>();
         services.AddSingleton<ReminderService>();
         services.AddSingleton<InboxService>();
@@ -121,6 +123,11 @@ public static class DependencyInjection
     public static async Task CatchUpAsync(IServiceProvider services, CancellationToken ct = default)
     {
         await services.GetRequiredService<DayRolloverService>().RunAsync(ct);
+
+        // Wybory z dni minionych wygasają razem z przejściem dnia — to ten sam moment
+        // i ta sama zasada: nie ma zadania w tle, jest zastana różnica dat.
+        await services.GetRequiredService<FocusService>().ExpireAsync(ct);
+
         await services.GetRequiredService<ReminderService>().RunAsync(ct);
     }
 }

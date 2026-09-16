@@ -82,6 +82,21 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .OrderBy(t => t.ReminderAt)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<TaskItem>> ByFocusDateAsync(
+        DateOnly date, CancellationToken ct = default) =>
+        await db.Tasks
+            .Where(t => t.FocusDate == date && !t.Deleted && t.State != TaskState.Trashed)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<TaskItem>> ExpiredFocusAsync(
+        DateOnly today, CancellationToken ct = default) =>
+        await db.Tasks
+            .Where(t => t.FocusDate != null && t.FocusDate < today && !t.Deleted
+                     && t.State != TaskState.Done && t.State != TaskState.Trashed)
+            .ToListAsync(ct);
+
     /// <summary>Zadania nierozstrzygnięte: poza skrzynką, koszem i wykonanymi.</summary>
     private IQueryable<TaskItem> Otwarte() =>
         db.Tasks.Where(t => !t.Deleted

@@ -38,5 +38,11 @@ public interface ITaskRepository
     /// <summary>Zadania otwarte z chwilą przypomnienia nie późniejszą niż podana.</summary>
     Task<IReadOnlyList<TaskItem>> DueRemindersAsync(DateTimeOffset now, CancellationToken ct = default);
 
+    /// <summary>Zadania wybrane na dany dzień (spec 8.6).</summary>
+    Task<IReadOnlyList<TaskItem>> ByFocusDateAsync(DateOnly date, CancellationToken ct = default);
+
+    /// <summary>Wybory z dni minionych, niewykonane — do wygaszenia przy przejściu dnia.</summary>
+    Task<IReadOnlyList<TaskItem>> ExpiredFocusAsync(DateOnly today, CancellationToken ct = default);
+
     void Add(TaskItem task);
 }

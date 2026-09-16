@@ -23,7 +23,13 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.Deleted).IsRequired();
         builder.Property(t => t.RecurrenceJson).HasMaxLength(500);
         builder.Property(t => t.RollCount).IsRequired();
+        builder.Property(t => t.Energy).IsRequired().HasConversion<int>();
+        builder.Property(t => t.FocusMissCount).IsRequired();
         builder.HasIndex(t => t.ReminderAt);
+
+        // Wybór na dziś odpytywany jest przy każdym otwarciu „Dzisiaj" i przy każdym
+        // przejściu dnia.
+        builder.HasIndex(t => t.FocusDate);
 
         // Reguła jest w bazie jednym tekstem (RecurrenceJson); to tylko jej odczytana
         // postać. Zmapowana byłaby drugą, niespójną kopią tej samej rzeczy.

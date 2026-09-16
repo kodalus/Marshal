@@ -89,6 +89,42 @@ public sealed class TaskItem : Entity
     /// <summary>Waga, bez limitu (spec 1.6).</summary>
     public Priority Priority { get; private set; } = Priority.None;
 
+    // --- wybór na dziś i widok „Teraz" (spec 8.1, 8.6) ------------------------
+
+    /// <summary>
+    /// Ile to zajmie. Puste znaczy „nieoszacowane" — i wtedy zadanie **nigdy** nie
+    /// trafia do „Teraz" (spec 8.1).
+    /// </summary>
+    /// <remarks>
+    /// To nie jest surowość, tylko warunek działania: widok, który dobiera zadania pod
+    /// dostępne minuty, nie ma jak ocenić czegoś bez oszacowania. Zamiast zgadywać,
+    /// ekran prosi o oszacowanie pięciu zadań, gdy kandydatów robi się mało.
+    /// </remarks>
+    public int? EstimatedMinutes { get; private set; }
+
+    public Energy Energy { get; private set; } = Energy.Unknown;
+
+    /// <summary>
+    /// Dzień, na który zadanie wybrano. **Najwyżej pięć na dobę** (N14).
+    /// </summary>
+    /// <remarks>
+    /// To nie jest <see cref="DoDate"/>. Dzień wykonania może mieć dwadzieścia zadań
+    /// i ekran „Dzisiaj" pokaże dwadzieścia; wybór na dziś to te pięć, na które się
+    /// piszesz. Limit działa tu bez oporu, a na wadze działałby źle, bo dotyczy jednego
+    /// dnia, zeruje się co dobę i wypada przy porannym planowaniu, a nie przy wrzucaniu.
+    /// </remarks>
+    public DateOnly? FocusDate { get; private set; }
+
+    /// <summary>
+    /// Ile razy zadanie było wybrane na dany dzień i niewykonane (N13).
+    /// </summary>
+    /// <remarks>
+    /// Licznik pracuje **po cichu**. Nie ma ekranu podsumowania ani „wykonano 2 z 5";
+    /// niewykonany wybór po prostu wygasa. Po czwartym razie przegląd zadaje pytanie,
+    /// bo zwykle odpowiedź brzmi „to nie jest jedno zadanie, tylko projekt".
+    /// </remarks>
+    public int FocusMissCount { get; private set; }
+
     /// <summary>Puste = weź kolor projektu, a w dalszej kolejności obszaru.</summary>
     public string? Color { get; private set; }
 
@@ -191,6 +227,44 @@ public sealed class TaskItem : Entity
         Touch(stamp);
     }
 
+    public void SetEstimate(int? minutes, Energy energy, Hlc stamp)
+    {
+        if (minutes is <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(minutes), "Oszacowanie musi być dodatnie.");
+        }
+
+        EstimatedMinutes = minutes;
+        Energy = energy;
+        Touch(stamp);
+    }
+
+    /// <summary>Wybór na dany dzień. Limit pięciu pilnuje warstwa wyżej (N14).</summary>
+    public void Focus(DateOnly date, Hlc stamp)
+    {
+        FocusDate = date;
+        Touch(stamp);
+    }
+
+    /// <summary>Zdjęcie z wyboru **bez żadnej innej zmiany** (spec 8.6).</summary>
+    /// <remarks>
+    /// Świadomie nie dotyka licznika: zadanie zdjęte rano, żeby zrobić miejsce innemu,
+    /// nie jest zadaniem, którego nie zrobiłaś. Licznik podbija dopiero koniec dnia.
+    /// </remarks>
+    public void Unfocus(Hlc stamp)
+    {
+        FocusDate = null;
+        Touch(stamp);
+    }
+
+    /// <summary>Koniec dnia: wybór wygasa, licznik rośnie (spec 8.6, N13).</summary>
+    public void MissFocus(Hlc stamp)
+    {
+        FocusDate = null;
+        FocusMissCount++;
+        Touch(stamp);
+    }
+
     public void SetRecurrence(RecurrenceRule? rule, Hlc stamp)
     {
         RecurrenceJson = rule?.ToJson();
@@ -248,6 +322,11 @@ public sealed class TaskItem : Entity
             Priority = Priority,
             Color = Color,
             SortOrder = SortOrder,
+
+            // Oszacowanie przechodzi — to ta sama robota. Wybór na dziś i licznik
+            // pominięć nie: dotyczą konkretnego dnia i konkretnego wystąpienia.
+            EstimatedMinutes = EstimatedMinutes,
+            Energy = Energy,
         };
 
         // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"
@@ -374,6 +453,10 @@ public sealed class TaskItem : Entity
     {
         State = TaskState.Done;
         CompletedAt = now;
+
+        // Zdjęte z wyboru przy odhaczeniu, żeby koniec dnia nie policzył go jako
+        // nierobionego. Bez tego N13 liczyłby wykonane zadania jako pominięte.
+        FocusDate = null;
         Touch(stamp);
     }
 
@@ -406,6 +489,7 @@ public sealed class TaskItem : Entity
         CarriedSince = null;
         RollCount = 0;
         ReminderAt = null;
+        FocusDate = null;
         ClearWaiting();
         Touch(stamp);
     }
