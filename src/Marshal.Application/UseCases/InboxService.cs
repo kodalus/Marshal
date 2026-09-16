@@ -57,7 +57,7 @@ public sealed class InboxService(
     public Task DelegateAsync(
         Guid id, Guid areaId, string who, int? nudgeDays = null, CancellationToken ct = default) =>
         MutateAsync(id, task => task.Delegate(
-            areaId, who, DateOnly.FromDateTime(clock.Now.Date), nudgeDays, hlc.Next()), ct);
+            areaId, who, clock.Today, nudgeDays, hlc.Next()), ct);
 
     /// <summary>Moja, bez wyznaczonego dnia → następna akcja.</summary>
     public Task MakeNextAsync(Guid id, Guid areaId, Guid? projectId = null, CancellationToken ct = default) =>

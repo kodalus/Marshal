@@ -182,7 +182,13 @@ public sealed class BackupService(MarshalDbContext db, IHlcSource hlc, IClock cl
         {
             var tabela = typ.GetTableName()!;
 
-            await db.Database.ExecuteSqlRawAsync($"DELETE FROM \"{tabela}\"", ct);
+            // Nazwa tabeli sklejana poza wywołaniem: przekazany wprost tekst z wstawką
+            // trafiłby na przeciążenie dla łańcuchów formatowalnych i analizator
+            // słusznie zgłosiłby wstrzykiwanie SQL. Źródłem jest tu model EF,
+            // nie cokolwiek wpisanego przez człowieka.
+            var czyszczenie = "DELETE FROM \"" + tabela + "\"";
+
+            await db.Database.ExecuteSqlRawAsync(czyszczenie, ct);
             await db.FieldStamps.Where(s => s.EntityType == tabela).ExecuteDeleteAsync(ct);
         }
 

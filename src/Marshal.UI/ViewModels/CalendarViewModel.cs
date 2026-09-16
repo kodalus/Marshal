@@ -164,7 +164,7 @@ public sealed partial class CalendarViewModel(
 
     private void GoToToday()
     {
-        Anchor = DateOnly.FromDateTime(clock.Now.DateTime);
+        Anchor = clock.Today;
 
         if (VisibleDays == 7)
         {

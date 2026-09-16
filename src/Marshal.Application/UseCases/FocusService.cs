@@ -103,5 +103,5 @@ public sealed class FocusService(
         return wygasle.Count;
     }
 
-    private DateOnly Today() => DateOnly.FromDateTime(clock.Now.DateTime);
+    private DateOnly Today() => clock.Today;
 }

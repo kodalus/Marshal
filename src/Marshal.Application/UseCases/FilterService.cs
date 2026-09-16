@@ -49,7 +49,7 @@ public sealed class FilterService(
             .GroupBy(l => l.TaskId)
             .ToDictionary(g => g.Key, g => (IReadOnlyCollection<Guid>)g.Select(l => l.TagId).ToArray());
 
-        var dzis = DateOnly.FromDateTime(clock.Now.LocalDateTime);
+        var dzis = clock.Today;
 
         return query
             .Apply(

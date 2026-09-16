@@ -109,6 +109,7 @@
       <Button Classes="nav" Command="{Binding ShowFiltersCommand}" Content="Filtry" />
       <Button Classes="nav" Command="{Binding ShowAreasCommand}" Content="Obszary" />
       <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
+      <Button Classes="nav" Command="{Binding ShowSettingsCommand}" Content="Ustawienia" />
     </WrapPanel>
 
     <!-- Ekrany leżą na sobie w jednej komórce; widoczny jest zawsze jeden. -->
@@ -812,6 +813,51 @@
       </ScrollViewer>
 
     </DockPanel>
+    </Panel>
+
+    <!-- Ustawienia: motyw, strefa, kopia zapasowa (spec 11, 12) -->
+    <Panel IsVisible="{Binding IsSettings}">
+    <ScrollViewer DataContext="{Binding Settings}">
+      <StackPanel x:DataType="vm:SettingsViewModel" MaxWidth="560" HorizontalAlignment="Left">
+
+        <TextBlock Classes="label" Text="Motyw" />
+        <ComboBox ItemsSource="{Binding Themes}" SelectedItem="{Binding Theme}"
+                  HorizontalAlignment="Stretch" />
+
+        <TextBlock Classes="label" Margin="0,18,0,0" Text="Strefa, w której liczone są dni" />
+        <ComboBox ItemsSource="{Binding Zones}" SelectedItem="{Binding Zone}"
+                  HorizontalAlignment="Stretch" />
+        <!-- Strefa jawna, nie z systemu (spec 3.4): wyjazd na zachód przestawiłby
+             „dzisiaj" o dobę dokładnie wtedy, kiedy najmniej chce się to prostować. -->
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="Nie bierzemy jej z systemu. Termin i dzień wykonania są bez strefy — ale to ona rozstrzyga, który dzień jest dzisiaj." />
+        <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Now}" />
+
+        <TextBlock Classes="label" Margin="0,18,0,0" Text="Kopia zapasowa" />
+        <TextBlock Classes="hint" Margin="2,0,0,8" TextWrapping="Wrap"
+                   Text="Jeden plik JSON, bez konta i bez sieci. Synchronizacja chroni przed utratą urządzenia; kopia chroni przed utratą Dysku, konta albo zaufania do nich." />
+        <WrapPanel>
+          <Button Classes="nav" Margin="0,0,8,8" Command="{Binding ExportCommand}"
+                  Content="Zapisz kopię" />
+          <Button Classes="nav" Margin="0,0,8,8" Command="{Binding ImportCommand}"
+                  Content="Wczytaj kopię" />
+        </WrapPanel>
+        <CheckBox IsChecked="{Binding ReplaceOnImport}"
+                  Content="Wczytaj z podmianą całości" />
+        <!-- Podmiana wymaga świadomego kliknięcia, bo na urządzeniu podpiętym do
+             synchronizacji jest pozorna: czyszczenie nie zostawia śladu w dzienniku,
+             więc drugie urządzenie odda swój stan z powrotem. -->
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="Bez zaznaczenia kopia scala się po zegarze: nowsze pole wygrywa i nic świeższego nie przepada. Z zaznaczeniem baza jest czyszczona — to tryb na urządzenie, które zaczyna od nowa." />
+
+        <TextBlock Margin="0,18,0,0" TextWrapping="Wrap" Text="{Binding Status}" />
+
+        <TextBlock Classes="label" Margin="0,18,0,0" Text="Konto Google" />
+        <TextBlock Classes="hint" TextWrapping="Wrap"
+                   Text="Jeszcze nie podpięte — poświadczenia zakłada się w konsoli Google, zob. docs/google-dysk.md. Do tego czasu synchronizacja i kalendarz Google są nieczynne, a iCal i kopia zapasowa działają bez żadnego konta." />
+
+      </StackPanel>
+    </ScrollViewer>
     </Panel>
 
     <!-- Oczekiwane: sortowane po liczbie dni, najdłużej czekające na górze -->

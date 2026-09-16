@@ -30,7 +30,7 @@ public sealed class NowService(
     public async Task<IReadOnlyList<NowPick>> PickAsync(
         int availableMinutes, Energy energy, CancellationToken ct = default)
     {
-        var dzis = DateOnly.FromDateTime(clock.Now.DateTime);
+        var dzis = clock.Today;
         var wszystkie = await tasks.ByStateAsync(TaskState.Next, ct);
 
         // Projekt wstrzymany („kiedyś") albo zamknięty wyklucza swoje zadania: leżą

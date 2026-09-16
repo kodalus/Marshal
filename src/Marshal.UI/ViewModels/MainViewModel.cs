@@ -25,6 +25,7 @@ public enum Screen
     Calendar,
     Notes,
     Filters,
+    Settings,
     Areas,
     Archive,
     Review,
@@ -58,7 +59,8 @@ public sealed partial class MainViewModel : ObservableObject
         NowViewModel nowVm,
         CalendarViewModel calendar,
         NotesViewModel notes,
-        FiltersViewModel filters)
+        FiltersViewModel filters,
+        SettingsViewModel settings)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -76,6 +78,7 @@ public sealed partial class MainViewModel : ObservableObject
         Calendar = calendar;
         Notes = notes;
         Filters = filters;
+        Settings = settings;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
@@ -90,6 +93,11 @@ public sealed partial class MainViewModel : ObservableObject
         // wznowi się na tym samym kroku, bo jego stan siedzi w bazie, a nie w ekranie.
         Review.InboxRequested += async (_, _) => await ShowClarifyAsync();
         Now.Changed += async (_, _) => await RefreshFocusAsync();
+
+        // Wgranie kopii zmienia wszystko naraz, więc ekran pod spodem musi się
+        // przeliczyć — inaczej lista pokazuje stan sprzed wczytania, wyglądając
+        // na aktualną.
+        Settings.Imported += async (_, _) => await ReloadAsync();
     }
 
     public ClarifyViewModel Clarify { get; }
@@ -105,6 +113,8 @@ public sealed partial class MainViewModel : ObservableObject
     public NotesViewModel Notes { get; }
 
     public FiltersViewModel Filters { get; }
+
+    public SettingsViewModel Settings { get; }
 
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
@@ -200,6 +210,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsFilters => Current == Screen.Filters;
 
+    public bool IsSettings => Current == Screen.Settings;
+
     public bool IsReview => Current == Screen.Review;
 
     public bool HasNudges => Nudges.Count > 0;
@@ -226,6 +238,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCalendar));
         OnPropertyChanged(nameof(IsNotes));
         OnPropertyChanged(nameof(IsFilters));
+        OnPropertyChanged(nameof(IsSettings));
         OnPropertyChanged(nameof(IsReview));
         OnPropertyChanged(nameof(IsAreas));
         OnPropertyChanged(nameof(IsArchive));
@@ -457,6 +470,14 @@ public sealed partial class MainViewModel : ObservableObject
         await Notes.LoadAsync();
     }
 
+    /// <summary>Ustawienia: motyw, strefa, kopia zapasowa (spec 11, 12).</summary>
+    [RelayCommand]
+    private void ShowSettings()
+    {
+        Settings.Load();
+        Current = Screen.Settings;
+    }
+
     /// <summary>Własne widoki — konstruktor warunków i Ulubione (spec 11.5).</summary>
     [RelayCommand]
     private async Task ShowFiltersAsync()
@@ -555,7 +576,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    private DateOnly Today() => DateOnly.FromDateTime(_clock.Now.Date);
+    private DateOnly Today() => _clock.Today;
 
     private async Task Fill(ObservableCollection<TaskRow> target, Task<IReadOnlyList<TaskItem>> source)
     {

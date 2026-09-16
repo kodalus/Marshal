@@ -43,7 +43,7 @@ public sealed class DayRolloverService(
     public async Task<RolloverReport> RunAsync(CancellationToken ct = default)
     {
         var now = clock.Now;
-        var today = DateOnly.FromDateTime(now.DateTime);
+        var today = clock.Today;
 
         var kolejka = new Queue<TaskItem>(await tasks.OverdueByDoDateAsync(today, ct));
         var przesuniete = 0;

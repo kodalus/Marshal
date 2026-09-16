@@ -51,6 +51,8 @@ public static class DependencyInjection
             ServiceLifetime.Singleton,
             ServiceLifetime.Singleton);
 
+        // Ustawienia przed zegarem: zegar liczy dni w strefie, którą one podają.
+        services.AddSingleton<ISettings, LocalSettings>();
         services.AddSingleton<IClock, SystemClock>();
 
         services.AddSingleton<IDeviceIdentity>(sp => deviceId is null

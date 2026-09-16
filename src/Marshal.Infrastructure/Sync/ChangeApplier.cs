@@ -4,6 +4,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Sync;
 using Marshal.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Marshal.Infrastructure.Sync;

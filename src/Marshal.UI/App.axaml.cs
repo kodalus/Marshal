@@ -1,6 +1,8 @@
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using Avalonia.Threading;
+using Marshal.Application.Abstractions;
 using Marshal.Infrastructure;
 using Marshal.UI.ViewModels;
 using Marshal.UI.Views;
@@ -20,6 +22,10 @@ public partial class App : Avalonia.Application
     {
         var services = AppServices.Build();
         var viewModel = services.GetRequiredService<MainViewModel>();
+
+        // Motyw przestawia aplikacja, bo dotyczy całego okna, a nie ekranu ustawień.
+        // Zastosowany od razu, żeby ciemny wybrany wczoraj nie mignął jasnym dziś.
+        viewModel.Settings.ThemeChanged += (_, wybor) => RequestedThemeVariant = Variant(wybor);
 
         switch (ApplicationLifetime)
         {
@@ -42,6 +48,12 @@ public partial class App : Avalonia.Application
             try
             {
                 await DependencyInjection.PrepareAsync(services);
+
+                // Dopiero po migracji: zapisany motyw leży w bazie, a tej przed
+                // PrepareAsync jeszcze nie ma.
+                RequestedThemeVariant = Variant(
+                    services.GetRequiredService<ISettings>().Theme);
+
                 await viewModel.InitializeAsync();
             }
             catch (Exception ex)
@@ -51,4 +63,14 @@ public partial class App : Avalonia.Application
             }
         });
     }
+
+    private static ThemeVariant Variant(ThemeChoice wybor) => wybor switch
+    {
+        ThemeChoice.Light => ThemeVariant.Light,
+        ThemeChoice.Dark => ThemeVariant.Dark,
+
+        // „Za systemem" to Default, a nie odgadywanie jasności z zegara. System wie,
+        // czy użytkownik ma włączony tryb nocny; aplikacja nie ma jak tego zgadnąć.
+        _ => ThemeVariant.Default,
+    };
 }

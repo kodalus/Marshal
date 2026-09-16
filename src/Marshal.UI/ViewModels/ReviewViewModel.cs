@@ -214,7 +214,7 @@ public sealed partial class ReviewViewModel(
         if (IsBalanceStep)
         {
             foreach (var wiersz in await queries.BalanceAsync(
-                DateOnly.FromDateTime(clock.Now.DateTime)))
+                clock.Today))
             {
                 Balance.Add(wiersz);
             }

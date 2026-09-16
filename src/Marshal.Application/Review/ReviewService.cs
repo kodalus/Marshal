@@ -146,5 +146,5 @@ public sealed class ReviewService(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
-    private DateOnly Today() => DateOnly.FromDateTime(clock.Now.DateTime);
+    private DateOnly Today() => clock.Today;
 }

@@ -219,7 +219,7 @@ public sealed partial class FiltersViewModel : ObservableObject
             return;
         }
 
-        var dzis = DateOnly.FromDateTime(_clock.Now.LocalDateTime);
+        var dzis = _clock.Today;
 
         Results.Clear();
         foreach (var zadanie in await _filters.RunAsync(Build()))
