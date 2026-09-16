@@ -80,7 +80,9 @@ public static class DependencyInjection
         return services;
     }
 
-    /// <summary>Migracje i obszary początkowe. Wołane raz, przy starcie.</summary>
+    /// <summary>
+    /// Migracje, obszary początkowe, przejście dnia i przypomnienia. Wołane przy starcie.
+    /// </summary>
     public static async Task PrepareAsync(IServiceProvider services, CancellationToken ct = default)
     {
         var db = services.GetRequiredService<MarshalDbContext>();
@@ -95,6 +97,24 @@ public static class DependencyInjection
             services.GetRequiredService<IClock>(),
             services.GetRequiredService<IHlcSource>(),
             ct);
+
+        await CatchUpAsync(services, ct);
+    }
+
+    /// <summary>
+    /// Nadrobienie tego, co przespała zamknięta aplikacja: zaległe dni i przypomnienia.
+    /// </summary>
+    /// <remarks>
+    /// Wołane przy starcie, przy powrocie z tła i po scaleniu synchronizacji — te trzy
+    /// chwile to jedyne momenty, w których stan mógł się zmienić bez udziału okna.
+    /// Powtórne wołanie nic nie psuje i na tym polega cały pomysł: nie ma zadania w tle,
+    /// które musiałoby zadziałać dokładnie o północy, jest tylko różnica między datą
+    /// zapisaną a dzisiejszą, zastawana przy każdym otwarciu.
+    /// </remarks>
+    public static async Task CatchUpAsync(IServiceProvider services, CancellationToken ct = default)
+    {
+        await services.GetRequiredService<DayRolloverService>().RunAsync(ct);
+        await services.GetRequiredService<ReminderService>().RunAsync(ct);
     }
 }
 

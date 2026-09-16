@@ -166,6 +166,15 @@ Niesprawdzone jest to, czego bez poświadczeń sprawdzić się nie da — samo w
 Dysku — oraz logowanie na Androidzie, które wymaga osobnych poświadczeń i innej drogi
 niż przeglądarka z portem pętli zwrotnej. Instrukcja w `docs/google-dysk.md`.
 
+**Stan etapu 4 na 16.09.2026.** Powtarzalność, terminy i przejście dnia gotowe
+i sprawdzone testami, łącznie z przypadkami brzegowymi z 8.4c. Przypomnienia gotowe
+po stronie wyboru, co i kiedy pokazać; odezwanie się przy **zamkniętej** aplikacji
+wymaga powiadomień systemowych i sprzętu do sprawdzenia (8.4d).
+
+Przy okazji rozstrzygnięte dwie sprzeczności, które wyszły dopiero przy pisaniu:
+`Accumulate` kontra 8.7 (zob. 8.4b) oraz `Skip` nadrabiający po jednym dniu na
+uruchomienie. Obie były niewidoczne w samym tekście specyfikacji.
+
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
 zaczyna się od etapu 3. Przerwa między etapem 2 a 3 to najbardziej prawdopodobny moment
@@ -467,7 +476,7 @@ ze źródła. Lokalna kopia to bufor, nie dane.
 | `Kind` | `Daily`, `EveryNDays`, `Weekly`, `Monthly`, `Yearly` |
 | `Interval` | `int` |
 | `DaysOfWeek` | zbiór dni (dla `Weekly`) |
-| `DayOfMonth` | `int?` lub `LastDay` |
+| `DayOfMonth` | `int?` w zakresie 1–31, zawsze przycinane do długości miesiąca |
 | `Anchor` | `FromScheduled` \| `FromCompletion` — domyślny **wyprowadzany z `Kind`** |
 | `OnMissed` | `Skip` \| `Carry` \| `Accumulate` |
 | `Until` | `DateOnly?` |
@@ -476,6 +485,27 @@ ze źródła. Lokalna kopia to bufor, nie dane.
 RRULE z iCal jest odrzucony celowo: obsługuje przypadki, których nigdy nie użyjesz,
 a nie ma pojęcia `Anchor` ani `OnMissed` — czyli dokładnie tego, co jest tu istotne.
 Import RRULE z Google Calendar odbywa się do tego typu, stratnie, z oznaczeniem.
+
+**Osobnego pola „ostatni dzień miesiąca" nie ma.** Dzień miesiąca jest zawsze przycinany
+do długości miesiąca, więc 31 w lutym daje 28 albo 29, a w kwietniu 30 — czyli
+„ostatniego" to po prostu 31. Przycięcie nie zjada dnia na stałe: po lutym rytm wraca
+do 31-go, bo bazą jest reguła, nie ostatnia data.
+
+**Reguła siedzi w bazie jako jeden tekst JSON, nie jako osiem kolumn.** Osiem kolumn
+dałoby osiem osobnych pól w dzienniku zmian, a scalanie per pole (9.4) potrafiłoby
+złożyć rytm z połówek dwóch różnych decyzji: dni tygodnia z telefonu i odstęp
+z komputera. Reguła jest **jedną decyzją** i wygrywa albo przegrywa w całości.
+
+**Postać zapisu jest oddzielona od typu domenowego.** Reguły leżą w bazie i w dzienniku,
+więc typ domenowy musi dać się zmieniać bez unieważniania tego, co już zapisane. Odczyt
+przechodzi przez konstruktor, czyli sprawdzenia obowiązują także wartości, które przyszły
+z pliku — nie tylko te wpisane w aplikacji. Reguła nie do odczytania jest pomijana,
+a nie wywraca scalania (9.4).
+
+**Wszystko liczone na dacie, nie na chwili.** To nie jest uproszczenie, tylko
+rozstrzygnięcie: zmiana czasu nie może przesunąć dnia. Rytm liczony na chwilach
+potrafiłby po przejściu na czas zimowy wypaść w niedzielę o 23:00; przy dacie ten
+przypadek brzegowy nie istnieje.
 
 **Wartość domyślna `Anchor` nie jest stała, tylko liczona z `Kind`:**
 
@@ -686,17 +716,98 @@ Przy odhaczeniu zadania z `Recurrence`:
 5. utwórz nowe zadanie: kopia pól, nowe Id, DoDate = następne
 ```
 
-Przy przejściu dnia, dla zadań niewykonanych z `DoDate` w przeszłości:
+Odhaczone wystąpienie **zostaje odhaczone**, a następne jest nowym zadaniem z nowym
+identyfikatorem. Nie przestawiamy daty w tym samym zadaniu: historia „robiłam to w każdy
+poniedziałek prócz jednego" jest całą wartością powtarzalności, a zadanie wędrujące
+w przyszłość jej nie niesie.
+
+Termin i chwila przypomnienia przenoszą się na nowe wystąpienie **z zachowaniem odstępu**
+od daty wykonania. „Zapłacić do 10-go" przy racie robionej 5-go to pięć dni zapasu, co
+miesiąc tyle samo; skopiowane wprost byłyby od razu przeterminowane i N5 zacząłby kłamać.
+
+### 8.4a Regułę nosi najnowsze wystąpienie
+
+Przy tworzeniu kolejnego wystąpienia reguła **przechodzi na nie i znika z poprzedniego**.
+
+To jedyna rzecz, która czyni przetwarzanie dnia powtarzalnym: zadanie bez reguły nie umie
+zrodzić następnika, więc przejście dnia puszczone dwa razy nie zrobi dwóch kopii. Bez tego
+`Accumulate` dokładałby po jednej pozycji na każde uruchomienie aplikacji — a aplikacja
+startuje wiele razy dziennie i na dwóch urządzeniach, które się ze sobą nie umawiają.
+
+### 8.4b Przejście dnia
+
+Dla zadań niewykonanych z `DoDate` w przeszłości:
 
 | `OnMissed` | Działanie |
 |---|---|
-| `Skip` | `Status = Trashed`, tworzone następne wystąpienie |
-| `Carry` | `DoDate` przesuwane na dziś, oznaczenie „zaległe od X", **bez** tworzenia nowego |
-| `Accumulate` | bieżące zostaje z pierwotnym `DoDate`, tworzone następne |
+| `Skip` | bieżące do kosza; tworzone **jedno** wystąpienie na dziś albo później |
+| `Carry` | `DoDate` przesuwane na dziś, `CarriedSince` ustawiane raz, **bez** tworzenia nowego |
+| `Accumulate` | bieżące zostaje jako zaległość bez dnia; tworzone następne |
 
-Przypadki brzegowe do pokrycia testami: 31. dnia w miesiącu 30-dniowym, 29 lutego,
-zmiana czasu, `Weekly` z pustym zbiorem dni, odhaczenie zadania z przyszłości,
-odhaczenie dwa razy tego samego dnia, `Carry` przez trzy tygodnie z rzędu.
+**`Skip` nadrabia jednym krokiem.** Tydzień bez otwierania aplikacji ma dać jedno
+wystąpienie, a nie siedem utworzonych i wyrzuconych po kolei. Nagrobek każdego
+przeskoczonego dnia nie jest niczyją informacją, a rozjechałby się po wszystkich
+urządzeniach. Przeskoczone wystąpienia **zużywają licznik serii**: „pięć razy" przespane
+przez pięć dni jest serią skończoną, a nie serią czekającą na kolejne pięć okazji.
+
+**`Carry` pamięta pierwszy przegapiony dzień.** `CarriedSince` ustawiane jest raz, przy
+pierwszym przeniesieniu — „zaległe od 14 września", nie „od wczoraj". Bez tego N12 nigdy
+nie doliczyłby trzydziestu dni i strażnik rytmu nie odezwałby się nigdy.
+
+**`Accumulate` zostawia zaległość, nie datę.** To rozstrzygnięcie sprzeczności między tą
+tabelą a 8.7: gdyby pominięte wystąpienie zostało zaplanowane na swoją dawną datę, 8.7
+przesunęłoby je nazajutrz na dziś, potem znowu, i po czterech dniach każde odpaliłoby N15.
+Mechanizm zjadałby sam siebie. Zaległe wystąpienie zostaje więc **następną akcją bez
+wyznaczonego dnia** — bo tym właśnie jest — a dzień, na który było umówione, zostaje
+w `CarriedSince` jako „zaległe od".
+
+`Accumulate` domyka całą zaległość w jednym przebiegu, z **ogranicznikiem 120 wystąpień**.
+Rok bez otwarcia aplikacji przy powtarzaniu codziennym dałby trzysta pozycji naraz, czyli
+dokładnie to, przed czym ma chronić zasada 1.2. Reszta dochodzi przy kolejnym
+uruchomieniu; nic nie ginie, tylko schodzi partiami.
+
+### 8.4c Kiedy to się dzieje
+
+Przy starcie aplikacji, przy powrocie z tła i po każdym scaleniu synchronizacji.
+
+**Nie ma wyzwalacza o północy i nie będzie.** Aplikacja nie chodzi w tle, a „przejście
+dnia" to nie zdarzenie w czasie, tylko zastana różnica między datą zapisaną a dzisiejszą.
+Wołanie jest powtarzalne bez skutków ubocznych i to jest warunek, nie wygoda: dwa
+urządzenia robią to samo, niezależnie, bez umawiania się, które ma.
+
+Przypadki brzegowe pokryte testami: 31. dnia w miesiącu 30-dniowym, 29 lutego, zmiana
+czasu, `Weekly` z pustym zbiorem dni, odhaczenie zadania z przyszłości, odhaczenie dwa
+razy tego samego dnia, `Carry` przez trzy tygodnie z rzędu, `Skip` i `Accumulate` po
+tygodniu nieobecności, przejście dnia puszczone dwa razy.
+
+### 8.4d Przypomnienia
+
+`ReminderAt` jest **chwilą**, nie dniem — o to właśnie chodzi w przypomnieniu — i jest
+polem osobnym od `DoDate` i od `Deadline`, bo znaczy co innego niż oba: „kiedy chcę o tym
+usłyszeć". Zadanie na wtorek może chcieć przypomnienia w poniedziałek wieczorem,
+a zadanie z terminem za miesiąc — na tydzień przed.
+
+**Przypomnienie z przeszłości też się odzywa.** Aplikacja nie chodzi w tle, więc chwila
+przypomnienia prawie nigdy nie zastaje jej otwartej; odzywanie się wyłącznie „co do
+minuty" znaczyłoby, że przypomnienia nie działają w ogóle.
+
+**Co się synchronizuje, a co nie.** Chwila przypomnienia jest decyzją i wędruje między
+urządzeniami. „Czy to urządzenie już pokazało" jest faktem o tym urządzeniu i zostaje
+przy nim, w tabeli poza dziennikiem zmian.
+
+Cena tego wyboru: przypomnienie potrafi odezwać się i na telefonie, i na komputerze.
+Cena wyboru odwrotnego: telefon odgrywa je w torbie, zapisuje „pokazane", i nie
+dowiadujesz się nigdy. Dwa razy usłyszeć jest gorzej niż raz, ale nieporównanie lepiej
+niż nie usłyszeć wcale.
+
+Zapis pokazania trzyma **chwilę, na którą było ustawione**, a nie samo „było". Bez tego
+„przypomnij mi jednak o godzinę później" milczałoby.
+
+**Czego nie ma:** odezwania się przy zamkniętej aplikacji. Wymaga powiadomień systemowych
+— na Androidzie kanału i uprawnienia, na Windowsie zarejestrowanego skrótu w menu Start —
+czyli jedynego kawałka, który wygląda inaczej na każdej platformie i którego nie da się
+sprawdzić testem. Wydzielony interfejsem; wybieranie, co i kiedy pokazać, leży po stronie
+sprawdzonej testami.
 
 ### 8.5 Równowaga obszarów
 
@@ -1001,9 +1112,11 @@ synchronizacji i pełni rolę kopii historycznej.
 
 ### 13.2 Otwarte
 
-1. **Czy `Accumulate` jest potrzebne w wersji 1?** `Carry` pokrywa niemal wszystko,
-   a `Accumulate` to jedyna ścieżka, która potrafi wyprodukować stertę. Do rozważenia
-   usunięcie z wersji 1 przy zostawieniu w modelu.
+1. **Czy `Accumulate` jest potrzebne w wersji 1?** Zaimplementowane w modelu razem
+   z ogranicznikiem 120 wystąpień na przebieg i z zamianą zaległego wystąpienia na
+   akcję bez dnia (8.4b) — obie rzeczy dokładnie po to, żeby sterty nie było.
+   **Otwarte zostaje, czy interfejs ma je w ogóle proponować.** Wstępnie nie: `Carry`
+   jest domyślne i pokrywa niemal wszystko, a wybór, którego nie widać, nie kusi.
 2. **Wartości `QuietDays` i `DefaultNudgeDays`** są zgadnięte. Do korekty po miesiącu
    realnego używania — przed pierwszym kontaktem z życiem nie ma na czym oprzeć decyzji.
 3. **Heurystyka podpowiadania energii** w „Teraz". Zaczynamy od pory dnia; wersja oparta
