@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Sync;
@@ -22,6 +23,17 @@ namespace Marshal.Infrastructure.Sync;
 /// </remarks>
 public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
 {
+    /// <summary>
+    /// Bez uciekania znaków spoza ASCII. Domyślnie <c>JsonSerializer</c> zamieniłby
+    /// „kupić mleko" na „kupi\u0107 mleko", a format tekstowy wybraliśmy właśnie po to,
+    /// żeby dziennik dało się czytać przy diagnostyce. Nazwa kodera mówi o kontekście
+    /// HTML, w którym te znaki bywają groźne — dziennik nigdzie nie trafia jako HTML.
+    /// </summary>
+    private static readonly JsonSerializerOptions Json = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
@@ -121,6 +133,6 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
         var converter = property.Metadata.GetValueConverter();
         var stored = converter is null ? value : converter.ConvertToProvider(value);
 
-        return stored is null ? null : JsonSerializer.Serialize(stored);
+        return stored is null ? null : JsonSerializer.Serialize(stored, Json);
     }
 }

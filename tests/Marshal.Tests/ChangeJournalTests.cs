@@ -97,6 +97,19 @@ public sealed class ChangeJournalTests : IDisposable
     }
 
     [Fact]
+    public void Polskie_znaki_nie_sa_uciekane()
+    {
+        // Format tekstowy ma sens tylko wtedy, gdy da się go czytać. Domyślny
+        // serializator zamieniłby każdą polską literę na sekwencję \uXXXX.
+        Zapisz("zażółć gęślą jaźń");
+
+        var wartosc = _db.Changes.Single(w => w.Field == "Title").Value;
+
+        wartosc.Should().NotContain("\\u");
+        wartosc.Should().Contain("zażółć gęślą jaźń");
+    }
+
+    [Fact]
     public void Znacznik_wpisu_jest_znacznikiem_encji()
     {
         var zadanie = Zapisz();
