@@ -48,6 +48,13 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
     [ObservableProperty]
     public partial PriorityChoice SelectedPriority { get; set; } = PriorityChoice.All[0];
 
+    /// <summary>Liczba dziesiętna z tego samego powodu co odstęp rytmu: NumericUpDown.</summary>
+    [ObservableProperty]
+    public partial decimal? EstimatedMinutes { get; set; }
+
+    [ObservableProperty]
+    public partial EnergyLevelChoice SelectedEnergyLevel { get; set; } = EnergyLevelChoice.All[0];
+
     // --- rytm ----------------------------------------------------------------
 
     [ObservableProperty]
@@ -99,6 +106,8 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
 
     public IReadOnlyList<PriorityChoice> Priorities => PriorityChoice.All;
 
+    public IReadOnlyList<EnergyLevelChoice> Energies => EnergyLevelChoice.All;
+
     /// <summary>
     /// Rytm zdaniem, nie formularzem. Sześć pól da się wypełnić źle i nie zauważyć;
     /// zdanie da się przeczytać i od razu wiedzieć, czy to jest to, o co chodziło.
@@ -141,6 +150,8 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
         ReminderDay = task.ReminderAt is { } r ? ToOffset(DateOnly.FromDateTime(r.DateTime)) : null;
         ReminderTime = task.ReminderAt?.TimeOfDay;
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
+        EstimatedMinutes = task.EstimatedMinutes;
+        SelectedEnergyLevel = Energies.First(e => e.Value == task.Energy);
         LoadRule(task.Recurrence);
 
         _loading = false;
@@ -193,7 +204,9 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
             ToDate(Deadline),
             ReminderAt(),
             regula,
-            SelectedPriority.Value));
+            SelectedPriority.Value,
+            EstimatedMinutes is { } minuty ? (int)minuty : null,
+            SelectedEnergyLevel.Value));
 
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);

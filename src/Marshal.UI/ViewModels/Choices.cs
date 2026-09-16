@@ -51,6 +51,23 @@ public sealed record MissedChoice(OnMissed Value, string Label)
     public override string ToString() => Label;
 }
 
+/// <summary>
+/// Poziom energii. „Nieokreślona" jest pierwsza i domyślna, bo brak decyzji jest
+/// stanem wyjściowym — a zadanie nieokreślone przechodzi przy każdym poziomie.
+/// </summary>
+public sealed record EnergyLevelChoice(Energy Value, string Label)
+{
+    public static readonly IReadOnlyList<EnergyLevelChoice> All =
+    [
+        new(Energy.Unknown, "nieokreślona"),
+        new(Energy.Low, "resztki wystarczą"),
+        new(Energy.Medium, "średnia"),
+        new(Energy.High, "pełna"),
+    ];
+
+    public override string ToString() => Label;
+}
+
 public sealed record PriorityChoice(Priority Value, string Label)
 {
     public static readonly IReadOnlyList<PriorityChoice> All =

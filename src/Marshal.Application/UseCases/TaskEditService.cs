@@ -13,7 +13,9 @@ public sealed record TaskEdit(
     DateOnly? Deadline,
     DateTimeOffset? ReminderAt,
     RecurrenceRule? Recurrence,
-    Priority Priority);
+    Priority Priority,
+    int? EstimatedMinutes = null,
+    Energy Energy = Energy.Unknown);
 
 /// <summary>
 /// Zmiana pól zadania z jednego miejsca (spec 11, ekran szczegółu).
@@ -64,6 +66,11 @@ public sealed class TaskEditService(
         if (edit.Priority != zadanie.Priority)
         {
             zadanie.SetPriority(edit.Priority, hlc.Next());
+        }
+
+        if (edit.EstimatedMinutes != zadanie.EstimatedMinutes || edit.Energy != zadanie.Energy)
+        {
+            zadanie.SetEstimate(edit.EstimatedMinutes, edit.Energy, hlc.Next());
         }
 
         if (edit.Recurrence != zadanie.Recurrence)

@@ -26,6 +26,7 @@ public static class AppServices
         services.AddSingleton<ClarifyViewModel>();
         services.AddSingleton<TaskDetailViewModel>();
         services.AddSingleton<ReviewViewModel>();
+        services.AddSingleton<NowViewModel>();
         services.AddSingleton<MainViewModel>();
 
         _provider = services.BuildServiceProvider();

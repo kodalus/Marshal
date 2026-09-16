@@ -14,6 +14,7 @@ namespace Marshal.UI.ViewModels;
 public enum Screen
 {
     Today,
+    Now,
     Inbox,
     Clarify,
     Next,
@@ -34,6 +35,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IAreaRepository _areas;
     private readonly IClock _clock;
     private readonly TaskEditService _edit;
+    private readonly FocusService _focus;
     private readonly IReviewQueries _queries;
     private readonly InAppNotifier _notifier;
 
@@ -44,11 +46,13 @@ public sealed partial class MainViewModel : ObservableObject
         IAreaRepository areas,
         IClock clock,
         TaskEditService edit,
+        FocusService focus,
         IReviewQueries queries,
         InAppNotifier notifier,
         ClarifyViewModel clarify,
         TaskDetailViewModel detail,
-        ReviewViewModel review)
+        ReviewViewModel review,
+        NowViewModel nowVm)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -56,11 +60,13 @@ public sealed partial class MainViewModel : ObservableObject
         _areas = areas;
         _clock = clock;
         _edit = edit;
+        _focus = focus;
         _queries = queries;
         _notifier = notifier;
         Clarify = clarify;
         Detail = detail;
         Review = review;
+        Now = nowVm;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
@@ -74,6 +80,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Krok skrzynki prowadzi do drzewka przetwarzania. Przegląd zostaje otwarty —
         // wznowi się na tym samym kroku, bo jego stan siedzi w bazie, a nie w ekranie.
         Review.InboxRequested += async (_, _) => await ShowClarifyAsync();
+        Now.Changed += async (_, _) => await RefreshFocusAsync();
     }
 
     public ClarifyViewModel Clarify { get; }
@@ -81,6 +88,8 @@ public sealed partial class MainViewModel : ObservableObject
     public TaskDetailViewModel Detail { get; }
 
     public ReviewViewModel Review { get; }
+
+    public NowViewModel Now { get; }
 
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
@@ -103,6 +112,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Oczekiwane, którym minął próg ponaglenia (N3) — pozycja w „Dzisiaj".</summary>
     public ObservableCollection<WaitingItem> Nudges { get; } = [];
+
+    /// <summary>Pięć slotów wyboru na dziś (spec 8.6).</summary>
+    public ObservableCollection<TaskItem> FocusItems { get; } = [];
+
+    /// <summary>Kandydaci do wyboru na dziś: „Następne" i zaplanowane na dziś lub wcześniej.</summary>
+    public ObservableCollection<TaskRow> FocusCandidates { get; } = [];
 
     public ObservableCollection<TaskItem> SomedayItems { get; } = [];
 
@@ -129,6 +144,26 @@ public sealed partial class MainViewModel : ObservableObject
     public bool HasReminders => Reminders.Count > 0;
 
     public bool IsToday => Current == Screen.Today;
+
+    public bool IsNow => Current == Screen.Now;
+
+    public bool FocusIsFull => FocusItems.Count >= FocusService.Slots;
+
+    public string FocusCount => $"{FocusItems.Count} z {FocusService.Slots}";
+
+    /// <summary>
+    /// Zadanie czekające na zwolnienie slotu. Puste, dopóki piątka nie jest pełna.
+    /// </summary>
+    /// <remarks>
+    /// Pytanie „które schodzi" bez pokazania czego dotyczy nie jest pytaniem, więc
+    /// odmowa niesie ze sobą obecną piątkę i tę pozycję (spec 8.6).
+    /// </remarks>
+    [ObservableProperty]
+    public partial TaskItem? PendingFocus { get; set; }
+
+    public bool HasPendingFocus => PendingFocus is not null;
+
+    partial void OnPendingFocusChanged(TaskItem? value) => OnPropertyChanged(nameof(HasPendingFocus));
 
     public bool IsInbox => Current == Screen.Inbox;
 
@@ -159,6 +194,7 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnCurrentChanged(Screen value)
     {
         OnPropertyChanged(nameof(IsToday));
+        OnPropertyChanged(nameof(IsNow));
         OnPropertyChanged(nameof(IsInbox));
         OnPropertyChanged(nameof(IsClarify));
         OnPropertyChanged(nameof(IsNext));
@@ -211,6 +247,7 @@ public sealed partial class MainViewModel : ObservableObject
         var zadanie = Current switch
         {
             Screen.Today => ShowTodayAsync(),
+            Screen.Now => Now.LoadAsync(),
             Screen.Next => ShowNextAsync(),
             Screen.Plans => ShowPlansAsync(),
             Screen.Someday => ShowSomedayAsync(),
@@ -223,6 +260,83 @@ public sealed partial class MainViewModel : ObservableObject
 
         await zadanie;
     }
+
+    /// <summary>
+    /// Piątka na dziś i kandydaci do niej. Kandydaci to „Następne" oraz zaplanowane
+    /// na dziś albo wcześniej (spec 8.6) — nie wszystko, co ma dzisiejszą datę.
+    /// </summary>
+    private async Task RefreshFocusAsync()
+    {
+        var dzis = Today();
+
+        FocusItems.Clear();
+        foreach (var zadanie in await _focus.TodayAsync())
+        {
+            FocusItems.Add(zadanie);
+        }
+
+        var wybrane = FocusItems.Select(t => t.Id).ToHashSet();
+        var kandydaci = (await _tasks.ByStateAsync(TaskState.Next))
+            .Concat(await _tasks.ByStateAsync(TaskState.Scheduled))
+            .Where(t => t.State == TaskState.Next || t.DoDate <= dzis)
+            .Where(t => !wybrane.Contains(t.Id));
+
+        FocusCandidates.Clear();
+        foreach (var zadanie in kandydaci)
+        {
+            FocusCandidates.Add(TaskRow.From(zadanie, dzis));
+        }
+
+        OnPropertyChanged(nameof(FocusIsFull));
+        OnPropertyChanged(nameof(FocusCount));
+    }
+
+    /// <summary>Wybór zadania na dziś. Przy pełnej piątce pyta, które schodzi.</summary>
+    [RelayCommand]
+    private async Task FocusAsync(TaskRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var wynik = await _focus.TryFocusAsync(row.Task.Id);
+
+        if (!wynik.Accepted)
+        {
+            PendingFocus = row.Task;
+            await RefreshFocusAsync();
+            return;
+        }
+
+        PendingFocus = null;
+        await RefreshFocusAsync();
+    }
+
+    /// <summary>
+    /// Zdjęcie z wyboru. Jeśli coś czekało na slot, wchodzi na zwolnione miejsce.
+    /// </summary>
+    [RelayCommand]
+    private async Task UnfocusAsync(TaskItem? task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        await _focus.UnfocusAsync(task.Id);
+
+        if (PendingFocus is { } czekajace)
+        {
+            await _focus.TryFocusAsync(czekajace.Id);
+            PendingFocus = null;
+        }
+
+        await RefreshFocusAsync();
+    }
+
+    [RelayCommand]
+    private void CancelPendingFocus() => PendingFocus = null;
 
     /// <summary>Otwarcie szczegółu — jedyne wejście do terminu, przypomnienia i rytmu.</summary>
     [RelayCommand]
@@ -316,12 +430,21 @@ public sealed partial class MainViewModel : ObservableObject
         await Review.OpenAsync();
     }
 
+    /// <summary>Widok „Teraz" — trzy do pięciu pozycji po wyborze czasu i energii.</summary>
+    [RelayCommand]
+    private async Task ShowNowAsync()
+    {
+        Current = Screen.Now;
+        await Now.LoadAsync();
+    }
+
     [RelayCommand]
     private async Task ShowTodayAsync()
     {
         Current = Screen.Today;
         var dzis = Today();
         await Fill(TodayItems, _tasks.TodayAsync(dzis));
+        await RefreshFocusAsync();
 
         // Ponaglenia (N3) i projekty zablokowane (N1) idą na „Dzisiaj", bo są sprawami
         // na dziś. Cisza obszarów (N10) **nigdy tu nie trafia** — to nie jest sprawa na

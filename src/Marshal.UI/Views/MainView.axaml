@@ -6,6 +6,7 @@
              xmlns:uc="using:Marshal.Application.UseCases"
              xmlns:abs="using:Marshal.Application.Abstractions"
              xmlns:rev="using:Marshal.Application.Review"
+             xmlns:sys="using:System"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
@@ -85,6 +86,7 @@
 
     <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,16" IsVisible="{Binding !IsClarify}">
       <Button Classes="nav" Command="{Binding ShowTodayCommand}" Content="Dzisiaj" />
+      <Button Classes="nav" Command="{Binding ShowNowCommand}" Content="Teraz" />
       <Button Classes="nav" Command="{Binding ShowInboxCommand}">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <TextBlock Text="Skrzynka" />
@@ -210,6 +212,51 @@
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Zadania na dziś i po terminie. Terminy pierwsze — to fakt zewnętrzny, nie decyzja." />
 
+      <!-- Pięć slotów wyboru na dziś (8.6). To nie to samo co dzień wykonania:
+           dzień wykonania może mieć dwadzieścia zadań, a to jest te pięć, na które
+           się piszesz. -->
+      <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,12" CornerRadius="8"
+              Background="#18808080">
+        <StackPanel>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="Na dziś" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Classes="hint" Text="{Binding FocusCount}" />
+          </Grid>
+
+          <ItemsControl ItemsSource="{Binding FocusItems}" Margin="0,8,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="tasks:TaskItem">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                  <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
+                             VerticalAlignment="Center" />
+                  <Button Grid.Column="1" Content="zdejmij" Padding="10,4"
+                          Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).UnfocusCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- Szósty nie wchodzi, dopóki coś nie zejdzie. Limit działa bez oporu,
+               bo dotyczy jednego dnia i zeruje się co dobę (8.6). -->
+          <Border Margin="0,8,0,0" Padding="12,10" CornerRadius="6" Background="#20808080"
+                  IsVisible="{Binding HasPendingFocus}">
+            <StackPanel Spacing="6">
+              <TextBlock TextWrapping="Wrap">
+                <Run Text="Pięć slotów jest zajętych. Co schodzi, żeby weszło:" />
+                <Run Text="{Binding PendingFocus.Title}" FontWeight="SemiBold" />
+                <Run Text="?" />
+              </TextBlock>
+              <Button Content="jednak nie" Padding="10,4" HorizontalAlignment="Left"
+                      Command="{Binding CancelPendingFocusCommand}" />
+            </StackPanel>
+          </Border>
+
+          <TextBlock Classes="hint" Margin="0,8,0,0" TextWrapping="Wrap"
+                     Text="Niewykonany wybór po prostu wygasa o północy. Bez podsumowania i bez oceny." />
+        </StackPanel>
+      </Border>
+
       <!-- N1 i N3 trafiają tutaj, bo są sprawami na dziś. Cisza obszarów (N10) nigdy —
            to nie jest sprawa na dziś, a codzienne przypominanie zamieniłoby ją w szum. -->
       <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
@@ -263,9 +310,9 @@
                 <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
                            IsVisible="{Binding HasBadges}" />
               </StackPanel>
-              <Button Grid.Column="1" Content="Szczegół" Padding="10,4" Margin="0,0,6,0"
+              <Button Grid.Column="1" Content="na dziś" Padding="10,4" Margin="0,0,6,0"
                       VerticalAlignment="Center"
-                      Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).OpenCommand}"
+                      Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).FocusCommand}"
                       CommandParameter="{Binding}" />
               <Button Grid.Column="2" Content="Zrobione" Padding="10,4"
                       VerticalAlignment="Center"
