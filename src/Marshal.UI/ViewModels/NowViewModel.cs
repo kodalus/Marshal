@@ -114,6 +114,10 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    // Przeliczenie po zmianie suwaka. Wywołanie bez czekania, bo powiadomienie
+    // o zmianie właściwości nie jest asynchroniczne — to jedyne miejsce w oknie,
+    // gdzie wyjątek z odczytu bazy nie miałby gdzie wypłynąć. Odczyt jest prosty
+    // i bezstanowy, więc koszt tego ustępstwa jest znany i ograniczony.
     partial void OnSelectedMinutesChanged(MinutesChoice value) => _ = RefreshAsync();
 
     partial void OnSelectedEnergyChanged(EnergyChoice value) => _ = RefreshAsync();

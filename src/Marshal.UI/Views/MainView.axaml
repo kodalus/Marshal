@@ -252,6 +252,28 @@
             </StackPanel>
           </Border>
 
+          <!-- Kandydaci: „Następne" i zaplanowane na dziś lub wcześniej (8.6).
+               Nie to samo co lista poniżej — większość następnych akcji nie ma daty
+               wykonania i bez tego miejsca nie dałoby się ich w ogóle wybrać. -->
+          <StackPanel IsVisible="{Binding !FocusIsFull}">
+            <TextBlock Classes="label" Text="Do wyboru" />
+            <ScrollViewer MaxHeight="220">
+              <ItemsControl ItemsSource="{Binding FocusCandidates}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TaskRow">
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                      <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
+                                 VerticalAlignment="Center" Opacity="0.8" />
+                      <Button Grid.Column="1" Content="na dziś" Padding="10,4"
+                              Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).FocusCommand}"
+                              CommandParameter="{Binding}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </StackPanel>
+
           <TextBlock Classes="hint" Margin="0,8,0,0" TextWrapping="Wrap"
                      Text="Niewykonany wybór po prostu wygasa o północy. Bez podsumowania i bez oceny." />
         </StackPanel>

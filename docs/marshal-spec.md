@@ -184,6 +184,11 @@ Niezmienniki N12, N13 i N15 mają dane (licznik przesunięć, data pierwszego pr
 ale nie mają jeszcze własnego kroku w przeglądzie — dojdą razem z wyborem na dziś
 (`FocusDate`, etap 6), bo N13 bez niego nie ma czego liczyć.
 
+**Etap 6 zamknięty 16.09.2026.** Widok „Teraz" z punktacją z 8.1 i powodem przy każdej
+pozycji, wybór pięciu na dziś z wygaszaniem o północy, oszacowanie czasu i energii
+w szczególe zadania. N12, N13 i N15 dostały własny krok w przeglądzie — teraz mają
+co liczyć.
+
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
 zaczyna się od etapu 3. Przerwa między etapem 2 a 3 to najbardziej prawdopodobny moment
@@ -648,6 +653,20 @@ Zadania bez `EstimatedMinutes` **nigdy** nie trafiają do „Teraz". Zamiast teg
 kandydatów jest mniej niż trzy, ekran proponuje „oszacuj 5 zadań" — mikrozadanie na
 minutę, które samo się rozwiązuje w miarę używania.
 
+**Każda pozycja pokazuje powód, dla którego wypłynęła** („termin za chwilę",
+„odblokowuje projekt", „czeka 100 dni"). Powód jest częścią odpowiedzi, nie ozdobnikiem:
+lista bez uzasadnienia każe wierzyć na słowo, a wtedy pierwszy chybiony wybór odbiera
+ekranowi zaufanie w całości.
+
+**Przycięcie wieku dotyczy punktów, nie faktu.** Rok i miesiąc dostają tyle samo punktów,
+bo bez tego jedno zadanie sprzed roku zdominowałoby ekran na zawsze — ale powód podaje
+wiek prawdziwy. „Czeka 20 dni" przy zadaniu sprzed stu dni byłoby zwyczajną nieprawdą.
+
+`Energy.Nieznana` **nie jest tym samym co `Niska`**. Zadanie nieoszacowane przechodzi
+przy każdym poziomie energii, bo nie ma podstaw, żeby je odsiać; zadanie oznaczone jako
+lekkie zostało tak oznaczone świadomie. Sklejenie tych wartości ukryłoby brak decyzji
+pod pozorem decyzji.
+
 ### 8.2 Wykrywanie zablokowanych projektów
 
 ```sql
@@ -685,7 +704,7 @@ zablokowany — czekanie to prawidłowy stan. Projekt, w którym wszystkie akcje
 
 ### 8.3 Kreator przeglądu tygodniowego
 
-Siedem kroków, każdy z licznikiem pozycji do rozpatrzenia:
+Dziewięć kroków (zerowy i dwa bez odhaczania), każdy z licznikiem pozycji:
 
 | # | Krok | Źródło |
 |---|---|---|
@@ -696,7 +715,8 @@ Siedem kroków, każdy z licznikiem pozycji do rozpatrzenia:
 | 5 | Projekty aktywne — nadal aktualne? | `Status = Active`, nietknięte od 14 dni |
 | 6 | Kiedyś-może — coś dojrzało? | N6 + przegląd losowych 10 |
 | 7 | Kalendarz — dwa tygodnie w przód | wydarzenia + `Deadline` |
-| 8 | Równowaga obszarów | N10 + tabela z 8.5 |
+| 8 | Liczniki, które o coś pytają | N12, N13, N15 |
+| 9 | Równowaga obszarów | N10 + tabela z 8.5 |
 
 Krok zerowy, przed pierwszym: przypięte notatki (wizja, zasady) — sam tekst, bez
 żadnej akcji do wykonania. Jest tam po to, żeby reszta przeglądu działa się po jego
@@ -900,6 +920,21 @@ puli — licznik pracuje po cichu na potrzeby N13.
 
 `FocusDate` to nie to samo co `DoDate`: `DoDate` może mieć dwadzieścia zadań na dziś
 i ekran „Dzisiaj" pokaże dwadzieścia. `FocusDate` to te pięć, na które się piszesz.
+
+**Kandydaci to `Next` oraz `Scheduled` z `DoDate ≤ dziś`** — i lista kandydatów musi być
+na ekranie osobno, obok listy dzisiejszej. Większość następnych akcji nie ma dnia
+wykonania, więc bez własnego miejsca nie dałoby się ich w ogóle wybrać.
+
+**Zdjęcie z wyboru nie podbija licznika.** Zadanie zdjęte rano, żeby zrobić miejsce
+innemu, nie jest zadaniem, którego nie zrobiłaś. Licznik podbija wyłącznie koniec dnia.
+
+**Odhaczenie zdejmuje z wyboru.** Bez tego wygaszanie na koniec dnia policzyłoby zadania
+wykonane jako pominięte i N13 zacząłby kłamać.
+
+N14 jest limitem **ekranu, nie bazy**. Scalanie z drugiego urządzenia potrafi przynieść
+szósty wybór i nie ma jak temu zapobiec bez ograniczeń między agregatami, których ten
+model nie ma (9.1). Skutek jest nieszkodliwy: jednego dnia widać sześć pozycji zamiast
+pięciu, a nazajutrz wszystko wygasa.
 
 ### 8.7 Przesuwanie zaplanowanych
 
