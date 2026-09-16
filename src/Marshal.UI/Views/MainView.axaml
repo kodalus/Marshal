@@ -1,12 +1,153 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Marshal.UI.ViewModels"
+             xmlns:tasks="using:Marshal.Domain.Tasks"
+             xmlns:projects="using:Marshal.Domain.Projects"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
-  <StackPanel Margin="24" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
-    <TextBlock Text="Marshal" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
-    <TextBlock Text="Etap 0 — szkielet" Opacity="0.6" HorizontalAlignment="Center" />
-    <TextBlock Text="{Binding Stamp}" FontFamily="monospace" Margin="0,16,0,0" HorizontalAlignment="Center" />
-    <TextBlock Text="znacznik zegara logicznego ze startu" FontSize="11" Opacity="0.5" HorizontalAlignment="Center" />
-  </StackPanel>
+
+  <UserControl.Styles>
+    <Style Selector="Button.nav">
+      <Setter Property="Margin" Value="0,0,8,0" />
+      <Setter Property="Padding" Value="14,8" />
+    </Style>
+    <Style Selector="Button.branch">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="14,10" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel Margin="16">
+
+    <!-- Wrzut jest dostępny z każdego ekranu poza przetwarzaniem: myśl przychodzi
+         wtedy, kiedy przychodzi, a nie wtedy, gdy akurat jesteś w skrzynce. -->
+    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12"
+                IsVisible="{Binding !IsClarify}">
+      <TextBox Text="{Binding CaptureText}"
+               Watermark="Wrzuć myśl i naciśnij Enter"
+               FontSize="16"
+               AcceptsReturn="False">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{Binding CaptureCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+      <TextBlock Classes="hint" Margin="2,4,0,0"
+                 Text="Bez pól, bez decyzji — obszar i reszta dochodzą przy przetwarzaniu." />
+    </StackPanel>
+
+    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,16"
+                IsVisible="{Binding !IsClarify}">
+      <Button Classes="nav" Command="{Binding ShowInboxCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="Skrzynka" />
+          <Border Background="#40808080" CornerRadius="9" Padding="7,1"
+                  IsVisible="{Binding HasInbox}">
+            <TextBlock Text="{Binding InboxCount}" FontSize="12" />
+          </Border>
+        </StackPanel>
+      </Button>
+      <Button Classes="nav" Command="{Binding ShowNextCommand}" Content="Następne" />
+      <Button Classes="nav" Command="{Binding ShowProjectsCommand}" Content="Projekty" />
+    </StackPanel>
+
+    <!-- Skrzynka -->
+    <DockPanel IsVisible="{Binding IsInbox}">
+      <Button DockPanel.Dock="Bottom" Margin="0,12,0,0"
+              HorizontalAlignment="Stretch" Padding="14,12"
+              Command="{Binding ShowClarifyCommand}"
+              IsEnabled="{Binding HasInbox}"
+              Content="Przetwórz skrzynkę" />
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                 Text="Przetwarzanie pokazuje jedną pozycję naraz." />
+      <ListBox ItemsSource="{Binding InboxItems}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="tasks:TaskItem">
+            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Padding="0,4" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <!-- Przetwarzanie: jedna pozycja, bez listy w tle -->
+    <ScrollViewer IsVisible="{Binding IsClarify}" DataContext="{Binding Clarify}"
+                  x:DataType="vm:ClarifyViewModel">
+      <StackPanel MaxWidth="560" HorizontalAlignment="Center">
+
+        <TextBlock Classes="hint" HorizontalAlignment="Center"
+                   Text="{Binding Remaining, StringFormat='Do rozstrzygnięcia: {0}'}" />
+
+        <Border Margin="0,12,0,20" Padding="20" CornerRadius="8" Background="#20808080">
+          <TextBlock Text="{Binding Current.Title}" FontSize="22" TextWrapping="Wrap" />
+        </Border>
+
+        <TextBlock Text="Obszar" Classes="hint" />
+        <ComboBox ItemsSource="{Binding Areas}" SelectedItem="{Binding SelectedArea}"
+                  HorizontalAlignment="Stretch" Margin="0,4,0,16" />
+
+        <TextBlock Text="Nie wymaga działania" Classes="hint" Margin="0,0,0,6" />
+        <Button Classes="branch" Command="{Binding TrashCommand}" Content="Kosz" />
+        <Button Classes="branch" Command="{Binding SomedayCommand}" Content="Kiedyś-może" />
+
+        <TextBlock Text="Wymaga działania" Classes="hint" Margin="0,14,0,6" />
+        <Button Classes="branch" Command="{Binding DoNowCommand}"
+                Content="Zrobione teraz (krócej niż dwie minuty)" />
+        <Button Classes="branch" Command="{Binding MakeNextCommand}" Content="Następna akcja" />
+
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+          <TextBox Grid.Column="0" Text="{Binding WaitingForWho}" Watermark="Na kogo czekasz?" />
+          <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
+                  Command="{Binding DelegateCommand}" Content="Oczekiwane" />
+        </Grid>
+
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+          <DatePicker Grid.Column="0" SelectedDate="{Binding ScheduledFor}" />
+          <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
+                  Command="{Binding ScheduleCommand}" Content="Zaplanuj" />
+        </Grid>
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" Text="{Binding ProjectOutcome}"
+                   Watermark="Po czym poznasz, że to skończone?" />
+          <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
+                  Command="{Binding PromoteToProjectCommand}" Content="To projekt" />
+        </Grid>
+        <TextBlock Classes="hint" Margin="2,4,0,0"
+                   Text="Projekt nazywa się wynikiem, nie czynnością." />
+
+        <TextBlock Text="{Binding Problem}" Foreground="#E06C75" Margin="0,16,0,0"
+                   TextWrapping="Wrap" IsVisible="{Binding HasProblem}" />
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- Następne akcje -->
+    <ListBox IsVisible="{Binding IsNext}" ItemsSource="{Binding NextActions}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="tasks:TaskItem">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="Zrobione" Padding="10,4"
+                    Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).CompleteCommand}"
+                    CommandParameter="{Binding}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- Projekty -->
+    <ListBox IsVisible="{Binding IsProjects}" ItemsSource="{Binding Projects}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="projects:Project">
+          <TextBlock Text="{Binding Outcome}" TextWrapping="Wrap" Padding="0,6" />
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+  </DockPanel>
 </UserControl>

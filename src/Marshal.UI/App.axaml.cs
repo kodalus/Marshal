@@ -1,7 +1,10 @@
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using Marshal.Infrastructure;
 using Marshal.UI.ViewModels;
 using Marshal.UI.Views;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Marshal.UI;
 
@@ -15,7 +18,8 @@ public partial class App : Avalonia.Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        var viewModel = new MainViewModel();
+        var services = AppServices.Build();
+        var viewModel = services.GetRequiredService<MainViewModel>();
 
         switch (ApplicationLifetime)
         {
@@ -29,5 +33,22 @@ public partial class App : Avalonia.Application
         }
 
         base.OnFrameworkInitializationCompleted();
+
+        // Migracje, obszary początkowe i pierwsze wczytanie skrzynki dzieją się po
+        // pokazaniu okna. Inaczej pierwsze uruchomienie wyglądałoby jak zawieszenie:
+        // zakładanie bazy to ułamek sekundy, ale na słabszym telefonie widoczny.
+        Dispatcher.UIThread.Post(async void () =>
+        {
+            try
+            {
+                await DependencyInjection.PrepareAsync(services);
+                await viewModel.InitializeAsync();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(ex);
+                throw;
+            }
+        });
     }
 }
