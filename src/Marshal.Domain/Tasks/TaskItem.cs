@@ -246,6 +246,29 @@ public sealed class TaskItem : Entity
         return nastepne;
     }
 
+    /// <summary>
+    /// Pominięte wystąpienie serii <see cref="OnMissed.Accumulate"/> przestaje być
+    /// zaplanowane na dzień, a staje się zwykłą zaległością.
+    /// </summary>
+    /// <remarks>
+    /// Rozstrzygnięcie sprzeczności między 8.4 a 8.7. Spec każe zostawić takie
+    /// wystąpienie z pierwotną datą, ale osobno każe przesuwać na dziś każde zaplanowane
+    /// zadanie z przeszłości — więc trzy nieodhaczone treningi wylądowałyby na dzisiaj,
+    /// a nazajutrz znowu, i po czterech dniach każdy z nich odpaliłby N15. Mechanizm
+    /// zjadałby sam siebie.
+    ///
+    /// Zaległe wystąpienie zostaje więc następną akcją bez wyznaczonego dnia — bo tym
+    /// właśnie jest — a dzień, na który było umówione, zostaje w
+    /// <see cref="CarriedSince"/> jako „zaległe od".
+    /// </remarks>
+    public void LeaveAsDebt(Hlc stamp)
+    {
+        CarriedSince ??= DoDate;
+        DoDate = null;
+        State = TaskState.Next;
+        Touch(stamp);
+    }
+
     public void MoveTo(Guid areaId, Guid? projectId, Hlc stamp)
     {
         RequireArea(areaId);

@@ -262,18 +262,64 @@ public sealed class RecurrenceRunnerTests
     }
 
     [Fact]
-    public void Pominiete_z_Accumulate_zostaje_na_swojej_dacie_a_rytm_idzie_dalej()
+    public void Pominiete_z_Accumulate_zostaje_zalegloscia_a_rytm_idzie_dalej()
     {
+        // Rozstrzygnięcie sprzeczności 8.4 z 8.7: gdyby zaległe wystąpienie zostało
+        // zaplanowane na swoją dawną datę, nazajutrz przesunęłoby się na dziś, potem
+        // znowu, i po czterech dniach odpaliłoby N15. Zostaje więc następną akcją
+        // bez dnia, a dzień, na który było umówione, siedzi w „zaległe od".
         var zadanie = Zaplanowane(
             "2026-09-14",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
 
         var nastepne = RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
 
-        zadanie.DoDate.Should().Be(D("2026-09-14"));
-        zadanie.State.Should().Be(TaskState.Scheduled);
+        zadanie.State.Should().Be(TaskState.Next);
+        zadanie.DoDate.Should().BeNull();
+        zadanie.CarriedSince.Should().Be(D("2026-09-14"));
         zadanie.Recurrence.Should().BeNull();
         nastepne!.DoDate.Should().Be(D("2026-09-15"));
+    }
+
+    [Fact]
+    public void Zalegle_wystapienie_z_Accumulate_nie_jest_juz_przesuwane()
+    {
+        var zadanie = Zaplanowane(
+            "2026-09-14",
+            new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
+
+        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-20"), Stempel);
+
+        zadanie.RollCount.Should().Be(0);
+        zadanie.CarriedSince.Should().Be(D("2026-09-14"));
+    }
+
+    [Fact]
+    public void Skip_po_tygodniu_nieobecnosci_daje_jedno_wystapienie_a_nie_siedem()
+    {
+        // Nagrobek każdego przeskoczonego dnia nie jest niczyją informacją, a rozjechałby
+        // się po wszystkich urządzeniach.
+        var zadanie = Zaplanowane(
+            "2026-09-09",
+            new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
+
+        var nastepne = RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+
+        nastepne!.DoDate.Should().Be(D("2026-09-16"));
+        RecurrenceRunner.Rollover(nastepne, Chwila("2026-09-16"), Stempel).Should().BeNull();
+    }
+
+    [Fact]
+    public void Skip_zuzywa_licznik_takze_za_dni_przeskoczone()
+    {
+        // Seria „pięć razy" przespana przez pięć dni jest serią skończoną, a nie serią,
+        // która czeka na kolejne pięć okazji.
+        var zadanie = Zaplanowane(
+            "2026-09-09",
+            new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip, count: 3));
+
+        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel).Should().BeNull();
     }
 
     [Fact]

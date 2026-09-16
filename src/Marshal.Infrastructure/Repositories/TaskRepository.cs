@@ -64,6 +64,15 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(
+        DateOnly today, CancellationToken ct = default) =>
+        await Otwarte()
+            .Where(t => t.DoDate != null && t.DoDate < today)
+            // Najstarsze pierwsze: przy Accumulate kolejność ma znaczenie, bo każde
+            // wystąpienie rodzi następne i rytm musi wyjść z najdawniejszego.
+            .OrderBy(t => t.DoDate)
+            .ToListAsync(ct);
+
     /// <summary>Zadania nierozstrzygnięte: poza skrzynką, koszem i wykonanymi.</summary>
     private IQueryable<TaskItem> Otwarte() =>
         db.Tasks.Where(t => !t.Deleted

@@ -67,6 +67,7 @@ public static class DependencyInjection
         services.AddSingleton<ITagRepository, TagRepository>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
+        services.AddSingleton<DayRolloverService>();
         services.AddSingleton<InboxService>();
         services.AddSingleton<TagService>();
 

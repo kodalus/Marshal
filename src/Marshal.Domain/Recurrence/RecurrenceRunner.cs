@@ -83,14 +83,18 @@ public static class RecurrenceRunner
         switch (rule.OnMissed)
         {
             case OnMissed.Skip:
+                // Jednym krokiem na dziś albo dalej. Tydzień bez otwierania aplikacji ma
+                // dać jedno wystąpienie, a nie siedem utworzonych i wyrzuconych po kolei.
                 task.Trash(stamp());
-                return Spawn(task, rule, doDate, now, stamp);
+                return SpawnFrom(task, rule, doDate, today, now, stamp);
 
             case OnMissed.Accumulate:
-                // Wystąpienie zostaje z pierwotną datą i przestaje być częścią serii —
+                // Wystąpienie przestaje być częścią serii i zostaje zwykłą zaległością;
                 // rytm idzie dalej na następniku. Trzy nieodhaczone treningi to trzy
-                // zwykłe pozycje plus jedna żywa.
-                return Spawn(task, rule, doDate, now, stamp);
+                // pozycje do zrobienia plus jedna umówiona na dziś.
+                var nastepne = Spawn(task, rule, doDate, now, stamp);
+                task.LeaveAsDebt(stamp());
+                return nastepne;
 
             default:
                 task.CarryTo(today, stamp());
@@ -117,6 +121,24 @@ public static class RecurrenceRunner
         }
 
         return task.SpawnNextOccurrence(nastepna, rule.Advance(), now, stamp());
+    }
+
+    private static TaskItem? SpawnFrom(
+        TaskItem task,
+        RecurrenceRule rule,
+        DateOnly baza,
+        DateOnly floor,
+        DateTimeOffset now,
+        Func<Hlc> stamp)
+    {
+        task.SetRecurrence(null, stamp());
+
+        if (RecurrenceSchedule.NextFrom(rule, baza, floor) is not { } wystapienie)
+        {
+            return null;
+        }
+
+        return task.SpawnNextOccurrence(wystapienie.Date, wystapienie.Rule, now, stamp());
     }
 
     /// <summary>

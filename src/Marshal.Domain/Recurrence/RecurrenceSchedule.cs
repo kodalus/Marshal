@@ -47,6 +47,48 @@ public static class RecurrenceSchedule
         return rule.Until is { } koniec && next > koniec ? null : next;
     }
 
+    /// <summary>Wystąpienie razem z regułą, która ma pójść na nie dalej.</summary>
+    public readonly record struct Occurrence(DateOnly Date, RecurrenceRule Rule);
+
+    /// <summary>
+    /// Pierwsze wystąpienie późniejsze od <paramref name="from"/> i **nie wcześniejsze**
+    /// niż <paramref name="floor"/>. Wystąpienia przeskoczone po drodze zużywają licznik.
+    /// </summary>
+    /// <remarks>
+    /// Potrzebne przy <see cref="OnMissed.Skip"/>: tydzień bez otwierania aplikacji ma
+    /// dać jedno wystąpienie na dziś, a nie siedem utworzonych i wyrzuconych po kolei.
+    /// Nagrobek każdego przeskoczonego dnia nie jest niczyją informacją, a rozjechałby
+    /// się po wszystkich urządzeniach.
+    /// </remarks>
+    public static Occurrence? NextFrom(RecurrenceRule rule, DateOnly from, DateOnly floor)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var biezaca = rule;
+        var baza = from;
+
+        // Każdy rodzaj posuwa datę do przodu, więc pętla i tak się kończy. Ogranicznik
+        // jest na wypadek reguły z nowszej wersji aplikacji, która tej własności nie ma.
+        for (var i = 0; i < 10_000; i++)
+        {
+            if (Next(biezaca, baza) is not { } data)
+            {
+                return null;
+            }
+
+            biezaca = biezaca.Advance();
+
+            if (data >= floor)
+            {
+                return new Occurrence(data, biezaca);
+            }
+
+            baza = data;
+        }
+
+        return null;
+    }
+
     private static DateOnly NextWeekly(RecurrenceRule rule, DateOnly from)
     {
         // Pusty zbiór dni konstruktor odrzuca, ale reguła może przyjść z nowszej wersji

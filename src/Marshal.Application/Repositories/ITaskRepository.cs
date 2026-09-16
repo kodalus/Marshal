@@ -30,5 +30,10 @@ public interface ITaskRepository
 
     Task<IReadOnlyList<TaskItem>> ByAreaAsync(Guid areaId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Zadania otwarte z dniem wykonania w przeszłości — wejście przejścia dnia (8.4, 8.7).
+    /// </summary>
+    Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(DateOnly today, CancellationToken ct = default);
+
     void Add(TaskItem task);
 }
