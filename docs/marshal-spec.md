@@ -166,10 +166,11 @@ Niesprawdzone jest to, czego bez poświadczeń sprawdzić się nie da — samo w
 Dysku — oraz logowanie na Androidzie, które wymaga osobnych poświadczeń i innej drogi
 niż przeglądarka z portem pętli zwrotnej. Instrukcja w `docs/google-dysk.md`.
 
-**Stan etapu 4 na 16.09.2026.** Powtarzalność, terminy i przejście dnia gotowe
-i sprawdzone testami, łącznie z przypadkami brzegowymi z 8.4c. Przypomnienia gotowe
-po stronie wyboru, co i kiedy pokazać; odezwanie się przy **zamkniętej** aplikacji
-wymaga powiadomień systemowych i sprzętu do sprawdzenia (8.4d).
+**Etap 4 zamknięty 16.09.2026** — mechanizm i okno. Powtarzalność, terminy, przejście
+dnia i przypomnienia, wszystko z ekranem szczegółu jako wejściem (11.2).
+
+Niesprawdzone zostaje jedno: **odezwanie się przy zamkniętej aplikacji**. Wymaga
+powiadomień systemowych i sprzętu (8.4d). Przy otwartym oknie przypomnienia działają.
 
 Przy okazji rozstrzygnięte dwie sprzeczności, które wyszły dopiero przy pisaniu:
 `Accumulate` kontra 8.7 (zob. 8.4b) oraz `Skip` nadrabiający po jednym dniu na
@@ -1081,6 +1082,42 @@ Wszystko poza „Kalendarzem" i „Notatkami" musi być w pełni obsługiwalne z
 - Tabela równowagi obszarów nie ma wersji „na skróty" w żadnym innym ekranie. Liczba
   „94 dni bez ruchu" obejrzana mimochodem między zadaniami jest kosztem bez pożytku;
   ma sens tylko wtedy, gdy siadasz do przeglądu i możesz coś z nią zrobić.
+
+### 11.2 Szczegół zadania
+
+Nakładka nad ekranami, nie pozycja w nawigacji. **Jedno wejście** do terminu, dnia
+wykonania, przypomnienia i rytmu — cztery osobne ekrany to cztery miejsca do znalezienia
+zamiast jednego, a wszystkie cztery dotyczą tej samej decyzji: kiedy to ma się zdarzyć.
+
+**Rytm pokazywany zdaniem, nie formularzem.** Pod polami stoi zdanie w rodzaju „co dwa
+tygodnie, w poniedziałki i czwartki, licząc od wykonania". Sześć pól da się wypełnić źle
+i nie zauważyć; zdanie da się przeczytać i od razu wiedzieć, czy o to chodziło. To jest
+jedyny sposób sprawdzenia wpisanego rytmu **bez czekania dwóch tygodni na wynik**.
+
+Zdanie i zapis biorą się z tego samego kodu, więc podsumowanie nie może pokazywać czegoś
+innego niż to, co się zapisze. Reguła niepełna mówi, czego brakuje („co tydzień — ale
+w które dni?"), zamiast udawać, że rytmu nie ma.
+
+Zmiana rodzaju rytmu **przestawia zaczepienie na domyślne dla tego rodzaju** (5.7).
+Zostawione ręcznie ustawione dałoby „co poniedziałek, licząc od wykonania" jako stan
+domyślny — czyli rytm dryfujący na środy.
+
+Lista „co z pominiętym" ma dwie pozycje: „zostaje jako zaległe" i „przepada".
+`Accumulate` jest w modelu, ale **nie na liście** (13.2 pkt 1): jest jedyną ścieżką, która
+potrafi wyprodukować stertę, a wybór, którego nie widać, nie kusi. Zadanie z tą wartością
+przyniesione z drugiego urządzenia działa normalnie.
+
+**Etykiety stanu na listach:** zaległość z datą pierwszego przegapienia, licznik
+przesunięć, termin, rytm. Pierwsze przesunięcie nie jest pokazywane — zdarza się każdemu
+i nie niesie informacji. Reszta bez czerwieni i bez wykrzykników, zgodnie z 11.1 i z
+uzasadnieniem przy N12–N15: to licznik, nie kara.
+
+**Odhaczenie z listy idzie tą samą drogą co ze szczegółu**, bo zadanie powtarzalne musi
+przy okazji zrodzić kolejne wystąpienie (8.4) — a z listy tego nie widać.
+
+**Zapisywane są tylko pola naprawdę zmienione.** Zapis „na wszelki wypadek" trafiłby do
+dziennika jako świeża decyzja i wygrał scalanie ze zmianą, której naprawdę dokonano na
+drugim urządzeniu (9.4).
 
 ---
 
