@@ -189,6 +189,11 @@ pozycji, wybór pięciu na dziś z wygaszaniem o północy, oszacowanie czasu i 
 w szczególe zadania. N12, N13 i N15 dostały własny krok w przeglądzie — teraz mają
 co liczyć.
 
+**Etap 7 zamknięty 16.09.2026** w części, którą da się zamknąć bez konta. Siatka
+godzinowa (dzień / 3 dni / tydzień) z zadaniami i wydarzeniami, kopia kalendarzy
+z odczytem przyrostowym, kanały iCal. Niesprawdzone zostaje wołanie API Google
+i pobieranie kanału po sieci — jedno i drugie wymaga czegoś z zewnątrz.
+
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
 zaczyna się od etapu 3. Przerwa między etapem 2 a 3 to najbardziej prawdopodobny moment
@@ -1099,9 +1104,30 @@ scalanie.
 `Google.Apis.Calendar.v3`, zakres `calendar.readonly`. Przyrostowo przez `syncToken`,
 pełne odświeżenie gdy token wygaśnie (410).
 
-Kanały iCal przez `Ical.Net`, pobierane po URL, odświeżane co godzinę.
+Kanały iCal przez `Ical.Net` (**4.x**, nie 5.x — piąta wersja przepisała API dat,
+a przy braku lokalnego kompilatora każde nietrafione założenie o jej kształcie kosztuje
+pełny przebieg CI). Pobierane po adresie, odświeżane co godzinę, zawsze w całości: plik
+iCal nie ma pojęcia odczytu przyrostowego i nie ma czego optymalizować.
 
 Konfiguracja: wybór kalendarzy do pokazywania, kolor na kalendarz.
+
+**Co się synchronizuje, a co nie.** Wybór kalendarzy i kolorów jest decyzją i wędruje
+między urządzeniami. **Same wydarzenia nie** — to kopia cudzych danych, po którą oba
+urządzenia sięgają do tego samego konta. Rozsyłanie jej podwajałoby ruch i stawiało
+pytania o scalanie czegoś, czego nie jesteśmy właścicielem. Żeton odczytu przyrostowego
+też zostaje przy urządzeniu, które go dostało.
+
+**Odwołanie to nagrobek, nie usunięcie.** Przy odczycie przyrostowym Google przysyła
+odwołanie jako zmianę wydarzenia; fizyczne skasowanie znaczyłoby, że kolejny odczyt
+nie ma czego zaktualizować i odwołane wydarzenie wraca.
+
+**Sprzątanie wyłącznie po odczycie pełnym.** Przy przyrostowym „nie przyszło" znaczy
+„bez zmian", więc to samo sprzątanie skasowałoby cały kalendarz przy pierwszym odczycie,
+w którym nic się nie zmieniło.
+
+**Niedostępny kanał nie zatrzymuje pozostałych ani startu aplikacji.** Kalendarz jest
+dodatkiem do zadań; brak sieci ma znaczyć „brak świeżych wydarzeń", a nie „aplikacja
+się nie otwiera".
 
 ### 10.2 Później — zapis
 
@@ -1134,7 +1160,7 @@ Token odświeżania w `DPAPI` (Windows) i `EncryptedSharedPreferences` (Android)
 | **Obszary** | Dziesięć pozycji, tabela równowagi (8.5), edycja i `QuietDays` |
 | **Kiedyś** | `Someday`, przegląd, przywracanie |
 | **Oczekiwane** | `Waiting`, sortowane po liczbie dni, z progiem ponaglenia obszaru |
-| **Kalendarz** | Godzinowo: dzień / 3 dni / tydzień. Wydarzenia pełne, zadania półprzezroczyste |
+| **Kalendarz** | Godzinowo: dzień / 3 dni / tydzień. Wydarzenia pełne, zadania półprzezroczyste (11.3) |
 | **Notatki** | Markdown, edytor i podgląd, tagi, szukanie |
 | **Filtry** | Konstruktor warunków, zapisywanie do Ulubionych |
 | **Przegląd** | Kreator siedmiu kroków (8.3) |
@@ -1188,6 +1214,29 @@ przy okazji zrodzić kolejne wystąpienie (8.4) — a z listy tego nie widać.
 **Zapisywane są tylko pola naprawdę zmienione.** Zapis „na wszelki wypadek" trafiłby do
 dziennika jako świeża decyzja i wygrał scalanie ze zmianą, której naprawdę dokonano na
 drugim urządzeniu (9.4).
+
+### 11.3 Siatka godzinowa
+
+Kolumny liczone są **w gronach rzeczy, które się ze sobą stykają**, nie na cały dzień.
+Liczenie na cały dzień zwęziłoby poranne spotkanie do jednej trzeciej szerokości tylko
+dlatego, że wieczorem coś się nakłada. Zwolniona kolumna jest używana ponownie, inaczej
+dzień z wieloma krótkimi punktami rozpadłby się na nitki.
+
+Wydarzenie przechodzące przez północ pojawia się **na obu dniach, przycięte** do granic
+każdego z nich — inaczej na siatce drugiego dnia zaczynałoby się „minus godzinę temu".
+Koniec dokładnie o północy nie wchodzi na dzień następny: spotkanie do 24:00 kończy się
+dziś.
+
+Bardzo krótkie wydarzenie ma **wysokość minimalną**. Pięciominutowe spotkanie narysowane
+co do proporcji byłoby kreską, w którą nie da się trafić palcem.
+
+**Zadanie bez godziny ląduje na pasku całodniowym, nie o północy.** Zgadywanie godziny
+zrobiłoby z listy zadań kalendarz, w którym wszystko jest umówione — a to jest dokładnie
+ten rodzaj planowania, który się nie utrzymuje. Godzina (`DoTime`) jest opcjonalna
+i czyszczona razem z dniem wykonania, bo bez dnia nie znaczy nic.
+
+**Tydzień zaczyna się w poniedziałek**, a nie „od dziś przez siedem dni": tydzień, który
+zaczyna się w środę, nie wygląda jak tydzień.
 
 ---
 

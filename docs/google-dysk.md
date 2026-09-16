@@ -69,6 +69,28 @@ nie traktuje jej jako zabezpieczenia; chroni Cię zgoda w przeglądarce, nie ona
 Mimo to nie wkładaj jej do repozytorium: nie dlatego, że coś kryje, tylko dlatego,
 że cudze użycie obciąża Twój limit zapytań.
 
+## Krok 4b — kalendarz (opcjonalnie)
+
+Jeśli chcesz widzieć wydarzenia z Google Calendar na siatce godzinowej:
+
+1. **Biblioteka** → `Google Calendar API` → **Włącz**.
+2. Do ekranu zgody **nie dodawaj** nic ręcznie. Aplikacja prosi dodatkowo o
+   `.../auth/calendar.readonly`.
+
+`calendar.readonly` **jest** uprawnieniem wrażliwym — inaczej niż `drive.file`. Przy
+aplikacji w trybie testowym z Twoim adresem na liście działa bez przeszkód; przegląd
+Google byłby potrzebny dopiero przy udostępnianiu jej innym ludziom.
+
+Aplikacja **tylko czyta** kalendarz. Zapis jest świadomie odłożony (spec 10.2): błąd
+w dwustronnej synchronizacji potrafi skasować prawdziwe wydarzenia i jest to jedyne
+miejsce w całym projekcie, gdzie awaria niszczy dane poza aplikacją.
+
+### Kanały iCal — bez żadnych poświadczeń
+
+Kalendarz przedszkola, zajęć czy szkoły zwykle udostępnia adres kończący się na `.ics`.
+Taki kanał wystarczy wkleić — nie wymaga konta Google ani niczego z tej instrukcji.
+Odświeża się co godzinę.
+
 ## Krok 5 — pierwsze logowanie
 
 Aplikacja otwiera przeglądarkę i czeka na powrót. Zgadzasz się raz; odświeżalny
@@ -98,6 +120,9 @@ Można je otworzyć notatnikiem — to zwykły tekst, jeden wiersz na zapis.
 - **Sprawdzenie na żywym koncie.** Cała logika składnicy — nazewnictwo, porządek,
   odsiewanie duplikatów, odmowa nadpisania — jest pokryta testami na udawanym Dysku.
   Nie sprawdzone jest samo wołanie API, bo do tego trzeba poświadczeń.
+- **Sprawdzenie kalendarza na żywym koncie.** Rozbiór plików iCal ma testy na treści
+  wpisanej wprost, a kopiowanie wydarzeń do bazy — testy na udawanym kanale.
+  Niesprawdzone zostaje samo wołanie API Google i pobieranie po sieci.
 - **Scalanie porcji.** Dziennik rośnie w nieskończoność. Docelowo stare porcje
   zwijają się w jedną migawkę (spec 9.5). Przy tempie kilkuset zmian dziennie to
   problem na rok, nie na teraz.
