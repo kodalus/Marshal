@@ -17,6 +17,22 @@ public readonly struct Hlc : IComparable<Hlc>, IEquatable<Hlc>
     /// <summary>Separator w postaci tekstowej — stąd zakaz kropki w identyfikatorze.</summary>
     public const char Separator = '.';
 
+    /// <summary>
+    /// Szerokości pól w postaci tekstowej. Uzupełnianie zerami jest konieczne, żeby
+    /// porządek leksykograficzny pokrywał się z porządkiem logicznym: bez tego
+    /// „999.0.a" wypada po „1000.0.a", a SQLite sortuje kolumnę tekstową właśnie
+    /// leksykograficznie. Trzynaście cyfr wystarcza dla milisekund do roku 2286.
+    /// </summary>
+    private const int WallDigits = 13;
+
+    private const int CounterDigits = 6;
+
+    /// <summary>Największy czas ścienny mieszczący się w postaci tekstowej.</summary>
+    public const long MaxWallMs = 9_999_999_999_999;
+
+    /// <summary>Największy licznik mieszczący się w postaci tekstowej.</summary>
+    public const int MaxCounter = 999_999;
+
     public long WallMs { get; }
     public int Counter { get; }
     public string DeviceId { get; }
@@ -24,7 +40,9 @@ public readonly struct Hlc : IComparable<Hlc>, IEquatable<Hlc>
     public Hlc(long wallMs, int counter, string deviceId)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(wallMs);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(wallMs, MaxWallMs);
         ArgumentOutOfRangeException.ThrowIfNegative(counter);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(counter, MaxCounter);
         ArgumentException.ThrowIfNullOrWhiteSpace(deviceId);
 
         if (deviceId.Contains(Separator))
@@ -90,9 +108,14 @@ public readonly struct Hlc : IComparable<Hlc>, IEquatable<Hlc>
         return string.CompareOrdinal(DeviceId, other.DeviceId);
     }
 
+    /// <summary>
+    /// Postać tekstowa z polami uzupełnionymi zerami, na przykład
+    /// <c>1757942400123.000007.a3f1</c>. Uzupełnianie sprawia, że porządek
+    /// leksykograficzny pokrywa się z logicznym — zob. <see cref="WallDigits"/>.
+    /// </summary>
     public override string ToString() =>
         string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{WallMs}{Separator}{Counter}{Separator}{DeviceId}");
+            $"{WallMs.ToString($"D{WallDigits}", System.Globalization.CultureInfo.InvariantCulture)}{Separator}{Counter.ToString($"D{CounterDigits}", System.Globalization.CultureInfo.InvariantCulture)}{Separator}{DeviceId}");
 
     public static Hlc Parse(string value) =>
         TryParse(value, out var hlc)

@@ -41,6 +41,10 @@ public sealed class MarshalDbContext : DbContext
             .HaveConversion<HlcConverter>()
             .HaveMaxLength(64);
 
+        // SQLite nie porządkuje typu DateTimeOffset — zob. DateTimeOffsetConverter.
+        configurationBuilder.Properties<DateTimeOffset>()
+            .HaveConversion<DateTimeOffsetConverter>();
+
         // GUID jako tekst, nie blob: baza daje się czytać narzędziami, a postać
         // jest ta sama co w logu synchronizacji.
         configurationBuilder.Properties<Guid>()

@@ -126,7 +126,7 @@ public class HlcTests
     {
         var hlc = new Hlc(1757942400123, 7, "a3f1");
 
-        hlc.ToString().Should().Be("1757942400123.7.a3f1");
+        hlc.ToString().Should().Be("1757942400123.000007.a3f1");
         Hlc.Parse(hlc.ToString()).Should().Be(hlc);
     }
 
@@ -143,6 +143,42 @@ public class HlcTests
     public void TryParse_odrzucaNiepoprawnePostacie(string tekst)
     {
         Hlc.TryParse(tekst, out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Porzadek_tekstowy_pokrywa_sie_z_logicznym()
+    {
+        // Kolumna w SQLite jest tekstowa i sortuje się leksykograficznie. Bez
+        // uzupełniania zerami „999" wypadłoby po „1000" i porządek zdarzeń
+        // rozjechałby się po cichu, bez żadnego błędu.
+        var znaczniki = new[]
+        {
+            new Hlc(10_000, 0, "a"),
+            new Hlc(1_000, 12, "a"),
+            new Hlc(999, 0, "a"),
+            new Hlc(1_000, 0, "a"),
+            new Hlc(1_000, 7, "a"),
+        };
+
+        var logicznie = znaczniki.Order().ToArray();
+        var tekstowo = znaczniki.OrderBy(h => h.ToString(), StringComparer.Ordinal).ToArray();
+
+        tekstowo.Should().Equal(logicznie);
+    }
+
+    [Fact]
+    public void Wszystkie_postacie_tekstowe_maja_te_sama_dlugosc_pol()
+    {
+        new Hlc(1, 1, "a").ToString().Should().Be("0000000000001.000001.a");
+        new Hlc(Hlc.MaxWallMs, Hlc.MaxCounter, "a").ToString().Should().Be("9999999999999.999999.a");
+    }
+
+    [Fact]
+    public void Czas_poza_zakresem_postaci_tekstowej_jest_odrzucany()
+    {
+        var zaDuzy = () => new Hlc(Hlc.MaxWallMs + 1, 0, "a");
+
+        zaDuzy.Should().Throw<ArgumentOutOfRangeException>();
     }
 
     [Fact]

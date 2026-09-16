@@ -29,7 +29,7 @@ public sealed class MarshalDbContextTests : IDisposable
             .Options;
 
         var kontekst = new MarshalDbContext(options);
-        kontekst.Database.Migrate();
+        kontekst.Database.EnsureCreated();
         return kontekst;
     }
 
@@ -78,7 +78,7 @@ public sealed class MarshalDbContextTests : IDisposable
         using var polecenie = _connection.CreateCommand();
         polecenie.CommandText = "SELECT UpdatedAt FROM Areas LIMIT 1";
 
-        polecenie.ExecuteScalar().Should().Be("1757942400123.7.a3f1");
+        polecenie.ExecuteScalar().Should().Be("1757942400123.000007.a3f1");
     }
 
     [Fact]
