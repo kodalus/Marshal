@@ -63,7 +63,7 @@ public sealed class SyncEngine(
             tekst.Append(line.Serialize()).Append('\n');
         }
 
-        await transport.AppendAsync(deviceId, tekst.ToString(), ct);
+        await transport.WriteSegmentAsync(deviceId, await NextSegmentAsync(ct), tekst.ToString(), ct);
 
         foreach (var change in pending)
         {
@@ -77,56 +77,63 @@ public sealed class SyncEngine(
     /// <summary>Czyta pliki pozostałych urządzeń od zapisanego przesunięcia i scala.</summary>
     public async Task<int> PullAsync(CancellationToken ct = default)
     {
-        var logs = await transport.ListLogsAsync(ct);
+        var segments = await transport.ListSegmentsAsync(ct);
         var applied = 0;
 
         using (SyncScope.Begin())
         {
-            foreach (var log in logs.Where(l => l.DeviceId != deviceId))
+            foreach (var grupa in segments.Where(s => s.DeviceId != deviceId).GroupBy(s => s.DeviceId))
             {
                 var cursor = await db.SyncCursors
-                    .FirstOrDefaultAsync(c => c.RemoteDeviceId == log.DeviceId, ct);
+                    .FirstOrDefaultAsync(c => c.RemoteDeviceId == grupa.Key, ct);
 
                 if (cursor is null)
                 {
-                    cursor = new SyncCursor(log.DeviceId, 0);
+                    cursor = new SyncCursor(grupa.Key, string.Empty);
                     db.SyncCursors.Add(cursor);
                 }
 
-                var tekst = await transport.ReadFromAsync(log.DeviceId, cursor.Offset, ct);
-
-                if (tekst.Length == 0)
+                foreach (var segment in grupa.OrderBy(s => s.Name, StringComparer.Ordinal))
                 {
-                    continue;
-                }
-
-                // Wyłącznie pełne wiersze. Ostatnia linia może być urwana, bo drugie
-                // urządzenie mogło zapisywać w trakcie naszego czytania. Urwany ogon
-                // zostaje na następny raz — wtedy plik będzie już kompletny.
-                var koniec = tekst.LastIndexOf('\n');
-
-                if (koniec < 0)
-                {
-                    continue;
-                }
-
-                var pelne = tekst[..(koniec + 1)];
-
-                foreach (var linia in pelne.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    if (ChangeLine.TryParse(linia) is { } wiersz && Apply(wiersz))
+                    if (string.CompareOrdinal(segment.Name, cursor.LastSegment) <= 0)
                     {
-                        applied++;
+                        continue;
                     }
-                }
 
-                cursor.MoveTo(cursor.Offset + Encoding.UTF8.GetByteCount(pelne));
+                    var tekst = await transport.ReadSegmentAsync(segment, ct);
+
+                    foreach (var linia in tekst.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (ChangeLine.TryParse(linia) is { } wiersz && Apply(wiersz))
+                        {
+                            applied++;
+                        }
+                    }
+
+                    cursor.MoveTo(segment.Name);
+                }
             }
 
             await db.SaveChangesAsync(ct);
         }
 
         return applied;
+    }
+
+    /// <summary>
+    /// Kolejny numer porcji tego urządzenia. Uzupełniony zerami, żeby porządek
+    /// leksykograficzny pokrywał się z chronologicznym — składnice sortują nazwy
+    /// jako tekst, więc „10" wypadłoby przed „9".
+    /// </summary>
+    private async Task<string> NextSegmentAsync(CancellationToken ct)
+    {
+        var moje = (await transport.ListSegmentsAsync(ct))
+            .Where(s => s.DeviceId == deviceId)
+            .Select(s => int.TryParse(s.Name, out var n) ? n : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+
+        return (moje + 1).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private bool Apply(ChangeLine wiersz)

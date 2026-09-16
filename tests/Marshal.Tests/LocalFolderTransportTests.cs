@@ -1,5 +1,5 @@
-using System.Text;
 using FluentAssertions;
+using Marshal.Application.Sync;
 using Marshal.Infrastructure.Sync;
 using Xunit;
 
@@ -13,76 +13,102 @@ public sealed class LocalFolderTransportTests : IDisposable
     private LocalFolderTransport Skladnica() => new(_katalog);
 
     [Fact]
-    public async Task Pusta_skladnica_nie_ma_zadnych_plikow()
+    public async Task Pusta_skladnica_nie_ma_zadnych_porcji()
     {
-        (await Skladnica().ListLogsAsync()).Should().BeEmpty();
+        (await Skladnica().ListSegmentsAsync()).Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Dopisanie_tworzy_plik_i_zwieksza_dlugosc()
+    public async Task Zapisana_porcja_wraca_w_calosci()
     {
         var skladnica = Skladnica();
 
-        await skladnica.AppendAsync("biurko", "pierwsza\n");
-        await skladnica.AppendAsync("biurko", "druga\n");
+        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwsza\ndruga\n");
 
-        var logi = await skladnica.ListLogsAsync();
-        logi.Should().ContainSingle();
-        logi[0].DeviceId.Should().Be("biurko");
-        logi[0].Length.Should().Be(Encoding.UTF8.GetByteCount("pierwsza\ndruga\n"));
+        var porcje = await skladnica.ListSegmentsAsync();
+        porcje.Should().ContainSingle();
+        porcje[0].DeviceId.Should().Be("biurko");
+        porcje[0].Name.Should().Be("000001");
+        (await skladnica.ReadSegmentAsync(porcje[0])).Should().Be("pierwsza\ndruga\n");
     }
 
     [Fact]
-    public async Task Odczyt_od_przesuniecia_zwraca_wylacznie_nowa_tresc()
+    public async Task Polskie_litery_wracaja_niezmienione()
     {
+        // Zapis i odczyt muszą chodzić tym samym kodowaniem. Rozjazd nie rzuca
+        // wyjątku — daje zniekształcony tekst dopiero na drugim urządzeniu.
         var skladnica = Skladnica();
-        await skladnica.AppendAsync("biurko", "pierwsza\n");
-        var po = (await skladnica.ListLogsAsync())[0].Length;
-        await skladnica.AppendAsync("biurko", "druga\n");
 
-        (await skladnica.ReadFromAsync("biurko", po)).Should().Be("druga\n");
+        await skladnica.WriteSegmentAsync("biurko", "000001", "zażółć gęślą jaźń\n");
+
+        (await skladnica.ReadSegmentAsync(new LogSegment("biurko", "000001")))
+            .Should().Be("zażółć gęślą jaźń\n");
     }
 
     [Fact]
-    public async Task Przesuniecie_liczone_jest_w_bajtach_nie_w_znakach()
+    public async Task Zapisana_porcja_nie_daje_sie_nadpisac()
     {
-        // Polska litera zajmuje dwa bajty w UTF-8. Przesunięcie liczone w znakach
-        // rozjechałoby się o tyle bajtów, ile liter spoza ASCII przeszło wcześniej.
+        // Niezmienność porcji jest warunkiem poprawności kursora: skoro
+        // „przeczytana zostaje przeczytana", to zmiana treści pod tą samą nazwą
+        // przepadłaby na wszystkich urządzeniach, które ją już minęły.
         var skladnica = Skladnica();
-        await skladnica.AppendAsync("biurko", "zażółć\n");
-        var po = (await skladnica.ListLogsAsync())[0].Length;
-        await skladnica.AppendAsync("biurko", "gęślą\n");
+        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwotna\n");
 
-        po.Should().Be(Encoding.UTF8.GetByteCount("zażółć\n"));
-        (await skladnica.ReadFromAsync("biurko", po)).Should().Be("gęślą\n");
+        var ponownie = async () =>
+            await skladnica.WriteSegmentAsync("biurko", "000001", "podmieniona\n");
+
+        await ponownie.Should().ThrowAsync<InvalidOperationException>();
+        (await skladnica.ReadSegmentAsync(new LogSegment("biurko", "000001")))
+            .Should().Be("pierwotna\n");
     }
 
     [Fact]
-    public async Task Odczyt_poza_koncem_pliku_zwraca_pustke()
-    {
-        var skladnica = Skladnica();
-        await skladnica.AppendAsync("biurko", "cokolwiek\n");
-
-        (await skladnica.ReadFromAsync("biurko", 10_000)).Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task Odczyt_nieistniejacego_urzadzenia_zwraca_pustke()
-    {
-        (await Skladnica().ReadFromAsync("nieznane", 0)).Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task Pliki_roznych_urzadzen_sa_rozlaczne()
+    public async Task Porcje_wracaja_w_porzadku_nazw()
     {
         var skladnica = Skladnica();
 
-        await skladnica.AppendAsync("biurko", "z biurka\n");
-        await skladnica.AppendAsync("telefon", "z telefonu\n");
+        await skladnica.WriteSegmentAsync("biurko", "000010", "dziesiąta\n");
+        await skladnica.WriteSegmentAsync("biurko", "000002", "druga\n");
+        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwsza\n");
 
-        (await skladnica.ReadFromAsync("biurko", 0)).Should().Be("z biurka\n");
-        (await skladnica.ReadFromAsync("telefon", 0)).Should().Be("z telefonu\n");
-        (await skladnica.ListLogsAsync()).Should().HaveCount(2);
+        (await skladnica.ListSegmentsAsync()).Select(s => s.Name)
+            .Should().ContainInOrder("000001", "000002", "000010");
+    }
+
+    [Fact]
+    public async Task Odczyt_nieistniejacej_porcji_zwraca_pustke()
+    {
+        (await Skladnica().ReadSegmentAsync(new LogSegment("nieznane", "000001")))
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Porcje_roznych_urzadzen_sa_rozlaczne()
+    {
+        var skladnica = Skladnica();
+
+        await skladnica.WriteSegmentAsync("biurko", "000001", "z biurka\n");
+        await skladnica.WriteSegmentAsync("telefon", "000001", "z telefonu\n");
+
+        var porcje = await skladnica.ListSegmentsAsync();
+        porcje.Should().HaveCount(2);
+        (await skladnica.ReadSegmentAsync(new LogSegment("biurko", "000001")))
+            .Should().Be("z biurka\n");
+        (await skladnica.ReadSegmentAsync(new LogSegment("telefon", "000001")))
+            .Should().Be("z telefonu\n");
+    }
+
+    [Fact]
+    public async Task Plik_tymczasowy_przerwanego_zapisu_nie_jest_porcja()
+    {
+        // Przerwany zapis zostawia plik tymczasowy obok porcji. Gdyby trafił na
+        // listę, drugie urządzenie przeczytałoby dziennik ucięty w pół wiersza.
+        var skladnica = Skladnica();
+        await skladnica.WriteSegmentAsync("biurko", "000001", "cała\n");
+        await File.WriteAllTextAsync(
+            Path.Combine(_katalog, "log", "biurko", "000002.jsonl.tmp"), "urwana");
+
+        (await skladnica.ListSegmentsAsync()).Select(s => s.Name).Should().Equal("000001");
     }
 
     [Theory]
@@ -92,9 +118,22 @@ public sealed class LocalFolderTransportTests : IDisposable
     [InlineData("")]
     public async Task Identyfikator_psujacy_nazwe_pliku_jest_odrzucany(string urzadzenie)
     {
-        var dopisz = async () => await Skladnica().AppendAsync(urzadzenie, "cokolwiek\n");
+        var zapisz = async () =>
+            await Skladnica().WriteSegmentAsync(urzadzenie, "000001", "cokolwiek\n");
 
-        await dopisz.Should().ThrowAsync<ArgumentException>();
+        await zapisz.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("../ucieczka")]
+    [InlineData("a/b")]
+    [InlineData("")]
+    public async Task Nazwa_porcji_psujaca_sciezke_jest_odrzucana(string porcja)
+    {
+        var zapisz = async () =>
+            await Skladnica().WriteSegmentAsync("biurko", porcja, "cokolwiek\n");
+
+        await zapisz.Should().ThrowAsync<ArgumentException>();
     }
 
     public void Dispose()

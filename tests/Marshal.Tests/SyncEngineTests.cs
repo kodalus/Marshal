@@ -175,14 +175,14 @@ public sealed class SyncEngineTests : IDisposable
     public async Task Ponowne_zastosowanie_tych_samych_wpisow_nic_nie_zmienia()
     {
         // Kursor jest przyspieszeniem, nie warunkiem poprawności — po jego wyzerowaniu
-        // plik czyta się od początku i wynik musi być ten sam.
+        // porcje czyta się od początku i wynik musi być ten sam.
         var id = Dodaj(_biurko, "Zadzwonić");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
         foreach (var kursor in _telefon.Db.SyncCursors)
         {
-            kursor.MoveTo(0);
+            kursor.MoveTo(string.Empty);
         }
 
         _telefon.Db.SaveChanges();
@@ -209,18 +209,54 @@ public sealed class SyncEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task Urwany_ogon_pliku_nie_psuje_scalania()
+    public async Task Popsuta_porcja_nie_psuje_pozostalych()
     {
+        // Porcja z nowszej wersji aplikacji albo uszkodzona przez składnicę.
+        // Ma zostać pominięta, a nie przerwać synchronizację — inaczej jedna zła
+        // porcja unieruchomiłaby kursor i wszystko, co po niej.
         Dodaj(_biurko, "pierwsze");
         await _biurko.Engine.SyncAsync();
 
-        // Drugie urządzenie zapisywało w trakcie naszego czytania.
-        await new LocalFolderTransport(_katalog).AppendAsync("biurko", "{\"e\":\"Tasks\",\"id\":");
+        var skladnica = new LocalFolderTransport(_katalog);
+        await skladnica.WriteSegmentAsync("biurko", "000002", "{\"e\":\"Tasks\",\"id\":\n");
 
-        var wynik = await _telefon.Engine.SyncAsync();
+        Dodaj(_biurko, "trzecie");
+        await _biurko.Engine.SyncAsync();
 
-        wynik.Applied.Should().BeGreaterThan(0);
-        _telefon.Db.Tasks.Should().ContainSingle();
+        await _telefon.Engine.SyncAsync();
+
+        _telefon.Db.Tasks.Select(t => t.Title).Should().BeEquivalentTo(["pierwsze", "trzecie"]);
+    }
+
+    [Fact]
+    public async Task Kolejne_wysylki_trafiaja_do_osobnych_porcji()
+    {
+        // Porcja raz zapisana się nie zmienia, więc druga wysyłka musi założyć nową.
+        Dodaj(_biurko, "pierwsze");
+        await _biurko.Engine.SyncAsync();
+        Dodaj(_biurko, "drugie");
+        await _biurko.Engine.SyncAsync();
+
+        var porcje = await new LocalFolderTransport(_katalog).ListSegmentsAsync();
+
+        porcje.Where(s => s.DeviceId == "biurko").Select(s => s.Name)
+            .Should().Equal("000001", "000002");
+    }
+
+    [Fact]
+    public async Task Porcja_pominieta_przy_pierwszym_czytaniu_dochodzi_przy_drugim()
+    {
+        // Kursor przesuwa się per porcja, więc porcja, która pojawiła się po
+        // wylistowaniu, zostaje doczytana przy następnej synchronizacji.
+        Dodaj(_biurko, "pierwsze");
+        await _biurko.Engine.SyncAsync();
+        await _telefon.Engine.SyncAsync();
+
+        Dodaj(_biurko, "drugie");
+        await _biurko.Engine.SyncAsync();
+        await _telefon.Engine.SyncAsync();
+
+        _telefon.Db.Tasks.Select(t => t.Title).Should().BeEquivalentTo(["pierwsze", "drugie"]);
     }
 
     [Fact]

@@ -14,18 +14,22 @@ public sealed class SyncCursor
     private SyncCursor()
     {
         RemoteDeviceId = string.Empty;
+        LastSegment = string.Empty;
     }
 
-    public SyncCursor(string remoteDeviceId, long offset)
+    public SyncCursor(string remoteDeviceId, string lastSegment)
     {
         RemoteDeviceId = remoteDeviceId;
-        Offset = offset;
+        LastSegment = lastSegment;
     }
 
     public string RemoteDeviceId { get; private set; }
 
-    /// <summary>Przesunięcie w bajtach. Plik jest tylko dopisywany, więc raz przeczytane nie zmienia się.</summary>
-    public long Offset { get; private set; }
+    /// <summary>
+    /// Nazwa ostatniej przeczytanej porcji. Porcja raz zapisana nigdy się nie zmienia,
+    /// więc przeczytana zostaje przeczytana. Puste znaczy „jeszcze żadnej".
+    /// </summary>
+    public string LastSegment { get; private set; } = string.Empty;
 
-    public void MoveTo(long offset) => Offset = offset;
+    public void MoveTo(string segment) => LastSegment = segment;
 }

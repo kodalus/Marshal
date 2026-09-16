@@ -12,7 +12,7 @@ public sealed class SyncCursorConfiguration : IEntityTypeConfiguration<SyncCurso
         builder.HasKey(c => c.RemoteDeviceId);
 
         builder.Property(c => c.RemoteDeviceId).HasMaxLength(64);
-        builder.Property(c => c.Offset).IsRequired();
+        builder.Property(c => c.LastSegment).IsRequired().HasMaxLength(32);
     }
 }
 
