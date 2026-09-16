@@ -1,6 +1,8 @@
 using System.Reflection;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Primitives;
+using Marshal.Domain.Projects;
+using Marshal.Domain.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
@@ -15,6 +17,18 @@ public sealed class MarshalDbContext : DbContext
 
     public DbSet<Area> Areas => Set<Area>();
 
+    public DbSet<Project> Projects => Set<Project>();
+
+    public DbSet<TaskItem> Tasks => Set<TaskItem>();
+
+    /// <remarks>
+    /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy
+    /// obcych**. Nie jest to niedopatrzenie: przy synchronizacji plikowej (spec 9) zmiany
+    /// z drugiego urządzenia przychodzą w kolejności zapisu, nie w kolejności zależności,
+    /// więc zadanie potrafi dotrzeć przed swoim projektem. Klucz obcy odrzuciłby wtedy
+    /// poprawną zmianę i rozjechał obie bazy na trwałe. Spójność pilnują niezmienniki
+    /// z rozdziału 6, sprawdzane po scaleniu.
+    /// </remarks>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());

@@ -80,3 +80,32 @@ jobs:
           name: marshal-apk
           path: artefakty/apk
           if-no-files-found: error
+
+  migracja:
+    name: Migracja — wygenerowanie do wglądu (tymczasowe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Narzędzie dotnet-ef
+        run: dotnet tool install --global dotnet-ef
+
+      - name: Wygenerowanie migracji
+        run: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef migrations add Init \
+            -p src/Marshal.Infrastructure \
+            -s src/Marshal.Infrastructure \
+            -o Data/Migrations
+
+      - name: Wypisanie migracji
+        run: |
+          for f in src/Marshal.Infrastructure/Data/Migrations/*.cs; do
+            echo "@@@@@ PLIK $f"
+            cat "$f"
+          done
+          echo "@@@@@ KONIEC"
