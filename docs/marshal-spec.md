@@ -176,6 +176,14 @@ Przy okazji rozstrzygnięte dwie sprzeczności, które wyszły dopiero przy pisa
 `Accumulate` kontra 8.7 (zob. 8.4b) oraz `Skip` nadrabiający po jednym dniu na
 uruchomienie. Obie były niewidoczne w samym tekście specyfikacji.
 
+**Etap 5 zamknięty 16.09.2026.** Niezmienniki N1, N3, N4, N5, N6 i N10 działają jako
+zapytania, nie jako rzeczy do zauważenia. Ekran „Oczekiwane", tabela równowagi, oznaczanie
+projektów zablokowanych w drzewie i kreator przeglądu z wznawianiem po każdej pozycji.
+
+Niezmienniki N12, N13 i N15 mają dane (licznik przesunięć, data pierwszego przegapienia),
+ale nie mają jeszcze własnego kroku w przeglądzie — dojdą razem z wyborem na dziś
+(`FocusDate`, etap 6), bo N13 bez niego nie ma czego liczyć.
+
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
 zaczyna się od etapu 3. Przerwa między etapem 2 a 3 to najbardziej prawdopodobny moment
@@ -697,6 +705,24 @@ przeczytaniu, a nie żeby cokolwiek z nim zrobić.
 **Stan zapisywany po każdej pojedynczej pozycji**, nie po kroku. Encja `ReviewSession`:
 `StartedAt`, `CompletedAt?`, `CurrentStep`, `ProcessedIds` (JSON).
 
+**Wznowienie jest domyślne i nie pyta.** Ekran „masz niedokończony przegląd, chcesz
+wrócić?" byłby pytaniem, na które jest tylko jedna sensowna odpowiedź, a przy okazji
+dawałby okazję do zaczęcia od nowa — czyli do tego, przed czym cały ten mechanizm chroni.
+
+**Krok 1 nie odhacza pozycji, tylko prowadzi do drzewka przetwarzania** (rozdz. 7).
+Oznaczenie wrzutu jako „rozpatrzony" bez podjęcia decyzji zostawiłoby go w skrzynce,
+a za tydzień trzeba by go oznaczyć znowu: bieżnia zamiast opróżniania. Licznik tego
+kroku schodzi sam, w miarę jak skrzynka pustoszeje.
+
+**Kroki 0 i 8 nie mają czego odhaczać** — pierwszy jest tekstem do przeczytania, drugi
+tabelą do obejrzenia. Nie każdy krok przeglądu kończy się czynnością.
+
+Zbiór rozpatrzonych pozycji jest jednym polem z tekstem JSON i scala się jak każde inne
+pole: nowszy zapis wygrywa w całości. Dwa urządzenia prowadzące ten sam przegląd
+**równocześnie** zgubiłyby część oznaczeń. Świadomie przyjęte — przegląd robi się
+w jednym miejscu naraz, a scalanie zbiorów przez sumę wymagałoby własnej reguły scalania
+dla jednego pola w całym modelu.
+
 Przerwanie przez dziecko po czterech minutach to przegląd w 30% ukończony, wznawialny
 dokładnie w tym miejscu, także na drugim urządzeniu. Przegląd rozłożony na pięć
 wieczorów jest przeglądem zrobionym. Brak ekranu „zacznij od nowa" jest tu celowy
@@ -818,6 +844,15 @@ dla każdego obszaru IsActive:
     ostatniRuch    = max(UpdatedAt) z projektów i zadań tego obszaru
     cisza          = dni od ostatniRuch
 ```
+
+„Dni od" liczone są ze **ściennego członu zegara logicznego** i w czasie uniwersalnym.
+Chwila pochodzi z urządzenia, które zmianę zrobiło, i jego strefy nie znamy; przy mierze
+„ile dni bez ruchu" kilka godzin różnicy nie ma znaczenia, a udawanie dokładności,
+której nie ma, miałoby.
+
+**Brak ruchu to osobna wartość, nie zero dni.** Obszar, w którym nigdy nic się nie
+zapisało, i obszar ruszony dzisiaj to dwie różne rzeczy, a pokazanie obu jako „0"
+byłoby kłamstwem w najważniejszym miejscu tej tabeli.
 
 Wynik jako tabela, sortowana po `cisza` malejąco:
 
@@ -1063,7 +1098,7 @@ Token odświeżania w `DPAPI` (Windows) i `EncryptedSharedPreferences` (Android)
 | **Projekty** | Drzewo: obszar → cel → projekt → zadania. Zablokowane wyróżnione |
 | **Obszary** | Dziesięć pozycji, tabela równowagi (8.5), edycja i `QuietDays` |
 | **Kiedyś** | `Someday`, przegląd, przywracanie |
-| **Oczekiwane** | `Waiting`, sortowane po liczbie dni |
+| **Oczekiwane** | `Waiting`, sortowane po liczbie dni, z progiem ponaglenia obszaru |
 | **Kalendarz** | Godzinowo: dzień / 3 dni / tydzień. Wydarzenia pełne, zadania półprzezroczyste |
 | **Notatki** | Markdown, edytor i podgląd, tagi, szukanie |
 | **Filtry** | Konstruktor warunków, zapisywanie do Ulubionych |
