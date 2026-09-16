@@ -103,7 +103,10 @@ public sealed class AgendaTests
     [Fact]
     public void Zwolniona_kolumna_jest_uzywana_ponownie()
     {
-        // a 9–10, b 9–12, c 10–11: c wchodzi po a, do tej samej kolumny.
+        // a 9–10, b 9–12, c 10–11. Trzy wydarzenia, ale w danej chwili najwyżej dwa
+        // naraz — więc dwie kolumny, a c wchodzi do tej, którą zwolniło a.
+        // Numer kolumny jest szczegółem układu; istotne jest, że c ją po a dziedziczy,
+        // a nie zakłada trzeciej.
         var dni = Agenda.Build(
             [
                 Wydarzenie("a", "2026-09-16", 9, 10),
@@ -112,8 +115,28 @@ public sealed class AgendaTests
             ],
             Dzis, 1);
 
+        var a = dni[0].Timed.Single(s => s.Entry.Title == "a");
         var c = dni[0].Timed.Single(s => s.Entry.Title == "c");
-        c.Column.Should().Be(0);
+
+        c.Column.Should().Be(a.Column);
+        dni[0].Timed.Should().AllSatisfy(s => s.Columns.Should().Be(2));
+    }
+
+    [Fact]
+    public void Dwa_rozlaczne_po_wspolnym_nie_mnoza_kolumn()
+    {
+        // Długie wydarzenie i pod nim dwa krótkie jedno po drugim: dwie kolumny,
+        // nie trzy. Bez ponownego użycia kolumny dzień z wieloma krótkimi punktami
+        // zwęziłby się do nitek.
+        var dni = Agenda.Build(
+            [
+                Wydarzenie("długie", "2026-09-16", 9, 15),
+                Wydarzenie("krótkie a", "2026-09-16", 9, 10),
+                Wydarzenie("krótkie b", "2026-09-16", 11, 12),
+                Wydarzenie("krótkie c", "2026-09-16", 13, 14),
+            ],
+            Dzis, 1);
+
         dni[0].Timed.Should().AllSatisfy(s => s.Columns.Should().Be(2));
     }
 
