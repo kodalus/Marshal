@@ -1,9 +1,11 @@
 using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
+using Marshal.Application.Review;
 using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Notifications;
 using Marshal.Infrastructure.Repositories;
+using Marshal.Infrastructure.Review;
 using Marshal.Infrastructure.Sync;
 using Marshal.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
@@ -71,6 +73,8 @@ public static class DependencyInjection
         services.AddSingleton<IReminderLog, ReminderLog>();
         services.AddSingleton<InAppNotifier>();
         services.AddSingleton<INotifier>(sp => sp.GetRequiredService<InAppNotifier>());
+
+        services.AddSingleton<IReviewQueries, ReviewQueries>();
 
         services.AddSingleton<TaskEditService>();
         services.AddSingleton<DayRolloverService>();
