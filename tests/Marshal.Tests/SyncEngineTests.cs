@@ -68,7 +68,7 @@ public sealed class SyncEngineTests : IDisposable
     }
 
     private readonly string _katalog =
-        Path.Combine(Path.GetTempPath(), "marshal-sync-" + Guid.CreateVersion7().ToString("N")[..12]);
+        Path.Combine(Path.GetTempPath(), "marshal-sync-" + Guid.NewGuid().ToString("N"));
 
     private readonly Urzadzenie _biurko;
     private readonly Urzadzenie _telefon;

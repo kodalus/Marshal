@@ -8,7 +8,7 @@ namespace Marshal.Tests;
 public sealed class LocalFolderTransportTests : IDisposable
 {
     private readonly string _katalog =
-        Path.Combine(Path.GetTempPath(), "marshal-testy-" + Guid.CreateVersion7().ToString("N")[..12]);
+        Path.Combine(Path.GetTempPath(), "marshal-testy-" + Guid.NewGuid().ToString("N"));
 
     private LocalFolderTransport Skladnica() => new(_katalog);
 

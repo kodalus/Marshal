@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Marshal.Application.Abstractions;
 using Marshal.Domain.Sync;
 using Marshal.Infrastructure.Data;
@@ -59,7 +60,11 @@ public sealed class DeviceIdentity(MarshalDbContext db) : IDeviceIdentity
             .ToArray())
             .ToLowerInvariant();
 
-        var losowy = Guid.CreateVersion7().ToString("N")[..12];
+        // Naprawdę losowe, nie z zegara. Identyfikator siódmej wersji zaczyna się od
+        // 48-bitowego znacznika czasu w milisekundach, więc jego pierwsze dwanaście
+        // znaków szesnastkowych **to jest ten znacznik** — dwa urządzenia zakładane
+        // w tej samej milisekundzie dostałyby ten sam człon. Test to wychwycił.
+        var losowy = Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
 
         return czytelny.Length == 0 ? losowy : $"{czytelny}-{losowy}";
     }
