@@ -91,9 +91,6 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
     [ObservableProperty]
     public partial MissedChoice SelectedMissed { get; set; } = MissedChoice.All[0];
 
-    [ObservableProperty]
-    public partial string? Problem { get; set; }
-
     public IReadOnlyList<RepeatChoice> Repeats => RepeatChoice.All;
 
     public IReadOnlyList<AnchorChoice> Anchors => AnchorChoice.All;
@@ -106,7 +103,18 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
     /// Rytm zdaniem, nie formularzem. Sześć pól da się wypełnić źle i nie zauważyć;
     /// zdanie da się przeczytać i od razu wiedzieć, czy to jest to, o co chodziło.
     /// </summary>
-    public string Summary => RecurrenceText.Describe(BuildRule(out _));
+    public string Summary
+    {
+        get
+        {
+            var regula = BuildRule(out var problem);
+
+            // Reguła niepełna nie może pokazywać się jako „nie powtarza się" — wybrałaś
+            // „co tydzień", a zdanie mówiłoby, że rytmu nie ma. Zdanie musi mówić prawdę
+            // o tym, co jest na ekranie, także wtedy, gdy na ekranie czegoś brakuje.
+            return problem is not null ? problem : RecurrenceText.Describe(regula);
+        }
+    }
 
     public bool IsRepeating => SelectedRepeat.Kind is not null;
 
@@ -117,8 +125,6 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
     public bool NeedsWeekdays => SelectedRepeat.Kind == RecurrenceKind.Weekly;
 
     public bool NeedsDayOfMonth => SelectedRepeat.Kind == RecurrenceKind.Monthly;
-
-    public bool HasProblem => !string.IsNullOrEmpty(Problem);
 
     public event EventHandler? Saved;
 
@@ -135,8 +141,6 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
         ReminderDay = task.ReminderAt is { } r ? ToOffset(DateOnly.FromDateTime(r.DateTime)) : null;
         ReminderTime = task.ReminderAt?.TimeOfDay;
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
-        Problem = null;
-
         LoadRule(task.Recurrence);
 
         _loading = false;
@@ -177,7 +181,8 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
 
         if (problem is not null)
         {
-            Problem = problem;
+            // Zdanie podsumowujące pokazuje już, czego brakuje; czerwony napis obok
+            // powtarzałby to samo drugi raz.
             return;
         }
 
@@ -251,9 +256,12 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
                 SelectedAnchor.Value,
                 SelectedMissed.Value);
         }
-        catch (ArgumentException e)
+        catch (ArgumentException)
         {
-            problem = e.Message;
+            // Jedyny przypadek, jaki może tu wystąpić: rytm tygodniowy bez wskazanego
+            // dnia. Komunikat z wyjątku niesie nazwę parametru, więc nie nadaje się
+            // na ekran.
+            problem = "co tydzień — ale w które dni?";
             return null;
         }
     }
@@ -272,8 +280,6 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
         OnPropertyChanged(nameof(NeedsWeekdays));
         OnPropertyChanged(nameof(NeedsDayOfMonth));
     }
-
-    partial void OnProblemChanged(string? value) => OnPropertyChanged(nameof(HasProblem));
 
     partial void OnSelectedRepeatChanged(RepeatChoice value)
     {
