@@ -23,6 +23,7 @@ public enum Screen
     Someday,
     Waiting,
     Calendar,
+    Notes,
     Areas,
     Archive,
     Review,
@@ -54,7 +55,8 @@ public sealed partial class MainViewModel : ObservableObject
         TaskDetailViewModel detail,
         ReviewViewModel review,
         NowViewModel nowVm,
-        CalendarViewModel calendar)
+        CalendarViewModel calendar,
+        NotesViewModel notes)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -70,6 +72,7 @@ public sealed partial class MainViewModel : ObservableObject
         Review = review;
         Now = nowVm;
         Calendar = calendar;
+        Notes = notes;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
@@ -95,6 +98,8 @@ public sealed partial class MainViewModel : ObservableObject
     public NowViewModel Now { get; }
 
     public CalendarViewModel Calendar { get; }
+
+    public NotesViewModel Notes { get; }
 
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
@@ -186,6 +191,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsCalendar => Current == Screen.Calendar;
 
+    public bool IsNotes => Current == Screen.Notes;
+
     public bool IsReview => Current == Screen.Review;
 
     public bool HasNudges => Nudges.Count > 0;
@@ -210,6 +217,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsSomeday));
         OnPropertyChanged(nameof(IsWaiting));
         OnPropertyChanged(nameof(IsCalendar));
+        OnPropertyChanged(nameof(IsNotes));
         OnPropertyChanged(nameof(IsReview));
         OnPropertyChanged(nameof(IsAreas));
         OnPropertyChanged(nameof(IsArchive));
@@ -263,6 +271,7 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Projects => ShowProjectsAsync(),
             Screen.Waiting => ShowWaitingAsync(),
             Screen.Calendar => Calendar.LoadAsync(),
+            Screen.Notes => Notes.LoadAsync(),
             Screen.Areas => ShowAreasAsync(),
             _ => Task.CompletedTask,
         };
@@ -429,6 +438,14 @@ public sealed partial class MainViewModel : ObservableObject
         {
             WaitingItems.Add(pozycja);
         }
+    }
+
+    /// <summary>Notatki — materiał referencyjny, którego nie trzeba robić.</summary>
+    [RelayCommand]
+    private async Task ShowNotesAsync()
+    {
+        Current = Screen.Notes;
+        await Notes.LoadAsync();
     }
 
     /// <summary>Kalendarz godzinowy — wydarzenia i zadania na jednej siatce.</summary>

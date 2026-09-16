@@ -50,13 +50,21 @@ public sealed record MarkdownBlock(
 /// Notatka rozłożona na bloki do narysowania.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Płaska lista, nie drzewo. Podgląd notatki osobistej nie potrzebuje pełnego modelu
 /// dokumentu — potrzebuje czegoś, co da się przelecieć jednym <c>ItemsControl</c>,
 /// a zagnieżdżenie listy niesie sam poziom wcięcia.
+/// </para>
+/// <para>
+/// Nazwa <c>NoteDocument</c>, nie <c>MarkdownDocument</c>: tak nazywa się typ Markdiga
+/// i dwie takie nazwy w jednym pliku znaczą kwalifikowanie każdego użycia. Przy okazji
+/// ta jest trafniejsza — to jest postać **notatki** do narysowania, a nie dokument
+/// Markdown w ogóle.
+/// </para>
 /// </remarks>
-public sealed record MarkdownDocument(IReadOnlyList<MarkdownBlock> Blocks)
+public sealed record NoteDocument(IReadOnlyList<MarkdownBlock> Blocks)
 {
-    public static readonly MarkdownDocument Empty = new([]);
+    public static readonly NoteDocument Empty = new([]);
 
     public bool IsEmpty => Blocks.Count == 0;
 }

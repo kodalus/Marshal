@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddSingleton<IProjectRepository, ProjectRepository>();
         services.AddSingleton<IAreaRepository, AreaRepository>();
         services.AddSingleton<ITagRepository, TagRepository>();
+        services.AddSingleton<INoteRepository, NoteRepository>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
         services.AddSingleton<IReminderLog, ReminderLog>();
@@ -93,6 +94,7 @@ public static class DependencyInjection
         services.AddSingleton<NowService>();
         services.AddSingleton<DayRolloverService>();
         services.AddSingleton<ReminderService>();
+        services.AddSingleton<NoteService>();
         services.AddSingleton<InboxService>();
         services.AddSingleton<TagService>();
 

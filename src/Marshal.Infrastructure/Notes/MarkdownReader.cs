@@ -23,17 +23,17 @@ namespace Marshal.Infrastructure.Notes;
 /// </remarks>
 public static class MarkdownReader
 {
-    public static MarkdownDocument Read(string? markdown)
+    public static NoteDocument Read(string? markdown)
     {
         if (string.IsNullOrWhiteSpace(markdown))
         {
-            return MarkdownDocument.Empty;
+            return NoteDocument.Empty;
         }
 
         var bloki = new List<MarkdownBlock>();
         Flatten(Markdig.Markdown.Parse(markdown), bloki, listLevel: 0);
 
-        return new MarkdownDocument(bloki);
+        return new NoteDocument(bloki);
     }
 
     private static void Flatten(ContainerBlock container, List<MarkdownBlock> output, int listLevel)

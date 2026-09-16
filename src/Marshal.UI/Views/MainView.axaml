@@ -7,6 +7,7 @@
              xmlns:abs="using:Marshal.Application.Abstractions"
              xmlns:rev="using:Marshal.Application.Review"
              xmlns:sys="using:System"
+             xmlns:dn="using:Marshal.Domain.Notes"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
@@ -103,6 +104,7 @@
       <Button Classes="nav" Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
       <Button Classes="nav" Command="{Binding ShowReviewCommand}" Content="Przegląd" />
       <Button Classes="nav" Command="{Binding ShowCalendarCommand}" Content="Kalendarz" />
+      <Button Classes="nav" Command="{Binding ShowNotesCommand}" Content="Notatki" />
       <Button Classes="nav" Command="{Binding ShowAreasCommand}" Content="Obszary" />
       <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
     </WrapPanel>
@@ -535,6 +537,115 @@
 
         </StackPanel>
       </ScrollViewer>
+    </DockPanel>
+    </Panel>
+
+    <!-- Notatki: lista, edytor i podgląd obok siebie -->
+    <Panel IsVisible="{Binding IsNotes}">
+    <DockPanel DataContext="{Binding Notes}">
+
+      <StackPanel DockPanel.Dock="Top" x:DataType="vm:NotesViewModel" Margin="0,0,0,10"
+                  IsVisible="{Binding !IsEditing}">
+        <TextBox Text="{Binding Query}" Watermark="Szukaj w notatkach" />
+        <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+          <TextBox Grid.Column="0" Text="{Binding NewTitle}" Watermark="Tytuł nowej notatki">
+            <TextBox.KeyBindings>
+              <KeyBinding Gesture="Enter" Command="{Binding CreateCommand}" />
+            </TextBox.KeyBindings>
+          </TextBox>
+          <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
+                  Command="{Binding CreateCommand}" Content="Nowa" />
+        </Grid>
+      </StackPanel>
+
+      <Grid x:DataType="vm:NotesViewModel">
+
+        <!-- Lista -->
+        <DockPanel IsVisible="{Binding !IsEditing}">
+          <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                     TextWrapping="Wrap" Text="{Binding Empty}"
+                     IsVisible="{Binding !HasItems}" />
+          <ListBox ItemsSource="{Binding Items}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="dn:Note">
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                  <!-- Przypięcie znakiem, nie kolorem: wizja i zasady mają się
+                       wyróżniać, a nie krzyczeć. -->
+                  <TextBlock Grid.Column="0" Text="📌" Margin="0,0,8,0"
+                             IsVisible="{Binding IsPinned}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding Title}" TextWrapping="Wrap"
+                             VerticalAlignment="Center" />
+                  <Button Grid.Column="2" Content="Otwórz" Padding="10,4"
+                          Command="{Binding $parent[ListBox].((vm:NotesViewModel)DataContext).OpenCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+
+        <!-- Edytor i podgląd obok siebie. Przełącznik „pisz / oglądaj" każe pamiętać,
+             w którym trybie się jest — przy notatce pisanej raz i czytanej dziesięć
+             razy to pytanie zadawane bez potrzeby. -->
+        <DockPanel IsVisible="{Binding IsEditing}">
+
+          <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBox Text="{Binding Title}" FontSize="18" />
+            <WrapPanel Margin="0,8,0,0">
+              <CheckBox IsChecked="{Binding IsPinned}" Content="Przypięta" Margin="0,0,14,0" />
+              <Button Classes="nav" Command="{Binding SaveCommand}" Content="Zapisz" />
+              <Button Classes="nav" Command="{Binding CloseCommand}" Content="Zamknij" />
+              <Button Classes="nav" Command="{Binding DeleteCommand}" Content="Usuń" />
+            </WrapPanel>
+            <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                       Text="Przypięta trafia do kroku zerowego przeglądu — tam, gdzie wizja i zasady." />
+          </StackPanel>
+
+          <Grid ColumnDefinitions="*,*">
+
+            <TextBox Grid.Column="0" Margin="0,0,6,0" Text="{Binding Content}"
+                     AcceptsReturn="True" TextWrapping="Wrap"
+                     VerticalContentAlignment="Top"
+                     Watermark="Markdown: # nagłówek, - punkt, **gruby**, *pochyły*" />
+
+            <ScrollViewer Grid.Column="1">
+              <ItemsControl ItemsSource="{Binding Preview}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:BlockView">
+                    <Grid ColumnDefinitions="Auto,Auto,*" Margin="{Binding Margin}">
+                      <Border Grid.Column="0" Width="{Binding Indent}" />
+                      <!-- Cytat kreską z boku, punkt listy kropką: jedno i drugie
+                           znakiem, nie kolorem. -->
+                      <TextBlock Grid.Column="1" Text="•" Margin="0,0,6,0"
+                                 IsVisible="{Binding IsListItem}" />
+                      <Border Grid.Column="1" Width="3" Margin="0,0,8,0"
+                              Background="#40808080" IsVisible="{Binding IsQuote}" />
+                      <ItemsControl Grid.Column="2" ItemsSource="{Binding Spans}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <WrapPanel />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:SpanView">
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
+                                       FontWeight="{Binding Weight}"
+                                       FontStyle="{Binding Style}"
+                                       Opacity="{Binding Opacity}"
+                                       FontSize="{Binding $parent[ItemsControl].((vm:BlockView)DataContext).FontSize}" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+
+          </Grid>
+        </DockPanel>
+
+      </Grid>
     </DockPanel>
     </Panel>
 
