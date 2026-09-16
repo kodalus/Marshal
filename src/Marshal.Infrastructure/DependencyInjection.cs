@@ -3,6 +3,7 @@ using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
+using Marshal.Infrastructure.Backup;
 using Marshal.Infrastructure.Calendar;
 using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Notifications;
@@ -99,6 +100,7 @@ public static class DependencyInjection
         services.AddSingleton<NoteService>();
         services.AddSingleton<AttachmentService>();
         services.AddSingleton<FilterService>();
+        services.AddSingleton<BackupService>();
         services.AddSingleton<InboxService>();
         services.AddSingleton<TagService>();
 

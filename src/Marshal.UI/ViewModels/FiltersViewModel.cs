@@ -87,7 +87,7 @@ public sealed partial class FiltersViewModel : ObservableObject
 
     public IReadOnlyList<WindowChoice> Windows => WindowChoice.All;
 
-    public IReadOnlyList<MinutesChoice> MinuteOptions => MinutesChoice.All;
+    public IReadOnlyList<EstimateChoice> MinuteOptions => EstimateChoice.All;
 
     [ObservableProperty]
     public partial ScopeChoice? Area { get; set; }
@@ -102,7 +102,7 @@ public sealed partial class FiltersViewModel : ObservableObject
     public partial WindowChoice? DoDate { get; set; }
 
     [ObservableProperty]
-    public partial MinutesChoice? Minutes { get; set; }
+    public partial EstimateChoice? Minutes { get; set; }
 
     [ObservableProperty]
     public partial string Text { get; set; } = string.Empty;
@@ -156,7 +156,7 @@ public sealed partial class FiltersViewModel : ObservableObject
         Project ??= ScopeChoice.Any;
         Deadline ??= WindowChoice.All[0];
         DoDate ??= WindowChoice.All[0];
-        Minutes ??= MinutesChoice.All[0];
+        Minutes ??= EstimateChoice.All[0];
 
         await ReloadFavouritesAsync();
 
@@ -326,7 +326,7 @@ public sealed partial class FiltersViewModel : ObservableObject
         Project = ScopeChoice.Any;
         Deadline = WindowChoice.All[0];
         DoDate = WindowChoice.All[0];
-        Minutes = MinutesChoice.All[0];
+        Minutes = EstimateChoice.All[0];
 
         foreach (var przelacznik in States.Concat(Priorities).Concat(Energies).Concat(Tags))
         {
@@ -365,8 +365,8 @@ public sealed partial class FiltersViewModel : ObservableObject
             case FilterField.Estimate:
                 // Widok zapisany na urządzeniu z inną listą minut ma się otworzyć,
                 // a nie zniknąć: brakująca wartość dokładana do listy na miejscu.
-                Minutes = MinutesChoice.All.FirstOrDefault(m => m.Value == warunek.MaxMinutes)
-                    ?? new MinutesChoice(warunek.MaxMinutes, $"{warunek.MaxMinutes} min");
+                Minutes = EstimateChoice.All.FirstOrDefault(m => m.Value == warunek.MaxMinutes)
+                    ?? new EstimateChoice(warunek.MaxMinutes, $"{warunek.MaxMinutes} min");
                 break;
             case FilterField.Text:
                 Text = warunek.Text ?? string.Empty;
@@ -437,7 +437,7 @@ public sealed partial class FiltersViewModel : ObservableObject
 
     partial void OnDoDateChanged(WindowChoice? value) => _ = RunAsync();
 
-    partial void OnMinutesChanged(MinutesChoice? value) => _ = RunAsync();
+    partial void OnMinutesChanged(EstimateChoice? value) => _ = RunAsync();
 
     partial void OnTextChanged(string value) => _ = RunAsync();
 

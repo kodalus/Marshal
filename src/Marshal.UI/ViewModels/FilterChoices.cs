@@ -46,10 +46,14 @@ public sealed record WindowChoice(DateWindow? Value, string Label)
     public override string ToString() => Label;
 }
 
-/// <summary>Ile mam czasu. Wartości z widoku „Teraz", żeby pytanie brzmiało tak samo.</summary>
-public sealed record MinutesChoice(int? Value, string Label)
+/// <summary>
+/// Górny limit oszacowania. Nazwa inna niż <see cref="MinutesChoice"/> z widoku
+/// „Teraz", bo i pytanie jest inne: tam „ile mam czasu" i odpowiedź jest zawsze,
+/// tu „nie dłuższe niż" i brak warunku jest pozycją na liście.
+/// </summary>
+public sealed record EstimateChoice(int? Value, string Label)
 {
-    public static readonly IReadOnlyList<MinutesChoice> All =
+    public static readonly IReadOnlyList<EstimateChoice> All =
     [
         new(null, "bez znaczenia"),
         new(15, "kwadrans"),
