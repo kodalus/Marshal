@@ -1,0 +1,59 @@
+name: Wydanie
+
+# Uruchamiane znacznikiem, np. `git tag v0.1.0 && git push origin v0.1.0`.
+# Artefakty przebiegu CI wygasają po 90 dniach i wymagają zalogowania;
+# wydanie daje stały, publiczny odnośnik do pliku APK.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  apk:
+    name: Zbudowanie i opublikowanie APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Workload Androida
+        run: dotnet workload install android
+
+      - name: Publikacja APK
+        run: dotnet publish src/Marshal.Android/Marshal.Android.csproj -c Release
+
+      - name: Zebranie pakietu
+        id: pakiet
+        run: |
+          mkdir -p artefakty/apk
+          find src/Marshal.Android/bin/Release -name '*-Signed.apk' -exec cp {} artefakty/apk/ \;
+          # Gdyby konwencja nazw się zmieniła, bierzemy cokolwiek, co jest pakietem.
+          if [ -z "$(ls -A artefakty/apk)" ]; then
+            find src/Marshal.Android/bin/Release -name '*.apk' -exec cp {} artefakty/apk/ \;
+          fi
+          ls -l artefakty/apk
+          test -n "$(ls -A artefakty/apk)"
+
+      - name: Wydanie
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" artefakty/apk/*.apk \
+            --title "Marshal ${{ github.ref_name }}" \
+            --notes "Pakiet podpisany kluczem diagnostycznym — do instalacji z pominięciem sklepu. Zbudowany dla arm64-v8a." \
+            --repo "${{ github.repository }}"

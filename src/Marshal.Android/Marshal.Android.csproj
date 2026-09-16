@@ -8,6 +8,10 @@
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion>
     <AndroidPackageFormat>apk</AndroidPackageFormat>
+    <!-- Publikacja Release pakuje domyślnie kod natywny dla czterech architektur.
+         Telefon używa jednej; cztery to około 75 MB zamiast 25 MB i trzykrotnie
+         dłuższe budowanie. Do zmiany, gdyby doszło urządzenie 32-bitowe. -->
+    <RuntimeIdentifiers>android-arm64</RuntimeIdentifiers>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Android" Version="$(AvaloniaVersion)" />
