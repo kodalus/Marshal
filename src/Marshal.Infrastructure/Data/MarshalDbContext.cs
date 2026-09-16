@@ -2,6 +2,7 @@ using System.Reflection;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
+using Marshal.Domain.Review;
 using Marshal.Domain.Sync;
 using Marshal.Domain.Tags;
 using Marshal.Domain.Tasks;
@@ -41,6 +42,9 @@ public sealed class MarshalDbContext : DbContext
 
     /// <summary>Przypomnienia pokazane przez to urządzenie. Lokalne, niesynchronizowane.</summary>
     public DbSet<ReminderShown> ReminderShown => Set<ReminderShown>();
+
+    /// <summary>Przeglądy tygodniowe — także te w trakcie. Synchronizowane.</summary>
+    public DbSet<ReviewSession> ReviewSessions => Set<ReviewSession>();
 
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy

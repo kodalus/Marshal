@@ -75,6 +75,8 @@ public static class DependencyInjection
         services.AddSingleton<INotifier>(sp => sp.GetRequiredService<InAppNotifier>());
 
         services.AddSingleton<IReviewQueries, ReviewQueries>();
+        services.AddSingleton<IReviewSessionRepository, ReviewSessionRepository>();
+        services.AddSingleton<ReviewService>();
 
         services.AddSingleton<TaskEditService>();
         services.AddSingleton<DayRolloverService>();

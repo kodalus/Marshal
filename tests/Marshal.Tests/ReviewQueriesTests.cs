@@ -281,8 +281,12 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Cisza_liczy_sie_od_ostatniego_ruchu_w_obszarze()
     {
-        var obszar = Obszar("Twórczość", quietDays: 45);
+        // Kolejność nie jest tu dowolna: zegar logiczny nigdy się nie cofa, więc zapisu
+        // z przeszłości nie da się zrobić po zapisie z teraźniejszości — kolejny znacznik
+        // dostałby i tak czas bieżący. Scenariusz musi biec tak, jak biegnie naprawdę:
+        // najpierw dawno, potem dziś.
         _zegar.Now = _zegar.Now.AddDays(-100);
+        var obszar = Obszar("Twórczość", quietDays: 45);
         Zadanie("Nagrać pierwszą historię", obszar);
         _zegar.Now = _zegar.Now.AddDays(100);
 
@@ -297,10 +301,9 @@ public sealed class ReviewQueriesTests : IDisposable
     {
         // Praca i Dzieci mają progi, które praktycznie nigdy nie zadziałają, i tak ma
         // być: wartość mechanizmu leży cała w dolnej połowie tabeli (5.2).
+        _zegar.Now = _zegar.Now.AddDays(-20);
         var praca = Obszar("Praca", quietDays: 14);
         var tworczosc = Obszar("Twórczość", quietDays: 45);
-
-        _zegar.Now = _zegar.Now.AddDays(-20);
         Zadanie("Przegląd kodu", praca);
         Zadanie("Szkic historii", tworczosc);
         _zegar.Now = _zegar.Now.AddDays(20);
@@ -314,9 +317,9 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Tabela_idzie_od_najdluzej_milczacych()
     {
+        _zegar.Now = _zegar.Now.AddDays(-5);
         var praca = Obszar("Praca");
         Obszar("Relacje");
-        _zegar.Now = _zegar.Now.AddDays(-5);
         Zadanie("Przegląd kodu", praca);
         _zegar.Now = _zegar.Now.AddDays(5);
 
@@ -376,8 +379,8 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Projekty_nietkniete_od_dawna_trafiaja_do_kroku_piatego()
     {
-        var obszar = Obszar("Dom");
         _zegar.Now = _zegar.Now.AddDays(-30);
+        var obszar = Obszar("Dom");
         Projekt("Piwnica jest uporządkowana", obszar);
         _zegar.Now = _zegar.Now.AddDays(30);
         Projekt("Zimowe opony są na aucie", obszar);
