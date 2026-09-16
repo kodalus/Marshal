@@ -161,7 +161,7 @@
       <ListBox ItemsSource="{Binding TodayItems}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
-            <StackPanel Spacing="2" Padding="0,4">
+            <StackPanel Spacing="2" Margin="0,4">
               <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
               <TextBlock Classes="hint" Text="{Binding Deadline, StringFormat='termin {0:yyyy-MM-dd}'}"
                          IsVisible="{Binding HasDeadline}" />
@@ -177,7 +177,7 @@
       <ListBox ItemsSource="{Binding PlanItems}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
-            <StackPanel Spacing="2" Padding="0,4">
+            <StackPanel Spacing="2" Margin="0,4">
               <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
               <TextBlock Classes="hint" Text="{Binding DoDate, StringFormat='{}{0:yyyy-MM-dd}'}" />
             </StackPanel>
@@ -203,7 +203,7 @@
     <ListBox IsVisible="{Binding IsProjects}" ItemsSource="{Binding ProjectRows}">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="uc:ProjectRow">
-          <StackPanel Orientation="Horizontal" Padding="0,5">
+          <StackPanel Orientation="Horizontal" Margin="0,5">
             <Border Width="{Binding Indent}" />
             <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
           </StackPanel>
@@ -218,7 +218,7 @@
       <ListBox ItemsSource="{Binding AreaItems}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="areas:Area">
-            <Grid ColumnDefinitions="*,Auto" Padding="0,5">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,5">
               <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
                 <TextBlock Classes="hint" Text="{Binding QuietDays, StringFormat='cisza {0} dni'}" />
@@ -237,7 +237,7 @@
       <ListBox ItemsSource="{Binding ArchiveItems}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
-            <Grid ColumnDefinitions="*,Auto" Padding="0,4">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
               <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap" Opacity="0.75" />
               <TextBlock Grid.Column="1" Classes="hint" Text="{Binding State}" VerticalAlignment="Center" />
             </Grid>
