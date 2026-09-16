@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Marshal.UI.ViewModels"
+             x:Class="Marshal.UI.Views.MainView"
+             x:DataType="vm:MainViewModel">
+  <StackPanel Margin="24" Spacing="8" VerticalAlignment="Center" HorizontalAlignment="Center">
+    <TextBlock Text="Marshal" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
+    <TextBlock Text="Etap 0 — szkielet" Opacity="0.6" HorizontalAlignment="Center" />
+    <TextBlock Text="{Binding Stamp}" FontFamily="monospace" Margin="0,16,0,0" HorizontalAlignment="Center" />
+    <TextBlock Text="znacznik zegara logicznego ze startu" FontSize="11" Opacity="0.5" HorizontalAlignment="Center" />
+  </StackPanel>
+</UserControl>

@@ -3,5 +3,10 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <AvaloniaVersion>11.*</AvaloniaVersion>
+    <EfCoreVersion>10.0.11</EfCoreVersion>
   </PropertyGroup>
 </Project>
