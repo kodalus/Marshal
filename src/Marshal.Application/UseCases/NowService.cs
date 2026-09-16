@@ -126,10 +126,10 @@ public sealed class NowService(
             powod ??= "odblokowuje projekt";
         }
 
-        // Wiek w dniach, przycięty do dwudziestu. Przycięcie jest istotne: bez niego
-        // jedno zadanie sprzed roku zdominowałoby ekran na zawsze.
-        var wiek = Math.Clamp(today.DayNumber - DateOnly.FromDateTime(task.CreatedAt.UtcDateTime).DayNumber, 0, 20);
-        punkty += wiek;
+        // Wiek w dniach, **przycięty do dwudziestu punktów**. Przycięcie jest istotne:
+        // bez niego jedno zadanie sprzed roku zdominowałoby ekran na zawsze.
+        var wiek = Math.Max(0, today.DayNumber - DateOnly.FromDateTime(task.CreatedAt.UtcDateTime).DayNumber);
+        punkty += Math.Min(wiek, 20);
 
         if (task.Priority == Priority.High)
         {
@@ -143,6 +143,9 @@ public sealed class NowService(
             powod ??= "krótkie — łatwo zacząć";
         }
 
+        // Powód podaje wiek **prawdziwy**, nie przycięty: przycięcie jest sposobem
+        // liczenia punktów, a nie faktem o zadaniu. „Czeka 20 dni" przy zadaniu sprzed
+        // roku byłoby zwyczajną nieprawdą na ekranie.
         return new NowPick(task, punkty, powod ?? $"czeka {wiek} dni");
     }
 }

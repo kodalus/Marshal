@@ -203,17 +203,46 @@ public sealed class NowServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Wiek_jest_przyciety()
+    public async Task Wiek_przestaje_dawac_punkty_po_dwudziestu_dniach()
     {
         // Bez przycięcia jedno zadanie sprzed roku zdominowałoby ekran na zawsze.
+        // Rok i miesiąc muszą więc dostać tyle samo punktów za wiek.
+        _zegar.Now = _zegar.Now.AddYears(-1);
+        Zadanie("prastare");
+        _zegar.Now = _zegar.Now.AddYears(1).AddDays(-25);
+        Zadanie("sprzed miesiąca");
+        _zegar.Now = _zegar.Now.AddDays(25);
+
+        var wynik = await _teraz.PickAsync(60, Energy.High);
+
+        wynik.Select(p => p.Score).Distinct().Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Powod_podaje_wiek_prawdziwy_a_nie_przyciety()
+    {
+        // Przycięcie jest sposobem liczenia punktów, a nie faktem o zadaniu.
+        // „Czeka 20 dni" przy zadaniu sprzed stu dni byłoby nieprawdą na ekranie.
+        _zegar.Now = _zegar.Now.AddDays(-100);
+        Zadanie("dawne");
+        _zegar.Now = _zegar.Now.AddDays(100);
+
+        (await _teraz.PickAsync(60, Energy.High))[0].Reason.Should().Be("czeka 100 dni");
+    }
+
+    [Fact]
+    public async Task Termin_w_tym_tygodniu_bije_zadanie_lezace_od_roku()
+    {
+        // Sedno przycięcia: leżenie długo nie może przebić faktu zewnętrznego.
         _zegar.Now = _zegar.Now.AddYears(-1);
         Zadanie("prastare");
         _zegar.Now = _zegar.Now.AddYears(1);
-        var swieze = Zadanie("świeże");
-        swieze.SetPriority(Priority.High, _hlc.Next());
+
+        var zTerminem = Zadanie("z terminem");
+        zTerminem.SetDeadline(Dzis.AddDays(5), _hlc.Next());
         _db.SaveChanges();
 
-        (await _teraz.PickAsync(60, Energy.High))[0].Task.Title.Should().Be("świeże");
+        (await _teraz.PickAsync(60, Energy.High))[0].Task.Title.Should().Be("z terminem");
     }
 
     [Fact]
