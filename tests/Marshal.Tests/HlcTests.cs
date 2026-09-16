@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Marshal.Domain.Primitives;
+using Xunit;
 
 namespace Marshal.Tests;
 

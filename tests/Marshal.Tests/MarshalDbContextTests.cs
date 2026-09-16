@@ -4,6 +4,7 @@ using Marshal.Domain.Primitives;
 using Marshal.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Xunit;
 
 namespace Marshal.Tests;
 

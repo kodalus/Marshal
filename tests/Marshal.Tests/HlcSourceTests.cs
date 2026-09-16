@@ -2,6 +2,7 @@ using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Domain.Primitives;
 using Marshal.Infrastructure.Time;
+using Xunit;
 
 namespace Marshal.Tests;
 
