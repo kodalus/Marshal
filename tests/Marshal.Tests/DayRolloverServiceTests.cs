@@ -29,6 +29,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     private readonly MarshalDbContext _db;
     private readonly Zegar _zegar = new();
     private readonly DayRolloverService _usluga;
+    private readonly HlcSource _hlc;
     private readonly Guid _obszar = Guid.CreateVersion7();
 
     public DayRolloverServiceTests()
@@ -41,22 +42,24 @@ public sealed class DayRolloverServiceTests : IDisposable
                 .Options);
         _db.Database.Migrate();
 
-        var repo = new TaskRepository(_db);
+        // Jeden zegar logiczny na urządzenie, tak jak w aplikacji. Dwa niezależne
+        // ruszające od zera wydałyby te same znaczniki dwa razy i drugi zapis zostałby
+        // odrzucony jako cofnięcie zegara — co jest zachowaniem prawidłowym.
+        _hlc = new HlcSource(_zegar, "biurko");
         _usluga = new DayRolloverService(
-            repo, new UnitOfWork(_db), _zegar, new HlcSource(_zegar, "biurko"));
+            new TaskRepository(_db), new UnitOfWork(_db), _zegar, _hlc);
     }
 
     private static DateOnly D(string iso) => DateOnly.Parse(iso);
 
     private TaskItem Dodaj(string tytul, string doDate, RecurrenceRule? regula = null)
     {
-        var hlc = new HlcSource(_zegar, "biurko");
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, hlc.Next());
-        zadanie.Schedule(_obszar, D(doDate), hlc.Next());
+        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
+        zadanie.Schedule(_obszar, D(doDate), _hlc.Next());
 
         if (regula is not null)
         {
-            zadanie.SetRecurrence(regula, hlc.Next());
+            zadanie.SetRecurrence(regula, _hlc.Next());
         }
 
         _db.Tasks.Add(zadanie);
@@ -85,8 +88,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     public async Task Zadanie_ze_skrzynki_nie_jest_ruszane()
     {
         // Skrzynka nie ma dnia wykonania i nie powinna go dostać z przypadku.
-        var hlc = new HlcSource(_zegar, "biurko");
-        var wrzut = TaskItem.Capture("do przemyślenia", _zegar.Now, hlc.Next());
+        var wrzut = TaskItem.Capture("do przemyślenia", _zegar.Now, _hlc.Next());
         _db.Tasks.Add(wrzut);
         _db.SaveChanges();
 

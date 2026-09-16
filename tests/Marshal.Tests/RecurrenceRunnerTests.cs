@@ -220,8 +220,11 @@ public sealed class RecurrenceRunnerTests
     }
 
     [Fact]
-    public void Pominiete_z_Skip_trafia_do_kosza_i_rodzi_nastepne()
+    public void Pominiete_z_Skip_trafia_do_kosza_i_rodzi_nastepne_na_dzis()
     {
+        // Nie na 15-go: wystąpienia między datą pominiętą a dniem dzisiejszym też
+        // przepadają, bo na tym polega Skip. Tworzenie ich po to, żeby zaraz wyrzucić,
+        // dałoby tylko nagrobki do rozesłania.
         var zadanie = Zaplanowane(
             "2026-09-14",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
@@ -229,7 +232,7 @@ public sealed class RecurrenceRunnerTests
         var nastepne = RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
 
         zadanie.State.Should().Be(TaskState.Trashed);
-        nastepne!.DoDate.Should().Be(D("2026-09-15"));
+        nastepne!.DoDate.Should().Be(D("2026-09-16"));
     }
 
     [Fact]
