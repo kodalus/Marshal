@@ -94,6 +94,9 @@ jobs:
       - name: Narzędzie dotnet-ef
         run: dotnet tool install --global dotnet-ef
 
+      - name: Odtworzenie pakietów
+        run: dotnet restore src/Marshal.Infrastructure/Marshal.Infrastructure.csproj
+
       - name: Wygenerowanie migracji
         run: |
           export PATH="$PATH:$HOME/.dotnet/tools"
