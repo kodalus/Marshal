@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pięć wierszy wpisanych wprost, a nie ListView z RemoteViewsService.
+  Lista w widgecie to osobna usługa, osobna fabryka widoków i osobny cykl życia —
+  przy stałym limicie pięciu pozycji (N14) cała ta machina obsługiwałaby liczbę,
+  która się nie zmienia. Wiersz bez treści jest po prostu ukrywany.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:orientation="vertical"
+              android:padding="12dp"
+              android:background="#EE1E1E1E">
+
+  <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal">
+
+    <TextView
+        android:id="@+id/naglowek"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:textColor="#FFFFFFFF"
+        android:textSize="15sp"
+        android:text="Na dziś" />
+
+    <Button
+        android:id="@+id/wrzut"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:padding="6dp"
+        android:textSize="13sp"
+        android:text="Wrzuć" />
+  </LinearLayout>
+
+  <TextView
+      android:id="@+id/pusto"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="10dp"
+      android:textColor="#B0FFFFFF"
+      android:textSize="13sp"
+      android:visibility="gone"
+      android:text="Nic nie wybrane na dziś." />
+
+  <LinearLayout android:id="@+id/wiersz_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+    <TextView android:id="@+id/tytul_1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="2" android:ellipsize="end" android:textColor="#FFFFFFFF" android:textSize="14sp" />
+    <Button android:id="@+id/zrobione_1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:textSize="13sp" android:text="✓" />
+  </LinearLayout>
+
+  <LinearLayout android:id="@+id/wiersz_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+    <TextView android:id="@+id/tytul_2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="2" android:ellipsize="end" android:textColor="#FFFFFFFF" android:textSize="14sp" />
+    <Button android:id="@+id/zrobione_2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:textSize="13sp" android:text="✓" />
+  </LinearLayout>
+
+  <LinearLayout android:id="@+id/wiersz_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+    <TextView android:id="@+id/tytul_3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="2" android:ellipsize="end" android:textColor="#FFFFFFFF" android:textSize="14sp" />
+    <Button android:id="@+id/zrobione_3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:textSize="13sp" android:text="✓" />
+  </LinearLayout>
+
+  <LinearLayout android:id="@+id/wiersz_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+    <TextView android:id="@+id/tytul_4" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="2" android:ellipsize="end" android:textColor="#FFFFFFFF" android:textSize="14sp" />
+    <Button android:id="@+id/zrobione_4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:textSize="13sp" android:text="✓" />
+  </LinearLayout>
+
+  <LinearLayout android:id="@+id/wiersz_5" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+    <TextView android:id="@+id/tytul_5" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="2" android:ellipsize="end" android:textColor="#FFFFFFFF" android:textSize="14sp" />
+    <Button android:id="@+id/zrobione_5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:textSize="13sp" android:text="✓" />
+  </LinearLayout>
+
+</LinearLayout>

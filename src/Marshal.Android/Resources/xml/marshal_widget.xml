@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Opis widgetu dla systemu. Rozmiar minimalny dobrany na cztery kolumny i trzy
+  wiersze siatki ekranu domowego — tyle potrzeba na pięć pozycji z przyciskiem,
+  a mniej znaczyłoby listę uciętą w połowie.
+
+  updatePeriodMillis zostaje zerem świadomie: system i tak nie odświeża częściej
+  niż co pół godziny, a widget ma być aktualny **po zmianie**, nie co pół godziny.
+  Odświeżenie wywołuje aplikacja, kiedy coś się zmieniło.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+                    android:minWidth="250dp"
+                    android:minHeight="180dp"
+                    android:updatePeriodMillis="0"
+                    android:initialLayout="@layout/widget_marshal"
+                    android:resizeMode="horizontal|vertical"
+                    android:widgetCategory="home_screen" />

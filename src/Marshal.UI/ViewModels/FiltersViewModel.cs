@@ -143,7 +143,7 @@ public sealed partial class FiltersViewModel : ObservableObject
         Projects.Add(ScopeChoice.None);
         foreach (var projekt in await _projects.AllAsync())
         {
-            Projects.Add(new ScopeChoice(projekt.Id, projekt.Name));
+            Projects.Add(new ScopeChoice(projekt.Id, projekt.Outcome));
         }
 
         Tags.Clear();

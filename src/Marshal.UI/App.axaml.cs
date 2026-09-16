@@ -3,7 +3,6 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Marshal.Application.Abstractions;
-using Marshal.Infrastructure;
 using Marshal.UI.ViewModels;
 using Marshal.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,7 +46,7 @@ public partial class App : Avalonia.Application
         {
             try
             {
-                await DependencyInjection.PrepareAsync(services);
+                await AppServices.ReadyAsync();
 
                 // Dopiero po migracji: zapisany motyw leży w bazie, a tej przed
                 // PrepareAsync jeszcze nie ma.
