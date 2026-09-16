@@ -157,6 +157,15 @@ Do etapu 1 dołożone dwie rzeczy z budowania, które wyszły przy pierwszej ins
 - **Wydanie GitHub Release z APK w załącznikach.** Artefakty przebiegu wygasają po
   90 dniach i wymagają zalogowania, więc nie nadają się na stały sposób instalacji.
 
+**Stan etapu 3 na 16.09.2026.** Mechanika gotowa i sprawdzona testami: zegar logiczny,
+dziennik zmian z przechwytywania zapisu, scalanie per pole, porcje, kursory, trwała
+tożsamość urządzenia. Sprawdzone na dwóch urządzeniach o osobnych bazach i osobnych
+zegarach, przez składnicę na katalogu **i** przez udawany Dysk.
+
+Niesprawdzone jest to, czego bez poświadczeń sprawdzić się nie da — samo wołanie API
+Dysku — oraz logowanie na Androidzie, które wymaga osobnych poświadczeń i innej drogi
+niż przeglądarka z portem pętli zwrotnej. Instrukcja w `docs/google-dysk.md`.
+
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
 zaczyna się od etapu 3. Przerwa między etapem 2 a 3 to najbardziej prawdopodobny moment
@@ -768,8 +777,8 @@ a po czwartym razie N15 zadaje pytanie w przeglądzie.
 
 ### 9.1 Zasada
 
-Każde urządzenie zapisuje **wyłącznie własny plik** w folderze aplikacji na Dysku Google.
-Nigdy nie modyfikuje cudzego.
+Każde urządzenie zapisuje **wyłącznie własne porcje** w folderze aplikacji na Dysku
+Google. Nigdy nie modyfikuje cudzych ani własnych wcześniejszych.
 
 Dzięki temu **konflikt zapisu nie powstaje** — nie jest rozwiązywany sprytnym
 algorytmem, tylko nie istnieje. To jedyny powód, dla którego ten projekt nie potrzebuje
@@ -777,62 +786,127 @@ serwera.
 
 ### 9.2 Układ na Dysku
 
+Dziennik urządzenia jest **ciągiem niezmiennych porcji**, nie jednym rosnącym plikiem.
+
 ```
 Marshal/
-  log/
-    {deviceId}.jsonl          dopisywanie na koniec, nigdy nadpisanie
-  snapshot/
-    {deviceId}-{n}.json       zrzut stanu, gdy log przekroczy 2 MB
-  files/
-    {sha256}                  załączniki
-  device/
-    {deviceId}.json           nazwa urządzenia, ostatni kontakt
+  {deviceId}.{porcja}.jsonl   porcja raz zapisana nigdy się nie zmienia
+  files/{sha256}              załączniki
 ```
+
+Nazwa porcji to liczba uzupełniona zerami (`000001`), żeby porządek leksykograficzny
+pokrywał się z chronologicznym — składnice sortują nazwy jako tekst, więc `10`
+wypadłoby przed `9`. Ta sama sztuczka co przy zegarze logicznym (3.5).
+
+**Dlaczego nie jeden plik z dopisywaniem.** Pierwsza wersja tego rozdziału zakładała
+jeden plik na urządzenie i przesunięcie w bajtach jako kursor. Odpadła przy
+implementacji: **Dysk Google nie ma operacji dopisania.** Da się wgrać nową wersję
+całego pliku albo utworzyć nowy — nie ma czegoś takiego jak „dołóż te 200 bajtów na
+koniec". Pobieranie całości i wgrywanie z powrotem przy każdej synchronizacji
+odbierałoby tę jedną własność, na której wszystko stoi: przerwane wgranie niszczyłoby
+własny dziennik, zamiast tylko nie dołożyć ostatniej porcji.
+
+**Dlaczego płasko, bez katalogów na urządzenie.** Nazwy na Dysku nie są unikalne. Dwa
+urządzenia zakładające jednocześnie katalog `telefon` dostaną dwa różne katalogi o tej
+samej nazwie i każde będzie pisać do swojego. Identyfikator urządzenia siedzi więc
+w nazwie pliku. Składnica na katalogu lokalnym używa `log/{deviceId}/{porcja}.jsonl`,
+bo tam nazwy są unikalne z definicji.
 
 Folder zwykły, nie `appDataFolder` — użytkownik ma go widzieć i móc skopiować.
 
-### 9.3 Format wpisu
+### 9.3 Uprawnienie
+
+`https://www.googleapis.com/auth/drive.file` — dostęp **wyłącznie do plików założonych
+przez aplikację**. Jedyne uprawnienie Dysku, które nie wymaga przeglądu Google, więc
+aplikacja nie wpada w limit stu użytkowników testowych. Wystarcza, bo dziennik zakłada
+sama aplikacja.
+
+„Aplikacja" to identyfikator klienta OAuth, a nie instalacja: drugie urządzenie z tym
+samym identyfikatorem i tym samym kontem widzi porcje pierwszego. Reszta Dysku —
+zdjęcia, dokumenty — jest poza zasięgiem aplikacji.
+
+### 9.4 Format wpisu
 
 ```json
-{"op":"upsert","e":"task","id":"0199...","hlc":"1757942400123.7.a3f1",
- "f":{"Title":"Zadzwonić do przychodni","Status":"Next","ProjectId":"0199..."}}
+{"e":"Tasks","id":"0199...","hlc":"1757942400123.000007.a3f1",
+ "f":{"Title":"Zadzwonić do przychodni","State":"Next","ProjectId":"0199..."}}
 ```
 
-`f` zawiera **tylko pola zmienione**. Scalanie działa **per pole** — wygrywa wpis
-z wyższym HLC dla tego konkretnego pola. Zmiana priorytetu na telefonie i tytułu na
-desktopie w trybie offline daje po scaleniu oba, a nie jedno z nich.
+`f` zawiera **tylko pola zmienione jednym zapisem**. Grupowanie po zapisie, a nie po
+polu, bo jeden zapis to jedna decyzja użytkownika.
 
-### 9.4 Przebieg
+Scalanie działa **per pole** — wygrywa wpis z wyższym znacznikiem dla tego konkretnego
+pola. Zmiana priorytetu na telefonie i tytułu na komputerze w trybie offline daje po
+scaleniu oba, a nie jedno z nich. Do tego potrzebna jest tabela `FieldStamp` ze
+znacznikiem **bieżącej wartości każdego pola**; znacznik encji by nie wystarczył.
+
+Uszkodzony wiersz jest pomijany, a nie przerywa scalania: może pochodzić z nowszej
+wersji aplikacji, a reszta porcji jest zrozumiała.
+
+### 9.5 Przebieg
 
 ```
-1. Pobierz listę plików w log/ z Dysku (metadane: rozmiar, modifiedTime)
-2. Dla każdego cudzego pliku pobierz zakres bajtów od zapisanego offsetu
-3. Zastosuj wpisy: LWW per pole po HLC, remis rozstrzyga deviceId
-4. Zapisz nowe offsety w SyncState
-5. Dopisz własne niewysłane wpisy na koniec własnego pliku
-6. Przelicz niezmienniki z rozdziału 6
+1. Wyślij: zgrupuj niewysłane zmiany, zapisz jako kolejną własną porcję
+2. Pobierz listę porcji wszystkich urządzeń
+3. Dla każdego cudzego urządzenia weź porcje o nazwie większej od kursora
+4. Zastosuj wpisy: nowszy znacznik wygrywa, per pole; remis rozstrzyga deviceId
+5. Przesuń kursor po każdej przeczytanej porcji
+6. Zapisz podniesiony zegar logiczny
 ```
+
+Kursor jest **przyspieszeniem, nie warunkiem poprawności**. Ponowne zastosowanie tego
+samego wpisu nic nie zmienia, bo jego znacznik nie jest już nowszy od zapisanego.
+Gdyby kursor przepadł, synchronizacja przeczyta wszystko od początku i dojdzie do tego
+samego stanu — tylko raz wolniej.
+
+Scalanie działa w zasięgu, w którym dziennik zmian milczy. Bez tego zastosowanie
+zdalnej zmiany zapisałoby ją jako zmianę lokalną, wysyłka odesłałaby ją z powrotem
+i dwa urządzenia odbijałyby sobie te same wpisy bez końca — przy czym każdy obieg
+z osobna wyglądałby na poprawny.
 
 Wyzwalacze: start aplikacji, powrót z tła, co 5 minut przy aktywnym oknie, ręcznie.
 Nigdy w tle przy wyłączonej aplikacji.
 
-### 9.5 Kompakcja
+### 9.6 Tożsamość urządzenia i ciągłość zegara
 
-Gdy własny log przekroczy 2 MB: zapisz `snapshot/{deviceId}-{n}.json` ze stanem pełnym,
-wyczyść log, zapisz w nim wpis `{"op":"snapshot","n":n}`. Pozostałe urządzenia widzą
-wpis, wczytują zrzut i zerują offset.
+Identyfikator urządzenia **nie może brać się z nazwy maszyny**. Na Androidzie
+`MachineName` zwraca `localhost` na każdym urządzeniu, a dwa urządzenia o jednym
+identyfikatorze psują trzy rzeczy naraz: rozstrzyganie remisów zegara przestaje być
+jednoznaczne, nazwy porcji wchodzą sobie w drogę, a każde urządzenie uznaje dziennik
+drugiego za własny i przestaje go czytać. Żadna z tych rzeczy nie rzuca wyjątku.
 
-### 9.6 Czego to nie daje
+Identyfikator nadawany jest raz, z prawdziwego źródła losowości, i leży w bazie
+lokalnej. Człon czytelny z nazwy maszyny jest wyłącznie po to, żeby w składnicy dało
+się poznać, z czego jest który plik.
+
+Ostatni wydany znacznik zegara logicznego **musi przetrwać zamknięcie aplikacji**.
+Inaczej zegar startuje od zera i opiera się wyłącznie na zegarze ściennym; wystarczy,
+że ten cofnie się między uruchomieniami — poprawka z serwera czasu, zmiana strefy,
+rozładowana bateria podtrzymania — a nowe zmiany dostają znaczniki wcześniejsze od
+już wysłanych i przepadają przy scalaniu, bez śladu.
+
+### 9.7 Kompakcja
+
+Dziennik rośnie w nieskończoność. Docelowo: gdy porcji uzbiera się dużo, zapisz jedną
+porcję-migawkę ze stanem pełnym i oznacz wcześniejsze jako zbędne. Pozostałe urządzenia
+widzą wpis, wczytują migawkę i przestawiają kursor.
+
+**Nie zrobione.** Przy tempie kilkuset zmian dziennie to problem na rok, nie na teraz.
+
+### 9.8 Czego to nie daje
 
 - Opóźnienie liczone w minutach, nie w sekundach. Przy jednym użytkowniku bez znaczenia.
 - Brak natychmiastowego powiadomienia o zmianie na drugim urządzeniu.
 - Wymaga konta Google — tego samego, co kalendarz.
 
-### 9.7 Zależność od Google
+### 9.9 Zależność od Google
 
 Jedyna w projekcie. Zabezpieczenie: eksport całej bazy do JSON od etapu 1, offline,
 bez konta. Zmiana dostawcy synchronizacji na Dropbox, OneDrive albo katalog sieciowy
 to podmiana jednej implementacji `ISyncTransport` — format plików nie zależy od Dysku.
+Składnica na katalogu lokalnym nie jest atrapą na czas testów: to działająca droga
+przez katalog Dropboksa, OneDrive albo Syncthinga, i to na niej sprawdzane jest
+scalanie.
 
 ---
 
