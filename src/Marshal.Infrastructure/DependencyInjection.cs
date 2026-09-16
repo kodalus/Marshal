@@ -27,8 +27,12 @@ public static class DependencyInjection
         return Path.Combine(folder, "marshal.db");
     }
 
+    /// <param name="deviceId">
+    /// Wymuszony identyfikator urządzenia. Tylko do testów — normalnie bierze się
+    /// go z bazy, żeby był trwały i różny na każdym urządzeniu.
+    /// </param>
     public static IServiceCollection AddMarshal(
-        this IServiceCollection services, string databasePath, string deviceId)
+        this IServiceCollection services, string databasePath, string? deviceId = null)
     {
         // Jeden kontekst na całą aplikację. Przy jednym użytkowniku i pracy
         // wyłącznie lokalnej to najprostsze rozwiązanie, które działa. Do ponownego
@@ -42,7 +46,20 @@ public static class DependencyInjection
             ServiceLifetime.Singleton);
 
         services.AddSingleton<IClock, SystemClock>();
-        services.AddSingleton<IHlcSource>(sp => new HlcSource(sp.GetRequiredService<IClock>(), deviceId));
+
+        services.AddSingleton<IDeviceIdentity>(sp => deviceId is null
+            ? new DeviceIdentity(sp.GetRequiredService<MarshalDbContext>())
+            : new FixedDeviceIdentity(deviceId));
+
+        // Zegar wznawiany z bazy. Rozstrzygnięcie leniwe, bo identyfikator urządzenia
+        // i zapisany znacznik leżą w bazie, a ta jest gotowa dopiero po PrepareAsync.
+        services.AddSingleton<IHlcSource>(sp =>
+        {
+            var db = sp.GetRequiredService<MarshalDbContext>();
+            var id = sp.GetRequiredService<IDeviceIdentity>().Id;
+
+            return new HlcSource(sp.GetRequiredService<IClock>(), id, LastHlcStore.Read(db, id));
+        });
 
         services.AddSingleton<ITaskRepository, TaskRepository>();
         services.AddSingleton<IProjectRepository, ProjectRepository>();
@@ -62,10 +79,20 @@ public static class DependencyInjection
         var db = services.GetRequiredService<MarshalDbContext>();
         await db.Database.MigrateAsync(ct);
 
+        // Identyfikator urządzenia rozstrzygany zaraz po migracji: zakłada go przy
+        // pierwszym uruchomieniu, a zegar logiczny potrzebuje go do wznowienia.
+        _ = services.GetRequiredService<IDeviceIdentity>().Id;
+
         await AreaSeed.EnsureAsync(
             db,
             services.GetRequiredService<IClock>(),
             services.GetRequiredService<IHlcSource>(),
             ct);
     }
+}
+
+/// <summary>Identyfikator podany z zewnątrz — do testów i do scenariuszy z dwoma bazami.</summary>
+internal sealed class FixedDeviceIdentity(string id) : IDeviceIdentity
+{
+    public string Id { get; } = id;
 }

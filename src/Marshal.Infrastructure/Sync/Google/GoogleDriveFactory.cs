@@ -31,7 +31,7 @@ public static class GoogleDriveFactory
     /// nie instalacja, więc drugie urządzenie z tym samym identyfikatorem i tym samym
     /// kontem widzi porcje pierwszego.
     /// </remarks>
-    private const string Scope = DriveService.Scope.DriveFile;
+    private static readonly string Scope = DriveService.Scope.DriveFile;
 
     /// <param name="clientId">Z poświadczeń OAuth typu „aplikacja na komputer".</param>
     /// <param name="tokenFolder">

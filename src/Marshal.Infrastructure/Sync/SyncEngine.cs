@@ -114,6 +114,11 @@ public sealed class SyncEngine(
                 }
             }
 
+            // Scalanie podnosi zegar lokalny ponad znaczniki zdalne. Gdyby to
+            // podniesienie nie przetrwało zamknięcia aplikacji, kolejna zmiana
+            // lokalna byłaby wcześniejsza od tego, co już przyszło, i przegrałaby.
+            LastHlcStore.Stage(db, hlc.Last);
+
             await db.SaveChangesAsync(ct);
         }
 

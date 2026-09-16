@@ -21,24 +21,12 @@ public static class AppServices
 
         services.AddMarshal(
             databasePath ?? DependencyInjection.DefaultDatabasePath(),
-            deviceId ?? DeviceId());
+            deviceId);
 
         services.AddSingleton<ClarifyViewModel>();
         services.AddSingleton<MainViewModel>();
 
         _provider = services.BuildServiceProvider();
         return _provider;
-    }
-
-    /// <summary>
-    /// Identyfikator urządzenia rozstrzyga remisy zegara logicznego (spec 3.5), więc
-    /// musi być trwały i różny na każdym urządzeniu. Nazwa maszyny wystarcza do etapu 3;
-    /// przy synchronizacji dostanie własny, losowy identyfikator zapisany w ustawieniach.
-    /// </summary>
-    private static string DeviceId()
-    {
-        var name = Environment.MachineName;
-        var clean = new string(name.Where(char.IsLetterOrDigit).ToArray());
-        return string.IsNullOrEmpty(clean) ? "urzadzenie" : clean.ToLowerInvariant();
     }
 }

@@ -10,6 +10,12 @@ public interface IHlcSource
 {
     string DeviceId { get; }
 
+    /// <summary>
+    /// Ostatni wydany znacznik. Musi przetrwać zamknięcie aplikacji, inaczej zegar
+    /// wystartuje od zera i zależy wyłącznie od zegara ściennego.
+    /// </summary>
+    Hlc Last { get; }
+
     /// <summary>Znacznik dla zmiany lokalnej.</summary>
     Hlc Next();
 

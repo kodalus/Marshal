@@ -13,6 +13,10 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <!-- Testy sięgają po części wewnętrzne synchronizacji: to mechanizm, nie API. -->
+    <InternalsVisibleTo Include="Marshal.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Marshal.Application\Marshal.Application.csproj" />
   </ItemGroup>
 </Project>

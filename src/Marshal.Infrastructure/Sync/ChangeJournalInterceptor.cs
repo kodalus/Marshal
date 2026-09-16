@@ -94,6 +94,11 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
             var id = entry.Entity.Id;
             var hlc = entry.Entity.UpdatedAt.ToString();
 
+            // Znacznik zużyty przez tę zmianę musi przeżyć zamknięcie aplikacji,
+            // inaczej zegar wystartuje od zera i cofnięty zegar ścienny sprawi,
+            // że kolejne zmiany przegrają scalanie jako rzekomo starsze.
+            LastHlcStore.Stage(context, entry.Entity.UpdatedAt);
+
             foreach (var property in entry.Properties)
             {
                 // Klucz główny pomijany: identyfikator jest w każdym wierszu dziennika
