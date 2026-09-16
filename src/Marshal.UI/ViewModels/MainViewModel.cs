@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
+using Marshal.Application.Review;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Tasks;
@@ -19,8 +20,10 @@ public enum Screen
     Plans,
     Projects,
     Someday,
+    Waiting,
     Areas,
     Archive,
+    Review,
 }
 
 public sealed partial class MainViewModel : ObservableObject
@@ -31,6 +34,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IAreaRepository _areas;
     private readonly IClock _clock;
     private readonly TaskEditService _edit;
+    private readonly IReviewQueries _queries;
     private readonly InAppNotifier _notifier;
 
     public MainViewModel(
@@ -40,9 +44,11 @@ public sealed partial class MainViewModel : ObservableObject
         IAreaRepository areas,
         IClock clock,
         TaskEditService edit,
+        IReviewQueries queries,
         InAppNotifier notifier,
         ClarifyViewModel clarify,
-        TaskDetailViewModel detail)
+        TaskDetailViewModel detail,
+        ReviewViewModel review)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -50,19 +56,27 @@ public sealed partial class MainViewModel : ObservableObject
         _areas = areas;
         _clock = clock;
         _edit = edit;
+        _queries = queries;
         _notifier = notifier;
         Clarify = clarify;
         Detail = detail;
+        Review = review;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
         // wykonania potrafi przenieść zadanie na inną listę niż ta, z której je otwarto.
         Detail.Saved += async (_, _) => await ReloadAsync();
+
+        // Przegląd zmienia stan zadań i projektów, więc ekran pod spodem musi się
+        // przeliczyć — także liczniki niezmienników w „Dzisiaj".
+        Review.Changed += async (_, _) => await ReloadAsync();
     }
 
     public ClarifyViewModel Clarify { get; }
 
     public TaskDetailViewModel Detail { get; }
+
+    public ReviewViewModel Review { get; }
 
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
@@ -74,6 +88,17 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Przypomnienia, które odezwały się przy tym uruchomieniu.</summary>
     public ObservableCollection<Notification> Reminders { get; } = [];
+
+    public ObservableCollection<WaitingItem> WaitingItems { get; } = [];
+
+    /// <summary>Tabela równowagi (8.5). Widoczna wyłącznie tutaj i w kroku 8 przeglądu.</summary>
+    public ObservableCollection<AreaBalance> BalanceRows { get; } = [];
+
+    /// <summary>Projekty bez następnej akcji (N1) — pozycja w „Dzisiaj".</summary>
+    public ObservableCollection<BlockedProject> BlockedProjects { get; } = [];
+
+    /// <summary>Oczekiwane, którym minął próg ponaglenia (N3) — pozycja w „Dzisiaj".</summary>
+    public ObservableCollection<WaitingItem> Nudges { get; } = [];
 
     public ObservableCollection<TaskItem> SomedayItems { get; } = [];
 
@@ -113,6 +138,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsSomeday => Current == Screen.Someday;
 
+    public bool IsWaiting => Current == Screen.Waiting;
+
+    public bool IsReview => Current == Screen.Review;
+
+    public bool HasNudges => Nudges.Count > 0;
+
+    public bool HasBlocked => BlockedProjects.Count > 0;
+
     public bool IsAreas => Current == Screen.Areas;
 
     public bool IsArchive => Current == Screen.Archive;
@@ -128,6 +161,8 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsPlans));
         OnPropertyChanged(nameof(IsProjects));
         OnPropertyChanged(nameof(IsSomeday));
+        OnPropertyChanged(nameof(IsWaiting));
+        OnPropertyChanged(nameof(IsReview));
         OnPropertyChanged(nameof(IsAreas));
         OnPropertyChanged(nameof(IsArchive));
     }
@@ -177,6 +212,7 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Someday => ShowSomedayAsync(),
             Screen.Archive => ShowArchiveAsync(),
             Screen.Projects => ShowProjectsAsync(),
+            Screen.Waiting => ShowWaitingAsync(),
             Screen.Areas => ShowAreasAsync(),
             _ => Task.CompletedTask,
         };
@@ -243,7 +279,13 @@ public sealed partial class MainViewModel : ObservableObject
         Current = Screen.Projects;
         ProjectRows.Clear();
 
-        var rows = ProjectTree.Build(await _areas.ActiveAsync(), await _projects.ActiveAsync());
+        var zablokowane = (await _queries.BlockedProjectsAsync())
+            .Select(p => p.ProjectId)
+            .ToHashSet();
+
+        var rows = ProjectTree.Build(
+            await _areas.ActiveAsync(), await _projects.ActiveAsync(), zablokowane);
+
         foreach (var row in rows)
         {
             ProjectRows.Add(row);
@@ -251,10 +293,49 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task ShowWaitingAsync()
+    {
+        Current = Screen.Waiting;
+        WaitingItems.Clear();
+
+        foreach (var pozycja in await _queries.WaitingAsync(Today()))
+        {
+            WaitingItems.Add(pozycja);
+        }
+    }
+
+    /// <summary>Kreator przeglądu. Wznawia niedokończony albo zakłada nowy.</summary>
+    [RelayCommand]
+    private async Task ShowReviewAsync()
+    {
+        Current = Screen.Review;
+        await Review.OpenAsync();
+    }
+
+    [RelayCommand]
     private async Task ShowTodayAsync()
     {
         Current = Screen.Today;
-        await Fill(TodayItems, _tasks.TodayAsync(Today()));
+        var dzis = Today();
+        await Fill(TodayItems, _tasks.TodayAsync(dzis));
+
+        // Ponaglenia (N3) i projekty zablokowane (N1) idą na „Dzisiaj", bo są sprawami
+        // na dziś. Cisza obszarów (N10) **nigdy tu nie trafia** — to nie jest sprawa na
+        // dziś, a codzienne przypominanie o niej zamieniłoby ją w szum (spec 6).
+        Nudges.Clear();
+        foreach (var pozycja in (await _queries.WaitingAsync(dzis)).Where(w => w.NeedsNudge))
+        {
+            Nudges.Add(pozycja);
+        }
+
+        BlockedProjects.Clear();
+        foreach (var projekt in await _queries.BlockedProjectsAsync())
+        {
+            BlockedProjects.Add(projekt);
+        }
+
+        OnPropertyChanged(nameof(HasNudges));
+        OnPropertyChanged(nameof(HasBlocked));
     }
 
     [RelayCommand]
@@ -287,6 +368,12 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var area in await _areas.AllAsync())
         {
             AreaItems.Add(area);
+        }
+
+        BalanceRows.Clear();
+        foreach (var wiersz in await _queries.BalanceAsync(Today()))
+        {
+            BalanceRows.Add(wiersz);
         }
     }
 

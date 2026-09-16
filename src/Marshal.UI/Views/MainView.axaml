@@ -5,6 +5,7 @@
              xmlns:areas="using:Marshal.Domain.Areas"
              xmlns:uc="using:Marshal.Application.UseCases"
              xmlns:abs="using:Marshal.Application.Abstractions"
+             xmlns:rev="using:Marshal.Application.Review"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
@@ -97,6 +98,8 @@
       <Button Classes="nav" Command="{Binding ShowPlansCommand}" Content="Plany" />
       <Button Classes="nav" Command="{Binding ShowProjectsCommand}" Content="Projekty" />
       <Button Classes="nav" Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
+      <Button Classes="nav" Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
+      <Button Classes="nav" Command="{Binding ShowReviewCommand}" Content="Przegląd" />
       <Button Classes="nav" Command="{Binding ShowAreasCommand}" Content="Obszary" />
       <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
     </WrapPanel>
@@ -206,6 +209,51 @@
     <DockPanel IsVisible="{Binding IsToday}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Zadania na dziś i po terminie. Terminy pierwsze — to fakt zewnętrzny, nie decyzja." />
+
+      <!-- N1 i N3 trafiają tutaj, bo są sprawami na dziś. Cisza obszarów (N10) nigdy —
+           to nie jest sprawa na dziś, a codzienne przypominanie zamieniłoby ją w szum. -->
+      <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+
+        <Border Padding="12,10" CornerRadius="8" Background="#18808080"
+                IsVisible="{Binding HasNudges}">
+          <StackPanel>
+            <TextBlock Text="Do ponaglenia" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <ItemsControl ItemsSource="{Binding Nudges}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="rev:WaitingItem">
+                  <TextBlock Margin="0,2" TextWrapping="Wrap">
+                    <Run Text="{Binding Task.Title}" />
+                    <Run Text=" — " />
+                    <Run Text="{Binding Who}" />
+                    <Run Text=", " />
+                    <Run Text="{Binding Days}" />
+                    <Run Text=" dni" />
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+        <Border Margin="0,8,0,0" Padding="12,10" CornerRadius="8" Background="#18808080"
+                IsVisible="{Binding HasBlocked}">
+          <StackPanel>
+            <TextBlock Text="Projekty bez następnej akcji" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <ItemsControl ItemsSource="{Binding BlockedProjects}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="rev:BlockedProject">
+                  <TextBlock Margin="0,2" TextWrapping="Wrap">
+                    <Run Text="{Binding Outcome}" />
+                    <Run Text=" · " />
+                    <Run Text="{Binding AreaName}" />
+                  </TextBlock>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
       <ListBox ItemsSource="{Binding TodayItems}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TaskRow">
@@ -265,36 +313,175 @@
       </ListBox>
     </DockPanel>
 
-    <!-- Projekty: obszar, cel, projekt -->
-    <ListBox IsVisible="{Binding IsProjects}" ItemsSource="{Binding ProjectRows}">
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="uc:ProjectRow">
-          <StackPanel Orientation="Horizontal" Margin="0,5">
-            <Border Width="{Binding Indent}" />
-            <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
-          </StackPanel>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
-
-    <!-- Obszary -->
-    <DockPanel IsVisible="{Binding IsAreas}">
+    <!-- Oczekiwane: sortowane po liczbie dni, najdłużej czekające na górze -->
+    <DockPanel IsVisible="{Binding IsWaiting}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
-                 Text="Cisza — po ilu dniach bez ruchu obszar się zgłasza. Ponaglenie — po ilu dniach przypomnieć o oczekiwaniu." />
-      <ListBox ItemsSource="{Binding AreaItems}">
+                 Text="Czekanie jest prawidłowym stanem. Próg ponaglenia jest własnością obszaru — urząd nie odpowiada w tydzień." />
+      <ListBox ItemsSource="{Binding WaitingItems}">
         <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="areas:Area">
-            <Grid ColumnDefinitions="*,Auto" Margin="0,5">
-              <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="14" VerticalAlignment="Center">
-                <TextBlock Classes="hint" Text="{Binding QuietDays, StringFormat='cisza {0} dni'}" />
-                <TextBlock Classes="hint" Text="{Binding DefaultNudgeDays, StringFormat='ponaglenie {0} dni'}" />
+          <DataTemplate x:DataType="rev:WaitingItem">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+              <StackPanel Grid.Column="0">
+                <TextBlock Text="{Binding Task.Title}" TextWrapping="Wrap" />
+                <TextBlock Classes="badge" TextWrapping="Wrap">
+                  <Run Text="{Binding Who}" />
+                  <Run Text=" · " />
+                  <Run Text="{Binding Days}" />
+                  <Run Text=" dni z " />
+                  <Run Text="{Binding NudgeDays}" />
+                </TextBlock>
               </StackPanel>
+              <TextBlock Grid.Column="1" Text="ponaglić" VerticalAlignment="Center"
+                         Opacity="0.75" IsVisible="{Binding NeedsNudge}" />
             </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
     </DockPanel>
+
+    <!-- Projekty: obszar, cel, projekt -->
+    <ListBox IsVisible="{Binding IsProjects}" ItemsSource="{Binding ProjectRows}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="uc:ProjectRow">
+          <StackPanel Orientation="Horizontal" Margin="0,5" Spacing="10">
+            <Border Width="{Binding Indent}" />
+            <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
+            <!-- N1 napisem, nie kolorem: plakietka bez treści uczy ignorowania. -->
+            <TextBlock Classes="badge" Text="{Binding Marker}"
+                       IsVisible="{Binding IsBlocked}" VerticalAlignment="Center" />
+          </StackPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <!-- Obszary: tabela równowagi (8.5) plus progi -->
+    <DockPanel IsVisible="{Binding IsAreas}">
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+                 Text="Równowaga nie znaczy równy rozkład. Trzy miesiące w jednym obszarze bywają prawidłową decyzją — tabela ma pokazać, że zapadła." />
+      <ListBox ItemsSource="{Binding BalanceRows}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="rev:AreaBalance">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,5">
+              <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center"
+                         Width="130" TextAlignment="Right"
+                         Text="{Binding ActiveProjects, StringFormat='{}{0} aktywnych'}" />
+              <!-- Sama liczba dni, bez ocen i bez czerwieni: etykieta dokłada wstyd,
+                   który nie pomaga podjąć działania (8.5). -->
+              <TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center"
+                         Width="150" TextAlignment="Right"
+                         Text="{Binding DaysSinceMove, StringFormat='{}{0} dni bez ruchu'}"
+                         IsVisible="{Binding DaysSinceMove, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Grid.Column="2" Classes="hint" VerticalAlignment="Center"
+                         Width="150" TextAlignment="Right" Text="brak ruchu"
+                         IsVisible="{Binding DaysSinceMove, Converter={x:Static ObjectConverters.IsNull}}" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
+
+    <!-- Przegląd tygodniowy: kreator ośmiu kroków (8.3) -->
+    <Panel IsVisible="{Binding IsReview}">
+    <ScrollViewer DataContext="{Binding Review}">
+      <StackPanel MaxWidth="620" HorizontalAlignment="Center"
+                  x:DataType="vm:ReviewViewModel">
+
+        <StackPanel IsVisible="{Binding !IsFinished}">
+
+          <TextBlock Classes="hint" HorizontalAlignment="Center" Text="{Binding StepNumber}" />
+          <TextBlock Text="{Binding StepTitle}" FontSize="22" Margin="0,6,0,4"
+                     TextWrapping="Wrap" HorizontalAlignment="Center" />
+          <TextBlock Classes="hint" Text="{Binding StepHint}" TextWrapping="Wrap"
+                     HorizontalAlignment="Center" TextAlignment="Center" />
+          <TextBlock Classes="hint" Text="{Binding Remaining}" Margin="0,10,0,0"
+                     HorizontalAlignment="Center" />
+
+          <!-- Krok zerowy: sam tekst, bez żadnej akcji. Jest po to, żeby reszta
+               przeglądu działa się po jego przeczytaniu, a nie żeby coś z nim zrobić. -->
+          <Border Margin="0,16,0,0" Padding="18" CornerRadius="8" Background="#18808080"
+                  IsVisible="{Binding IsPinnedStep}">
+            <StackPanel Spacing="10">
+              <TextBlock TextWrapping="Wrap"
+                         Text="Aplikacja nie może liczyć na to, że przegląd się odbędzie. Wszystko, co tu zobaczysz, wyliczyło się samo — nie musiałaś o tym pamiętać." />
+              <TextBlock TextWrapping="Wrap"
+                         Text="Przerwanie w dowolnym momencie nic nie kosztuje. Stan zapisuje się po każdej pojedynczej pozycji, więc przegląd rozłożony na pięć wieczorów jest przeglądem zrobionym." />
+              <TextBlock Classes="hint" TextWrapping="Wrap"
+                         Text="Miejsce na przypięte notatki — wizję i zasady — dochodzi w etapie 8." />
+            </StackPanel>
+          </Border>
+
+          <!-- Krok ósmy: tabela do obejrzenia, nie lista do odhaczenia. -->
+          <StackPanel Margin="0,16,0,0" IsVisible="{Binding IsBalanceStep}">
+            <ItemsControl ItemsSource="{Binding Balance}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="rev:AreaBalance">
+                  <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,5">
+                    <TextBlock Grid.Column="0" Text="{Binding Name}" />
+                    <TextBlock Grid.Column="1" Classes="hint" Width="120" TextAlignment="Right"
+                               Text="{Binding ActiveProjects, StringFormat='{}{0} aktywnych'}" />
+                    <TextBlock Grid.Column="2" Classes="hint" Width="150" TextAlignment="Right"
+                               Text="{Binding DaysSinceMove, StringFormat='{}{0} dni bez ruchu'}"
+                               IsVisible="{Binding DaysSinceMove, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                    <TextBlock Grid.Column="2" Classes="hint" Width="150" TextAlignment="Right"
+                               Text="brak ruchu"
+                               IsVisible="{Binding DaysSinceMove, Converter={x:Static ObjectConverters.IsNull}}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- Pozycje kroku. Odhaczenie zapisuje się natychmiast — to jest cały
+               mechanizm wznawialności, a nie optymalizacja. -->
+          <ItemsControl ItemsSource="{Binding Items}" Margin="0,16,0,0">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="rev:ReviewItem">
+                <Border Margin="0,0,0,8" Padding="14,10" CornerRadius="8" Background="#18808080">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                      <TextBlock Classes="badge" Text="{Binding Detail}" TextWrapping="Wrap"
+                                 IsVisible="{Binding HasDetail}" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Content="Rozpatrzone" Padding="12,6"
+                            VerticalAlignment="Center"
+                            Command="{Binding $parent[ItemsControl].((vm:ReviewViewModel)DataContext).ProcessCommand}"
+                            CommandParameter="{Binding}" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,20,0,0">
+            <Button Grid.Column="0" Content="Wstecz" Padding="14,8"
+                    IsEnabled="{Binding CanGoBack}" Command="{Binding BackCommand}" />
+            <Button Grid.Column="2" Padding="14,8" Command="{Binding NextCommand}"
+                    Content="Dalej" IsVisible="{Binding !IsLastStep}" />
+            <Button Grid.Column="2" Padding="14,8" Command="{Binding NextCommand}"
+                    Content="Zakończ przegląd" IsVisible="{Binding IsLastStep}" />
+          </Grid>
+
+          <TextBlock Classes="hint" Margin="0,10,0,0" TextWrapping="Wrap"
+                     HorizontalAlignment="Center" TextAlignment="Center"
+                     Text="Można wyjść w każdej chwili. Nieukończony przegląd nie wygasa i o sobie nie przypomina." />
+
+        </StackPanel>
+
+        <!-- Zakończenie bez podsumowania „wykonano 2 z 5" i bez oceny. -->
+        <Border IsVisible="{Binding IsFinished}" Margin="0,40,0,0" Padding="24"
+                CornerRadius="10" Background="#18808080">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Przegląd zamknięty." FontSize="20" HorizontalAlignment="Center" />
+            <TextBlock Classes="hint" TextWrapping="Wrap" TextAlignment="Center"
+                       Text="Następny założy się sam, kiedy tu wrócisz. Bez terminu i bez licznika dni." />
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+    </Panel>
 
     <!-- Archiwum -->
     <DockPanel IsVisible="{Binding IsArchive}">

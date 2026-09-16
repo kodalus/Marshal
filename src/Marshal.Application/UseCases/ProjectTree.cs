@@ -4,10 +4,14 @@ using Marshal.Domain.Projects;
 namespace Marshal.Application.UseCases;
 
 /// <summary>Wiersz drzewa: obszar albo projekt, z głębokością zagnieżdżenia.</summary>
-public sealed record ProjectRow(Guid Id, string Label, int Depth, bool IsArea)
+public sealed record ProjectRow(
+    Guid Id, string Label, int Depth, bool IsArea, bool IsBlocked = false)
 {
     /// <summary>Wcięcie w punktach. Liczba, nie typ interfejsu — warstwa aplikacji nie zna Avalonii.</summary>
     public double Indent => Depth * 20.0;
+
+    /// <summary>N1 — projekt bez następnej akcji. Napisem, nie kolorem (spec 11.1).</summary>
+    public string Marker => IsBlocked ? "brak następnej akcji" : string.Empty;
 }
 
 /// <summary>
@@ -16,8 +20,15 @@ public sealed record ProjectRow(Guid Id, string Label, int Depth, bool IsArea)
 /// </summary>
 public static class ProjectTree
 {
+    /// <param name="blocked">
+    /// Projekty bez następnej akcji (N1). Wyróżnienie robi się tutaj, bo drzewo i tak
+    /// przechodzi po wszystkich projektach — osobne przejście po liście tylko po to,
+    /// żeby dopisać jedną flagę, byłoby drugim miejscem do rozjechania się z pierwszym.
+    /// </param>
     public static IReadOnlyList<ProjectRow> Build(
-        IReadOnlyList<Area> areas, IReadOnlyList<Project> projects)
+        IReadOnlyList<Area> areas,
+        IReadOnlyList<Project> projects,
+        IReadOnlySet<Guid>? blocked = null)
     {
         var rows = new List<ProjectRow>();
         var byParent = projects
@@ -47,7 +58,7 @@ public static class ProjectTree
 
             foreach (var projekt in korzenie)
             {
-                Dopisz(projekt, depth: 1, rows, byParent, odwiedzone);
+                Dopisz(projekt, depth: 1, rows, byParent, odwiedzone, blocked);
             }
         }
 
@@ -59,7 +70,8 @@ public static class ProjectTree
         int depth,
         List<ProjectRow> rows,
         Dictionary<Guid, List<Project>> byParent,
-        HashSet<Guid> odwiedzone)
+        HashSet<Guid> odwiedzone,
+        IReadOnlySet<Guid>? blocked)
     {
         // Zabezpieczenie przed cyklem: przy scalaniu dwóch urządzeń da się otrzymać
         // projekt będący własnym przodkiem, mimo że żadne z osobna na to nie pozwala.
@@ -68,13 +80,18 @@ public static class ProjectTree
             return;
         }
 
-        rows.Add(new ProjectRow(projekt.Id, projekt.Outcome, depth, IsArea: false));
+        rows.Add(new ProjectRow(
+            projekt.Id,
+            projekt.Outcome,
+            depth,
+            IsArea: false,
+            IsBlocked: blocked?.Contains(projekt.Id) ?? false));
 
         if (byParent.TryGetValue(projekt.Id, out var dzieci))
         {
             foreach (var dziecko in dzieci)
             {
-                Dopisz(dziecko, depth + 1, rows, byParent, odwiedzone);
+                Dopisz(dziecko, depth + 1, rows, byParent, odwiedzone, blocked);
             }
         }
     }
