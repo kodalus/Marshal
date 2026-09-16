@@ -2,6 +2,7 @@ using System.Reflection;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
+using Marshal.Domain.Sync;
 using Marshal.Domain.Tags;
 using Marshal.Domain.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,12 @@ public sealed class MarshalDbContext : DbContext
     public DbSet<Tag> Tags => Set<Tag>();
 
     public DbSet<TaskTag> TaskTags => Set<TaskTag>();
+
+    /// <summary>Dziennik zmian — lokalny, niesynchronizowany. To on jest tym, co się wysyła.</summary>
+    public DbSet<ChangeEntry> Changes => Set<ChangeEntry>();
+
+    /// <summary>Znaczniki zegara dla bieżących wartości pól. Warunek scalania per pole.</summary>
+    public DbSet<FieldStamp> FieldStamps => Set<FieldStamp>();
 
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy

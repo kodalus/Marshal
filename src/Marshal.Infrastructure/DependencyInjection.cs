@@ -3,6 +3,7 @@ using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Repositories;
+using Marshal.Infrastructure.Sync;
 using Marshal.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -34,7 +35,9 @@ public static class DependencyInjection
         // rozważenia w etapie 3: scalanie synchronizacji będzie chciało własnego
         // kontekstu, żeby nie mieszać śledzenia zmian z tym, co widzi ekran.
         services.AddDbContext<MarshalDbContext>(
-            options => options.UseSqlite($"Data Source={databasePath}"),
+            options => options
+                .UseSqlite($"Data Source={databasePath}")
+                .AddInterceptors(new ChangeJournalInterceptor()),
             ServiceLifetime.Singleton,
             ServiceLifetime.Singleton);
 

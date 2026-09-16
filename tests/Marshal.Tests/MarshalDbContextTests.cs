@@ -29,7 +29,7 @@ public sealed class MarshalDbContextTests : IDisposable
             .Options;
 
         var kontekst = new MarshalDbContext(options);
-        kontekst.Database.Migrate();
+        kontekst.Database.EnsureCreated();
         return kontekst;
     }
 

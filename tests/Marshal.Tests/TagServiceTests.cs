@@ -28,7 +28,7 @@ public sealed class TagServiceTests : IDisposable
         _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>().UseSqlite(_connection).Options);
-        _db.Database.Migrate();
+        _db.Database.EnsureCreated();
 
         var zegar = new Zegar();
         _tagi = new TagService(
