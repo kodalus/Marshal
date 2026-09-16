@@ -40,7 +40,6 @@ public sealed record RecurrenceRule
         Converters = { new JsonStringEnumConverter() },
     };
 
-    [JsonConstructor]
     public RecurrenceRule(
         RecurrenceKind kind,
         int interval = 1,
@@ -135,7 +134,9 @@ public sealed record RecurrenceRule
             : new RecurrenceRule(
                 Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count - 1);
 
-    public string ToJson() => JsonSerializer.Serialize(this, Json);
+    public string ToJson() =>
+        JsonSerializer.Serialize(
+            new Wire(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count), Json);
 
     /// <summary>Zwraca <c>null</c> zamiast rzucać: zapis z nowszej wersji aplikacji nie
     /// może wywrócić scalania (spec 9.4).</summary>
@@ -148,11 +149,41 @@ public sealed record RecurrenceRule
 
         try
         {
-            return JsonSerializer.Deserialize<RecurrenceRule>(json, Json);
+            return JsonSerializer.Deserialize<Wire>(json, Json) is { } w
+                ? new RecurrenceRule(
+                    w.Kind, w.Interval, w.DaysOfWeek, w.DayOfMonth,
+                    w.Anchor, w.OnMissed, w.Until, w.Count)
+                : null;
         }
         catch (Exception e) when (e is JsonException or ArgumentException or ArgumentOutOfRangeException)
         {
             return null;
         }
     }
+
+    /// <summary>
+    /// Postać zapisu, oddzielona od typu domenowego.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Powód bezpośredni: konstruktor domenowy przyjmuje zaczepienie jako wartość pustą
+    /// („wylicz z rodzaju"), a właściwość pustej nie dopuszcza — czego serializator nie
+    /// umie pogodzić.
+    /// </para>
+    /// <para>
+    /// Powód istotniejszy: reguły leżą w bazie i w dzienniku zmian. Osobna postać zapisu
+    /// znaczy, że typ domenowy wolno zmieniać bez unieważniania tego, co już zapisane —
+    /// a odczyt przechodzi przez konstruktor, więc **sprawdzenia obowiązują także
+    /// wartości, które przyszły z pliku**, nie tylko te wpisane w aplikacji.
+    /// </para>
+    /// </remarks>
+    private sealed record Wire(
+        RecurrenceKind Kind,
+        int Interval,
+        Weekdays DaysOfWeek,
+        int? DayOfMonth,
+        RecurrenceAnchor Anchor,
+        OnMissed OnMissed,
+        DateOnly? Until,
+        int? Count);
 }
