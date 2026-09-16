@@ -32,7 +32,7 @@ public sealed class InboxServiceTests : IDisposable
 
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>().UseSqlite(_connection).Options);
-        _db.Database.EnsureCreated();
+        _db.Database.Migrate();
 
         _skrzynka = new InboxService(
             new TaskRepository(_db),

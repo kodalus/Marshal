@@ -31,7 +31,7 @@ public sealed class ChangeJournalTests : IDisposable
                 .UseSqlite(_connection)
                 .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
-        _db.Database.EnsureCreated();
+        _db.Database.Migrate();
     }
 
     private Hlc Stamp() => new(_znacznik += 10, 0, "biurko");
