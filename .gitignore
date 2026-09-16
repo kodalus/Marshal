@@ -388,102 +388,103 @@ FodyWeavers.xsd
 
 
 ## ---------------------------------------------------------------
-## .NET MAUI / Android
+## Avalonia / Android
 ## ---------------------------------------------------------------
 
-# Android generated resource designer
+# Android — generowany designer zasobów
 **/Resources/Resource.designer.cs
 **/Resource.designer.cs
 
-# Android build artifacts
+# Android — artefakty budowania
 *.apk
 *.aab
 *.ap_
 *.dex
 *.class
 *.apkidsig
-**/Platforms/Android/obj/
-**/Platforms/Android/bin/
 
 # Android SDK / Gradle
 .gradle/
 local.properties
 *.iml
 
-# ProGuard / R8 (генерируется при release-сборке с оптимизацией)
+# ProGuard / R8 (powstaje przy budowaniu release z optymalizacją)
 proguard/dump.txt
 proguard/mapping.txt
 proguard/seeds.txt
 proguard/usage.txt
 
-# iOS / macOS (на случай, если проект когда-нибудь соберут под них)
-**/Platforms/iOS/obj/
-**/Platforms/MacCatalyst/obj/
-*.dSYM/
-*.ipa
-
-# MAUI generated
-**/Platforms/Android/AndroidManifest.g.xml
+# Avalonia — kompilowany XAML
 *.g.cs
 !**/Generated/**/*.g.cs
 
-# Xamarin/MAUI provisioning
-*.mobileprovision
-*.provisionprofile
-
 
 ## ---------------------------------------------------------------
-## Ключи и подписи — НИКОГДА не коммитить
+## Klucze i podpisy — NIGDY nie commitować
 ## ---------------------------------------------------------------
 
 *.keystore
 *.jks
 *.p12
+*.pfx
 *.pem
 *.key
 keystore.properties
 signing.properties
 secrets.json
 appsettings.Local.json
+appsettings.*.Local.json
 
 
 ## ---------------------------------------------------------------
-## Castellan — личные финансовые данные
+## Poświadczenia Google — NIGDY nie commitować
 ## ---------------------------------------------------------------
-## Всё ниже содержит реальные суммы, остатки и мерчантов.
-## Репозиторий публичный — этому там не место.
+## OAuth do Dysku (synchronizacja) i Kalendarza — rozdz. 9 i 10.3 spec.
+## Repozytorium jest publiczne. Wyciek client_secret pozwala obcej
+## aplikacji podszyć się pod Marshala na ekranie zgody Google, a wyciek
+## tokenu odświeżania daje dostęp do Dysku i Kalendarza bez hasła.
 
-# Локальная база SQLite
+client_secret*.json
+client_secrets.json
+credentials.json
+*.credentials.json
+google-credentials*.json
+token.json
+tokens/
+*.tokenstore
+.google/
+.credentials/
+
+
+## ---------------------------------------------------------------
+## Marshal — dane osobiste
+## ---------------------------------------------------------------
+## Zadania, projekty, notatki i załączniki to zapis prywatnego życia.
+## Repozytorium jest publiczne — temu tam nie miejsce.
+
+# Lokalna baza SQLite
 *.db
 *.db-wal
 *.db-shm
 *.db-journal
 *.sqlite
 *.sqlite3
-castellan.db*
+Marshal.db*
 
-# Экспорт и бэкапы бюджета
+# Eksport i kopie zapasowe
 backups/
 exports/
-*.castellan.json
+*.marshal.json
 
-# Сырые уведомления банков (суммы, остатки, мерчанты)
-# Всё в samples/notifications/ игнорируется по умолчанию...
-samples/notifications/
-notifications-raw/
-
-# ...кроме обезличенных примеров для тестов парсеров
-!tests/**/fixtures/notifications/*.txt
-
-# Скриншоты с реальными данными
+# Zrzuty ekranu z prawdziwymi danymi
 screenshots/raw/
 
 
 ## ---------------------------------------------------------------
-## Инструменты и ОС
+## Narzędzia i system
 ## ---------------------------------------------------------------
 
-# Claude Code — project-level settings коммитим, личное игнорируем
+# Claude Code — ustawienia projektu commitujemy, osobiste ignorujemy
 .claude/settings.local.json
 
 # JetBrains Rider
@@ -494,4 +495,3 @@ screenshots/raw/
 .DS_Store
 Thumbs.db
 desktop.ini
-*.swp
