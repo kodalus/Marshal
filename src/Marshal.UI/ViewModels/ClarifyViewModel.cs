@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
+using Marshal.Application.UseCases;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.UI.ViewModels;
@@ -17,6 +18,7 @@ namespace Marshal.UI.ViewModels;
 /// </remarks>
 public sealed partial class ClarifyViewModel(
     InboxService inbox,
+    NoteService notes,
     IAreaRepository areas) : ObservableObject
 {
     [ObservableProperty]
@@ -83,6 +85,18 @@ public sealed partial class ClarifyViewModel(
 
     [RelayCommand]
     private Task Someday() => Run(id => inbox.PostponeAsync(id, SelectedArea!.Id, null));
+
+    /// <summary>
+    /// Gałąź „materiał referencyjny" z drzewka (spec 7): nie wymaga działania, ale ma
+    /// być pod ręką.
+    /// </summary>
+    /// <remarks>
+    /// Bez obszaru, bo notatka bywa ogólna — „numer do przychodni" nie należy do
+    /// żadnego obszaru odpowiedzialności bardziej niż do innego, a wymuszony wybór
+    /// byłby zmyśleniem.
+    /// </remarks>
+    [RelayCommand]
+    private Task ToNote() => Run(id => notes.ConvertToNoteAsync(id), needsArea: false);
 
     [RelayCommand]
     private Task DoNow() => Run(id => inbox.DoNowAsync(id, SelectedArea!.Id));

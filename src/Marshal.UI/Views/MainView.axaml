@@ -154,6 +154,7 @@
         <TextBlock Text="Nie wymaga działania" Classes="hint" Margin="0,0,0,6" />
         <Button Classes="branch" Command="{Binding TrashCommand}" Content="Kosz" />
         <Button Classes="branch" Command="{Binding SomedayCommand}" Content="Kiedyś-może" />
+        <Button Classes="branch" Command="{Binding ToNoteCommand}" Content="Materiał referencyjny (notatka)" />
 
         <TextBlock Text="Wymaga działania" Classes="hint" Margin="0,14,0,6" />
         <Button Classes="branch" Command="{Binding DoNowCommand}"
@@ -744,8 +745,21 @@
                          Text="Aplikacja nie może liczyć na to, że przegląd się odbędzie. Wszystko, co tu zobaczysz, wyliczyło się samo — nie musiałaś o tym pamiętać." />
               <TextBlock TextWrapping="Wrap"
                          Text="Przerwanie w dowolnym momencie nic nie kosztuje. Stan zapisuje się po każdej pojedynczej pozycji, więc przegląd rozłożony na pięć wieczorów jest przeglądem zrobionym." />
-              <TextBlock Classes="hint" TextWrapping="Wrap"
-                         Text="Miejsce na przypięte notatki — wizję i zasady — dochodzi w etapie 8." />
+              <!-- Przypięte notatki: czwarty i piąty horyzont GTD. Rzeczy, których nie
+                   da się odhaczyć, więc nie mają tu żadnego przycisku. -->
+              <ItemsControl ItemsSource="{Binding Pinned}" IsVisible="{Binding HasPinned}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="dn:Note">
+                    <StackPanel Margin="0,10,0,0" Spacing="3">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Content}" TextWrapping="Wrap" Opacity="0.85" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !HasPinned}"
+                         Text="Nie masz jeszcze przypiętych notatek. Przypnij tę, którą chcesz czytać przed każdym przeglądem — wizję albo zasady." />
             </StackPanel>
           </Border>
 

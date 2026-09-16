@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Review;
+using Marshal.Application.UseCases;
+using Marshal.Domain.Notes;
 using Marshal.Domain.Review;
 
 namespace Marshal.UI.ViewModels;
@@ -19,6 +21,7 @@ namespace Marshal.UI.ViewModels;
 public sealed partial class ReviewViewModel(
     ReviewService review,
     IReviewQueries queries,
+    NoteService notes,
     IClock clock) : ObservableObject
 {
     private static readonly (ReviewStep Step, string Title, string Hint)[] Steps =
@@ -53,6 +56,11 @@ public sealed partial class ReviewViewModel(
     public ObservableCollection<ReviewItem> Items { get; } = [];
 
     public ObservableCollection<AreaBalance> Balance { get; } = [];
+
+    /// <summary>Przypięte notatki — wizja i zasady, krok zerowy (spec 8.3, 1.8).</summary>
+    public ObservableCollection<Note> Pinned { get; } = [];
+
+    public bool HasPinned => Pinned.Count > 0;
 
     public string StepTitle => Steps[StepIndex].Title;
 
@@ -190,6 +198,17 @@ public sealed partial class ReviewViewModel(
         {
             Items.Add(item);
         }
+
+        Pinned.Clear();
+        if (IsPinnedStep)
+        {
+            foreach (var notatka in await notes.PinnedAsync())
+            {
+                Pinned.Add(notatka);
+            }
+        }
+
+        OnPropertyChanged(nameof(HasPinned));
 
         Balance.Clear();
         if (IsBalanceStep)
