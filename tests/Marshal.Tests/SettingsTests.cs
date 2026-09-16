@@ -98,7 +98,9 @@ public sealed class SettingsTests : IDisposable
         // Pierwsza minuta wtorku w strefie z ustawień. Gdyby „dzisiaj" liczyło się
         // przez LocalDateTime, maszyna w UTC pokazałaby jeszcze poniedziałek —
         // i raz na dobę cała aplikacja pracowałaby na wczorajszym dniu.
-        var zegar = new StalyMoment(
+        // Typ interfejsu, nie klasy: Today jest domyślną implementacją składową
+        // interfejsu, a takich nie widać przez typ implementujący.
+        IClock zegar = new StalyMoment(
             new DateTimeOffset(2026, 9, 15, 0, 30, 0, TimeSpan.FromHours(2)));
 
         zegar.Today.Should().Be(new DateOnly(2026, 9, 15));

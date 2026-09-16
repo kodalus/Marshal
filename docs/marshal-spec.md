@@ -141,8 +141,8 @@ zerowy kreatora przeglądu. Koszt zerowy, jedna flaga.
 | 6 | Widok „Teraz", szacowany czas i energia | Aplikacja wybiera za Ciebie |
 | 7 | Kalendarz godzinowy, odczyt z Google Calendar i iCal | Czas i zadania w jednym miejscu |
 | 8 | Notatki w Markdown, załączniki | Materiały referencyjne |
-| 9 | Filtry łączone, filtry zapisane | Własne widoki |
-| 10 | Widget Androida, tryb ciemny, kopia zapasowa | Domknięcie |
+| 9 | Filtry łączone, filtry zapisane | ✅ Własne widoki |
+| 10 | Widget Androida, tryb ciemny, kopia zapasowa | Domknięcie — poza tym, co wymaga sprzętu |
 | Później | Dwustronny zapis do Google Calendar | Osobno, po przeżyciu etapu 7 |
 
 **Etap 0 zamknięty 16.09.2026.** Zweryfikowany na prawdziwym sprzęcie, nie tylko w CI:
@@ -201,6 +201,27 @@ składowanie załączników adresowane treścią, z osobną drogą przenoszenia 
 Brakuje **wyboru pliku z dysku**. Ta część wymaga systemowego okna wyboru — na Androidzie
 i Windowsie wygląda inaczej, potrzebuje uchwytu okna i nie da się jej sprawdzić inaczej
 niż na sprzęcie. Cała reszta drogi załącznika działa i ma testy.
+
+**Etap 9 zamknięty 16.09.2026.** Filtry łączone i zapisane widoki w Ulubionych (11.5).
+Sprawdzanie warunków jest czystą funkcją w domenie i ma testy w całości; ekran jest
+nad nią cienką warstwą.
+
+**Etap 10 zamknięty 16.09.2026 w części, którą da się zamknąć bez sprzętu.** Kopia
+zapasowa do jednego pliku JSON z wgrywaniem przez scalanie albo podmianę (12), ekran
+ustawień, motyw, jawna strefa liczenia dni (3.4) i widget Androida (4.2).
+
+Przy okazji wyszło, że **spec 3.4 nie była zrealizowana**: strefa miała być jawna od
+początku, a dni liczyły się z zegara systemowego. Dwa miejsca dopisane tego samego dnia
+wybrały do tego `LocalDateTime`, czyli jeszcze inaczej niż reszta kodu.
+
+Niesprawdzone zostaje wszystko, co wymaga urządzenia: **widget na ekranie domowym**
+(CI buduje APK, nie instaluje go) oraz **systemowe okno wyboru pliku** przy zapisie
+i wczytaniu kopii — to samo okno, którego brakuje załącznikom z etapu 8. Sama kopia,
+czyli to, co się w tym pliku znajdzie i jak się scala, ma testy.
+
+**Ostrzeżenie dotyczące kopii zapasowej.** Kopia, której nigdy nie odtworzono, nie jest
+kopią. Pierwsze odtworzenie na prawdziwych danych warto zrobić **zanim** będzie potrzebne
+— na drugim urządzeniu albo na świeżej instalacji, nie na tej, która ma dane.
 
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
@@ -267,7 +288,19 @@ Rozróżnienie krytyczne przy powtarzalności:
 - **Moment** (`DateTimeOffset`) — wydarzenie kalendarzowe, przypomnienie. Ze strefą.
 
 Strefa domyślna Europe/Warsaw, przechowywana jawnie w ustawieniach (nie brana z systemu),
-żeby wyjazd nie przestawiał terminów.
+żeby wyjazd nie przestawiał terminów. Dzień wykonania i termin są bez strefy — ale to
+strefa rozstrzyga, **który dzień jest dzisiaj**, więc z systemowej wyjazd na zachód
+przesunąłby „dzisiaj" o dobę i zadania jutrzejsze zrobiłyby się dzisiejszymi.
+
+Dzisiejszy dzień liczy **jedna właściwość zegara** (`IClock.Today`), a nie
+`DateOnly.FromDateTime(clock.Now.???)` rozsiane po kilkunastu miejscach. Rozsiane było
+groźne nie dlatego, że długie, tylko dlatego, że każde z tych miejsc mogło wybrać inną
+z trzech właściwości — `DateTime`, `LocalDateTime`, `UtcDateTime` — a różnią się dokładnie
+o tyle, żeby raz na dobę dać inny dzień.
+
+Strefa i motyw są **lokalne, niesynchronizowane**. Zsynchronizowany motyw znaczyłby,
+że ciemny włączony wieczorem przy komputerze zapala się rano na telefonie; strefa tym
+bardziej — telefon jedzie z Tobą, komputer zostaje.
 
 ### 3.5 Zegar logiczny
 
@@ -320,9 +353,30 @@ Widget na ekranie głównym **nie jest Avalonią**. To natywny `AppWidgetProvide
 (RemoteViews) w projekcie `Marshal.Android`, czytający bazę SQLite bezpośrednio przez
 osobny, minimalny `DbContext` w trybie tylko do odczytu.
 
-Zakres widgetu: lista 3–5 pozycji z widoku „Teraz", przycisk odhaczenia, przycisk
-szybkiego wrzutu do skrzynki. Nic więcej — każda funkcja w widgecie jest utrzymywana
-podwójnie.
+Zakres widgetu: **piątka wybrana na dziś** (8.6), przycisk odhaczenia, przycisk szybkiego
+wrzutu. Nic więcej — każda funkcja w widgecie jest utrzymywana podwójnie.
+
+Dwie poprawki wobec pierwotnego zapisu, obie z tego samego powodu — widget nie ma
+z kim rozmawiać:
+
+- **Wybór na dziś, nie widok „Teraz".** Lista „Teraz" powstaje z punktacji zależnej od
+  zadeklarowanego czasu i energii (8.1), a widget nie ma jak o nie zapytać i musiałby
+  je zgadywać. Piątka na dziś jest już wybrana i odpowiada na to samo pytanie bez
+  zgadywania czegokolwiek.
+- **Te same usługi co aplikacja, nie osobny odczyt tylko do czytania.** Dla samego
+  czytania osobny minimalny `DbContext` byłby prostszy. Rzecz jest w przycisku
+  odhaczenia: zapis z pominięciem dziennika zmian i zegara logicznego zmieniłby wiersz
+  lokalnie i **nigdy nie dotarłby na drugie urządzenie** — bez błędu i bez śladu.
+  Drugie, uproszczone wejście do danych jest dokładnie tym rodzajem skrótu, który
+  rozjeżdża bazy po cichu.
+
+Stąd zależności składane **raz na proces**: widget wchodzi tą samą drogą co okno i bywa
+pierwszy, a dwa złożenia dałyby dwa konteksty nad jednym plikiem.
+
+Pięć wierszy wpisanych wprost w układ, bez `ListView` i `RemoteViewsService`: przy stałym
+limicie pięciu pozycji (N14) cała ta machina obsługiwałaby liczbę, która się nie zmienia.
+Wrzut otwiera aplikację, bo `RemoteViews` nie zna pola do wpisywania, a wszystko inne
+znaczyłoby drugi ekran do utrzymywania.
 
 ---
 
@@ -1221,7 +1275,7 @@ Token odświeżania w `DPAPI` (Windows) i `EncryptedSharedPreferences` (Android)
 | **Filtry** | Konstruktor warunków, zapisywanie do Ulubionych (11.5) |
 | **Przegląd** | Kreator siedmiu kroków (8.3) |
 | **Archiwum** | `Done` i `Trashed`, szukanie, przywracanie |
-| **Ustawienia** | Konto Google, kalendarze, kopia, motyw, strefa |
+| **Ustawienia** | Konto Google, kalendarze, kopia (12), motyw, strefa (3.4) |
 
 Wszystko poza „Kalendarzem" i „Notatkami" musi być w pełni obsługiwalne z klawiatury.
 
@@ -1384,6 +1438,40 @@ filtr układa się metodą prób, a przycisk zamieniłby każdą próbę w osobn
 
 Eksport całości do jednego pliku JSON, offline, bez konta — jak w Castellanie.
 Import z podmianą całości albo scaleniem po HLC.
+
+Osobno od synchronizacji, a nie zamiast niej. Synchronizacja chroni przed utratą
+urządzenia; kopia chroni przed **utratą Dysku, konta albo zaufania do nich** — i przed
+przypadkiem, w którym błąd rozjechał dane i rozsiał je na oba urządzenia.
+
+**Treść kopii to te same wiersze zmian, którymi mówi synchronizacja** (9.4), tylko
+zebrane w jeden plik zamiast dopisywane do porcji. Nie jest to oszczędność kodu: gdyby
+kopia miała własny format i własne scalanie, byłyby dwie implementacje reguły „nowsze
+pole wygrywa", a rozjechałyby się przy pierwszej zmianie modelu — po cichu i tylko
+u tego, kto akurat odtwarzał kopię.
+
+Wiersze grupowane **po znaczniku pola**, nie po encji. Gdyby cała encja szła pod jednym
+znacznikiem (tym z `UpdatedAt`), pola zmienione dawno dostałyby w kopii datę ostatniej
+zmiany czegokolwiek w tym rekordzie — i po wgraniu wygrałyby ze świeższymi wartościami
+z drugiego urządzenia. Kopia cofałaby dane, wyglądając na poprawną.
+
+Eksportowane są **agregaty synchronizowane**, rozpoznawane po tym samym warunku co przy
+scalaniu. Rzeczy lokalne (kursory, pokazane przypomnienia, pobrane wydarzenia kalendarza,
+dziennik zmian) nie wchodzą: należą do urządzenia, a nie do danych, i odtworzą się same.
+Treść załączników też nie — w kopii jest wpis, nie zawartość pliku.
+
+Wgranie **nie trafia do dziennika zmian**: inaczej każdy odtworzony rekord poleciałby na
+Dysk jako świeża zmiana i wskrzesił na drugim urządzeniu rzeczy skasowane po zrobieniu
+kopii.
+
+**Podmiana całości tylko na urządzeniu, które zaczyna od nowa** — po awarii, po
+przesiadce na nowy sprzęt. Na urządzeniu podpiętym do synchronizacji podmiana jest
+pozorna: czyszczenie nie zostawia śladu w dzienniku, bo dziennik niesie zmiany, a nie
+usunięcia tabel, więc drugie urządzenie o niczym się nie dowie i przy najbliższym
+scaleniu odda swój stan z powrotem. To nie jest usterka do naprawienia — to wynika
+z tego, czym jest synchronizacja plikowa (9.8).
+
+Plik jest jawny i czytelny bez aplikacji: zwykły JSON z nazwami tabel i pól. Kopia,
+której nie da się obejrzeć notatnikiem, jest obietnicą, nie zabezpieczeniem.
 
 Automatyczny zrzut do `snapshot/` na Dysku przy każdej kompakcji jest efektem ubocznym
 synchronizacji i pełni rolę kopii historycznej.

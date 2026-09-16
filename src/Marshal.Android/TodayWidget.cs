@@ -83,6 +83,13 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
+        // Przepisane do zmiennych lokalnych: sprawdzenie na parametrze nie przenosi
+        // się do domknięcia, bo kompilator nie ma jak zagwarantować, że parametr
+        // nie zmieni się do chwili wywołania.
+        var okno = context;
+        var menedzer = appWidgetManager;
+        var identyfikatory = appWidgetIds;
+
         // Odbiornik rozgłoszeń ma kilka sekund i działa na wątku głównym, a tu jest
         // odczyt z bazy. GoAsync przedłuża życie odbiornika na czas pracy w tle —
         // bez tego system potrafi ubić proces w środku zapytania.
@@ -92,11 +99,11 @@ public sealed class TodayWidget : AppWidgetProvider
         {
             try
             {
-                var widok = await BuildAsync(context);
+                var widok = await BuildAsync(okno);
 
-                foreach (var id in appWidgetIds)
+                foreach (var id in identyfikatory)
                 {
-                    appWidgetManager.UpdateAppWidget(id, widok);
+                    menedzer.UpdateAppWidget(id, widok);
                 }
             }
             catch (Exception e)
@@ -121,6 +128,7 @@ public sealed class TodayWidget : AppWidgetProvider
         }
 
         var id = intent.GetStringExtra(TaskIdExtra);
+        var okno = context;
         var oczekiwanie = GoAsync();
 
         _ = Task.Run(async () =>
@@ -133,7 +141,7 @@ public sealed class TodayWidget : AppWidgetProvider
                     await services.GetRequiredService<TaskEditService>().CompleteAsync(zadanie);
                 }
 
-                Refresh(context);
+                Refresh(okno);
             }
             catch (Exception e)
             {
