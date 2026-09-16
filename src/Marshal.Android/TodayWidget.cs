@@ -114,7 +114,9 @@ public sealed class TodayWidget : AppWidgetProvider
             }
             finally
             {
-                oczekiwanie.Finish();
+                // GoAsync zwraca wartość pustą, gdy odbiornik nie działa w tle —
+                // wtedy nie ma czego kończyć.
+                oczekiwanie?.Finish();
             }
         });
     }
@@ -149,7 +151,9 @@ public sealed class TodayWidget : AppWidgetProvider
             }
             finally
             {
-                oczekiwanie.Finish();
+                // GoAsync zwraca wartość pustą, gdy odbiornik nie działa w tle —
+                // wtedy nie ma czego kończyć.
+                oczekiwanie?.Finish();
             }
         });
     }
