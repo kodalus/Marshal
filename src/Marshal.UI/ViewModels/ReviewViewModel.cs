@@ -31,6 +31,7 @@ public sealed partial class ReviewViewModel(
         (ReviewStep.StaleProjects, "Projekty nietknięte", "Dwa tygodnie bez ruchu. Nadal aktualne?"),
         (ReviewStep.Someday, "Kiedyś-może — coś dojrzało?", "Minęła data, na którą było odłożone."),
         (ReviewStep.Upcoming, "Dwa tygodnie w przód", "Co nadchodzi i czy jest na to miejsce."),
+        (ReviewStep.Counters, "Liczniki, które o coś pytają", "Nie ocena, tylko sygnał, że zapis jest nieprawdziwy. Zwykle odpowiedź brzmi: to nie jedno zadanie, tylko projekt."),
         (ReviewStep.Balance, "Równowaga obszarów", "Do obejrzenia. Bez ocen i bez wyrównywania — równowaga nie znaczy równy rozkład."),
     ];
 

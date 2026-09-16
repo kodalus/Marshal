@@ -360,6 +360,60 @@
       </ListBox>
     </DockPanel>
 
+    <!-- Teraz: odpowiedź na jedno pytanie, nie lista (8.1) -->
+    <DockPanel IsVisible="{Binding IsNow}">
+      <StackPanel DockPanel.Dock="Top" DataContext="{Binding Now}"
+                  x:DataType="vm:NowViewModel" Margin="0,0,0,12">
+
+        <TextBlock Classes="label" Text="Ile masz czasu" />
+        <ComboBox ItemsSource="{Binding Minutes}" SelectedItem="{Binding SelectedMinutes}"
+                  HorizontalAlignment="Stretch" />
+
+        <TextBlock Classes="label" Text="Ile masz siły" />
+        <ComboBox ItemsSource="{Binding Energies}" SelectedItem="{Binding SelectedEnergy}"
+                  HorizontalAlignment="Stretch" />
+        <TextBlock Classes="hint" Margin="2,4,0,0"
+                   Text="Podpowiedziane z pory dnia. Do nadpisania jednym kliknięciem." />
+
+        <!-- Pusty ekran z komunikatem „nic nie pasuje" byłby prawdą bezużyteczną.
+             Zamiast niego mikrozadanie, które samo się rozwiązuje w miarę używania. -->
+        <Border Margin="0,14,0,0" Padding="14,12" CornerRadius="8" Background="#20808080"
+                IsVisible="{Binding SuggestEstimating}">
+          <TextBlock Text="{Binding EstimatePrompt}" TextWrapping="Wrap" />
+        </Border>
+
+      </StackPanel>
+
+      <ScrollViewer DataContext="{Binding Now}">
+        <ItemsControl ItemsSource="{Binding Picks}" x:DataType="vm:NowViewModel">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="uc:NowPick">
+              <Border Margin="0,0,0,8" Padding="14,12" CornerRadius="8" Background="#18808080">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Task.Title}" TextWrapping="Wrap" FontSize="15" />
+                    <!-- Powód jest częścią odpowiedzi, nie ozdobnikiem: lista bez
+                         uzasadnienia każe wierzyć na słowo, a wtedy pierwszy chybiony
+                         wybór odbiera jej zaufanie w całości. -->
+                    <TextBlock Classes="badge" TextWrapping="Wrap">
+                      <Run Text="{Binding Reason}" />
+                      <Run Text=" · " />
+                      <Run Text="{Binding Task.EstimatedMinutes}" />
+                      <Run Text=" min" />
+                    </TextBlock>
+                  </StackPanel>
+                  <Button Grid.Column="1" Content="Zrobione" Padding="12,6"
+                          VerticalAlignment="Center"
+                          Command="{Binding $parent[ItemsControl].((vm:NowViewModel)DataContext).CompleteCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </DockPanel>
+
     <!-- Oczekiwane: sortowane po liczbie dni, najdłużej czekające na górze -->
     <DockPanel IsVisible="{Binding IsWaiting}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
@@ -605,6 +659,19 @@
           <TextBlock Classes="label" Text="Waga" />
           <ComboBox ItemsSource="{Binding Priorities}" SelectedItem="{Binding SelectedPriority}"
                     HorizontalAlignment="Stretch" />
+
+          <!-- Bez oszacowania zadanie nigdy nie trafi do „Teraz" (8.1). To nie jest
+               surowość, tylko warunek: widok dobierający pod dostępne minuty nie ma jak
+               ocenić czegoś, co nie ma długości. -->
+          <TextBlock Classes="label" Text="Ile to zajmie (minuty)" />
+          <NumericUpDown Value="{Binding EstimatedMinutes}" Minimum="1" Maximum="600"
+                         Increment="5" FormatString="0" />
+
+          <TextBlock Classes="label" Text="Ile trzeba mieć w sobie" />
+          <ComboBox ItemsSource="{Binding Energies}" SelectedItem="{Binding SelectedEnergyLevel}"
+                    HorizontalAlignment="Stretch" />
+          <TextBlock Classes="hint" Margin="2,4,0,0"
+                     Text="Nieokreślona przechodzi przy każdym poziomie — brak decyzji nie udaje decyzji." />
 
           <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="#18808080">
             <StackPanel>

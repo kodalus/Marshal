@@ -46,6 +46,15 @@ public sealed record AreaBalance(
 }
 
 /// <summary>
+/// Zadanie, którego licznik przekroczył próg (N12, N13, N15).
+/// </summary>
+/// <remarks>
+/// <see cref="Question"/> jest pytaniem, nie oceną. „Przesunięte cztery razy — czy to
+/// jest prawdziwe zadanie?" da się na coś zamienić; „zaniedbane" nie da się na nic.
+/// </remarks>
+public sealed record CounterFlag(TaskItem Task, string Question);
+
+/// <summary>
 /// Liczniki do kroków kreatora przeglądu (spec 8.3).
 /// </summary>
 /// <remarks>
@@ -81,5 +90,8 @@ public enum ReviewStep
     StaleProjects = 5,
     Someday = 6,
     Upcoming = 7,
-    Balance = 8,
+
+    /// <summary>N12, N13, N15 — liczniki, które o coś pytają.</summary>
+    Counters = 8,
+    Balance = 9,
 }

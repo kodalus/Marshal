@@ -109,9 +109,12 @@ public sealed class ReviewService(
                 .Select(t => new ReviewItem(
                     t.Id, t.Title, $"{t.DoDate ?? t.Deadline:yyyy-MM-dd}")),
 
-            // Kroki zerowy i ósmy nie mają pozycji do odhaczenia: pierwszy jest tekstem
-            // do przeczytania, drugi tabelą do obejrzenia. To jest celowe — patrz 8.3
-            // i 8.5. Nie każdy krok przeglądu kończy się czynnością.
+            ReviewStep.Counters => (await queries.CounterFlagsAsync(dzis, ct))
+                .Select(f => new ReviewItem(f.Task.Id, f.Task.Title, f.Question)),
+
+            // Krok zerowy i krok równowagi nie mają pozycji do odhaczenia: pierwszy jest
+            // tekstem do przeczytania, drugi tabelą do obejrzenia. To jest celowe — patrz
+            // 8.3 i 8.5. Nie każdy krok przeglądu kończy się czynnością.
             _ => [],
         };
 

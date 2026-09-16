@@ -36,6 +36,20 @@ public interface IReviewQueries
     Task<IReadOnlyList<Project>> StaleProjectsAsync(
         DateOnly today, int days, CancellationToken ct = default);
 
+    /// <summary>
+    /// N12, N13 i N15: zadania, których licznik przekroczył próg.
+    /// </summary>
+    /// <remarks>
+    /// Jeden mechanizm w trzech miejscach: **licznik zamiast kary**. Zadanie przenoszone
+    /// od trzech miesięcy, wybierane co tydzień i nierobione, albo przesuwane cztery razy
+    /// — to nie jest lenistwo do zgromienia, tylko informacja, że zapis jest nieprawdziwy.
+    /// Zwykle odpowiedź brzmi „to nie jest jedno zadanie, tylko projekt" albo „to nie jest
+    /// moje". Jedno i drugie da się naprawić; czerwona plakietka nie daje się naprawić
+    /// niczym.
+    /// </remarks>
+    Task<IReadOnlyList<CounterFlag>> CounterFlagsAsync(
+        DateOnly today, CancellationToken ct = default);
+
     /// <summary>N4: ile pozycji zalega w skrzynce dłużej niż tydzień.</summary>
     Task<int> StaleInboxCountAsync(DateOnly today, CancellationToken ct = default);
 }

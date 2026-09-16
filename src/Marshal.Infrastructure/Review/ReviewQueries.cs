@@ -179,6 +179,47 @@ public sealed class ReviewQueries(MarshalDbContext db) : IReviewQueries
             .ToList();
     }
 
+    public async Task<IReadOnlyList<CounterFlag>> CounterFlagsAsync(
+        DateOnly today, CancellationToken ct = default)
+    {
+        var otwarte = await Open()
+            .Where(t => t.RollCount >= 4 || t.FocusMissCount >= 4 || t.CarriedSince != null)
+            .ToListAsync(ct);
+
+        var flagi = new List<CounterFlag>();
+
+        foreach (var zadanie in otwarte)
+        {
+            // N12: przenoszone dłużej niż trzydzieści dni.
+            if (zadanie.CarriedSince is { } od && today.DayNumber - od.DayNumber > 30)
+            {
+                flagi.Add(new CounterFlag(
+                    zadanie,
+                    $"zaległe od {od:yyyy-MM-dd} — rytm do zmiany czy do skasowania?"));
+                continue;
+            }
+
+            // N15: przesunięte cztery razy.
+            if (zadanie.RollCount >= 4)
+            {
+                flagi.Add(new CounterFlag(
+                    zadanie,
+                    $"przesunięte {zadanie.RollCount} razy — czy to jest prawdziwe zadanie?"));
+                continue;
+            }
+
+            // N13: wybierane co tydzień i nierobione.
+            if (zadanie.FocusMissCount >= 4)
+            {
+                flagi.Add(new CounterFlag(
+                    zadanie,
+                    $"wybrane na dziś {zadanie.FocusMissCount} razy i nierobione — czy to nie jest projekt?"));
+            }
+        }
+
+        return flagi;
+    }
+
     public async Task<int> StaleInboxCountAsync(DateOnly today, CancellationToken ct = default)
     {
         var wrzuty = await db.Tasks.AsNoTracking()
