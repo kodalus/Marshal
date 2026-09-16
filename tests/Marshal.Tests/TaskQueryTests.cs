@@ -31,7 +31,7 @@ public sealed class TaskQueryTests : IDisposable
         _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>().UseSqlite(_connection).Options);
-        _db.Database.EnsureCreated();
+        _db.Database.Migrate();
         _zadania = new TaskRepository(_db);
     }
 
