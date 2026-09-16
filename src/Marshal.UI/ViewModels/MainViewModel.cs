@@ -22,6 +22,7 @@ public enum Screen
     Projects,
     Someday,
     Waiting,
+    Calendar,
     Areas,
     Archive,
     Review,
@@ -52,7 +53,8 @@ public sealed partial class MainViewModel : ObservableObject
         ClarifyViewModel clarify,
         TaskDetailViewModel detail,
         ReviewViewModel review,
-        NowViewModel nowVm)
+        NowViewModel nowVm,
+        CalendarViewModel calendar)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -67,6 +69,7 @@ public sealed partial class MainViewModel : ObservableObject
         Detail = detail;
         Review = review;
         Now = nowVm;
+        Calendar = calendar;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
@@ -90,6 +93,8 @@ public sealed partial class MainViewModel : ObservableObject
     public ReviewViewModel Review { get; }
 
     public NowViewModel Now { get; }
+
+    public CalendarViewModel Calendar { get; }
 
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
@@ -179,6 +184,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsWaiting => Current == Screen.Waiting;
 
+    public bool IsCalendar => Current == Screen.Calendar;
+
     public bool IsReview => Current == Screen.Review;
 
     public bool HasNudges => Nudges.Count > 0;
@@ -202,6 +209,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsProjects));
         OnPropertyChanged(nameof(IsSomeday));
         OnPropertyChanged(nameof(IsWaiting));
+        OnPropertyChanged(nameof(IsCalendar));
         OnPropertyChanged(nameof(IsReview));
         OnPropertyChanged(nameof(IsAreas));
         OnPropertyChanged(nameof(IsArchive));
@@ -254,6 +262,7 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Archive => ShowArchiveAsync(),
             Screen.Projects => ShowProjectsAsync(),
             Screen.Waiting => ShowWaitingAsync(),
+            Screen.Calendar => Calendar.LoadAsync(),
             Screen.Areas => ShowAreasAsync(),
             _ => Task.CompletedTask,
         };
@@ -420,6 +429,14 @@ public sealed partial class MainViewModel : ObservableObject
         {
             WaitingItems.Add(pozycja);
         }
+    }
+
+    /// <summary>Kalendarz godzinowy — wydarzenia i zadania na jednej siatce.</summary>
+    [RelayCommand]
+    private async Task ShowCalendarAsync()
+    {
+        Current = Screen.Calendar;
+        await Calendar.LoadAsync();
     }
 
     /// <summary>Kreator przeglądu. Wznawia niedokończony albo zakłada nowy.</summary>

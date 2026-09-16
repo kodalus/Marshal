@@ -102,6 +102,7 @@
       <Button Classes="nav" Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
       <Button Classes="nav" Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
       <Button Classes="nav" Command="{Binding ShowReviewCommand}" Content="Przegląd" />
+      <Button Classes="nav" Command="{Binding ShowCalendarCommand}" Content="Kalendarz" />
       <Button Classes="nav" Command="{Binding ShowAreasCommand}" Content="Obszary" />
       <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
     </WrapPanel>
@@ -433,6 +434,102 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+      </ScrollViewer>
+    </DockPanel>
+
+    <!-- Kalendarz godzinowy (spec 11). Wydarzenia pełne, zadania półprzezroczyste:
+         umowa z kimś i zamiar wobec siebie nie mogą wyglądać tak samo. -->
+    <DockPanel IsVisible="{Binding IsCalendar}" DataContext="{Binding Calendar}">
+
+      <StackPanel DockPanel.Dock="Top" x:DataType="vm:CalendarViewModel" Margin="0,0,0,10">
+        <WrapPanel>
+          <Button Classes="nav" Command="{Binding PreviousCommand}" Content="◀" />
+          <Button Classes="nav" Command="{Binding TodayCommand}" Content="dziś" />
+          <Button Classes="nav" Command="{Binding NextCommand}" Content="▶" />
+          <Button Classes="nav" Command="{Binding SetDaysCommand}" CommandParameter="1" Content="dzień" />
+          <Button Classes="nav" Command="{Binding SetDaysCommand}" CommandParameter="3" Content="3 dni" />
+          <Button Classes="nav" Command="{Binding SetDaysCommand}" CommandParameter="7" Content="tydzień" />
+          <Button Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
+        </WrapPanel>
+        <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
+      </StackPanel>
+
+      <ScrollViewer x:DataType="vm:CalendarViewModel"
+                    HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <StackPanel Orientation="Horizontal">
+
+          <!-- Godziny raz, z lewej, żeby nie powtarzać ich przy każdej kolumnie. -->
+          <StackPanel Width="52">
+            <Border Height="46" />
+            <ItemsControl ItemsSource="{Binding HourLabels}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <Border Height="48">
+                    <TextBlock Classes="hint" Text="{Binding}" VerticalAlignment="Top" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <ItemsControl ItemsSource="{Binding Columns}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:CalendarColumn">
+                <StackPanel Margin="0,0,2,0">
+
+                  <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
+                             HorizontalAlignment="Center" Margin="0,0,0,4" />
+
+                  <!-- Pasek całodniowy nad siatką, nie w niej: wydarzenie bez godziny
+                       umieszczone o północy kłamałoby o porze. -->
+                  <Border Height="24" Padding="4,2" CornerRadius="4" Background="#18808080"
+                          IsVisible="{Binding HasAllDay}">
+                    <TextBlock Text="{Binding AllDayText}" FontSize="11"
+                               TextTrimming="CharacterEllipsis" />
+                  </Border>
+                  <Border Height="24" IsVisible="{Binding !HasAllDay}" />
+
+                  <Canvas Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).GridHeight}"
+                          Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
+                          Background="#0C808080">
+                    <ItemsControl ItemsSource="{Binding Slots}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <Canvas />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemContainerTheme>
+                        <ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotBox">
+                          <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                          <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                        </ControlTheme>
+                      </ItemsControl.ItemContainerTheme>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SlotBox">
+                          <Border Width="{Binding Width}" Height="{Binding Height}"
+                                  Opacity="{Binding Opacity}"
+                                  Background="#556C8FBF" CornerRadius="4" Padding="4,2">
+                            <TextBlock Text="{Binding Title}" FontSize="11"
+                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Canvas>
+
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+        </StackPanel>
       </ScrollViewer>
     </DockPanel>
 

@@ -139,6 +139,10 @@ public static class DependencyInjection
         await services.GetRequiredService<FocusService>().ExpireAsync(ct);
 
         await services.GetRequiredService<ReminderService>().RunAsync(ct);
+
+        // Kalendarze odświeżane przy okazji, nie osobnym zadaniem w tle. Kanał, który
+        // nie odpowiedział, ma znaczyć „brak świeżych wydarzeń", a nie zatrzymać start.
+        await services.GetRequiredService<CalendarSyncService>().RefreshAsync(ct: ct);
     }
 }
 
