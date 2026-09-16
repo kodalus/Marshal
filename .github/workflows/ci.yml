@@ -65,5 +65,18 @@ jobs:
       - name: Workload Androida
         run: dotnet workload install android
 
-      - name: Budowanie
-        run: dotnet build src/Marshal.Android/Marshal.Android.csproj -c Release
+      - name: Publikacja APK
+        run: dotnet publish src/Marshal.Android/Marshal.Android.csproj -c Release
+
+      - name: Zebranie pakietów
+        run: |
+          mkdir -p artefakty/apk
+          find src/Marshal.Android/bin/Release -name '*.apk' -exec cp {} artefakty/apk/ \;
+          ls -l artefakty/apk
+
+      - name: APK do pobrania
+        uses: actions/upload-artifact@v4
+        with:
+          name: marshal-apk
+          path: artefakty/apk
+          if-no-files-found: error
