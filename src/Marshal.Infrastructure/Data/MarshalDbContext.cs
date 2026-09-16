@@ -1,6 +1,8 @@
 using System.Reflection;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Attachments;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Notes;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
 using Marshal.Domain.Review;
@@ -46,6 +48,12 @@ public sealed class MarshalDbContext : DbContext
 
     /// <summary>Przeglądy tygodniowe — także te w trakcie. Synchronizowane.</summary>
     public DbSet<ReviewSession> ReviewSessions => Set<ReviewSession>();
+
+    /// <summary>Materiał referencyjny. Przypięte wchodzą do kroku zerowego przeglądu.</summary>
+    public DbSet<Note> Notes => Set<Note>();
+
+    /// <summary>Wpisy załączników. Treść plików wędruje osobną drogą.</summary>
+    public DbSet<Attachment> Attachments => Set<Attachment>();
 
     /// <summary>Które kalendarze pokazywać i w jakim kolorze. Decyzja, więc synchronizowana.</summary>
     public DbSet<CalendarSource> CalendarSources => Set<CalendarSource>();

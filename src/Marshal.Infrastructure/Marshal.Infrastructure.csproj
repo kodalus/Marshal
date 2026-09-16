@@ -6,6 +6,7 @@
     <PackageReference Include="Google.Apis.Auth" Version="$(GoogleApisVersion)" />
     <PackageReference Include="Google.Apis.Calendar.v3" Version="$(GoogleCalendarVersion)" />
     <PackageReference Include="Ical.Net" Version="$(IcalNetVersion)" />
+    <PackageReference Include="Markdig" Version="$(MarkdigVersion)" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="$(GoogleDriveVersion)" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="$(EfCoreVersion)" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="$(EfCoreVersion)" />
