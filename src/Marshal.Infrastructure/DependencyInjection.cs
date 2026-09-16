@@ -72,6 +72,7 @@ public static class DependencyInjection
         services.AddSingleton<InAppNotifier>();
         services.AddSingleton<INotifier>(sp => sp.GetRequiredService<InAppNotifier>());
 
+        services.AddSingleton<TaskEditService>();
         services.AddSingleton<DayRolloverService>();
         services.AddSingleton<ReminderService>();
         services.AddSingleton<InboxService>();

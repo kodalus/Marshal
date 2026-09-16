@@ -6,6 +6,7 @@ using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Tasks;
+using Marshal.Infrastructure.Notifications;
 
 namespace Marshal.UI.ViewModels;
 
@@ -29,6 +30,8 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IProjectRepository _projects;
     private readonly IAreaRepository _areas;
     private readonly IClock _clock;
+    private readonly TaskEditService _edit;
+    private readonly InAppNotifier _notifier;
 
     public MainViewModel(
         InboxService inbox,
@@ -36,26 +39,41 @@ public sealed partial class MainViewModel : ObservableObject
         IProjectRepository projects,
         IAreaRepository areas,
         IClock clock,
-        ClarifyViewModel clarify)
+        TaskEditService edit,
+        InAppNotifier notifier,
+        ClarifyViewModel clarify,
+        TaskDetailViewModel detail)
     {
         _inbox = inbox;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
         _clock = clock;
+        _edit = edit;
+        _notifier = notifier;
         Clarify = clarify;
+        Detail = detail;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
+
+        // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
+        // wykonania potrafi przenieść zadanie na inną listę niż ta, z której je otwarto.
+        Detail.Saved += async (_, _) => await ReloadAsync();
     }
 
     public ClarifyViewModel Clarify { get; }
 
+    public TaskDetailViewModel Detail { get; }
+
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
-    public ObservableCollection<TaskItem> NextActions { get; } = [];
+    public ObservableCollection<TaskRow> NextActions { get; } = [];
 
-    public ObservableCollection<TaskItem> TodayItems { get; } = [];
+    public ObservableCollection<TaskRow> TodayItems { get; } = [];
 
-    public ObservableCollection<TaskItem> PlanItems { get; } = [];
+    public ObservableCollection<TaskRow> PlanItems { get; } = [];
+
+    /// <summary>Przypomnienia, które odezwały się przy tym uruchomieniu.</summary>
+    public ObservableCollection<Notification> Reminders { get; } = [];
 
     public ObservableCollection<TaskItem> SomedayItems { get; } = [];
 
@@ -78,6 +96,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Avalonia nie zamienia liczby na wartość logiczną — potrzebne wprost.</summary>
     public bool HasInbox => InboxCount > 0;
+
+    public bool HasReminders => Reminders.Count > 0;
 
     public bool IsToday => Current == Screen.Today;
 
@@ -114,8 +134,64 @@ public sealed partial class MainViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        CollectReminders();
         await RefreshInboxAsync();
         await ShowTodayAsync();
+    }
+
+    /// <summary>
+    /// Odbiera to, co uzbierała usługa przypomnień przy starcie.
+    /// </summary>
+    /// <remarks>
+    /// Przypomnienia odpalają się w <c>PrepareAsync</c>, zanim okno ma cokolwiek
+    /// wczytane. Zbieranie ich do odebrania, zamiast pokazywania od razu, jest tym,
+    /// co pozwala im przetrwać tę chwilę.
+    /// </remarks>
+    private void CollectReminders()
+    {
+        foreach (var przypomnienie in _notifier.Drain())
+        {
+            Reminders.Add(przypomnienie);
+        }
+
+        OnPropertyChanged(nameof(HasReminders));
+    }
+
+    [RelayCommand]
+    private void DismissReminders()
+    {
+        Reminders.Clear();
+        OnPropertyChanged(nameof(HasReminders));
+    }
+
+    /// <summary>Przeładowuje bieżący ekran — po zapisie, który mógł zmienić przynależność.</summary>
+    private async Task ReloadAsync()
+    {
+        await RefreshInboxAsync();
+
+        var zadanie = Current switch
+        {
+            Screen.Today => ShowTodayAsync(),
+            Screen.Next => ShowNextAsync(),
+            Screen.Plans => ShowPlansAsync(),
+            Screen.Someday => ShowSomedayAsync(),
+            Screen.Archive => ShowArchiveAsync(),
+            Screen.Projects => ShowProjectsAsync(),
+            Screen.Areas => ShowAreasAsync(),
+            _ => Task.CompletedTask,
+        };
+
+        await zadanie;
+    }
+
+    /// <summary>Otwarcie szczegółu — jedyne wejście do terminu, przypomnienia i rytmu.</summary>
+    [RelayCommand]
+    private void Open(TaskRow? row)
+    {
+        if (row is not null)
+        {
+            Detail.Load(row.Task);
+        }
     }
 
     /// <summary>
@@ -158,11 +234,7 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowNextAsync()
     {
         Current = Screen.Next;
-        NextActions.Clear();
-        foreach (var task in await _tasks.ByStateAsync(TaskState.Next))
-        {
-            NextActions.Add(task);
-        }
+        await Fill(NextActions, _tasks.ByStateAsync(TaskState.Next));
     }
 
     [RelayCommand]
@@ -197,14 +269,14 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowSomedayAsync()
     {
         Current = Screen.Someday;
-        await Fill(SomedayItems, _tasks.ByStateAsync(TaskState.Someday));
+        await FillPlain(SomedayItems, _tasks.ByStateAsync(TaskState.Someday));
     }
 
     [RelayCommand]
     private async Task ShowArchiveAsync()
     {
         Current = Screen.Archive;
-        await Fill(ArchiveItems, _tasks.ArchiveAsync(limit: 200));
+        await FillPlain(ArchiveItems, _tasks.ArchiveAsync(limit: 200));
     }
 
     [RelayCommand]
@@ -220,7 +292,20 @@ public sealed partial class MainViewModel : ObservableObject
 
     private DateOnly Today() => DateOnly.FromDateTime(_clock.Now.Date);
 
-    private static async Task Fill(ObservableCollection<TaskItem> target, Task<IReadOnlyList<TaskItem>> source)
+    private async Task Fill(ObservableCollection<TaskRow> target, Task<IReadOnlyList<TaskItem>> source)
+    {
+        var items = await source;
+        var dzis = Today();
+
+        target.Clear();
+        foreach (var item in items)
+        {
+            target.Add(TaskRow.From(item, dzis));
+        }
+    }
+
+    private static async Task FillPlain(
+        ObservableCollection<TaskItem> target, Task<IReadOnlyList<TaskItem>> source)
     {
         var items = await source;
         target.Clear();
@@ -230,16 +315,20 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Odhaczenie z listy. Idzie przez szczegół, bo zadanie powtarzalne musi przy
+    /// okazji zrodzić kolejne wystąpienie (8.4) — a z listy tego nie widać.
+    /// </summary>
     [RelayCommand]
-    private async Task CompleteAsync(TaskItem? task)
+    private async Task CompleteAsync(TaskRow? row)
     {
-        if (task is null)
+        if (row is null)
         {
             return;
         }
 
-        await _inbox.DoNowAsync(task.Id, task.AreaId!.Value);
-        await ShowNextAsync();
+        await _edit.CompleteAsync(row.Task.Id);
+        await ReloadAsync();
     }
 
     private async Task RefreshInboxAsync()

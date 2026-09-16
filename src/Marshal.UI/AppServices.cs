@@ -24,6 +24,7 @@ public static class AppServices
             deviceId);
 
         services.AddSingleton<ClarifyViewModel>();
+        services.AddSingleton<TaskDetailViewModel>();
         services.AddSingleton<MainViewModel>();
 
         _provider = services.BuildServiceProvider();

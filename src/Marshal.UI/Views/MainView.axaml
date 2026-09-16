@@ -4,6 +4,7 @@
              xmlns:tasks="using:Marshal.Domain.Tasks"
              xmlns:areas="using:Marshal.Domain.Areas"
              xmlns:uc="using:Marshal.Application.UseCases"
+             xmlns:abs="using:Marshal.Application.Abstractions"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
@@ -22,9 +23,47 @@
       <Setter Property="Opacity" Value="0.55" />
       <Setter Property="FontSize" Value="12" />
     </Style>
+    <!-- Etykiety stanu bez czerwieni i bez wykrzykników: „przesunięte 4 razy" jest
+         informacją, a ta sama liczba na czerwono jest wyrzutem (spec 11.1, N12–N15). -->
+    <Style Selector="TextBlock.badge">
+      <Setter Property="Opacity" Value="0.6" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Opacity" Value="0.55" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Margin" Value="0,10,0,3" />
+    </Style>
+    <Style Selector="ToggleButton.day">
+      <Setter Property="MinWidth" Value="44" />
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
   </UserControl.Styles>
 
   <DockPanel Margin="16">
+
+    <!-- Przypomnienia, które odezwały się przy starcie. Nad wszystkim, bo po to były
+         ustawione; z przyciskiem odprawienia, bo mają zniknąć po przeczytaniu, a nie
+         zostać jako kolejna lista do obsłużenia. -->
+    <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,10" CornerRadius="8"
+            Background="#2E9C7A40" IsVisible="{Binding HasReminders}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="Odprawione" Padding="10,4" Margin="10,0,0,0"
+                VerticalAlignment="Top"
+                Command="{Binding DismissRemindersCommand}" />
+        <StackPanel>
+          <TextBlock Text="Przypomnienia" FontWeight="SemiBold" Margin="0,0,0,4" />
+          <ItemsControl ItemsSource="{Binding Reminders}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="abs:Notification">
+                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Margin="0,2" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </DockPanel>
+    </Border>
 
     <!-- Wrzut jest dostępny z każdego ekranu poza przetwarzaniem: myśl przychodzi
          wtedy, kiedy przychodzi, a nie wtedy, gdy akurat jesteś w skrzynce. -->
@@ -142,11 +181,19 @@
     <!-- Następne akcje -->
     <ListBox IsVisible="{Binding IsNext}" ItemsSource="{Binding NextActions}">
       <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="tasks:TaskItem">
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
-                       VerticalAlignment="Center" />
-            <Button Grid.Column="1" Content="Zrobione" Padding="10,4"
+        <DataTemplate x:DataType="vm:TaskRow">
+          <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+              <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+              <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
+                         IsVisible="{Binding HasBadges}" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="Szczegół" Padding="10,4" Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).OpenCommand}"
+                    CommandParameter="{Binding}" />
+            <Button Grid.Column="2" Content="Zrobione" Padding="10,4"
+                    VerticalAlignment="Center"
                     Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).CompleteCommand}"
                     CommandParameter="{Binding}" />
           </Grid>
@@ -160,12 +207,22 @@
                  Text="Zadania na dziś i po terminie. Terminy pierwsze — to fakt zewnętrzny, nie decyzja." />
       <ListBox ItemsSource="{Binding TodayItems}">
         <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="tasks:TaskItem">
-            <StackPanel Spacing="2" Margin="0,4">
-              <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
-              <TextBlock Classes="hint" Text="{Binding Deadline, StringFormat='termin {0:yyyy-MM-dd}'}"
-                         IsVisible="{Binding HasDeadline}" />
-            </StackPanel>
+          <DataTemplate x:DataType="vm:TaskRow">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
+              <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
+                           IsVisible="{Binding HasBadges}" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="Szczegół" Padding="10,4" Margin="0,0,6,0"
+                      VerticalAlignment="Center"
+                      Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).OpenCommand}"
+                      CommandParameter="{Binding}" />
+              <Button Grid.Column="2" Content="Zrobione" Padding="10,4"
+                      VerticalAlignment="Center"
+                      Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).CompleteCommand}"
+                      CommandParameter="{Binding}" />
+            </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
@@ -176,11 +233,19 @@
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" Text="Najbliższe trzydzieści dni." />
       <ListBox ItemsSource="{Binding PlanItems}">
         <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="tasks:TaskItem">
-            <StackPanel Spacing="2" Margin="0,4">
-              <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
-              <TextBlock Classes="hint" Text="{Binding DoDate, StringFormat='{}{0:yyyy-MM-dd}'}" />
-            </StackPanel>
+          <DataTemplate x:DataType="vm:TaskRow">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+              <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                <TextBlock Classes="hint" Text="{Binding Task.DoDate, StringFormat='{}{0:yyyy-MM-dd}'}" />
+                <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
+                           IsVisible="{Binding HasBadges}" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="Szczegół" Padding="10,4"
+                      VerticalAlignment="Center"
+                      Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).OpenCommand}"
+                      CommandParameter="{Binding}" />
+            </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
@@ -245,6 +310,114 @@
         </ListBox.ItemTemplate>
       </ListBox>
     </DockPanel>
+
+    <!-- Szczegół zadania: nakładka nad ekranami, nie osobna pozycja w nawigacji.
+         Ta sama sztuczka co przy przetwarzaniu: widoczność na jednym elemencie,
+         podmiana kontekstu na drugim, bo DataContext ustawiony na elemencie
+         obowiązuje też dla pozostałych powiązań na tym samym elemencie. -->
+    <Panel IsVisible="{Binding Detail.IsOpen}" Background="#CC101010">
+    <Border MaxWidth="560" MaxHeight="620" Margin="8" Padding="20" CornerRadius="10"
+            Background="#FF1E1E1E" VerticalAlignment="Center">
+    <ScrollViewer DataContext="{Binding Detail}">
+      <StackPanel x:DataType="vm:TaskDetailViewModel">
+
+        <TextBox Text="{Binding Title}" FontSize="18" />
+
+        <TextBlock Classes="label" Text="Notatka" />
+        <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="60"
+                 TextWrapping="Wrap" Watermark="Cokolwiek, co pomoże zacząć" />
+
+        <TextBlock Classes="label" Text="Dzień wykonania — obietnica dana sobie" />
+        <DatePicker SelectedDate="{Binding DoDate}" HorizontalAlignment="Stretch" />
+
+        <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
+        <DatePicker SelectedDate="{Binding Deadline}" HorizontalAlignment="Stretch" />
+
+        <TextBlock Classes="label" Text="Przypomnienie — kiedy chcesz o tym usłyszeć" />
+        <Grid ColumnDefinitions="*,Auto">
+          <DatePicker Grid.Column="0" SelectedDate="{Binding ReminderDay}"
+                      HorizontalAlignment="Stretch" />
+          <TimePicker Grid.Column="1" Margin="6,0,0,0" SelectedTime="{Binding ReminderTime}"
+                      ClockIdentifier="24HourClock" />
+        </Grid>
+        <TextBlock Classes="hint" Margin="2,4,0,0"
+                   Text="Bez godziny znaczy rano. Sama godzina bez dnia nie znaczy nic." />
+
+        <TextBlock Classes="label" Text="Waga" />
+        <ComboBox ItemsSource="{Binding Priorities}" SelectedItem="{Binding SelectedPriority}"
+                  HorizontalAlignment="Stretch" />
+
+        <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="#18808080">
+          <StackPanel>
+
+            <TextBlock Text="Rytm" FontWeight="SemiBold" />
+
+            <TextBlock Classes="label" Text="Jak często" />
+            <ComboBox ItemsSource="{Binding Repeats}" SelectedItem="{Binding SelectedRepeat}"
+                      HorizontalAlignment="Stretch" />
+
+            <StackPanel IsVisible="{Binding NeedsInterval}">
+              <TextBlock Classes="label" Text="Co ile" />
+              <NumericUpDown Value="{Binding Interval}" Minimum="1" Maximum="99"
+                             Increment="1" FormatString="0" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding NeedsWeekdays}">
+              <TextBlock Classes="label" Text="W które dni" />
+              <WrapPanel>
+                <ToggleButton Classes="day" IsChecked="{Binding Monday}" Content="pn" />
+                <ToggleButton Classes="day" IsChecked="{Binding Tuesday}" Content="wt" />
+                <ToggleButton Classes="day" IsChecked="{Binding Wednesday}" Content="śr" />
+                <ToggleButton Classes="day" IsChecked="{Binding Thursday}" Content="cz" />
+                <ToggleButton Classes="day" IsChecked="{Binding Friday}" Content="pt" />
+                <ToggleButton Classes="day" IsChecked="{Binding Saturday}" Content="sb" />
+                <ToggleButton Classes="day" IsChecked="{Binding Sunday}" Content="nd" />
+              </WrapPanel>
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding NeedsDayOfMonth}">
+              <TextBlock Classes="label" Text="Którego dnia miesiąca" />
+              <NumericUpDown Value="{Binding DayOfMonth}" Minimum="1" Maximum="31"
+                             Increment="1" FormatString="0" />
+              <TextBlock Classes="hint" Margin="2,4,0,0"
+                         Text="31 znaczy ostatniego — w lutym wypadnie 28 albo 29." />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsRepeating}">
+              <TextBlock Classes="label" Text="Kolejne liczone" />
+              <ComboBox ItemsSource="{Binding Anchors}" SelectedItem="{Binding SelectedAnchor}"
+                        HorizontalAlignment="Stretch" />
+
+              <TextBlock Classes="label" Text="Gdy dzień minie niewykonany" />
+              <ComboBox ItemsSource="{Binding Missed}" SelectedItem="{Binding SelectedMissed}"
+                        HorizontalAlignment="Stretch" />
+            </StackPanel>
+
+            <!-- Rytm zdaniem, nie formularzem. Sześć pól da się wypełnić źle i nie
+                 zauważyć; zdanie da się przeczytać i od razu wiedzieć, czy o to chodziło. -->
+            <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="6" Background="#20808080">
+              <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontStyle="Italic" />
+            </Border>
+
+          </StackPanel>
+        </Border>
+
+        <TextBlock Text="{Binding Problem}" Foreground="#E06C75" Margin="0,14,0,0"
+                   TextWrapping="Wrap" IsVisible="{Binding HasProblem}" />
+
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,20,0,0">
+          <Button Grid.Column="0" Content="Zrobione" Padding="14,8"
+                  Command="{Binding CompleteCommand}" />
+          <Button Grid.Column="2" Content="Zapisz" Padding="14,8"
+                  Command="{Binding SaveCommand}" />
+        </Grid>
+        <Button HorizontalAlignment="Stretch" Margin="0,8,0,0" Padding="14,8"
+                Command="{Binding CloseCommand}" Content="Zamknij bez zapisywania" />
+
+      </StackPanel>
+    </ScrollViewer>
+    </Border>
+    </Panel>
 
     </Grid>
   </DockPanel>
