@@ -27,6 +27,9 @@ public sealed class TagRepository(MarshalDbContext db) : ITagRepository
     public async Task<IReadOnlyList<TaskTag>> LinksForTaskAsync(Guid taskId, CancellationToken ct = default) =>
         await db.TaskTags.Where(l => l.TaskId == taskId).ToListAsync(ct);
 
+    public async Task<IReadOnlyList<TaskTag>> AllLinksAsync(CancellationToken ct = default) =>
+        await db.TaskTags.Where(l => !l.Deleted).ToListAsync(ct);
+
     public async Task<IReadOnlyList<Tag>> ForTaskAsync(Guid taskId, CancellationToken ct = default)
     {
         var tagIds = await db.TaskTags

@@ -16,6 +16,9 @@ public interface ITagRepository
 
     Task<IReadOnlyList<Tag>> ForTaskAsync(Guid taskId, CancellationToken ct = default);
 
+    /// <summary>Wszystkie żywe powiązania — filtr po tagach potrzebuje ich naraz, nie po jednym.</summary>
+    Task<IReadOnlyList<TaskTag>> AllLinksAsync(CancellationToken ct = default);
+
     void Add(Tag tag);
 
     void AddLink(TaskTag link);

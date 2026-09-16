@@ -64,6 +64,22 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
 
+    /// <summary>
+    /// Wszystkie żywe zadania, także wykonane i wyrzucone.
+    /// </summary>
+    /// <remarks>
+    /// Stan odsiewa filtr, nie zapytanie: „pokaż wykonane w tym tygodniu" musi być
+    /// wykonalne, a byłoby nie do ułożenia, gdyby archiwum nie dochodziło tu w ogóle.
+    /// Domyślne ukrycie cmentarza siedzi w <see cref="Marshal.Domain.Filters.FilterQuery"/>,
+    /// czyli w jednym miejscu, razem z powodem.
+    /// </remarks>
+    public async Task<IReadOnlyList<TaskItem>> AllAsync(CancellationToken ct = default) =>
+        await db.Tasks
+            .Where(t => !t.Deleted)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(
         DateOnly today, CancellationToken ct = default) =>
         await Otwarte()

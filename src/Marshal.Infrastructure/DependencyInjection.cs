@@ -72,6 +72,7 @@ public static class DependencyInjection
         services.AddSingleton<ITagRepository, TagRepository>();
         services.AddSingleton<INoteRepository, NoteRepository>();
         services.AddSingleton<IAttachmentRepository, AttachmentRepository>();
+        services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
         services.AddSingleton<IReminderLog, ReminderLog>();
@@ -97,6 +98,7 @@ public static class DependencyInjection
         services.AddSingleton<ReminderService>();
         services.AddSingleton<NoteService>();
         services.AddSingleton<AttachmentService>();
+        services.AddSingleton<FilterService>();
         services.AddSingleton<InboxService>();
         services.AddSingleton<TagService>();
 

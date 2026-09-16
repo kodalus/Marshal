@@ -2,6 +2,7 @@ using System.Reflection;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Attachments;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Filters;
 using Marshal.Domain.Notes;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
@@ -54,6 +55,9 @@ public sealed class MarshalDbContext : DbContext
 
     /// <summary>Wpisy załączników. Treść plików wędruje osobną drogą.</summary>
     public DbSet<Attachment> Attachments => Set<Attachment>();
+
+    /// <summary>Zapisane widoki — Ulubione. Decyzja, więc synchronizowane.</summary>
+    public DbSet<SavedFilter> SavedFilters => Set<SavedFilter>();
 
     /// <summary>Które kalendarze pokazywać i w jakim kolorze. Decyzja, więc synchronizowana.</summary>
     public DbSet<CalendarSource> CalendarSources => Set<CalendarSource>();

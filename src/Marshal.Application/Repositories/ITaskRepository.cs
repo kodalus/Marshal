@@ -31,6 +31,15 @@ public interface ITaskRepository
     Task<IReadOnlyList<TaskItem>> ByAreaAsync(Guid areaId, CancellationToken ct = default);
 
     /// <summary>
+    /// Wszystkie żywe zadania — wejście filtrów łączonych (spec 11.5).
+    /// </summary>
+    /// <remarks>
+    /// Świadomie bez warunku: warunki filtra są sprawdzane w pamięci, nie w zapytaniu.
+    /// Zob. <see cref="UseCases.FilterService"/> — tam jest napisane dlaczego.
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> AllAsync(CancellationToken ct = default);
+
+    /// <summary>
     /// Zadania otwarte z dniem wykonania w przeszłości — wejście przejścia dnia (8.4, 8.7).
     /// </summary>
     Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(DateOnly today, CancellationToken ct = default);
