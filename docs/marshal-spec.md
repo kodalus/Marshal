@@ -132,8 +132,8 @@ zerowy kreatora przeglądu. Koszt zerowy, jedna flaga.
 
 | Etap | Zawartość | Rezultat |
 |---|---|---|
-| 0 | Szkielet, BD, testy, CI, okno desktopowe i ekran Androida | Pusta aplikacja startuje na obu platformach |
-| 1 | Zadania, podzadania, projekty, skrzynka, drzewko przetwarzania | Działające GTD na jednym urządzeniu |
+| 0 | Szkielet, BD, testy, CI, okno desktopowe i ekran Androida | ✅ Pusta aplikacja startuje na obu platformach |
+| 1 | Zadania, podzadania, projekty, skrzynka, drzewko przetwarzania, pierwsza migracja, APK tylko `arm64-v8a`, wydanie z APK | Działające GTD na jednym urządzeniu |
 | 2 | Dzisiaj, Plany, Kiedyś, Archiwum, **obszary**, zagnieżdżanie projektów, tagi, priorytety, kolory | Pełna nawigacja po sekcjach |
 | 3 | **Synchronizacja przez Dysk Google** | Telefon i desktop to jedna aplikacja — punkt bez odwrotu |
 | 4 | Powtarzalność, terminy, przypomnienia | Zadania cykliczne przestają wymagać pamięci |
@@ -144,6 +144,18 @@ zerowy kreatora przeglądu. Koszt zerowy, jedna flaga.
 | 9 | Filtry łączone, filtry zapisane | Własne widoki |
 | 10 | Widget Androida, tryb ciemny, kopia zapasowa | Domknięcie |
 | Później | Dwustronny zapis do Google Calendar | Osobno, po przeżyciu etapu 7 |
+
+**Etap 0 zamknięty 16.09.2026.** Zweryfikowany na prawdziwym sprzęcie, nie tylko w CI:
+okno otwiera się na Windowsie, aplikacja startuje na Androidzie. Tego nie dało się
+sprawdzić zdalnie — CI buduje, nie uruchamia.
+
+Do etapu 1 dołożone dwie rzeczy z budowania, które wyszły przy pierwszej instalacji:
+
+- **APK tylko dla `arm64-v8a`.** Publikacja Release pakuje kod natywny dla czterech
+  architektur, przez co pakiet waży 75 MB przy aplikacji pokazującej trzy napisy.
+  Telefon używa jednej architektury.
+- **Wydanie GitHub Release z APK w załącznikach.** Artefakty przebiegu wygasają po
+  90 dniach i wymagają zalogowania, więc nie nadają się na stały sposób instalacji.
 
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
