@@ -59,6 +59,15 @@ public sealed class Project : Entity
 
     public double SortOrder { get; private set; }
 
+    /// <summary>Puste = weź kolor obszaru.</summary>
+    public string? Color { get; private set; }
+
+    public void SetColor(string? color, Hlc stamp)
+    {
+        Color = color;
+        Touch(stamp);
+    }
+
     public void Rename(string outcome, Hlc stamp)
     {
         Outcome = NormalizeOutcome(outcome);

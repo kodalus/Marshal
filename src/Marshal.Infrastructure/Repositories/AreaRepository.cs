@@ -16,5 +16,11 @@ public sealed class AreaRepository(MarshalDbContext db) : IAreaRepository
             .OrderBy(a => a.SortOrder)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Area>> AllAsync(CancellationToken ct = default) =>
+        await db.Areas
+            .Where(a => !a.Deleted)
+            .OrderBy(a => a.SortOrder)
+            .ToListAsync(ct);
+
     public void Add(Area area) => db.Areas.Add(area);
 }

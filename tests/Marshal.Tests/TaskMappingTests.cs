@@ -24,7 +24,7 @@ public sealed class TaskMappingTests : IDisposable
     {
         var kontekst = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>().UseSqlite(_connection).Options);
-        kontekst.Database.Migrate();
+        kontekst.Database.EnsureCreated();
         return kontekst;
     }
 

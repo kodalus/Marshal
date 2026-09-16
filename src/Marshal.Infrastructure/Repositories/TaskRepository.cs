@@ -33,5 +33,43 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<TaskItem>> TodayAsync(DateOnly today, CancellationToken ct = default) =>
+        await Otwarte()
+            .Where(t => (t.DoDate != null && t.DoDate <= today)
+                     || (t.Deadline != null && t.Deadline <= today))
+            .OrderBy(t => t.Deadline == null)
+            .ThenBy(t => t.Deadline)
+            .ThenBy(t => t.DoDate)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<TaskItem>> UpcomingAsync(
+        DateOnly after, DateOnly until, CancellationToken ct = default) =>
+        await Otwarte()
+            .Where(t => (t.DoDate != null && t.DoDate > after && t.DoDate <= until)
+                     || (t.Deadline != null && t.Deadline > after && t.Deadline <= until))
+            .OrderBy(t => t.DoDate ?? t.Deadline)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<TaskItem>> ArchiveAsync(int limit, CancellationToken ct = default) =>
+        await db.Tasks
+            .Where(t => !t.Deleted && (t.State == TaskState.Done || t.State == TaskState.Trashed))
+            .OrderByDescending(t => t.CompletedAt ?? t.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<TaskItem>> ByAreaAsync(Guid areaId, CancellationToken ct = default) =>
+        await Otwarte()
+            .Where(t => t.AreaId == areaId)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
+            .ToListAsync(ct);
+
+    /// <summary>Zadania nierozstrzygnięte: poza skrzynką, koszem i wykonanymi.</summary>
+    private IQueryable<TaskItem> Otwarte() =>
+        db.Tasks.Where(t => !t.Deleted
+                         && t.State != TaskState.Done
+                         && t.State != TaskState.Trashed
+                         && t.State != TaskState.Inbox);
+
     public void Add(TaskItem task) => db.Tasks.Add(task);
 }

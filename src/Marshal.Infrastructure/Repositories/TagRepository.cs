@@ -1,0 +1,47 @@
+using Marshal.Application.Repositories;
+using Marshal.Domain.Tags;
+using Marshal.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace Marshal.Infrastructure.Repositories;
+
+public sealed class TagRepository(MarshalDbContext db) : ITagRepository
+{
+    public async Task<IReadOnlyList<Tag>> AllAsync(CancellationToken ct = default) =>
+        await db.Tags.Where(t => !t.Deleted).OrderBy(t => t.SortOrder).ThenBy(t => t.Name).ToListAsync(ct);
+
+    public async Task<Tag?> FindAsync(Guid id, CancellationToken ct = default) =>
+        await db.Tags.FirstOrDefaultAsync(t => t.Id == id && !t.Deleted, ct);
+
+    public async Task<Tag?> FindByNameAsync(string name, CancellationToken ct = default)
+    {
+        var szukane = name.Trim().TrimStart('#');
+
+        // Porównanie bez rozróżniania wielkości liter robione po stronie klienta:
+        // SQLite nie zna liter spoza zakresu ASCII, więc „Żłobek" i „żłobek" byłyby
+        // dla niego różne. Tagów są dziesiątki, nie tysiące — koszt bez znaczenia.
+        var wszystkie = await db.Tags.Where(t => !t.Deleted).ToListAsync(ct);
+        return wszystkie.FirstOrDefault(t => Tag.SameName(t.Name, szukane));
+    }
+
+    public async Task<IReadOnlyList<TaskTag>> LinksForTaskAsync(Guid taskId, CancellationToken ct = default) =>
+        await db.TaskTags.Where(l => l.TaskId == taskId).ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Tag>> ForTaskAsync(Guid taskId, CancellationToken ct = default)
+    {
+        var tagIds = await db.TaskTags
+            .Where(l => l.TaskId == taskId && !l.Deleted)
+            .Select(l => l.TagId)
+            .ToListAsync(ct);
+
+        return await db.Tags
+            .Where(t => tagIds.Contains(t.Id) && !t.Deleted)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.Name)
+            .ToListAsync(ct);
+    }
+
+    public void Add(Tag tag) => db.Tags.Add(tag);
+
+    public void AddLink(TaskTag link) => db.TaskTags.Add(link);
+}

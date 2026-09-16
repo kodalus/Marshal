@@ -75,6 +75,12 @@ public sealed class TaskItem : Entity
     /// <summary>Puste = weź <c>Area.DefaultNudgeDays</c>.</summary>
     public int? WaitingNudgeDays { get; private set; }
 
+    /// <summary>Waga, bez limitu (spec 1.6).</summary>
+    public Priority Priority { get; private set; } = Priority.None;
+
+    /// <summary>Puste = weź kolor projektu, a w dalszej kolejności obszaru.</summary>
+    public string? Color { get; private set; }
+
     public DateTimeOffset? CompletedAt { get; private set; }
 
     /// <summary>Pozycja ręczna; wstawienie między sąsiadów to średnia ich wartości.</summary>
@@ -89,6 +95,18 @@ public sealed class TaskItem : Entity
     public void SetNote(string? note, Hlc stamp)
     {
         Note = string.IsNullOrWhiteSpace(note) ? null : note;
+        Touch(stamp);
+    }
+
+    public void SetPriority(Priority priority, Hlc stamp)
+    {
+        Priority = priority;
+        Touch(stamp);
+    }
+
+    public void SetColor(string? color, Hlc stamp)
+    {
+        Color = color;
         Touch(stamp);
     }
 

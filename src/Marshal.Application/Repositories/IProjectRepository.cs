@@ -8,5 +8,9 @@ public interface IProjectRepository
 
     Task<IReadOnlyList<Project>> ActiveAsync(CancellationToken ct = default);
 
+    Task<IReadOnlyList<Project>> AllAsync(CancellationToken ct = default);
+
+    Task<IReadOnlyList<Project>> ByAreaAsync(Guid areaId, CancellationToken ct = default);
+
     void Add(Project project);
 }

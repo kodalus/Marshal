@@ -2,6 +2,7 @@ using System.Reflection;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
+using Marshal.Domain.Tags;
 using Marshal.Domain.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -20,6 +21,10 @@ public sealed class MarshalDbContext : DbContext
     public DbSet<Project> Projects => Set<Project>();
 
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+
+    public DbSet<Tag> Tags => Set<Tag>();
+
+    public DbSet<TaskTag> TaskTags => Set<TaskTag>();
 
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy

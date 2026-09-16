@@ -15,6 +15,7 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(p => p.Note);
         builder.Property(p => p.State).IsRequired().HasConversion<int>();
         builder.Property(p => p.AreaId).IsRequired();
+        builder.Property(p => p.Color).HasMaxLength(16);
         builder.Property(p => p.SortOrder).IsRequired();
         builder.Property(p => p.CreatedAt).IsRequired();
         builder.Property(p => p.UpdatedAt).IsRequired();

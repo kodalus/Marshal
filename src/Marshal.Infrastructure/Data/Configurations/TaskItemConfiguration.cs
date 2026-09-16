@@ -14,6 +14,8 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.Title).IsRequired().HasMaxLength(500);
         builder.Property(t => t.Note);
         builder.Property(t => t.State).IsRequired().HasConversion<int>();
+        builder.Property(t => t.Priority).IsRequired().HasConversion<int>();
+        builder.Property(t => t.Color).HasMaxLength(16);
         builder.Property(t => t.WaitingForWho).HasMaxLength(200);
         builder.Property(t => t.SortOrder).IsRequired();
         builder.Property(t => t.CreatedAt).IsRequired();
@@ -26,6 +28,7 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasIndex(t => t.ParentTaskId);
         builder.HasIndex(t => t.DoDate);
         builder.HasIndex(t => t.Deadline);
+        builder.HasIndex(t => t.Priority);
 
         // Świadomie bez kluczy obcych do Areas i Projects — zob. uwagę
         // w MarshalDbContext.OnModelCreating.

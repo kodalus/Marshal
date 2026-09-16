@@ -44,9 +44,11 @@ public static class DependencyInjection
         services.AddSingleton<ITaskRepository, TaskRepository>();
         services.AddSingleton<IProjectRepository, ProjectRepository>();
         services.AddSingleton<IAreaRepository, AreaRepository>();
+        services.AddSingleton<ITagRepository, TagRepository>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
         services.AddSingleton<InboxService>();
+        services.AddSingleton<TagService>();
 
         return services;
     }

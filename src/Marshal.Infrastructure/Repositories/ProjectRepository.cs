@@ -17,5 +17,19 @@ public sealed class ProjectRepository(MarshalDbContext db) : IProjectRepository
             .ThenBy(p => p.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<Project>> AllAsync(CancellationToken ct = default) =>
+        await db.Projects
+            .Where(p => !p.Deleted)
+            .OrderBy(p => p.SortOrder)
+            .ThenBy(p => p.CreatedAt)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<Project>> ByAreaAsync(Guid areaId, CancellationToken ct = default) =>
+        await db.Projects
+            .Where(p => p.AreaId == areaId && !p.Deleted)
+            .OrderBy(p => p.SortOrder)
+            .ThenBy(p => p.CreatedAt)
+            .ToListAsync(ct);
+
     public void Add(Project project) => db.Projects.Add(project);
 }

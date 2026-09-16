@@ -25,7 +25,7 @@ public sealed class AreaSeedTests : IDisposable
         _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>().UseSqlite(_connection).Options);
-        _db.Database.Migrate();
+        _db.Database.EnsureCreated();
     }
 
     private Task Zaloz() => AreaSeed.EnsureAsync(_db, _zegar, new HlcSource(_zegar, "testy"));
