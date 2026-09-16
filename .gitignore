@@ -291,8 +291,6 @@ node_modules/
 *.vbw
 *.dsw
 *.dsp
-*.ncb
-*.aps
 
 # Visual Studio LightSwitch build output
 **/*.HTMLClient/GeneratedArtifacts
@@ -426,7 +424,6 @@ proguard/usage.txt
 *.keystore
 *.jks
 *.p12
-*.pfx
 *.pem
 *.key
 keystore.properties
@@ -450,10 +447,10 @@ credentials.json
 *.credentials.json
 google-credentials*.json
 token.json
-tokens/
+/tokens/
 *.tokenstore
-.google/
-.credentials/
+/.google/
+/.credentials/
 
 
 ## ---------------------------------------------------------------
@@ -472,12 +469,12 @@ tokens/
 Marshal.db*
 
 # Eksport i kopie zapasowe
-backups/
-exports/
+/backups/
+/exports/
 *.marshal.json
 
 # Zrzuty ekranu z prawdziwymi danymi
-screenshots/raw/
+/screenshots/raw/
 
 
 ## ---------------------------------------------------------------
