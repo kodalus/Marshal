@@ -21,6 +21,15 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.CreatedAt).IsRequired();
         builder.Property(t => t.UpdatedAt).IsRequired();
         builder.Property(t => t.Deleted).IsRequired();
+        builder.Property(t => t.RecurrenceJson).HasMaxLength(500);
+        builder.Property(t => t.RollCount).IsRequired();
+
+        // Reguła jest w bazie jednym tekstem (RecurrenceJson); to tylko jej odczytana
+        // postać. Zmapowana byłaby drugą, niespójną kopią tej samej rzeczy.
+        builder.Ignore(t => t.Recurrence);
+
+        // Liczone, nie przechowywane — inaczej dałoby się mieć HasDeadline bez Deadline.
+        builder.Ignore(t => t.HasDeadline);
 
         builder.HasIndex(t => t.State);
         builder.HasIndex(t => t.AreaId);
@@ -29,6 +38,9 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasIndex(t => t.DoDate);
         builder.HasIndex(t => t.Deadline);
         builder.HasIndex(t => t.Priority);
+
+        // Przejście dnia odpytuje po tej dacie przy każdym starcie aplikacji.
+        builder.HasIndex(t => new { t.State, t.DoDate });
 
         // Świadomie bez kluczy obcych do Areas i Projects — zob. uwagę
         // w MarshalDbContext.OnModelCreating.

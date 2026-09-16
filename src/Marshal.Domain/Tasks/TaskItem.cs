@@ -1,4 +1,5 @@
 using Marshal.Domain.Primitives;
+using Marshal.Domain.Recurrence;
 
 namespace Marshal.Domain.Tasks;
 
@@ -89,6 +90,61 @@ public sealed class TaskItem : Entity
     /// <summary>Dla interfejsu: czy pokazać wiersz z terminem.</summary>
     public bool HasDeadline => Deadline is not null;
 
+    // --- powtarzalność (spec 5.7, 8.4) ---------------------------------------
+
+    /// <summary>
+    /// Reguła powtarzania w postaci bazodanowej: jeden tekst JSON, jedna kolumna.
+    /// </summary>
+    /// <remarks>
+    /// Rozłożenie reguły na osiem kolumn dałoby osiem osobnych pól w dzienniku zmian,
+    /// a scalanie per pole potrafiłoby złożyć rytm z połówek dwóch różnych decyzji:
+    /// dni tygodnia z telefonu i odstęp z komputera. Reguła jest **jedną decyzją**.
+    /// </remarks>
+    public string? RecurrenceJson { get; private set; }
+
+    /// <summary>
+    /// Reguła powtarzania albo <c>null</c>. Regułę nosi **zawsze najnowsze wystąpienie
+    /// serii** — przy tworzeniu kolejnego przechodzi na nie i znika z poprzedniego.
+    /// </summary>
+    /// <remarks>
+    /// To nie jest kosmetyka, tylko jedyna rzecz, która czyni przetwarzanie dnia
+    /// powtarzalnym: zadanie bez reguły nie umie zrodzić następnika, więc przejście dnia
+    /// puszczone dwa razy nie zrobi dwóch kopii. Bez tego <see cref="OnMissed.Accumulate"/>
+    /// produkowałby po jednej pozycji na każde uruchomienie.
+    /// </remarks>
+    public RecurrenceRule? Recurrence
+    {
+        get
+        {
+            if (!_recurrenceParsed)
+            {
+                _recurrence = RecurrenceRule.FromJson(RecurrenceJson);
+                _recurrenceParsed = true;
+            }
+
+            return _recurrence;
+        }
+    }
+
+    /// <summary>
+    /// Od kiedy wystąpienie jest zaległe przy <see cref="OnMissed.Carry"/>. Ustawiane
+    /// raz, przy pierwszym przeniesieniu — na potrzeby oznaczenia „zaległe od X" i N12.
+    /// </summary>
+    public DateOnly? CarriedSince { get; private set; }
+
+    /// <summary>
+    /// Ile razy <see cref="DoDate"/> zostało przesunięte na dziś (spec 8.7, N15).
+    /// </summary>
+    /// <remarks>
+    /// Licznik, nie kara. Po czwartym razie przegląd zadaje pytanie, czy to jest
+    /// prawdziwe zadanie — zwykle odpowiedź brzmi „to nie jedno zadanie, tylko projekt".
+    /// </remarks>
+    public int RollCount { get; private set; }
+
+    private RecurrenceRule? _recurrence;
+
+    private bool _recurrenceParsed;
+
     public void Rename(string title, Hlc stamp)
     {
         Title = NormalizeTitle(title);
@@ -117,6 +173,77 @@ public sealed class TaskItem : Entity
     {
         Deadline = deadline;
         Touch(stamp);
+    }
+
+    public void SetRecurrence(RecurrenceRule? rule, Hlc stamp)
+    {
+        RecurrenceJson = rule?.ToJson();
+        _recurrence = rule;
+        _recurrenceParsed = true;
+        Touch(stamp);
+    }
+
+    /// <summary>
+    /// Przesunięcie zaplanowanego zadania na dziś przy przejściu dnia (spec 8.7).
+    /// </summary>
+    /// <remarks>
+    /// Zostawienie zaległego na zawsze buduje stertę. Ciche cofnięcie do
+    /// <see cref="TaskState.Next"/> gubi informację, że planowałaś i nie zrobiłaś.
+    /// Przesunięcie z licznikiem zachowuje jedno i drugie.
+    /// </remarks>
+    public void RollTo(DateOnly today, Hlc stamp)
+    {
+        DoDate = today;
+        RollCount++;
+        Touch(stamp);
+    }
+
+    /// <summary>
+    /// Przeniesienie niewykonanego wystąpienia na dziś przy <see cref="OnMissed.Carry"/>.
+    /// </summary>
+    public void CarryTo(DateOnly today, Hlc stamp)
+    {
+        // Ustawiane raz: „zaległe od 3 września" ma wskazywać pierwszy przegapiony dzień,
+        // a nie wczoraj. Bez tego N12 nigdy nie doliczyłby trzydziestu dni.
+        CarriedSince ??= DoDate ?? today;
+        DoDate = today;
+        Touch(stamp);
+    }
+
+    /// <summary>
+    /// Kolejne wystąpienie serii: kopia pól, nowy identyfikator, nowa data (spec 8.4).
+    /// </summary>
+    /// <remarks>
+    /// Kopia, a nie przestawienie daty w tym samym zadaniu. Odhaczone wystąpienie ma
+    /// zostać odhaczone: historia „robiłam to w każdy poniedziałek prócz jednego" jest
+    /// całą wartością powtarzalności, a zadanie wędrujące w przyszłość jej nie niesie.
+    /// </remarks>
+    internal TaskItem SpawnNextOccurrence(
+        DateOnly doDate, RecurrenceRule rule, DateTimeOffset now, Hlc stamp)
+    {
+        var nastepne = new TaskItem(Guid.CreateVersion7(), now, stamp, Title)
+        {
+            Note = Note,
+            State = TaskState.Scheduled,
+            AreaId = AreaId,
+            ProjectId = ProjectId,
+            ParentTaskId = ParentTaskId,
+            DoDate = doDate,
+            Priority = Priority,
+            Color = Color,
+            SortOrder = SortOrder,
+        };
+
+        // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"
+        // przy racie robionej 5-go to pięć dni zapasu, co miesiąc tyle samo. Skopiowany
+        // wprost byłby od razu przeterminowany (N5) i N5 zacząłby kłamać.
+        if (Deadline is { } termin && DoDate is { } planowana)
+        {
+            nastepne.Deadline = doDate.AddDays(termin.DayNumber - planowana.DayNumber);
+        }
+
+        nastepne.SetRecurrence(rule, stamp);
+        return nastepne;
     }
 
     public void MoveTo(Guid areaId, Guid? projectId, Hlc stamp)
@@ -230,6 +357,8 @@ public sealed class TaskItem : Entity
         CompletedAt = null;
         DoDate = null;
         DeferUntil = null;
+        CarriedSince = null;
+        RollCount = 0;
         ClearWaiting();
         Touch(stamp);
     }

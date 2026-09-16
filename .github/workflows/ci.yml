@@ -88,3 +88,28 @@ jobs:
           name: marshal-apk
           path: artefakty/apk
           if-no-files-found: error
+
+  migracja:
+    name: Migawka — wypis na wypadek rozjazdu (tymczasowe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Narzędzie dotnet-ef
+        run: dotnet tool install --global dotnet-ef
+      - name: Odtworzenie pakietów
+        run: dotnet restore src/Marshal.Infrastructure/Marshal.Infrastructure.csproj
+      - name: Wygenerowanie migracji
+        run: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef migrations add Kontrolna \
+            -p src/Marshal.Infrastructure \
+            -s src/Marshal.Infrastructure \
+            -o Data/Migrations
+      - name: Wypisanie migawki
+        run: |
+          echo "@@@@@ MIGAWKA"
+          cat src/Marshal.Infrastructure/Data/Migrations/MarshalDbContextModelSnapshot.cs
+          echo "@@@@@ KONIEC"
