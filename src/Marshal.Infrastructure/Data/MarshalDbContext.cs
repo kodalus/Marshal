@@ -1,5 +1,6 @@
 using System.Reflection;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Calendar;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
 using Marshal.Domain.Review;
@@ -45,6 +46,15 @@ public sealed class MarshalDbContext : DbContext
 
     /// <summary>Przeglądy tygodniowe — także te w trakcie. Synchronizowane.</summary>
     public DbSet<ReviewSession> ReviewSessions => Set<ReviewSession>();
+
+    /// <summary>Które kalendarze pokazywać i w jakim kolorze. Decyzja, więc synchronizowana.</summary>
+    public DbSet<CalendarSource> CalendarSources => Set<CalendarSource>();
+
+    /// <summary>Kopia wydarzeń z kalendarzy zewnętrznych. Lokalna — każde urządzenie pobiera sobie samo.</summary>
+    public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
+
+    /// <summary>Żetony odczytu przyrostowego. Lokalne — żeton należy do urządzenia, które go dostało.</summary>
+    public DbSet<CalendarCursor> CalendarCursors => Set<CalendarCursor>();
 
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy

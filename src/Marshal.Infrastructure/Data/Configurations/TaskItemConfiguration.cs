@@ -25,6 +25,7 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.RollCount).IsRequired();
         builder.Property(t => t.Energy).IsRequired().HasConversion<int>();
         builder.Property(t => t.FocusMissCount).IsRequired();
+        builder.Property(t => t.DoTime);
         builder.HasIndex(t => t.ReminderAt);
 
         // Wybór na dziś odpytywany jest przy każdym otwarciu „Dzisiaj" i przy każdym
