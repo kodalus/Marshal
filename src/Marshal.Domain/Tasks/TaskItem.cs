@@ -66,6 +66,16 @@ public sealed class TaskItem : Entity
     /// <summary>Decyzja własna, kiedy się tym zajmę. Wymagane w stanie <see cref="TaskState.Scheduled"/>.</summary>
     public DateOnly? DoDate { get; private set; }
 
+    /// <summary>
+    /// Godzina, o której zadanie ma się odbyć. **Tylko jeśli dzień ma sens godzinowy.**
+    /// </summary>
+    /// <remarks>
+    /// Puste jest normą, nie brakiem. Większość zadań nie ma godziny i wymuszanie jej
+    /// zamieniłoby listę w kalendarz, w którym wszystko jest umówione — a to jest
+    /// dokładnie ten rodzaj planowania, który się nie utrzymuje.
+    /// </remarks>
+    public TimeOnly? DoTime { get; private set; }
+
     /// <summary>Niewidoczne przed tą datą.</summary>
     public DateOnly? DeferUntil { get; private set; }
 
@@ -227,6 +237,13 @@ public sealed class TaskItem : Entity
         Touch(stamp);
     }
 
+    /// <summary>Godzina wykonania. Bez dnia nie znaczy nic, więc jest wtedy czyszczona.</summary>
+    public void SetDoTime(TimeOnly? time, Hlc stamp)
+    {
+        DoTime = DoDate is null ? null : time;
+        Touch(stamp);
+    }
+
     public void SetEstimate(int? minutes, Energy energy, Hlc stamp)
     {
         if (minutes is <= 0)
@@ -327,6 +344,10 @@ public sealed class TaskItem : Entity
             // pominięć nie: dotyczą konkretnego dnia i konkretnego wystąpienia.
             EstimatedMinutes = EstimatedMinutes,
             Energy = Energy,
+
+            // Godzina przechodzi: „śmieci w poniedziałek o 19" to ta sama pora
+            // w każdy poniedziałek.
+            DoTime = DoTime,
         };
 
         // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"
@@ -404,6 +425,10 @@ public sealed class TaskItem : Entity
         RequireArea(areaId);
         AreaId = areaId;
         State = TaskState.Next;
+
+        // Godzina bez dnia nie znaczy nic. Zostawiona wróciłaby przy następnym
+        // zaplanowaniu jako godzina, której nikt nie wybierał.
+        DoTime = null;
         ClearWaiting();
         Touch(stamp);
     }
@@ -485,6 +510,7 @@ public sealed class TaskItem : Entity
         State = TaskState.Inbox;
         CompletedAt = null;
         DoDate = null;
+        DoTime = null;
         DeferUntil = null;
         CarriedSince = null;
         RollCount = 0;
