@@ -90,6 +90,7 @@ public sealed class GoogleSyncService(
             settings.GoogleClientId!,
             settings.GoogleClientSecret!,
             TokenFolder,
+            settings.GoogleCalendarEnabled,
             ct);
 
         var silnik = new SyncEngine(db, polaczenie.Transport, hlc, device.Id);
