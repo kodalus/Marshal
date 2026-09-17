@@ -51,7 +51,7 @@ public sealed partial class ClarifyViewModel(
 
     /// <summary>Podpowiedź pod polami: czemu to w ogóle pytanie.</summary>
     public static string EstimateHint =>
-        "Bez tego zadanie nie trafi do „Teraz" — ten ekran dobiera pod dostępne minuty "
+        "Bez tego zadanie nie trafi do „Teraz” — ten ekran dobiera pod dostępne minuty "
         + "i poziom sił. Puste zostaje puste; zgadywanie jest gorsze od braku.";
 
     [ObservableProperty]

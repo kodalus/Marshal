@@ -317,7 +317,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
             .Single(f => f.Name == "Na dziś");
 
         zapisany.Query.Should().NotBeNull("definicja ma się dać odczytać z powrotem");
-        zapisany.Query!.Conditions.Should().NotBeEmpty("warunek „przelew\" miał przeżyć zapis");
+        zapisany.Query!.Conditions.Should().NotBeEmpty("warunek „przelew” miał przeżyć zapis");
     }
 
     public void Dispose()

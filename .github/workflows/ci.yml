@@ -26,6 +26,9 @@ jobs:
       - name: Wzorce .gitignore
         run: ./tools/check-gitignore.sh
 
+      - name: Cudzysłowy w napisach
+        run: ./tools/check-quotes.sh
+
       - name: Odtworzenie pakietów
         run: |
           dotnet restore src/Marshal.Desktop/Marshal.Desktop.csproj
