@@ -1031,9 +1031,9 @@
       </ScrollViewer>
     </DockPanel>
 
-    <!-- Kliknięte wydarzenie z cudzego kalendarza. Zmienić się go stąd nie da (spec 10.2),
-         ale „nie da się zmienić" to nie to samo co „kliknięcie nic nie robi" — drugie
-         wygląda jak zepsuty przycisk. -->
+    <!-- Kliknięte wydarzenie z podłączonego kalendarza. Własna karta, nie okno szczegółu
+         zadania: należy do czegoś innego i ma inne pola. Odhaczyć i przeciągnąć da się je
+         wprost na siatce. -->
     <Panel DataContext="{Binding Calendar}" IsVisible="{Binding HasOpened}"
            Background="#CC101010">
       <Border x:DataType="vm:CalendarViewModel" MaxWidth="480" Margin="12" Padding="20"

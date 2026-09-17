@@ -172,7 +172,6 @@ public sealed record CalendarColumn(
 {
     public bool HasAllDay => AllDay.Count > 0;
 
-    public string AllDayText => string.Join("  ·  ", AllDay.Select(w => w.Title));
 
     /// <summary>
     /// Tło nazwy dnia. Dzisiejszy dzień w barwie wyróżnienia.
@@ -837,13 +836,11 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
-    /// <summary>Otwarcie szczegółu zadania z siatki. Wydarzenia Google nie mają czego otwierać.</summary>
     /// <summary>Otwarty blok: zadanie idzie do nakładki szczegółu, wydarzenie na kartę obok.</summary>
     /// <remarks>
-    /// Wydarzenia Google nie da się tu zmienić — zapis do cudzego kalendarza jest
-    /// świadomie odłożony (spec 10.2). Ale „nie da się zmienić" to nie to samo co
-    /// „kliknięcie nic nie robi": drugie wygląda jak zepsuty przycisk. Karta mówi,
-    /// co to jest i skąd pochodzi.
+    /// Wydarzenie z podłączonego kalendarza ma własną kartę, nie okno szczegółu zadania:
+    /// należy do czegoś innego i ma inne pola. Odhaczyć i przeciągnąć da się je wprost
+    /// na siatce, a karta mówi, co to jest i z którego kalendarza pochodzi.
     /// </remarks>
     [RelayCommand]
     private void OpenTask(SlotBox? blok)

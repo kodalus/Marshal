@@ -983,7 +983,7 @@ public sealed partial class MainViewModel : ObservableObject
         await ReloadAsync();
     }
 
-    /// <summary>Nazwa zakładanego obszaru — pole na ekranie „Obszary".</summary>
+    /// <summary>Nazwa zakładanego obszaru — pole na ekranie „Obszary i projekty".</summary>
     [ObservableProperty]
     public partial string NewAreaName { get; set; } = string.Empty;
 

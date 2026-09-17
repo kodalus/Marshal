@@ -18,12 +18,11 @@ namespace Marshal.Infrastructure.Calendar;
 /// nietknięty przez tydzień prawie na pewno ten termin przekroczy.
 /// </para>
 /// <para>
-/// <b>Tylko odczyt.</b> Zapis jest świadomie odłożony (10.2): błąd w dwustronnej
-/// synchronizacji potrafi skasować wydarzenia w prawdziwym kalendarzu i jest to jedyne
-/// miejsce w całym projekcie, gdzie awaria niszczy dane poza aplikacją.
-/// </para>
-/// <para>
-/// <b>Nie sprawdzone na żywym koncie.</b>
+/// <b>Tylko odczyt — ta klasa.</b> Zapis idzie osobną drogą, przez pisarza kalendarza,
+/// i jest obudowany własnymi zasadami: łatamy zamiast nadpisywać, najpierw źródło,
+/// kasujemy tylko to, co wskazano wprost. Rozdzielone, bo to jedyne miejsce w całym
+/// projekcie, gdzie awaria niszczy dane poza aplikacją — i czytanie nie ma dzielić
+/// z pisaniem ani jednej linii, którą dałoby się pomylić.
 /// </para>
 /// </remarks>
 public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed

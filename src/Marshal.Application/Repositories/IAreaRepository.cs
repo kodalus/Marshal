@@ -8,7 +8,7 @@ public interface IAreaRepository
 
     Task<IReadOnlyList<Area>> ActiveAsync(CancellationToken ct = default);
 
-    /// <summary>Wszystkie, także nieaktywne — ekran „Obszary" musi je pokazać, żeby dało się je włączyć.</summary>
+    /// <summary>Wszystkie, także nieaktywne — ekran struktury musi je pokazać, żeby dało się je włączyć.</summary>
     Task<IReadOnlyList<Area>> AllAsync(CancellationToken ct = default);
 
     void Add(Area area);
