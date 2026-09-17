@@ -200,6 +200,12 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public event Action<double>? ScrollRequested;
 
+    /// <summary>
+    /// Kliknięty blok zadania. Szczegół należy do okna głównego, nie do kalendarza —
+    /// to ta sama nakładka, która otwiera się z list, i ma zostać jedna.
+    /// </summary>
+    public event Action<Guid>? TaskRequested;
+
     public async Task LoadAsync()
     {
         if (Anchor == default)
@@ -411,6 +417,32 @@ public sealed partial class CalendarViewModel(
 
         await edit.CompleteAsync(identyfikator);
         await RefreshAsync();
+    }
+
+    /// <summary>Otwarcie szczegółu zadania z siatki. Wydarzenia Google nie mają czego otwierać.</summary>
+    [RelayCommand]
+    private void OpenTask(Guid? id)
+    {
+        if (id is { } identyfikator)
+        {
+            TaskRequested?.Invoke(identyfikator);
+        }
+    }
+
+    /// <summary>
+    /// Przesunięcie kreski bieżącej godziny. Woła je okno co minutę.
+    /// </summary>
+    /// <remarks>
+    /// Kreska liczona była wyłącznie przy składaniu siatki, więc stała tam, gdzie
+    /// wypadła przy otwarciu ekranu — po pięciu godzinach z otwartą aplikacją
+    /// pokazywała godzinę sprzed pięciu godzin i wyglądała jak błąd w strefie czasowej.
+    /// </remarks>
+    public void Tick()
+    {
+        if (Columns.Any(k => k.IsToday))
+        {
+            Przelicz();
+        }
     }
 
     private SlotBox Box(AgendaSlot slot)

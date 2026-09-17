@@ -38,7 +38,22 @@
       <Setter Property="Padding" Value="0" />
       <Setter Property="MinWidth" Value="0" />
     </Style>
-    <Style Selector="Border.slot:pointerover CheckBox.odhacz">
+    <!-- Blok jest przyciskiem, żeby kliknięcie otwierało szczegół. Własna oprawa
+         przycisku wyłączona: barwę bloku niesie ramka w środku, a domyślne tło
+         motywu zamalowałoby kolor kalendarza przy najechaniu. -->
+    <Style Selector="Button.slot">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.slot /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Button.slot:pointerover CheckBox.odhacz">
       <Setter Property="Opacity" Value="1" />
       <Setter Property="IsHitTestVisible" Value="True" />
     </Style>
@@ -632,9 +647,12 @@
                       </ItemsControl.ItemContainerTheme>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SlotBox">
-                          <Border Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
-                                  Opacity="{Binding Opacity}"
-                                  Background="{Binding Background}" CornerRadius="4" Padding="4,2">
+                          <Button Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
+                                  Command="{Binding $parent[DockPanel].((vm:CalendarViewModel)DataContext).OpenTaskCommand}"
+                                  CommandParameter="{Binding TaskId}">
+                          <Border Opacity="{Binding Opacity}"
+                                  Background="{Binding Background}" CornerRadius="4" Padding="4,2"
+                                  HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                             <Grid ColumnDefinitions="Auto,*,Auto">
 
                               <!-- Miejsce na odhaczenie zajęte na stałe, a nie odsłaniane:
@@ -661,6 +679,7 @@
 
                             </Grid>
                           </Border>
+                          </Button>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -737,6 +756,10 @@
 
           <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
             <TextBox Text="{Binding Title}" FontSize="18" />
+
+          <!-- Nieudany zapis zamykał okno tak samo jak udany. -->
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Foreground="#D0553C"
+                     Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
             <WrapPanel Margin="0,8,0,0">
               <CheckBox IsChecked="{Binding IsPinned}" Content="Przypięta" Margin="0,0,14,0" />
               <Button Classes="nav" Command="{Binding SaveCommand}" Content="Zapisz" />
@@ -1419,8 +1442,29 @@
           <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="60"
                    TextWrapping="Wrap" Watermark="Cokolwiek, co pomoże zacząć" />
 
+          <TextBlock Classes="label" Text="Obszar — do czego to należy" />
+          <ComboBox ItemsSource="{Binding Areas}" SelectedItem="{Binding SelectedArea}"
+                    HorizontalAlignment="Stretch" PlaceholderText="jeszcze nierozstrzygnięty">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="areas:Area">
+                <TextBlock Text="{Binding Name}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+
           <TextBlock Classes="label" Text="Dzień wykonania — obietnica dana sobie" />
           <DatePicker SelectedDate="{Binding DoDate}" HorizontalAlignment="Stretch" />
+
+          <TextBlock Classes="label" Text="Od której do której" />
+          <Grid ColumnDefinitions="*,Auto,*">
+            <TimePicker Grid.Column="0" SelectedTime="{Binding DoTime}"
+                        ClockIdentifier="24HourClock" HorizontalAlignment="Stretch" />
+            <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
+            <TimePicker Grid.Column="2" SelectedTime="{Binding EndTime}"
+                        ClockIdentifier="24HourClock" HorizontalAlignment="Stretch" />
+          </Grid>
+          <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                     Text="Bez godziny zadanie idzie na pasek całodniowy. Bez godziny końca trwa pół godziny." />
 
           <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
           <DatePicker SelectedDate="{Binding Deadline}" HorizontalAlignment="Stretch" />

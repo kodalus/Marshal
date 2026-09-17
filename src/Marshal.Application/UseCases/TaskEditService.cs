@@ -15,7 +15,13 @@ public sealed record TaskEdit(
     RecurrenceRule? Recurrence,
     Priority Priority,
     int? EstimatedMinutes = null,
-    Energy Energy = Energy.Unknown);
+    Energy Energy = Energy.Unknown,
+
+    /// <summary>Obszar. Puste znaczy „zostaw ten, który jest".</summary>
+    Guid? AreaId = null,
+
+    /// <summary>Godzina rozpoczęcia. Bez niej zadanie idzie na pasek całodniowy.</summary>
+    TimeOnly? DoTime = null);
 
 /// <summary>
 /// Zmiana pól zadania z jednego miejsca (spec 11, ekran szczegółu).
@@ -29,7 +35,8 @@ public sealed class TaskEditService(
     ITaskRepository tasks,
     IUnitOfWork unitOfWork,
     IHlcSource hlc,
-    IClock clock)
+    IClock clock,
+    IAreaRepository areas)
 {
     public async Task<TaskItem?> ApplyAsync(Guid id, TaskEdit edit, CancellationToken ct = default)
     {
@@ -78,9 +85,22 @@ public sealed class TaskEditService(
             zadanie.SetRecurrence(edit.Recurrence, hlc.Next());
         }
 
-        if (edit.DoDate != zadanie.DoDate)
+        // Zmiana obszaru rusza stan tylko wtedy, gdy zadanie już wyszło ze skrzynki:
+        // przetwarzanie jest osobnym krokiem i zapisanie szczegółu nie ma go zastępować.
+        var obszarSieZmienil = edit.AreaId is { } nowy
+            && nowy != zadanie.AreaId
+            && zadanie.State != TaskState.Inbox;
+
+        if (edit.DoDate != zadanie.DoDate || obszarSieZmienil)
         {
-            ApplyDoDate(zadanie, edit.DoDate);
+            await ApplyDoDateAsync(zadanie, edit.DoDate, edit.AreaId, ct);
+        }
+
+        // Godzina po dniu, bo bez dnia nie ma czego trzymać — i po przejściu stanu,
+        // bo MakeNext ją czyści.
+        if (edit.DoTime != zadanie.DoTime)
+        {
+            zadanie.SetDoTime(edit.DoTime, hlc.Next());
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -113,15 +133,42 @@ public sealed class TaskEditService(
     /// samo pole: N8 wymaga, żeby zadanie <c>Scheduled</c> miało datę, a zadanie bez
     /// daty nie było <c>Scheduled</c>.
     /// </summary>
-    private void ApplyDoDate(TaskItem zadanie, DateOnly? doDate)
+    /// <summary>
+    /// Nadanie i zdjęcie dnia wykonania.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przechodzi przez przejścia stanu, nie przez samo pole: N8 wymaga, żeby zadanie
+    /// <c>Scheduled</c> miało datę, a zadanie bez daty nie było <c>Scheduled</c>.
+    /// </para>
+    /// <para>
+    /// <b>Zadanie bez obszaru dostaje obszar.</b> Do dziś oba przejścia wymagały, żeby
+    /// obszar już był — a zadanie z wrzutu go nie ma. Data ustawiona na ekranie
+    /// szczegółu **znikała bez słowa**: zapis się udawał, okno się zamykało, a zadanie
+    /// nie pojawiało się ani w „Dzisiaj", ani w „Planach", ani na siatce kalendarza.
+    /// Wybór obszaru jest decyzją użytkownika (i jest w szczegółach), ale gdy go nie
+    /// podano, pierwszy czynny obszar jest odpowiedzią lepszą niż cisza.
+    /// </para>
+    /// </remarks>
+    private async Task ApplyDoDateAsync(
+        TaskItem zadanie, DateOnly? doDate, Guid? wybrany, CancellationToken ct)
     {
-        if (doDate is { } dzien && zadanie.AreaId is { } obszar)
+        var obszar = wybrany ?? zadanie.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
+
+        if (obszar is not { } id)
         {
-            zadanie.Schedule(obszar, dzien, hlc.Next());
+            throw new InvalidOperationException(
+                "Nie ma żadnego czynnego obszaru, a zadanie z dniem wykonania musi do "
+                + "któregoś należeć. Włącz obszar na ekranie „Obszary".");
         }
-        else if (doDate is null && zadanie.AreaId is { } obszarBezDaty)
+
+        if (doDate is { } dzien)
         {
-            zadanie.MakeNext(obszarBezDaty, hlc.Next());
+            zadanie.Schedule(id, dzien, hlc.Next());
+        }
+        else
+        {
+            zadanie.MakeNext(id, hlc.Next());
         }
     }
 }

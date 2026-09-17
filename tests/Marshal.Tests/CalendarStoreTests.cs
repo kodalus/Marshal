@@ -124,7 +124,7 @@ public sealed class CalendarStoreTests : IDisposable
             _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia());
 
         _edycja = new TaskEditService(
-            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar);
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar, new AreaRepository(_db));
 
         _zrodlo = new CalendarSource(
             Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),

@@ -103,6 +103,15 @@ public sealed partial class MainViewModel : ObservableObject
         // przeliczyć — inaczej lista pokazuje stan sprzed wczytania, wyglądając
         // na aktualną.
         Settings.Imported += async (_, _) => await ReloadAsync();
+
+        // Kliknięcie w blok na siatce otwiera tę samą nakładkę, co kliknięcie na liście.
+        Calendar.TaskRequested += async id =>
+        {
+            if (await _tasks.FindAsync(id) is { } zadanie)
+            {
+                await Detail.LoadAsync(zadanie);
+            }
+        };
     }
 
     public ClarifyViewModel Clarify { get; }
@@ -448,11 +457,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Otwarcie szczegółu — jedyne wejście do terminu, przypomnienia i rytmu.</summary>
     [RelayCommand]
-    private void Open(TaskRow? row)
+    private async Task OpenAsync(TaskRow? row)
     {
         if (row is not null)
         {
-            Detail.Load(row.Task);
+            await Detail.LoadAsync(row.Task);
         }
     }
 

@@ -1,8 +1,11 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
+using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
+using Marshal.Domain.Areas;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.UI.ViewModels;
@@ -15,10 +18,14 @@ namespace Marshal.UI.ViewModels;
 /// z tych rzeczy oznaczałby cztery miejsca do znalezienia zamiast jednego, a wszystkie
 /// cztery dotyczą tej samej decyzji: kiedy to ma się zdarzyć.
 /// </remarks>
-public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clock) : ObservableObject
+public sealed partial class TaskDetailViewModel(
+    TaskEditService edit, IClock clock, IAreaRepository areas) : ObservableObject
 {
     private Guid _id;
     private bool _loading;
+
+    /// <summary>Ile trwa zadanie z godziną, ale bez podanego końca (spec 11).</summary>
+    private const int DomyslneMinuty = 30;
 
     [ObservableProperty]
     public partial bool IsOpen { get; set; }
@@ -31,6 +38,33 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
 
     [ObservableProperty]
     public partial DateTimeOffset? DoDate { get; set; }
+
+    /// <summary>
+    /// Godzina rozpoczęcia i zakończenia.
+    /// </summary>
+    /// <remarks>
+    /// Koniec nie jest osobnym polem w modelu: zadanie ma oszacowanie długości i to
+    /// ono rysuje blok na siatce. Koniec jest więc innym sposobem powiedzenia tego
+    /// samego — wpisanie go przelicza się na minuty, a brak zostawia trzydzieści.
+    /// Dwie prawdy o jednej rzeczy rozjechałyby się przy pierwszej zmianie jednej z nich.
+    /// </remarks>
+    [ObservableProperty]
+    public partial TimeSpan? DoTime { get; set; }
+
+    [ObservableProperty]
+    public partial TimeSpan? EndTime { get; set; }
+
+    /// <summary>Obszar. Pusty znaczy „jeszcze nierozstrzygnięty" — tak wygląda wrzut.</summary>
+    [ObservableProperty]
+    public partial Area? SelectedArea { get; set; }
+
+    public ObservableCollection<Area> Areas { get; } = [];
+
+    /// <summary>Co poszło nie tak przy zapisie. Puste, gdy poszło.</summary>
+    [ObservableProperty]
+    public partial string? Problem { get; set; }
+
+    public bool HasProblem => !string.IsNullOrEmpty(Problem);
 
     [ObservableProperty]
     public partial DateTimeOffset? Deadline { get; set; }
@@ -137,11 +171,32 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
 
     public event EventHandler? Saved;
 
+    /// <summary>
+    /// Otwarcie szczegółu. Obszary dociągane przy każdym otwarciu, bo lista bywa
+    /// zmieniana na osobnym ekranie i zapamiętana zrobiłaby się nieprawdziwa.
+    /// </summary>
+    public async Task LoadAsync(TaskItem task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        var czynne = await areas.ActiveAsync();
+
+        Areas.Clear();
+        foreach (var obszar in czynne)
+        {
+            Areas.Add(obszar);
+        }
+
+        Load(task);
+    }
+
     public void Load(TaskItem task)
     {
         ArgumentNullException.ThrowIfNull(task);
 
         _loading = true;
+        Problem = null;
+        OnPropertyChanged(nameof(HasProblem));
         _id = task.Id;
         Title = task.Title;
         Note = task.Note ?? string.Empty;
@@ -151,6 +206,14 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
         ReminderTime = task.ReminderAt?.TimeOfDay;
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
         EstimatedMinutes = task.EstimatedMinutes;
+        DoTime = task.DoTime?.ToTimeSpan();
+        SelectedArea = Areas.FirstOrDefault(o => o.Id == task.AreaId);
+
+        // Koniec z początku i długości — nie ma go w modelu, bo byłby drugą prawdą
+        // o tej samej rzeczy.
+        EndTime = task.DoTime is { } poczatek
+            ? poczatek.ToTimeSpan() + TimeSpan.FromMinutes(task.EstimatedMinutes ?? DomyslneMinuty)
+            : null;
         SelectedEnergyLevel = Energies.First(e => e.Value == task.Energy);
         LoadRule(task.Recurrence);
 
@@ -197,19 +260,55 @@ public sealed partial class TaskDetailViewModel(TaskEditService edit, IClock clo
             return;
         }
 
-        await edit.ApplyAsync(_id, new TaskEdit(
-            Title,
-            string.IsNullOrWhiteSpace(Note) ? null : Note,
-            ToDate(DoDate),
-            ToDate(Deadline),
-            ReminderAt(),
-            regula,
-            SelectedPriority.Value,
-            EstimatedMinutes is { } minuty ? (int)minuty : null,
-            SelectedEnergyLevel.Value));
+        try
+        {
+            await edit.ApplyAsync(_id, new TaskEdit(
+                Title,
+                string.IsNullOrWhiteSpace(Note) ? null : Note,
+                ToDate(DoDate),
+                ToDate(Deadline),
+                ReminderAt(),
+                regula,
+                SelectedPriority.Value,
+                Minuty(),
+                SelectedEnergyLevel.Value,
+                SelectedArea?.Id,
+                DoTime is { } pora ? TimeOnly.FromTimeSpan(pora) : null));
+        }
+        catch (Exception e) when (e is InvalidOperationException or ArgumentException)
+        {
+            // Zapis, który się nie udał, zamykał okno tak samo jak udany. Pole z datą
+            // wracało puste dopiero przy następnym otwarciu — czyli dużo później
+            // i bez związku z przyczyną.
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+            return;
+        }
 
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Długość zadania w minutach.
+    /// </summary>
+    /// <remarks>
+    /// Godzina zakończenia jest ważniejsza od ręcznego oszacowania, bo została wpisana
+    /// przy tym samym dniu i tej samej godzinie — a oszacowanie mogło zostać z innego
+    /// planu. Koniec przed początkiem znaczy przejście przez północ.
+    /// </remarks>
+    private int? Minuty()
+    {
+        if (DoTime is { } poczatek && EndTime is { } koniec)
+        {
+            var dlugosc = koniec > poczatek
+                ? koniec - poczatek
+                : koniec + TimeSpan.FromDays(1) - poczatek;
+
+            return Math.Max(1, (int)dlugosc.TotalMinutes);
+        }
+
+        return EstimatedMinutes is { } minuty ? (int)minuty : null;
     }
 
     [RelayCommand]

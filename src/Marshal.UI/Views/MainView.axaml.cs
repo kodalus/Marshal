@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Marshal.UI.ViewModels;
 
 namespace Marshal.UI.Views;
@@ -81,6 +82,25 @@ public partial class MainView : UserControl
     private void NaZmianieSzerokosci(object? nadawca, SizeChangedEventArgs e) =>
         Szerokosc(e.NewSize.Width);
 
+    /// <summary>
+    /// Przesuwanie kreski bieżącej godziny.
+    /// </summary>
+    /// <remarks>
+    /// Kreska liczy się przy składaniu siatki, więc przy otwartej aplikacji stała
+    /// tam, gdzie wypadła przy wejściu na ekran — po kilku godzinach pokazywała
+    /// godzinę sprzed kilku godzin i wyglądała jak błąd w strefie czasowej.
+    /// Co minutę, bo częściej nie ma czego pokazywać: minuta to jeden punkt siatki.
+    /// </remarks>
+    private DispatcherTimer? _minutnik;
+
+    private void WireClock(MainViewModel model)
+    {
+        _minutnik ??= new DispatcherTimer(
+            TimeSpan.FromMinutes(1), DispatcherPriority.Background, (_, _) => model.Calendar.Tick());
+
+        _minutnik.Start();
+    }
+
     private void Szerokosc(double calosc)
     {
         if (calosc > 0)
@@ -141,6 +161,7 @@ public partial class MainView : UserControl
         model.IsNarrow = Bounds.Width > 0 && Bounds.Width < WidokWaski;
 
         WireCalendar(model);
+        WireClock(model);
 
         model.Settings.SaveRequested = async nazwa =>
         {

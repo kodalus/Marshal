@@ -47,7 +47,9 @@ public sealed class PrzezCalaTraseTests : IDisposable
             .AddMarshalViewModels()
             .BuildServiceProvider();
 
-        _uslugi.GetRequiredService<MarshalDbContext>().Database.Migrate();
+        // Pełne przygotowanie, nie sama migracja: obszary zasiewane są właśnie tutaj,
+        // a bez nich zadanie nie ma gdzie wylądować przy nadaniu dnia wykonania.
+        DependencyInjection.PrepareAsync(_uslugi).GetAwaiter().GetResult();
     }
 
     private T Usluga<T>() where T : notnull => _uslugi.GetRequiredService<T>();
@@ -66,6 +68,76 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await Usluga<IUnitOfWork>().SaveChangesAsync();
 
         return zadanie;
+    }
+
+    [Fact]
+    public async Task Data_nadana_wrzutowi_nie_ginie_po_drodze()
+    {
+        // Usterka, przez którą „Dzisiaj" i „Plany" były puste, a zadanie nie pojawiało
+        // się na siatce. Oba przejścia stanu wymagały, żeby zadanie miało już obszar —
+        // a zadanie z wrzutu go nie ma. Data **znikała bez słowa**: zapis się udawał,
+        // okno zamykało, i tyle.
+        var main = Usluga<MainViewModel>();
+        main.CaptureText = "Zadzwonić do przedszkola";
+        await main.CaptureCommand.ExecuteAsync(null);
+
+        var wrzut = main.InboxItems.Single();
+        wrzut.AreaId.Should().BeNull("wrzut nie ma obszaru i to jest cała trudność");
+
+        var szczegol = Usluga<TaskDetailViewModel>();
+        await szczegol.LoadAsync(wrzut);
+
+        var dzis = Usluga<IClock>().Today;
+        szczegol.DoDate = new DateTimeOffset(dzis.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        szczegol.DoTime = new TimeSpan(16, 0, 0);
+        szczegol.EndTime = new TimeSpan(17, 30, 0);
+
+        await szczegol.SaveCommand.ExecuteAsync(null);
+
+        szczegol.Problem.Should().BeNull("zapis miał się udać");
+
+        var zapisane = await Usluga<ITaskRepository>().FindAsync(wrzut.Id);
+
+        zapisane!.DoDate.Should().Be(dzis);
+        zapisane.DoTime.Should().Be(new TimeOnly(16, 0));
+        zapisane.AreaId.Should().NotBeNull("zadanie z dniem wykonania musi gdzieś należeć");
+
+        // Koniec nie jest osobnym polem: jest długością, i to ona rysuje blok.
+        zapisane.EstimatedMinutes.Should().Be(90);
+
+        // I dopiero to jest odpowiedź na „dlaczego Dzisiaj jest puste".
+        await main.ShowTodayCommand.ExecuteAsync(null);
+        main.TodayItems.Should().ContainSingle(w => w.Task.Id == wrzut.Id);
+
+        // Na siatce też, o właściwej godzinie.
+        var kalendarz = Usluga<CalendarViewModel>();
+        await kalendarz.LoadAsync();
+
+        kalendarz.Columns.SelectMany(k => k.Slots)
+            .Should().ContainSingle(b => b.Title == "Zadzwonić do przedszkola")
+            .Which.StartText.Should().Be("16:00");
+    }
+
+    [Fact]
+    public async Task Zadanie_z_godzina_bez_konca_trwa_pol_godziny()
+    {
+        var zadanie = await ZaplanowaneAsync("Przerwa");
+
+        var szczegol = Usluga<TaskDetailViewModel>();
+        await szczegol.LoadAsync(zadanie);
+        szczegol.DoTime = new TimeSpan(9, 0, 0);
+        szczegol.EndTime = null;
+        szczegol.EstimatedMinutes = null;
+
+        await szczegol.SaveCommand.ExecuteAsync(null);
+
+        var kalendarz = Usluga<CalendarViewModel>();
+        await kalendarz.LoadAsync();
+
+        var blok = kalendarz.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Przerwa");
+
+        blok.StartText.Should().Be("09:00");
+        blok.EndText.Should().Be("09:30");
     }
 
     [Fact]
