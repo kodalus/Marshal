@@ -41,6 +41,14 @@
          chodzi na Windowsie i Androidzie. -->
     <PackageReference Include="DesktopNotifications.Windows" Version="1.3.1"
                       Condition="'$(OS)' == 'Windows_NT'" />
+
+    <!-- Podniesione wprost, choć sami tego nie wołamy.
+         Biblioteka powiadomień ciągnie System.Drawing.Common 4.7.0 z luką o wadze
+         krytycznej, a zależności przechodniej nie da się poprawić inaczej niż
+         wskazaniem wersji u siebie: wpis bezpośredni wygrywa z tym, co przyszło
+         po drodze. Wyciszenie ostrzeżenia byłoby udawaniem, że luki nie ma. -->
+    <PackageReference Include="System.Drawing.Common" Version="10.0.12"
+                      Condition="'$(OS)' == 'Windows_NT'" />
     <PackageReference Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
   <ItemGroup>
