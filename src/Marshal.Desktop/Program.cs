@@ -1,8 +1,11 @@
 using Avalonia;
-using DesktopNotifications;
-using DesktopNotifications.Windows;
 using Marshal.Infrastructure.Notifications;
 using Marshal.UI;
+
+#if DYMKI
+using DesktopNotifications;
+using DesktopNotifications.Windows;
+#endif
 
 namespace Marshal.Desktop;
 
@@ -27,13 +30,15 @@ internal static class Program
     /// Podpięcie powiadomień systemowych. Tylko na Windowsie i tylko gdy się uda.
     /// </summary>
     /// <remarks>
-    /// Sprawdzenie systemu w czasie działania, a nie warunek przy budowaniu: projekt
-    /// buduje się na Linuksie (tam chodzi CI), więc warunek budowania znaczyłby, że ten
-    /// kod nie jest kompilowany w ogóle i pierwsze sprawdzenie odbywałoby się na żywym
-    /// Windowsie. Tak przynajmniej kompilator go widzi.
+    /// Warunek przy budowaniu, choć wolałabym inaczej. Typy od dymków istnieją tylko
+    /// w windowsowej odmianie biblioteki, a ta wchodzi tylko pod windowsowym celem
+    /// kompilacji — poza Windowsem nie ma czego wołać. Kosztem jest to, że CI, które
+    /// chodzi na Linuksie, tych kilkunastu linii nie kompiluje; sprawdzenie systemu
+    /// w środku zostaje, bo ten sam plik buduje się też pod zwykłym celem.
     /// </remarks>
     private static void PodepnijPowiadomienia()
     {
+#if DYMKI
         if (!OperatingSystem.IsWindows())
         {
             InAppNotifier.StanSystemowych = "ten system nie ma dymków Windowsa";
@@ -63,11 +68,11 @@ internal static class Program
         catch (Exception e)
         {
             // Bez powiadomień systemowych. Pasek w oknie zostaje i działa jak dotąd.
-            // Windows odmawia dymków aplikacjom bez skrótu w menu Start — to jest
-            // najczęstszy powód i nie jest usterką aplikacji, ale trzeba to napisać,
-            // bo z samego braku dymka nie da się tego poznać.
             InAppNotifier.StanSystemowych = $"{e.GetType().Name}: {e.Message}";
         }
+#else
+        InAppNotifier.StanSystemowych = "zbudowane bez obsługi dymków Windowsa";
+#endif
     }
 
     /// <summary>Używane także przez podgląd projektanta Avalonii.</summary>

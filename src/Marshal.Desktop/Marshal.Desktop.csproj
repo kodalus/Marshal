@@ -1,7 +1,23 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+
+    <!--
+      Na Windowsie budujemy pod wersjonowany cel windowsowy, gdzie indziej pod zwykły.
+
+      Dymki potrzebują typu ToastNotificationManagerCompat, a ten istnieje **tylko**
+      w windowsowej odmianie biblioteki powiadomień. Przy celu net10.0 NuGet podstawia
+      odmianę netstandard, w której tego typu nie ma — i wychodzi to dopiero przy
+      próbie pokazania powiadomienia, jako TypeLoadException. Kompilacja przechodzi,
+      bo brakujący typ jest po drugiej stronie cudzej biblioteki.
+
+      Koszt: na Linuksie (tam chodzi CI) kod od dymków nie jest kompilowany. Świadomy,
+      bo wybór jest między „CI nie sprawdza dziesięciu linii" a „dymki nie działają
+      w ogóle".
+    -->
+    <TargetFramework Condition="'$(OS)' == 'Windows_NT'">net10.0-windows10.0.17763.0</TargetFramework>
+    <TargetFramework Condition="'$(OS)' != 'Windows_NT'">net10.0</TargetFramework>
+    <DefineConstants Condition="'$(OS)' == 'Windows_NT'">$(DefineConstants);DYMKI</DefineConstants>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Marshal</AssemblyName>
@@ -23,7 +39,8 @@
          jak błędy — i słusznie. Podniesienie tej zależności na siłę uciszyłoby
          ostrzeżenie kosztem ścieżki, której i tak nikt tu nie uruchamia: Marshal
          chodzi na Windowsie i Androidzie. -->
-    <PackageReference Include="DesktopNotifications.Windows" Version="1.3.1" />
+    <PackageReference Include="DesktopNotifications.Windows" Version="1.3.1"
+                      Condition="'$(OS)' == 'Windows_NT'" />
     <PackageReference Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
   <ItemGroup>
