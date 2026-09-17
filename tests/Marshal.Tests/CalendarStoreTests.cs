@@ -69,7 +69,8 @@ public sealed class CalendarStoreTests : IDisposable
         _hlc = new HlcSource(_zegar, "biurko");
         _sklad = new CalendarStore(_db);
 
-        _usluga = new CalendarSyncService(_sklad, new TaskRepository(_db), [_kanal], _zegar);
+        _usluga = new CalendarSyncService(
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc);
 
         _zrodlo = new CalendarSource(
             Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
@@ -264,6 +265,24 @@ public sealed class CalendarStoreTests : IDisposable
         await _usluga.RefreshAsync();
 
         (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Kalendarz_da_sie_podlaczyc_i_odlaczyc()
+    {
+        // Do dziś nie było **żadnej** drogi, żeby dodać źródło: odświeżanie przechodziło
+        // po kalendarzach, których nic nie umiało utworzyć, i kończyło się po cichu.
+        var dodany = await _usluga.AddAsync(
+            CalendarKind.Ical, "https://example.test/drugi.ics", "Zajęcia");
+
+        (await _usluga.SourcesAsync()).Should().Contain(z => z.Id == dodany.Id);
+
+        await _usluga.RemoveAsync(dodany.Id);
+
+        (await _usluga.SourcesAsync()).Should().NotContain(z => z.Id == dodany.Id);
+
+        // Nagrobek, nie usunięcie — wybór kalendarzy się synchronizuje (spec 5.1).
+        _db.CalendarSources.Count(z => z.Id == dodany.Id).Should().Be(1);
     }
 
     public void Dispose()

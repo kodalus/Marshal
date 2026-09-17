@@ -102,6 +102,10 @@ public sealed class SettingsTests : IDisposable
 
         public string? GoogleClientSecret => null;
 
+        public bool GoogleCalendarEnabled => false;
+
+        public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
+
         public void SetZone(string id) => throw new NotSupportedException();
 
         public void SetTheme(ThemeChoice theme) => throw new NotSupportedException();
