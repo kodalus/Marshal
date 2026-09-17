@@ -255,7 +255,8 @@ public sealed partial class FiltersViewModel : ObservableObject
             // Widok zapisany w wersji, której ta nie rozumie. Zostaje w Ulubionych
             // z nazwą — ale kliknięcie musi powiedzieć, dlaczego nic się nie stało,
             // inaczej ekran wygląda na zepsuty.
-            Status = $"„{filter.Name}" zapisano w postaci, której ta wersja nie czyta. Ułóż go na nowo.";
+            Status = $"Widok „{filter.Name}” zapisano w postaci, "
+                + "której ta wersja nie czyta. Ułóż go na nowo.";
             OnPropertyChanged(nameof(HasStatus));
             return;
         }
