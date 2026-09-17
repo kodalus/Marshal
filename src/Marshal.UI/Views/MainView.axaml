@@ -247,29 +247,45 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel>
-            <Button Classes="boczny" Command="{Binding ShowTodayCommand}" Classes.wybrany="{Binding IsToday}" Content="Dzisiaj" />
-          <Button Classes="boczny" Command="{Binding ShowNowCommand}" Classes.wybrany="{Binding IsNow}" Content="Teraz" />
-          <Button Classes="boczny" Classes.wybrany="{Binding IsInbox}"
-                  Command="{Binding ShowInboxCommand}">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Text="Skrzynka" />
-              <Border Background="{DynamicResource Odznaka}" CornerRadius="9" Padding="7,1"
-                      IsVisible="{Binding HasInbox}">
-                <TextBlock Text="{Binding InboxCount}" FontSize="12" />
-              </Border>
-            </StackPanel>
-          </Button>
-          <Button Classes="boczny" Command="{Binding ShowNextCommand}" Classes.wybrany="{Binding IsNext}" Content="Następne" />
-          <Button Classes="boczny" Command="{Binding ShowProjectsCommand}" Classes.wybrany="{Binding IsProjects}" Content="Obszary i projekty" />
-          <Button Classes="boczny" Command="{Binding ShowSomedayCommand}" Classes.wybrany="{Binding IsSomeday}" Content="Kiedyś" />
-          <Button Classes="boczny" Command="{Binding ShowWaitingCommand}" Classes.wybrany="{Binding IsWaiting}" Content="Oczekiwane" />
-          <Button Classes="boczny" Command="{Binding ShowReviewCommand}" Classes.wybrany="{Binding IsReview}" Content="Przegląd" />
-          <Button Classes="boczny" Command="{Binding ShowCalendarCommand}" Classes.wybrany="{Binding IsCalendar}" Content="Kalendarz" />
-          <Button Classes="boczny" Command="{Binding ShowNotesCommand}" Classes.wybrany="{Binding IsNotes}" Content="Notatki" />
-          <Button Classes="boczny" Command="{Binding ShowFiltersCommand}" Classes.wybrany="{Binding IsFilters}" Content="Filtry" />
-          <Button Classes="boczny" Command="{Binding ShowArchiveCommand}" Classes.wybrany="{Binding IsArchive}" Content="Archiwum" />
-          <Button Classes="boczny" Command="{Binding ShowSettingsCommand}" Classes.wybrany="{Binding IsSettings}" Content="Ustawienia" />
-          <Button Classes="boczny" Command="{Binding ShowJournalCommand}" Classes.wybrany="{Binding IsJournal}" Content="Co się działo" />
+            <!-- Kalendarz pierwszy. Jest ekranem, na którym schodzi najwięcej czasu,
+                 a stał ósmy — czyli pod czterema listami, do których zagląda się
+                 raz dziennie, i pod przeglądem, do którego raz w tygodniu. -->
+            <Button Classes="boczny" Classes.wybrany="{Binding IsCalendar}"
+                    Command="{Binding ShowCalendarCommand}" Content="Kalendarz" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsToday}"
+                    Command="{Binding ShowTodayCommand}" Content="Dzisiaj" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsNow}"
+                    Command="{Binding ShowNowCommand}" Content="Teraz" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsInbox}"
+                    Command="{Binding ShowInboxCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="Skrzynka" />
+                <Border Background="{DynamicResource Odznaka}" CornerRadius="9" Padding="7,1"
+                        IsVisible="{Binding HasInbox}">
+                  <TextBlock Text="{Binding InboxCount}" FontSize="12" />
+                </Border>
+              </StackPanel>
+            </Button>
+            <Button Classes="boczny" Classes.wybrany="{Binding IsNext}"
+                    Command="{Binding ShowNextCommand}" Content="Następne" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsProjects}"
+                    Command="{Binding ShowProjectsCommand}" Content="Obszary i projekty" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsSomeday}"
+                    Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsWaiting}"
+                    Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsReview}"
+                    Command="{Binding ShowReviewCommand}" Content="Przegląd" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsNotes}"
+                    Command="{Binding ShowNotesCommand}" Content="Notatki" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsFilters}"
+                    Command="{Binding ShowFiltersCommand}" Content="Filtry" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsArchive}"
+                    Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsSettings}"
+                    Command="{Binding ShowSettingsCommand}" Content="Ustawienia" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsJournal}"
+                    Command="{Binding ShowJournalCommand}" Content="Co się działo" />
           </StackPanel>
         </ScrollViewer>
       </DockPanel>
