@@ -2,6 +2,7 @@ using System.Reflection;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Attachments;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Filters;
 using Marshal.Domain.Notes;
 using Marshal.Domain.Primitives;
@@ -67,6 +68,9 @@ public sealed class MarshalDbContext : DbContext
 
     /// <summary>Żetony odczytu przyrostowego. Lokalne — żeton należy do urządzenia, które go dostało.</summary>
     public DbSet<CalendarCursor> CalendarCursors => Set<CalendarCursor>();
+
+    /// <summary>Co aplikacja zrobiła i co z tego wyszło. Lokalne — opisuje to urządzenie.</summary>
+    public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
 
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy

@@ -7,6 +7,7 @@ using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Backup;
 using Marshal.Infrastructure.Calendar;
 using Marshal.Infrastructure.Data;
+using Marshal.Infrastructure.Diagnostics;
 using Marshal.Infrastructure.Notifications;
 using Marshal.Infrastructure.Repositories;
 using Marshal.Infrastructure.Review;
@@ -84,6 +85,12 @@ public static class DependencyInjection
         services.AddSingleton<IAttachmentRepository, AttachmentRepository>();
         services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
+
+        // Dziennik bierze same opcje, nie wspólny kontekst: zapis w środku cudzej
+        // operacji zatwierdziłby przy okazji jej niezapisane zmiany.
+        services.AddSingleton<IActivityLog>(sp => new ActivityLog(
+            sp.GetRequiredService<DbContextOptions<MarshalDbContext>>(),
+            sp.GetRequiredService<IClock>()));
 
         services.AddSingleton<IReminderLog, ReminderLog>();
         services.AddSingleton<InAppNotifier>();
