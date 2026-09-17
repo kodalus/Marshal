@@ -30,7 +30,6 @@ public enum Screen
     Notes,
     Filters,
     Settings,
-    Areas,
     Archive,
     Review,
 
@@ -169,8 +168,6 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<WaitingItem> WaitingItems { get; } = [];
 
     /// <summary>Tabela równowagi (8.5). Widoczna wyłącznie tutaj i w kroku 8 przeglądu.</summary>
-    public ObservableCollection<AreaBalance> BalanceRows { get; } = [];
-
     /// <summary>Projekty bez następnej akcji (N1) — pozycja w „Dzisiaj".</summary>
     public ObservableCollection<BlockedProject> BlockedProjects { get; } = [];
 
@@ -196,8 +193,6 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<TaskItem> SomedayItems { get; } = [];
 
     public ObservableCollection<TaskItem> ArchiveItems { get; } = [];
-
-    public ObservableCollection<Area> AreaItems { get; } = [];
 
     public ObservableCollection<ProjectTreeRow> ProjectRows { get; } = [];
 
@@ -325,8 +320,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool HasBlocked => BlockedProjects.Count > 0;
 
-    public bool IsAreas => Current == Screen.Areas;
-
     public bool IsArchive => Current == Screen.Archive;
 
     partial void OnInboxCountChanged(int value) => OnPropertyChanged(nameof(HasInbox));
@@ -347,7 +340,6 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFilters));
         OnPropertyChanged(nameof(IsSettings));
         OnPropertyChanged(nameof(IsReview));
-        OnPropertyChanged(nameof(IsAreas));
         OnPropertyChanged(nameof(IsArchive));
 
         // Wybranie czegokolwiek zamyka „Więcej". Lista, która zostaje otwarta nad
@@ -477,7 +469,6 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Notes => Notes.LoadAsync(),
             Screen.Journal => Journal.LoadAsync(),
             Screen.Filters => Filters.RunCommand.ExecuteAsync(null),
-            Screen.Areas => ShowAreasAsync(),
             _ => Task.CompletedTask,
         };
 
@@ -663,9 +654,18 @@ public sealed partial class MainViewModel : ObservableObject
         var rows = ProjectTree.Build(
             await _areas.ActiveAsync(), await _projects.ActiveAsync(), zablokowane);
 
+        // Równowaga obszarów wpisana w te same wiersze, a nie na osobnym ekranie.
+        // Dwa ekrany na te same obiekty dawały różne możliwości w każdym z nich:
+        // tu barwa i usunięcie, tam zakładanie, a nazwa tylko tam. Jeden ekran, jeden
+        // zestaw czynności — a liczby są cechą obszaru, więc stoją przy nim.
+        var rownowaga = (await _queries.BalanceAsync(Today()))
+            .ToDictionary(w => w.AreaId);
+
         foreach (var row in rows)
         {
-            ProjectRows.Add(new ProjectTreeRow(row));
+            ProjectRows.Add(new ProjectTreeRow(
+                row,
+                row.IsArea && rownowaga.TryGetValue(row.Id, out var w) ? w : null));
         }
     }
 
@@ -783,23 +783,6 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Archive;
         await FillPlain(ArchiveItems, _tasks.ArchiveAsync(limit: 200));
-    }
-
-    [RelayCommand]
-    private async Task ShowAreasAsync()
-    {
-        Current = Screen.Areas;
-        AreaItems.Clear();
-        foreach (var area in await _areas.AllAsync())
-        {
-            AreaItems.Add(area);
-        }
-
-        BalanceRows.Clear();
-        foreach (var wiersz in await _queries.BalanceAsync(Today()))
-        {
-            BalanceRows.Add(wiersz);
-        }
     }
 
     private DateOnly Today() => _clock.Today;
@@ -1022,29 +1005,73 @@ public sealed partial class MainViewModel : ObservableObject
         await _szkielet.AddAreaAsync(nazwa);
         NewAreaName = string.Empty;
         Notice = string.Empty;
-        await ShowAreasAsync();
+        await ShowProjectsAsync();
     }
 
-    public async Task RenameAreaAsync(Guid areaId, string name)
+    /// <summary>
+    /// Nowy projekt w obszarze albo podprojekt pod projektem.
+    /// </summary>
+    /// <remarks>
+    /// Rodzicem bywa obszar albo projekt i to jest jedno wejście na oba, bo z punktu
+    /// widzenia ręki to ta sama czynność: „tutaj ma powstać nowy".
+    /// </remarks>
+    public async Task AddProjectAsync(ProjectTreeRow parent, string outcome)
     {
+        ArgumentNullException.ThrowIfNull(parent);
+
+        if (string.IsNullOrWhiteSpace(outcome))
+        {
+            return;
+        }
+
+        await _szkielet.AddProjectAsync(parent.Id, outcome.Trim());
+        Notice = string.Empty;
+        await ShowProjectsAsync();
+    }
+
+    /// <summary>Nowa nazwa wiersza — obszaru albo projektu.</summary>
+    public async Task RenameRowAsync(ProjectTreeRow row, string name)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
         if (string.IsNullOrWhiteSpace(name))
         {
             return;
         }
 
-        await _szkielet.RenameAreaAsync(areaId, name.Trim());
-        await ShowAreasAsync();
+        if (row.IsArea)
+        {
+            await _szkielet.RenameAreaAsync(row.Id, name.Trim());
+        }
+        else
+        {
+            await _szkielet.RenameProjectAsync(row.Id, name.Trim());
+        }
+
+        await ShowProjectsAsync();
     }
 
-    public async Task DeleteAreaAsync(Guid areaId)
+    /// <summary>Usunięcie wiersza — obszaru albo projektu, i tylko pustego.</summary>
+    public async Task DeleteRowAsync(ProjectTreeRow row)
     {
-        Notice = await _szkielet.DeleteAreaAsync(areaId) ?? string.Empty;
-        await ShowAreasAsync();
+        ArgumentNullException.ThrowIfNull(row);
+
+        Notice = (row.IsArea
+            ? await _szkielet.DeleteAreaAsync(row.Id)
+            : await _szkielet.DeleteProjectAsync(row.Id)) ?? string.Empty;
+
+        await ShowProjectsAsync();
     }
 
-    /// <summary>Czy ten obszar da się usunąć — menu ma nie proponować rzeczy bez skutku.</summary>
-    public Task<string?> WhyCannotDeleteAreaAsync(Guid areaId) =>
-        _szkielet.WhyCannotDeleteAreaAsync(areaId);
+    /// <summary>Czy ten wiersz da się usunąć — menu ma nie proponować rzeczy bez skutku.</summary>
+    public Task<string?> WhyCannotDeleteRowAsync(ProjectTreeRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        return row.IsArea
+            ? _szkielet.WhyCannotDeleteAreaAsync(row.Id)
+            : _szkielet.WhyCannotDeleteAsync(row.Id);
+    }
 
     /// <summary>Barwa wiersza z ekranu „Projekty" — obszaru albo projektu.</summary>
     public async Task SetRowColorAsync(ProjectTreeRow row, string? color)
@@ -1062,34 +1089,6 @@ public sealed partial class MainViewModel : ObservableObject
 
         Notice = string.Empty;
         await ShowProjectsAsync();
-    }
-
-    /// <summary>
-    /// Usunięcie projektu. Obszarów stąd nie da się usunąć — zostałyby po nich
-    /// zadania bez przynależności, a każde zadanie musi mieć obszar (N11).
-    /// </summary>
-    public async Task DeleteProjectAsync(ProjectTreeRow row)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-
-        if (row.IsArea)
-        {
-            Notice = "Obszaru nie usuwa się stąd — można go wyłączyć na ekranie „Obszary”.";
-            return;
-        }
-
-        Notice = await _szkielet.DeleteProjectAsync(row.Id) ?? string.Empty;
-        await ShowProjectsAsync();
-    }
-
-    /// <summary>Czy ten projekt da się usunąć — menu ma nie proponować rzeczy bez skutku.</summary>
-    public async Task<string?> WhyCannotDeleteAsync(ProjectTreeRow row)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-
-        return row.IsArea
-            ? "Obszaru nie usuwa się stąd."
-            : await _szkielet.WhyCannotDeleteAsync(row.Id);
     }
 
     public async Task ToNoteAsync(TaskItem task)

@@ -1,4 +1,5 @@
 using Avalonia.Media;
+using Marshal.Application.Review;
 using Marshal.Application.UseCases;
 
 namespace Marshal.UI.ViewModels;
@@ -12,7 +13,7 @@ namespace Marshal.UI.ViewModels;
 /// Avalonii i znać nie powinna, a konwerter byłby trzecim miejscem do zajrzenia przy
 /// czytaniu jednego wiersza XAML-a. Ta sama zasada co przy blokach na siatce.
 /// </remarks>
-public sealed record ProjectTreeRow(ProjectRow Row)
+public sealed record ProjectTreeRow(ProjectRow Row, AreaBalance? Balance = null)
 {
     private const string Brak = "#40808080";
 
@@ -32,6 +33,26 @@ public sealed record ProjectTreeRow(ProjectRow Row)
     public string? Color => Row.Color;
 
     public bool HasColor => !string.IsNullOrWhiteSpace(Row.Color);
+
+    /// <summary>
+    /// Równowaga obszaru wpisana w ten sam wiersz.
+    /// </summary>
+    /// <remarks>
+    /// Tabela równowagi miała własny ekran i to był błąd widoczny z czterech stron:
+    /// na jednym ekranie dało się zmienić barwę i usunąć projekt, na drugim założyć
+    /// obszar, a nazwę zmienić tylko tam — bo te same obiekty mieszkały w dwóch
+    /// miejscach z różnymi możliwościami. Liczby są cechą obszaru, więc stoją przy nim.
+    /// </remarks>
+    public string BalanceText => Balance is not { } b
+        ? string.Empty
+        : b.DaysSinceMove is { } dni
+            ? $"{b.ActiveProjects} aktywnych · {dni} dni bez ruchu"
+            : $"{b.ActiveProjects} aktywnych · brak ruchu";
+
+    public bool HasBalance => Balance is not null;
+
+    /// <summary>Co da się tu założyć: w obszarze projekt, pod projektem podprojekt.</summary>
+    public string AddLabel => IsArea ? "Nowy projekt tutaj…" : "Nowy podprojekt…";
 
     /// <summary>
     /// Kwadracik barwy. Bez przezroczystości — tutaj kolor jest **wybierany**, więc ma

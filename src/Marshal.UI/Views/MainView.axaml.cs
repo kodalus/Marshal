@@ -1,3 +1,92 @@
+    /// <summary>
+    /// Menu wiersza struktury — to samo dla obszaru i dla projektu.
+    /// </summary>
+    /// <remarks>
+    /// Jedno menu na oba poziomy, bo czynności są te same: nazwa, barwa, założenie
+    /// czegoś pod spodem, usunięcie. Do dziś obszary i projekty mieszkały na dwóch
+    /// ekranach i każdy dawał co innego — tu barwę i usunięcie projektu, tam zakładanie
+    /// obszaru, a nazwę wyłącznie tam. Cztery osobne braki, jedna przyczyna.
+    ///
+    /// Powód odmowy sprawdzany przed pokazaniem menu: pozycja, która po kliknięciu nic
+    /// nie robi, uczy nieufności do całego menu.
+    /// </remarks>
+    private async Task PokazMenuProjektuAsync(MainViewModel model, Control zrodlo, ProjectTreeRow wiersz)
+    {
+        var przeszkoda = await model.WhyCannotDeleteRowAsync(wiersz);
+
+        var pozycje = new List<object>
+        {
+            Pozycja("Zmień nazwę…", () =>
+            {
+                PokazPoleNazwy(
+                    zrodlo, wiersz.Label, "Zapisz",
+                    nazwa => model.RenameRowAsync(wiersz, nazwa));
+
+                return Task.CompletedTask;
+            }),
+            Pozycja(wiersz.AddLabel, () =>
+            {
+                PokazPoleNazwy(
+                    zrodlo, string.Empty, "Załóż",
+                    nazwa => model.AddProjectAsync(wiersz, nazwa));
+
+                return Task.CompletedTask;
+            }),
+            Pozycja("Barwa…", () =>
+            {
+                PokazPalete(model, zrodlo, wiersz);
+                return Task.CompletedTask;
+            }),
+            new Separator(),
+            przeszkoda is null
+                ? Pozycja(wiersz.IsArea ? "Usuń obszar" : "Usuń projekt",
+                    () => model.DeleteRowAsync(wiersz))
+                : new MenuItem { Header = przeszkoda, IsEnabled = false },
+        };
+
+        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Małe okienko z jednym polem tekstowym przy wierszu.
+    /// </summary>
+    /// <remarks>
+    /// Pole wprost na liście byłoby czwartą rzeczą w wierszu, który już niesie nazwę,
+    /// kwadracik barwy i liczby — a nazwę zmienia się raz na parę miesięcy. Enter
+    /// zapisuje, bo po wpisaniu ręka i tak tam idzie.
+    /// </remarks>
+    private void PokazPoleNazwy(
+        Control zrodlo, string poczatkowa, string przycisk, Func<string, Task> praca)
+    {
+        var pole = new TextBox { Text = poczatkowa, Width = 260 };
+        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        void Zapisz()
+        {
+            var nazwa = pole.Text ?? string.Empty;
+            flyout.Hide();
+            _ = Probuj($"Struktura: {przycisk}", () => praca(nazwa));
+        }
+
+        pole.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Enter)
+            {
+                args.Handled = true;
+                Zapisz();
+            }
+        };
+
+        var zapisz = new Button { Content = przycisk, Padding = new Thickness(14, 6) };
+        zapisz.Click += (_, _) => Zapisz();
+
+        flyout.Content = new StackPanel { Spacing = 8, Children = { pole, zapisz } };
+        flyout.ShowAt(zrodlo);
+
+        pole.Focus();
+        pole.SelectAll();
+    }
+
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -169,6 +258,22 @@ public partial class MainView : UserControl
     /// </remarks>
     private const double StrefaKrawedzi = 6;
 
+    /// <summary>
+    /// Ile punktów ma godzina na siatce.
+    /// </summary>
+    /// <remarks>
+    /// Ta sama liczba co w modelu kalendarza, powtórzona tutaj świadomie: podgląd
+    /// rysuje okno, a nie model, i gdyby sięgał po nią przez model, okno zależałoby
+    /// od jego wnętrza po to, żeby narysować prostokąt.
+    /// </remarks>
+    private const double WysokoscGodziny = 48;
+
+    /// <summary>Punkt wewnątrz bloku, za który go złapano.</summary>
+    private Point _chwyt;
+
+    /// <summary>Lewy górny róg chwyconego bloku we współrzędnych okna.</summary>
+    private Point? _blokNaEkranie;
+
     private void BlokWcisniety(object? nadawca, PointerPressedEventArgs e)
     {
         if (nadawca is not Control blok || blok.Tag is not SlotBox slot)
@@ -188,6 +293,12 @@ public partial class MainView : UserControl
         _wciesniety = slot;
         _skad = e.GetPosition(this);
         _przeciagam = false;
+
+        // Gdzie **w bloku** wylądowała ręka i gdzie ten blok stoi na ekranie. Jedno
+        // i drugie po to, żeby kopia w podglądzie trzymała się tego samego punktu,
+        // za który została złapana, zamiast skakać rogiem pod wskaźnik.
+        _chwyt = e.GetPosition(blok);
+        _blokNaEkranie = blok.TranslatePoint(new Point(0, 0), this);
 
         // Za dolną krawędź ciągnie się koniec, nie cały blok. Tylko przy zadaniach:
         // długość wydarzenia z cudzego kalendarza zmienia się świadomą drogą.
@@ -274,39 +385,69 @@ public partial class MainView : UserControl
     {
         if (this.FindControl<Border>("Podglad") is not { } podglad
             || this.FindControl<TextBlock>("PodgladTytul") is not { } tytul
-            || this.FindControl<TextBlock>("PodgladKiedy") is not { } kiedy
+            || this.FindControl<TextBlock>("PodgladOd") is not { } od
+            || this.FindControl<TextBlock>("PodgladDo") is not { } doGodz
+            || this.FindControl<StackPanel>("PodgladGodziny") is not { } godziny
             || Cel(e) is not var (dzien, wysokosc))
         {
             return;
         }
 
+        var poczatek = CalendarViewModel.Pora(slot.Top);
         var pora = CalendarViewModel.Pora(wysokosc);
 
+        podglad.Width = slot.Width;
+        podglad.Background = slot.Background;
         tytul.Text = slot.Title;
 
         if (_rozciagam)
         {
-            // Przy rozciąganiu liczy się koniec i długość, nie dzień: dzień się nie zmienia,
-            // a pokazanie go sugerowałoby, że blok gdzieś jedzie.
-            var poczatek = CalendarViewModel.Pora(slot.Top);
-            var minuty = Math.Max(5, (int)(pora.ToTimeSpan() - poczatek.ToTimeSpan()).TotalMinutes);
+            // Rozciąganie: blok stoi tam, gdzie stał, i rośnie w dół za wskaźnikiem.
+            // Dzień się nie zmienia, więc pokazanie go sugerowałoby, że gdzieś jedzie.
+            var koniec = TimeOnly.FromTimeSpan(
+                pora.ToTimeSpan() > poczatek.ToTimeSpan()
+                    ? pora.ToTimeSpan()
+                    : poczatek.ToTimeSpan() + TimeSpan.FromMinutes(5));
 
-            kiedy.Text = $"{poczatek:HH}:{poczatek:mm} – {pora:HH}:{pora:mm} · {minuty} min";
+            podglad.Height = Math.Max(
+                12, (koniec.ToTimeSpan() - poczatek.ToTimeSpan()).TotalHours * WysokoscGodziny);
+
+            od.Text = $"{poczatek:HH}:{poczatek:mm}";
+            doGodz.Text = $"{koniec:HH}:{koniec:mm}";
+            godziny.IsVisible = true;
+
+            if (_blokNaEkranie is { } rog)
+            {
+                Canvas.SetLeft(podglad, rog.X);
+                Canvas.SetTop(podglad, rog.Y);
+            }
         }
         else
         {
-            kiedy.Text = $"{dzien:dd.MM} · {pora:HH}:{pora:mm}";
-        }
+            // Koniec liczony z długości bloku, nie z jego starej godziny: przeciągnięcie
+            // przesuwa, a nie skraca. Doba przycięta, żeby blok zaczepiony pod wieczór
+            // nie pokazywał godziny z następnego dnia.
+            var suma = pora.ToTimeSpan() + TimeSpan.FromHours(slot.Height / WysokoscGodziny);
+            var koniec = TimeOnly.FromTimeSpan(
+                suma < TimeSpan.FromDays(1) ? suma : TimeSpan.FromDays(1) - TimeSpan.FromMinutes(5));
 
-        var gdzie = e.GetPosition(this);
-        Canvas.SetLeft(podglad, gdzie.X + 14);
-        Canvas.SetTop(podglad, gdzie.Y + 14);
+            podglad.Height = slot.Height;
+            od.Text = $"{dzien:dd.MM} {pora:HH}:{pora:mm}";
+            doGodz.Text = $"{koniec:HH}:{koniec:mm}";
+            godziny.IsVisible = slot.Width >= 120;
+
+            var gdzie = e.GetPosition(this);
+            Canvas.SetLeft(podglad, gdzie.X - _chwyt.X);
+            Canvas.SetTop(podglad, gdzie.Y - _chwyt.Y);
+        }
 
         podglad.IsVisible = true;
     }
 
     private void SchowajPodglad()
     {
+        _blokNaEkranie = null;
+
         if (this.FindControl<Border>("Podglad") is { } podglad)
         {
             podglad.IsVisible = false;
@@ -527,14 +668,6 @@ public partial class MainView : UserControl
             return;
         }
 
-        if (Obszar(zrodlo) is { } obszar)
-        {
-            e.Handled = true;
-            _ = Probuj("Menu: obszar", () => PokazMenuObszaruAsync(model, zrodlo, obszar));
-
-            return;
-        }
-
         if (Wiersz(zrodlo) is { } wiersz)
         {
             e.Handled = true;
@@ -635,80 +768,6 @@ public partial class MainView : UserControl
         ];
 
         new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
-    }
-
-    /// <summary>Wiersz tabeli równowagi spod wskaźnika.</summary>
-    private static AreaBalance? Obszar(Control zrodlo) =>
-        zrodlo.GetSelfAndVisualAncestors()
-            .OfType<Control>()
-            .Select(k => k.DataContext)
-            .OfType<AreaBalance>()
-            .FirstOrDefault();
-
-    /// <summary>
-    /// Menu obszaru: nazwa i usunięcie.
-    /// </summary>
-    /// <remarks>
-    /// Powód odmowy sprawdzany przed pokazaniem menu, tak samo jak przy projekcie:
-    /// pozycja, która po kliknięciu nic nie robi, uczy nieufności do całego menu.
-    /// </remarks>
-    private async Task PokazMenuObszaruAsync(MainViewModel model, Control zrodlo, AreaBalance obszar)
-    {
-        var przeszkoda = await model.WhyCannotDeleteAreaAsync(obszar.AreaId);
-
-        var pozycje = new List<object>
-        {
-            Pozycja("Zmień nazwę…", () =>
-            {
-                PokazZmianeNazwy(model, zrodlo, obszar);
-                return Task.CompletedTask;
-            }),
-            new Separator(),
-            przeszkoda is null
-                ? Pozycja("Usuń obszar", () => model.DeleteAreaAsync(obszar.AreaId))
-                : new MenuItem { Header = przeszkoda, IsEnabled = false },
-        };
-
-        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
-    }
-
-    /// <summary>
-    /// Zmiana nazwy obszaru w małym okienku przy wierszu.
-    /// </summary>
-    /// <remarks>
-    /// Pole wprost na liście byłoby czwartą rzeczą w wierszu, który już niesie nazwę
-    /// i dwie liczby — a nazwę zmienia się raz na parę miesięcy. Enter zapisuje,
-    /// bo po wpisaniu nazwy ręka i tak tam idzie.
-    /// </remarks>
-    private void PokazZmianeNazwy(MainViewModel model, Control zrodlo, AreaBalance obszar)
-    {
-        var pole = new TextBox { Text = obszar.Name, Width = 240 };
-        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
-
-        void Zapisz()
-        {
-            var nazwa = pole.Text ?? string.Empty;
-            flyout.Hide();
-            _ = Probuj("Obszar: nazwa", () => model.RenameAreaAsync(obszar.AreaId, nazwa));
-        }
-
-        pole.KeyDown += (_, args) =>
-        {
-            if (args.Key == Key.Enter)
-            {
-                args.Handled = true;
-                Zapisz();
-            }
-        };
-
-        var zapisz = new Button { Content = "Zapisz", Padding = new Thickness(14, 6) };
-        zapisz.Click += (_, _) => Zapisz();
-
-        flyout.Content = new StackPanel { Spacing = 8, Children = { pole, zapisz } };
-        flyout.ShowAt(zrodlo);
-
-        pole.Focus();
-        pole.SelectAll();
     }
 
     /// <summary>Wiersz ekranu „Projekty” spod wskaźnika.</summary>

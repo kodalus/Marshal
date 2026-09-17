@@ -1,6 +1,7 @@
 using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Projects;
 
 namespace Marshal.Application.UseCases;
 
@@ -107,6 +108,65 @@ public sealed class StructureEditService(
         await unitOfWork.SaveChangesAsync(ct);
 
         return null;
+    }
+
+    /// <summary>
+    /// Nowy projekt w obszarze albo pod istniejącym projektem.
+    /// </summary>
+    /// <remarks>
+    /// Podprojekt przejmuje obszar rodzica i nie może go zmienić (N11) — inaczej cel
+    /// rozjechałby się po kilku obszarach i przestał być policzalny. Projekt rodzi się
+    /// bez następnej akcji, więc od razu zgłasza się jako zablokowany (N1); to jest
+    /// prawda o nim, a nie usterka, i lepiej, żeby było ją widać od pierwszej chwili.
+    /// </remarks>
+    public async Task<Guid?> AddProjectAsync(
+        Guid parentId, string outcome, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outcome);
+
+        var wszystkie = await projects.AllAsync(ct);
+        var kolejnosc = wszystkie.Count == 0 ? 0 : wszystkie.Max(p => p.SortOrder) + 1;
+
+        // Rodzicem bywa obszar albo projekt. Jedno wejście na oba, bo z punktu widzenia
+        // ręki to ta sama czynność: „tutaj ma powstać nowy".
+        if (wszystkie.FirstOrDefault(p => p.Id == parentId) is { } rodzic)
+        {
+            var pod = new Project(
+                Guid.CreateVersion7(), clock.Now, hlc.Next(), outcome,
+                rodzic.AreaId, kolejnosc, rodzic.Id);
+
+            projects.Add(pod);
+            await unitOfWork.SaveChangesAsync(ct);
+
+            return pod.Id;
+        }
+
+        if (await areas.FindAsync(parentId, ct) is null)
+        {
+            return null;
+        }
+
+        var projekt = new Project(
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), outcome, parentId, kolejnosc);
+
+        projects.Add(projekt);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return projekt.Id;
+    }
+
+    /// <summary>Nowa nazwa projektu. Nazwa projektu jest wynikiem, nie czynnością.</summary>
+    public async Task RenameProjectAsync(Guid projectId, string outcome, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outcome);
+
+        if (await projects.FindAsync(projectId, ct) is not { } projekt)
+        {
+            return;
+        }
+
+        projekt.Rename(outcome, hlc.Next());
+        await unitOfWork.SaveChangesAsync(ct);
     }
 
     public async Task SetAreaColorAsync(Guid areaId, string? color, CancellationToken ct = default)
