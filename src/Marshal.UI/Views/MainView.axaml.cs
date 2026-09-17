@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Marshal.Application.Review;
@@ -536,13 +537,109 @@ public partial class MainView : UserControl
         PokazPalete(model, kwadracik, wiersz);
     }
 
-    private void PokazPalete(MainViewModel model, Control zrodlo, ProjectTreeRow wiersz) =>
-        new MenuFlyout
+    /// <summary>
+    /// Wybieraczka barwy: koło, suwaki i pole szesnastkowe.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zamiast listy dziewięciu nazw. Lista była wygodna do napisania i zła do
+    /// używania: barwa obszaru ma odróżniać go od pozostałych **jednym spojrzeniem**,
+    /// a przy siedmiu obszarach dziewięć propozycji znaczy, że dobiera się je już nie
+    /// do siebie, tylko do tego, co zostało wolne. Do tego nazwy nie mówią, jak coś
+    /// wygląda — „pomarańczowy" trzeba było wybrać, żeby zobaczyć.
+    /// </para>
+    /// <para>
+    /// Zapis dopiero na „Ustaw", nie przy każdym ruchu myszy po kole: każda zmiana to
+    /// zapis do bazy i przerysowanie kalendarza, a przeciągnięcie po widmie daje ich
+    /// kilkaset. Do tego barwa wybrana przypadkiem po drodze nie ma zostawiać śladu
+    /// w dzienniku zmian, z którym potem scala się drugie urządzenie.
+    /// </para>
+    /// </remarks>
+    private void PokazPalete(MainViewModel model, Control zrodlo, ProjectTreeRow wiersz)
+    {
+        var kolo = new ColorView
         {
-            ItemsSource = ColorChoice.All
-                .Select(b => Pozycja(b.Label, () => model.SetRowColorAsync(wiersz, b.Value)))
-                .ToList(),
-        }.ShowAt(zrodlo);
+            Color = Color.TryParse(wiersz.Color ?? string.Empty, out var biezaca)
+                ? biezaca
+                : Colors.SlateGray,
+            IsAlphaEnabled = false,
+            IsAlphaVisible = false,
+            Width = 300,
+        };
+
+        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        var ustaw = new Button { Content = "Ustaw", Padding = new Thickness(14, 6) };
+        var wyczysc = new Button { Content = "Bez barwy", Padding = new Thickness(14, 6) };
+
+        ustaw.Click += (_, _) =>
+        {
+            flyout.Hide();
+            var c = kolo.Color;
+            _ = Probuj(
+                "Barwa: ustawienie",
+                () => model.SetRowColorAsync(wiersz, $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
+        };
+
+        wyczysc.Click += (_, _) =>
+        {
+            flyout.Hide();
+            _ = Probuj("Barwa: zdjęcie", () => model.SetRowColorAsync(wiersz, null));
+        };
+
+        // Barwy przygotowane zostają nad kołem, jednym kliknięciem. Koło jest po to,
+        // żeby dało się wyjść poza listę, a nie po to, żeby za każdym razem trzeba
+        // było trafiać myszą w odcień, który i tak jest na liście.
+        var szybkie = new WrapPanel();
+
+        foreach (var barwa in ColorChoice.All.Where(b => b.Value is not null))
+        {
+            var wybor = barwa;
+            // Barwa na ramce w środku, nie na tle przycisku: tło przycisku motyw
+            // przemalowuje przy najechaniu, a kwadracik, który zmienia kolor pod
+            // wskaźnikiem, przestaje pokazywać to, co ma pokazywać.
+            var kwadracik = new Button
+            {
+                Margin = new Thickness(0, 0, 6, 6),
+                Padding = new Thickness(3),
+                CornerRadius = new CornerRadius(7),
+                [ToolTip.TipProperty] = wybor.Label,
+                Content = new Border
+                {
+                    Width = 22,
+                    Height = 22,
+                    CornerRadius = new CornerRadius(5),
+                    Background = new SolidColorBrush(Color.Parse(wybor.Value!)),
+                },
+            };
+
+            kwadracik.Click += (_, _) =>
+            {
+                flyout.Hide();
+                _ = Probuj("Barwa: ustawienie", () => model.SetRowColorAsync(wiersz, wybor.Value));
+            };
+
+            szybkie.Children.Add(kwadracik);
+        }
+
+        flyout.Content = new StackPanel
+        {
+            Spacing = 10,
+            Children =
+            {
+                szybkie,
+                kolo,
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    Children = { ustaw, wyczysc },
+                },
+            },
+        };
+
+        flyout.ShowAt(zrodlo);
+    }
 
     /// <summary>
     /// Menu wiersza „Projektów”: barwa i usunięcie.
@@ -558,8 +655,11 @@ public partial class MainView : UserControl
 
         var pozycje = new List<object>
         {
-            Galaz("Barwa", [.. ColorChoice.All.Select(b =>
-                Pozycja(b.Label, () => model.SetRowColorAsync(wiersz, b.Value)))]),
+            Pozycja("Barwa…", () =>
+            {
+                PokazPalete(model, zrodlo, wiersz);
+                return Task.CompletedTask;
+            }),
         };
 
         if (!wiersz.IsArea)
