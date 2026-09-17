@@ -75,7 +75,17 @@ public sealed record SlotBox(
     /// </remarks>
     public bool ShowMarkColumn => ShowCheck || IsDone;
 
-    /// <summary>Rozmiar pola do odhaczenia — dopasowany do wysokości bloku.</summary>
+    /// <summary>
+    /// Rozmiar pola do odhaczenia — dopasowany do wysokości bloku.
+    /// </summary>
+    /// <remarks>
+    /// Kwadracik rysujemy sami, z ramki i napisu, zamiast używać gotowego pola wyboru.
+    /// Gotowe ma w motywie własną najmniejszą wysokość i własne odstępy, których nie
+    /// da się zejść poniżej: pomniejszanie go skalą kończyło się kontrolką ułożoną
+    /// na trzydzieści dwa punkty, narysowaną na szesnaście i przyciętą krawędzią
+    /// bloku do rogu. Trzy rundy poprawek na coś, co z dwóch prostych elementów
+    /// wychodzi od razu.
+    /// </remarks>
     public double CheckSize => Math.Clamp(Height - 6, 10, 16);
 
     /// <summary>
@@ -87,18 +97,8 @@ public sealed record SlotBox(
     /// i wychodziło poza bloczek. Skala zmienia to, co widać, a nie tylko miejsce,
     /// które pole dostaje.
     /// </remarks>
-    public ITransform CheckScale => new ScaleTransform(CheckSize / Fluent, CheckSize / Fluent);
-
-    /// <summary>
-    /// Ile miejsca zajmuje pole wyboru, zanim je pomniejszymy.
-    /// </summary>
-    /// <remarks>
-    /// Trzydzieści dwa, nie dwadzieścia. Dwadzieścia to sam kwadracik, ale kontrolka
-    /// ma wokół niego własne odstępy i najmniejszą wysokość — liczone od kwadracika
-    /// pomniejszenie wychodziło o połowę za małe i pole nadal nie mieściło się
-    /// w bloku. Miarą musi być to, co naprawdę zajmuje miejsce.
-    /// </remarks>
-    private const double Fluent = 32;
+    /// <summary>Wielkość samego ptaszka w kwadraciku.</summary>
+    public double MarkSize => Math.Max(8, CheckSize - 3);
 
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
     private const string DomyslneWydarzenie = "#6C8FBF";

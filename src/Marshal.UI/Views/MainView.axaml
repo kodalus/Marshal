@@ -45,18 +45,18 @@
       <Setter Property="HorizontalAlignment" Value="Right" />
     </Style>
 
-    <!-- Odhaczenie odsłaniane najechaniem. Przezroczystość zamiast widoczności, żeby
-         tytuł nie skakał; nieklikalne razem z niewidocznym, bo pole, które nic nie
-         pokazuje, a łapie kliknięcia, jest gorsze od obu tych rzeczy osobno.
-         Na dotyku najechania nie ma i pole zostaje ukryte — odhaczanie z siatki jest
-         skrótem dla myszy, a nie jedyną drogą: pozostaje ekran szczegółu. -->
-    <Style Selector="CheckBox.odhacz">
-      <Setter Property="Opacity" Value="0" />
-      <Setter Property="IsHitTestVisible" Value="False" />
+    <!-- Kwadracik odhaczenia rysowany z ramki i napisu. Gotowe pole wyboru ma
+         w motywie własną najmniejszą wysokość, poniżej której nie schodzi — na bloku
+         kwadransa układało się na trzydzieści dwa punkty, rysowało na szesnaście
+         i przycinało krawędzią bloku do rogu. Ramka pokazuje się przy najechaniu,
+         ptaszek widać zawsze, gdy zadanie jest odhaczone. Na dotyku najechania nie ma,
+         więc tam odhacza się z listy, z menu podręcznego albo ze szczegółu. -->
+    <Style Selector="Border.odhacz">
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="#00FFFFFF" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Background" Value="#10FFFFFF" />
       <Setter Property="Padding" Value="0" />
-      <Setter Property="MinWidth" Value="0" />
-      <Setter Property="MinHeight" Value="0" />
-      <Setter Property="Margin" Value="0" />
     </Style>
     <!-- Blok jest przyciskiem, żeby kliknięcie otwierało szczegół. Własna oprawa
          przycisku wyłączona: barwę bloku niesie ramka w środku, a domyślne tło
@@ -77,19 +77,9 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
     </Style>
-    <Style Selector="Border.slot:pointerover CheckBox.odhacz">
-      <Setter Property="Opacity" Value="1" />
-      <Setter Property="IsHitTestVisible" Value="True" />
-    </Style>
-
-    <!-- Ptaszek i pole wyboru zajmują to samo miejsce: widać jedno albo drugie. -->
-    <Style Selector="TextBlock.ptaszek">
-      <Setter Property="Opacity" Value="0.9" />
-      <Setter Property="LineHeight" Value="1" />
-      <Setter Property="Padding" Value="0" />
-    </Style>
-    <Style Selector="Border.slot:pointerover TextBlock.ptaszek">
-      <Setter Property="Opacity" Value="0" />
+    <Style Selector="Border.slot:pointerover Border.odhacz">
+      <Setter Property="BorderBrush" Value="#C0FFFFFF" />
+      <Setter Property="Background" Value="#25FFFFFF" />
     </Style>
 
     <!-- Pasek dolny: pole dotyku na całą szerokość kolumny i wysokość, w którą trafia
@@ -788,19 +778,17 @@
                               <Panel Grid.Column="0" Width="{Binding CheckSize}"
                                      Margin="0,0,3,0"
                                      IsVisible="{Binding ShowMarkColumn}">
-                                <TextBlock Classes="ptaszek" Text="✓"
-                                           IsVisible="{Binding IsDone}"
-                                           FontSize="{Binding CheckSize}"
-                                           VerticalAlignment="Top"
-                                           HorizontalAlignment="Left" />
-                                <CheckBox Classes="odhacz" VerticalAlignment="Top"
-                                          IsVisible="{Binding ShowCheck}"
-                                          IsChecked="{Binding IsDone, Mode=OneWay}"
-                                          IsEnabled="{Binding !IsDone}"
-                                          RenderTransform="{Binding CheckScale}"
-                                          RenderTransformOrigin="0%,0%"
-                                          Command="{Binding $parent[DockPanel].((vm:CalendarViewModel)DataContext).CompleteCommand}"
-                                          CommandParameter="{Binding TaskId}" />
+                                <Border Classes="odhacz" Tag="{Binding}"
+                                        Width="{Binding CheckSize}"
+                                        Height="{Binding CheckSize}"
+                                        VerticalAlignment="Top" HorizontalAlignment="Left"
+                                        PointerPressed="OdhaczNaSiatce">
+                                  <TextBlock Text="✓" IsVisible="{Binding IsDone}"
+                                             FontSize="{Binding MarkSize}"
+                                             LineHeight="{Binding CheckSize}"
+                                             HorizontalAlignment="Center"
+                                             VerticalAlignment="Center" />
+                                </Border>
                               </Panel>
 
                               <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="11"

@@ -305,6 +305,26 @@ public partial class MainView : UserControl
 
 
 
+    /// <summary>
+    /// Odhaczenie kwadracikiem na siatce.
+    /// </summary>
+    /// <remarks>
+    /// Zdarzenie zatrzymujemy tutaj: bez tego wciśnięcie doszłoby do bloku pod spodem
+    /// i zaczęłoby przeciąganie, a odhaczenie skończyłoby się przełożeniem zadania
+    /// o kilka minut.
+    /// </remarks>
+    private void OdhaczNaSiatce(object? nadawca, PointerPressedEventArgs e)
+    {
+        e.Handled = true;
+
+        if (nadawca is Control kwadracik
+            && kwadracik.Tag is SlotBox { TaskId: { } zadanie, IsDone: false }
+            && _kalendarz is not null)
+        {
+            _ = Probuj("Kalendarz: odhaczenie", () => _kalendarz.CompleteCommand.ExecuteAsync(zadanie));
+        }
+    }
+
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
     private void TloSzczegolu(object? nadawca, PointerPressedEventArgs e) => _szczegol?.Close();
 
