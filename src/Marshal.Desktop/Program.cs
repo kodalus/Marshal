@@ -1,6 +1,6 @@
 using Avalonia;
 using DesktopNotifications;
-using DesktopNotifications.Avalonia;
+using DesktopNotifications.Windows;
 using Marshal.Infrastructure.Notifications;
 using Marshal.UI;
 
@@ -18,26 +18,47 @@ internal static class Program
         // spoza niej: na Windowsie od skrótu w menu Start, na Linuksie od usługi
         // powiadomień. Gdy któregoś zabraknie, aplikacja ma wstać tak samo — z paskiem
         // przypomnień w oknie, który działał do dziś.
+        PodepnijPowiadomienia();
+
+        budowniczy.StartWithClassicDesktopLifetime(args);
+    }
+
+    /// <summary>
+    /// Podpięcie powiadomień systemowych. Tylko na Windowsie i tylko gdy się uda.
+    /// </summary>
+    /// <remarks>
+    /// Sprawdzenie systemu w czasie działania, a nie warunek przy budowaniu: projekt
+    /// buduje się na Linuksie (tam chodzi CI), więc warunek budowania znaczyłby, że ten
+    /// kod nie jest kompilowany w ogóle i pierwsze sprawdzenie odbywałoby się na żywym
+    /// Windowsie. Tak przynajmniej kompilator go widzi.
+    /// </remarks>
+    private static void PodepnijPowiadomienia()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         try
         {
-            budowniczy = budowniczy.SetupDesktopNotifications(out var menedzer);
+            var menedzer = new WindowsNotificationManager(
+                WindowsApplicationContext.FromCurrentProcess("Marshal"));
 
-            if (menedzer is not null)
-            {
-                InAppNotifier.Systemowe = (przypomnienie, ct) =>
-                    menedzer.ShowNotification(new Notification
-                    {
-                        Title = przypomnienie.Title,
-                        Body = przypomnienie.Body ?? string.Empty,
-                    });
-            }
+            menedzer.Initialize().GetAwaiter().GetResult();
+
+            InAppNotifier.Systemowe = (przypomnienie, _) =>
+                menedzer.ShowNotification(new Notification
+                {
+                    Title = przypomnienie.Title,
+                    Body = przypomnienie.Body ?? string.Empty,
+                });
         }
         catch (Exception)
         {
-            // Bez powiadomień systemowych. Pasek w oknie zostaje.
+            // Bez powiadomień systemowych. Pasek w oknie zostaje i działa jak dotąd.
+            // Windows odmawia dymków aplikacjom bez skrótu w menu Start — to jest
+            // najczęstszy powód i nie jest usterką aplikacji.
         }
-
-        budowniczy.StartWithClassicDesktopLifetime(args);
     }
 
     /// <summary>Używane także przez podgląd projektanta Avalonii.</summary>

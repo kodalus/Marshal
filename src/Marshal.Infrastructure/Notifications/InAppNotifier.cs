@@ -65,7 +65,7 @@ public sealed class InAppNotifier : INotifier
         {
             await systemowe(notification, ct);
         }
-        catch (Exception) when (true)
+        catch (Exception)
         {
             // Zostaje pasek w oknie.
         }
