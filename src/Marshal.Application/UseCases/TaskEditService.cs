@@ -108,6 +108,31 @@ public sealed class TaskEditService(
     }
 
     /// <summary>
+    /// Przełożenie zadania na inny dzień i godzinę — jednym ruchem, bez reszty pól.
+    /// </summary>
+    /// <remarks>
+    /// Osobno od <see cref="ApplyAsync"/>, bo przeciągnięcie po siatce zmienia dokładnie
+    /// dwie rzeczy. Przepuszczenie tego przez pełną edycję znaczyłoby wysłanie do
+    /// scalania wszystkich pól naraz — a wtedy przeciągnięcie bloku na komputerze
+    /// unieważniałoby tytuł poprawiony w tej samej minucie na telefonie (9.4).
+    /// </remarks>
+    public async Task<TaskItem?> RescheduleAsync(
+        Guid id, DateOnly day, TimeOnly? time, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        {
+            return null;
+        }
+
+        await ApplyDoDateAsync(zadanie, day, zadanie.AreaId, ct);
+        zadanie.SetDoTime(time, hlc.Next());
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return zadanie;
+    }
+
+    /// <summary>
     /// Odhaczenie zadania — razem z kolejnym wystąpieniem, jeśli się powtarza (8.4).
     /// </summary>
     public async Task<TaskItem?> CompleteAsync(Guid id, CancellationToken ct = default)

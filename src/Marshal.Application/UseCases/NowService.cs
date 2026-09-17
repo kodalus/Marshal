@@ -31,7 +31,14 @@ public sealed class NowService(
         int availableMinutes, Energy energy, CancellationToken ct = default)
     {
         var dzis = clock.Today;
-        var wszystkie = await tasks.ByStateAsync(TaskState.Next, ct);
+        // Następne akcje **i** to, co zaplanowane na dziś albo wcześniej (spec 8.6).
+        // Do dziś brane były wyłącznie „Następne", więc zadanie zaplanowane na dziś —
+        // czyli to, na które się właśnie napisałaś — nie mogło się tu pojawić w ogóle.
+        // Ekran „co teraz" bez rzeczy umówionych na dziś odpowiada na inne pytanie.
+        var wszystkie = (await tasks.ByStateAsync(TaskState.Next, ct))
+            .Concat((await tasks.ByStateAsync(TaskState.Scheduled, ct))
+                .Where(t => t.DoDate is { } dzien && dzien <= dzis))
+            .ToList();
 
         // Projekt wstrzymany („kiedyś") albo zamknięty wyklucza swoje zadania: leżą
         // w bazie poprawnie, ale nie są tym, co można teraz zrobić.
@@ -69,8 +76,15 @@ public sealed class NowService(
     }
 
     /// <summary>Ilu w ogóle jest kandydatów — bez tego nie da się zaproponować oszacowania.</summary>
-    public async Task<int> UnestimatedCountAsync(CancellationToken ct = default) =>
-        (await tasks.ByStateAsync(TaskState.Next, ct)).Count(t => t.EstimatedMinutes is null);
+    public async Task<int> UnestimatedCountAsync(CancellationToken ct = default)
+    {
+        var dzis = clock.Today;
+
+        return (await tasks.ByStateAsync(TaskState.Next, ct))
+            .Concat((await tasks.ByStateAsync(TaskState.Scheduled, ct))
+                .Where(t => t.DoDate is { } dzien && dzien <= dzis))
+            .Count(t => t.EstimatedMinutes is null);
+    }
 
     /// <summary>
     /// Podpowiedź poziomu energii z pory dnia (spec 13.2 pkt 3).

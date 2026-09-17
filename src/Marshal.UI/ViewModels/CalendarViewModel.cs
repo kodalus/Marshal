@@ -240,6 +240,50 @@ public sealed partial class CalendarViewModel(
             DayText: Anchor.ToString("dd.MM.yyyy"), wpis.SourceId, wpis.ExternalId));
     }
 
+    /// <summary>
+    /// Przeciągnięcie zadania na inny dzień i godzinę.
+    /// </summary>
+    /// <remarks>
+    /// Zmienia dokładnie dwie rzeczy — dzień i godzinę — i idzie osobną drogą niż zapis
+    /// z okna szczegółu. Długość zostaje: przeciągnięcie przesuwa, a nie skraca.
+    /// </remarks>
+    public async Task MoveAsync(Guid taskId, DateOnly day, double punkty)
+    {
+        var pora = Kwadrans(punkty);
+
+        try
+        {
+            await edit.RescheduleAsync(taskId, day, pora);
+            await log.RecordAsync(
+                "Kalendarz: przełożenie", $"{day:yyyy-MM-dd} {pora:HH\:mm}");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: przełożenie", "nie udało się", ActivityLevel.Problem, e.Message);
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Godzina z wysokości na siatce, zaokrąglona w dół do kwadransa.
+    /// </summary>
+    /// <remarks>
+    /// Minuta wzięta co do punktu byłaby udawaną precyzją: trafienie w 14:07 nie znaczy,
+    /// że ktoś planuje na 14:07.
+    /// </remarks>
+    private static TimeOnly Kwadrans(double punkty)
+    {
+        var minuty = Math.Clamp(punkty / HourHeight * 60, 0, (24 * 60) - 15);
+        var kwadranse = (int)(minuty / 15) * 15;
+
+        return new TimeOnly(kwadranse / 60, kwadranse % 60);
+    }
+
     /// <summary>Kliknięcie w pustą siatkę: nowe zadanie na tym dniu i o tej godzinie.</summary>
     public event Action<DateOnly, TimeOnly>? NewTaskRequested;
 
@@ -252,10 +296,7 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public void NewAt(DateOnly day, double punkty)
     {
-        var minuty = Math.Clamp(punkty / HourHeight * 60, 0, 24 * 60 - 15);
-        var kwadranse = (int)(minuty / 15) * 15;
-
-        NewTaskRequested?.Invoke(day, new TimeOnly(kwadranse / 60, kwadranse % 60));
+        NewTaskRequested?.Invoke(day, Kwadrans(punkty));
     }
 
     public async Task LoadAsync()

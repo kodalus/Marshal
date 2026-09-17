@@ -443,6 +443,29 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Przeciagniecie_zmienia_dzien_i_godzine_a_nie_dlugosc()
+    {
+        var zadanie = TaskItem.Capture("Przesunąć", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+        zadanie.SetEstimate(90, Energy.Unknown, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        await _db.SaveChangesAsync();
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        // Jutro, czternasta — czyli 14 * 48 punktów od góry siatki.
+        await model.MoveAsync(zadanie.Id, Dzis.AddDays(1), 14 * 48);
+
+        var po = _db.Tasks.Single(z => z.Id == zadanie.Id);
+
+        po.DoDate.Should().Be(Dzis.AddDays(1));
+        po.DoTime.Should().Be(new TimeOnly(14, 0));
+        po.EstimatedMinutes.Should().Be(90, "przeciągnięcie przesuwa, a nie skraca");
+    }
+
+    [Fact]
     public void Klikniecie_w_puste_miejsce_zaokragla_godzine_do_kwadransa()
     {
         // Minuta wzięta co do punktu byłaby udawaną precyzją: trafienie w 14:07

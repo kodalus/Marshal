@@ -132,7 +132,7 @@
     <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,10" CornerRadius="8"
             Background="#2E9C7A40" IsVisible="{Binding HasReminders}">
       <DockPanel>
-        <Button DockPanel.Dock="Right" Content="Odprawione" Padding="10,4" Margin="10,0,0,0"
+        <Button DockPanel.Dock="Right" Content="Zakończ" Padding="10,4" Margin="10,0,0,0"
                 VerticalAlignment="Top"
                 Command="{Binding DismissRemindersCommand}" />
         <StackPanel>
@@ -620,7 +620,7 @@
             </ItemsControl>
           </StackPanel>
 
-          <ItemsControl ItemsSource="{Binding Columns}">
+          <ItemsControl Name="KolumnyDni" ItemsSource="{Binding Columns}">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <StackPanel Orientation="Horizontal" />
@@ -672,6 +672,7 @@
                          osobną warstwą, nie tłem bloków, bo mają być widoczne
                          również tam, gdzie nic nie zaplanowano. -->
                     <ItemsControl Name="Godziny" Tag="{Binding Date}"
+                                  Loaded="WarstwaGodzinGotowa"
                                   PointerPressed="NowaRzeczNaSiatce"
                                   ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
                                   Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
@@ -707,8 +708,11 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SlotBox">
                           <Button Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
-                                  Command="{Binding $parent[DockPanel].((vm:CalendarViewModel)DataContext).OpenTaskCommand}"
-                                  CommandParameter="{Binding}">
+                                  Tag="{Binding}"
+                                  Click="BlokKlikniety"
+                                  PointerPressed="BlokWcisniety"
+                                  PointerMoved="BlokRuszony"
+                                  PointerReleased="BlokPuszczony">
                           <Border Opacity="{Binding Opacity}"
                                   Background="{Binding Background}" CornerRadius="4" Padding="4,2"
                                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">

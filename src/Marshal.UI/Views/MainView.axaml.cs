@@ -106,6 +106,115 @@ public partial class MainView : UserControl
             return Task.CompletedTask;
         });
 
+    /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
+    /// <remarks>
+    /// Wszystkie kolumny mają tę samą górną krawędź siatki, więc wystarczy jedna:
+    /// wysokość liczona względem niej jest prawdziwa niezależnie od tego, nad którym
+    /// dniem stoi wskaźnik.
+    /// </remarks>
+    private Control? _warstwaGodzin;
+
+    private void WarstwaGodzinGotowa(object? nadawca, RoutedEventArgs e) =>
+        _warstwaGodzin = nadawca as Control;
+
+    /// <summary>Ile trzeba przejechać, żeby to było przeciąganie, a nie drgnięcie ręki.</summary>
+    private const double ProgPrzeciagniecia = 6;
+
+    private SlotBox? _wciesniety;
+
+    private Point _skad;
+
+    private bool _przeciagam;
+
+    private void BlokWcisniety(object? nadawca, PointerPressedEventArgs e)
+    {
+        if (nadawca is Control blok && blok.Tag is SlotBox slot && slot.TaskId is not null)
+        {
+            _wciesniety = slot;
+            _skad = e.GetPosition(this);
+            _przeciagam = false;
+        }
+    }
+
+    private void BlokRuszony(object? nadawca, PointerEventArgs e)
+    {
+        if (_wciesniety is null || _przeciagam)
+        {
+            return;
+        }
+
+        var teraz = e.GetPosition(this);
+
+        if (Math.Abs(teraz.X - _skad.X) > ProgPrzeciagniecia
+            || Math.Abs(teraz.Y - _skad.Y) > ProgPrzeciagniecia)
+        {
+            _przeciagam = true;
+
+            if (nadawca is Control blok)
+            {
+                blok.Opacity = 0.5;
+                e.Pointer.Capture(blok);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Puszczenie bloku: nowy dzień z poziomej pozycji, nowa godzina z pionowej.
+    /// </summary>
+    /// <remarks>
+    /// Przeliczenie idzie z położenia wskaźnika, a nie z tego, co jest pod nim: przy
+    /// przechwyconym wskaźniku zdarzenia trafiają do przeciąganego bloku niezależnie
+    /// od tego, nad czym akurat stoi. Cudze wydarzenia nie dają się przeciągać — zapis
+    /// do kalendarza Google idzie świadomą drogą, przez kartę, a nie przez omsknięcie ręki.
+    /// </remarks>
+    private void BlokPuszczony(object? nadawca, PointerReleasedEventArgs e)
+    {
+        if (nadawca is Control blok)
+        {
+            blok.Opacity = 1;
+            e.Pointer.Capture(null);
+        }
+
+        if (!_przeciagam || _wciesniety is not { TaskId: { } zadanie } || _kalendarz is null)
+        {
+            _wciesniety = null;
+            return;
+        }
+
+        _wciesniety = null;
+
+        if (this.FindControl<ItemsControl>("KolumnyDni") is not { } kolumny
+            || _warstwaGodzin is null)
+        {
+            return;
+        }
+
+        var wKolumnach = e.GetPosition(kolumny);
+        var szerokosc = _kalendarz.ColumnWidth + 2;
+        var numer = Math.Clamp((int)(wKolumnach.X / szerokosc), 0, _kalendarz.VisibleDays - 1);
+
+        var wysokosc = e.GetPosition(_warstwaGodzin).Y;
+
+        _ = Probuj(
+            "Kalendarz: przełożenie",
+            () => _kalendarz.MoveAsync(zadanie, _kalendarz.Anchor.AddDays(numer), wysokosc));
+    }
+
+    /// <summary>Kliknięcie w blok. Po przeciągnięciu nie otwiera szczegółu.</summary>
+    private void BlokKlikniety(object? nadawca, RoutedEventArgs e)
+    {
+        if (_przeciagam)
+        {
+            _przeciagam = false;
+            return;
+        }
+
+        if (nadawca is Control blok && blok.Tag is SlotBox slot)
+        {
+            _kalendarz?.OpenTaskCommand.Execute(slot);
+        }
+    }
+
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
     private void TloSzczegolu(object? nadawca, PointerPressedEventArgs e) => _szczegol?.Close();
 
