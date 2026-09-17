@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
+using Marshal.Infrastructure.Notifications;
 using Marshal.Infrastructure.Backup;
 using System.Collections.ObjectModel;
 using Marshal.Application.Calendar;
@@ -35,6 +36,7 @@ public sealed record ThemeOption(ThemeChoice Value, string Label)
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettings _settings;
+    private readonly InAppNotifier _powiadomienia;
     private readonly BackupService _backup;
     private readonly IClock _clock;
     private readonly GoogleSyncService _dysk;
@@ -52,8 +54,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         GoogleSyncService dysk,
         CalendarSyncService kalendarze,
         GoogleCalendarGateway google,
-        IActivityLog dziennik)
+        IActivityLog dziennik,
+        InAppNotifier powiadomienia)
     {
+        _powiadomienia = powiadomienia;
         _settings = settings;
         _backup = backup;
         _clock = clock;
@@ -179,6 +183,35 @@ public sealed partial class SettingsViewModel : ObservableObject
     public partial MainCalendarChoice? MainCalendar { get; set; }
 
     public ObservableCollection<MainCalendarChoice> MainCalendars { get; } = [];
+
+    /// <summary>
+    /// Co wyszło z ostatniej próby powiadomienia. Przy powiadomieniach to jedyny sposób,
+    /// żeby czegokolwiek się dowiedzieć.
+    /// </summary>
+    /// <remarks>
+    /// „Nie ma dymka" ma trzy przyczyny wyglądające identycznie: biblioteka się nie
+    /// podpięła, podpięła się i Windows odmówił, albo nie było czego pokazać. Pierwsza
+    /// jest do naprawienia w kodzie, druga po stronie systemu — i bez rozróżnienia
+    /// obie naprawia się na oślep.
+    /// </remarks>
+    [ObservableProperty]
+    public partial string NotificationStatus { get; set; } = string.Empty;
+
+    /// <summary>Próbne powiadomienie. Wynik od razu na ekranie, nie w dzienniku.</summary>
+    [RelayCommand]
+    private async Task TestNotificationAsync()
+    {
+        await _powiadomienia.ShowAsync(new Notification(
+            Guid.Empty,
+            "Marshal — próba",
+            "Jeśli widzisz to jako dymek Windowsa, powiadomienia systemowe działają."));
+
+        NotificationStatus = InAppNotifier.StanSystemowych == "podpięte"
+            ? "Podpięte, wysłane. Jeśli dymek się nie pokazał, zatrzymał go Windows — "
+                + "najczęściej dlatego, że aplikacji nie ma w menu Start albo włączony "
+                + "jest tryb skupienia."
+            : $"Powiadomienia systemowe nie działają: {InAppNotifier.StanSystemowych}";
+    }
 
     partial void OnMainCalendarChanged(MainCalendarChoice? value)
     {

@@ -1447,6 +1447,17 @@
         <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
                    Text="{Binding TokenFolder, StringFormat='Żeton logowania: {0} — skasuj ten katalog, żeby zalogować się od nowa.'}" />
 
+        <!-- Próba powiadomienia. Przy dymkach Windowsa to jedyny sposób, żeby
+             czegokolwiek się dowiedzieć: brak dymka ma trzy przyczyny wyglądające
+             identycznie i bez rozróżnienia naprawia się je na oślep. -->
+        <TextBlock Classes="label" Margin="0,22,0,0" Text="Powiadomienia systemowe" />
+        <Button Padding="14,8" HorizontalAlignment="Left"
+                Command="{Binding TestNotificationCommand}"
+                Content="Wyślij powiadomienie próbne" />
+        <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                   Text="{Binding NotificationStatus}"
+                   IsVisible="{Binding NotificationStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
         <TextBlock Classes="label" Margin="0,22,0,0" Text="Kalendarze" />
         <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !HasCalendars}"
                    Text="Nie ma podłączonego żadnego. Dopóki go nie ma, siatka godzinowa pokazuje same zadania." />
