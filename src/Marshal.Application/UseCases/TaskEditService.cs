@@ -159,7 +159,7 @@ public sealed class TaskEditService(
         {
             throw new InvalidOperationException(
                 "Nie ma żadnego czynnego obszaru, a zadanie z dniem wykonania musi do "
-                + "któregoś należeć. Włącz obszar na ekranie „Obszary".");
+                + "któregoś należeć. Włącz obszar na ekranie „Obszary”.");
         }
 
         if (doDate is { } dzien)
