@@ -516,9 +516,9 @@
           <Button Classes="nav" Command="{Binding PreviousCommand}" Content="◀" />
           <Button Classes="nav" Command="{Binding TodayCommand}" Content="dziś" />
           <Button Classes="nav" Command="{Binding NextCommand}" Content="▶" />
-          <Button Classes="nav" Command="{Binding SetDaysCommand}" CommandParameter="1" Content="dzień" />
-          <Button Classes="nav" Command="{Binding SetDaysCommand}" CommandParameter="3" Content="3 dni" />
-          <Button Classes="nav" Command="{Binding SetDaysCommand}" CommandParameter="7" Content="tydzień" />
+          <Button Classes="nav" Command="{Binding ShowDayCommand}" Content="dzień" />
+          <Button Classes="nav" Command="{Binding ShowThreeDaysCommand}" Content="3 dni" />
+          <Button Classes="nav" Command="{Binding ShowWeekCommand}" Content="tydzień" />
           <Button Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
         </WrapPanel>
         <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />
@@ -568,10 +568,16 @@
                   </Border>
                   <Border Height="24" IsVisible="{Binding !HasAllDay}" />
 
-                  <Canvas Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).GridHeight}"
-                          Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
-                          Background="#0C808080">
-                    <ItemsControl ItemsSource="{Binding Slots}">
+                  <!-- Rozmiar na liście, nie na płótnie pod nią. Płótno **nie mierzy się
+                       swoją zawartością** — jego rozmiar własny to zero — więc lista
+                       z płótnem w środku, wstawiona do drugiego płótna, dostawała
+                       zero na zero i obcinała wszystko. Całodniowe rysowały się dalej,
+                       bo idą zwykłym paskiem nad siatką; godzinowe znikały bez śladu. -->
+                  <Panel>
+                    <ItemsControl ItemsSource="{Binding Slots}"
+                                  Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).GridHeight}"
+                                  Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
+                                  Background="#0C808080">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <Canvas />
@@ -594,7 +600,7 @@
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                  </Canvas>
+                  </Panel>
 
                 </StackPanel>
               </DataTemplate>

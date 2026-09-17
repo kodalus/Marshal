@@ -162,7 +162,26 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
+    /// <summary>
+    /// Trzy osobne polecenia zamiast jednego z liczbą.
+    /// </summary>
+    /// <remarks>
+    /// Polecenie przyjmujące <c>int</c> dostawało z XAML-a **tekst**: zapis
+    /// <c>CommandParameter="3"</c> to napis, a nie liczba, i nikt go po drodze nie
+    /// zamienia. Polecenie ogólne odpowiada wtedy, że nie da się go wykonać, więc
+    /// wszystkie trzy przyciski są wyszarzone — bez błędu, bez śladu i bez szansy,
+    /// żeby zgadnąć przyczynę z wyglądu. Trzy polecenia bez parametru nie mają tego
+    /// problemu w ogóle.
+    /// </remarks>
     [RelayCommand]
+    private Task ShowDay() => SetDaysAsync(1);
+
+    [RelayCommand]
+    private Task ShowThreeDays() => SetDaysAsync(3);
+
+    [RelayCommand]
+    private Task ShowWeek() => SetDaysAsync(7);
+
     private async Task SetDaysAsync(int days)
     {
         VisibleDays = days is 1 or 3 or 7 ? days : 3;
@@ -172,6 +191,12 @@ public sealed partial class CalendarViewModel(
         if (VisibleDays == 7)
         {
             Anchor = Anchor.AddDays(-(((int)Anchor.DayOfWeek + 6) % 7));
+        }
+        else
+        {
+            // Powrót z tygodnia zostawiał zakotwiczenie na poniedziałku, więc „dzień"
+            // po „tygodniu" pokazywał poniedziałek zamiast dzisiaj.
+            GoToToday();
         }
 
         OnPropertyChanged(nameof(ColumnWidth));
