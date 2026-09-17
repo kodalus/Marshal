@@ -108,6 +108,31 @@ public sealed class TaskEditService(
     }
 
     /// <summary>
+    /// Dopisanie długości i poziomu sił — bez ruszania reszty.
+    /// </summary>
+    /// <remarks>
+    /// Osobno od pełnej edycji, bo przetwarzanie skrzynki dopisuje właśnie te dwie
+    /// rzeczy i nic więcej. Przepuszczenie tego przez edycję wszystkich pól wysyłałoby
+    /// do scalania także tytuł i termin, których nikt nie dotykał (9.4).
+    /// </remarks>
+    public async Task<TaskItem?> SetEstimateAsync(
+        Guid id, int? minutes, Energy energy, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        {
+            return null;
+        }
+
+        if (zadanie.EstimatedMinutes != minutes || zadanie.Energy != energy)
+        {
+            zadanie.SetEstimate(minutes, energy, hlc.Next());
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        return zadanie;
+    }
+
+    /// <summary>
     /// Przełożenie zadania na inny dzień i godzinę — jednym ruchem, bez reszty pól.
     /// </summary>
     /// <remarks>

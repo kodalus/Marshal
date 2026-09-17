@@ -18,10 +18,41 @@ namespace Marshal.UI.ViewModels;
 public sealed partial class ClarifyViewModel(
     InboxService inbox,
     NoteService notes,
-    IAreaRepository areas) : ObservableObject
+    IAreaRepository areas,
+    TaskEditService edit) : ObservableObject
 {
     [ObservableProperty]
     public partial TaskItem? Current { get; set; }
+
+    /// <summary>
+    /// Ile to zajmie i ile trzeba mieć w sobie — pytane tu, przy decyzji.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ekran „Teraz" dobiera zadania pod dostępne minuty i poziom sił (spec 8.1),
+    /// więc zadanie bez oszacowania nie trafia tam **nigdy**. Do dziś jedyne miejsce,
+    /// gdzie dało się to wpisać, było w szczegółach — czyli trzeba było najpierw
+    /// przetworzyć skrzynkę, potem znaleźć zadanie na liście i otworzyć je jeszcze raz.
+    /// Dwa kroki na coś, co jest częścią tej samej decyzji.
+    /// </para>
+    /// <para>
+    /// Pytane tutaj, bo tutaj myśl jest jeszcze świeża: „zadzwonić do przychodni"
+    /// oszacuje się lepiej w chwili, gdy się o tym myśli, niż tydzień później z listy.
+    /// Puste zostaje puste — zgadywanie długości byłoby gorsze od jej braku.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    public partial decimal? EstimatedMinutes { get; set; }
+
+    [ObservableProperty]
+    public partial EnergyLevelChoice? SelectedEnergy { get; set; } = EnergyLevelChoice.All[0];
+
+    public IReadOnlyList<EnergyLevelChoice> Energies => EnergyLevelChoice.All;
+
+    /// <summary>Podpowiedź pod polami: czemu to w ogóle pytanie.</summary>
+    public static string EstimateHint =>
+        "Bez tego zadanie nie trafi do „Teraz" — ten ekran dobiera pod dostępne minuty "
+        + "i poziom sił. Puste zostaje puste; zgadywanie jest gorsze od braku.";
 
     [ObservableProperty]
     public partial int Remaining { get; set; }
@@ -73,6 +104,11 @@ public sealed partial class ClarifyViewModel(
         ProjectOutcome = string.Empty;
         ScheduledFor = null;
 
+        // Długość i siły należą do **tego** wrzutu — zostawione, przykleiłyby się
+        // do następnego, a ten bywa zupełnie inną robotą.
+        EstimatedMinutes = null;
+        SelectedEnergy = Energies[0];
+
         if (Current is null)
         {
             Emptied?.Invoke(this, EventArgs.Empty);
@@ -120,6 +156,20 @@ public sealed partial class ClarifyViewModel(
                 ? "Po czym poznasz, że projekt jest skończony?"
                 : null);
 
+    /// <summary>Dopisanie długości i sił do zadania, które właśnie wyszło ze skrzynki.</summary>
+    private async Task ZapiszOszacowanieAsync(Guid id)
+    {
+        var minuty = EstimatedMinutes is { } liczba ? (int)liczba : (int?)null;
+        var sila = SelectedEnergy?.Value ?? Energy.Unknown;
+
+        if (minuty is null && sila == Energy.Unknown)
+        {
+            return;
+        }
+
+        await edit.SetEstimateAsync(id, minuty, sila);
+    }
+
     private async Task Run(Func<Guid, Task> action, bool needsArea = true, Func<string?>? validate = null)
     {
         if (Current is null)
@@ -139,7 +189,14 @@ public sealed partial class ClarifyViewModel(
             return;
         }
 
-        await action(Current.Id);
+        var identyfikator = Current.Id;
+
+        await action(identyfikator);
+
+        // Oszacowanie po przejściu stanu, nie przed: gałęzie kosza i notatki nie mają
+        // czego szacować, a zadanie przeniesione do projektu ma już własny byt.
+        await ZapiszOszacowanieAsync(identyfikator);
+
         await NextAsync();
     }
 }

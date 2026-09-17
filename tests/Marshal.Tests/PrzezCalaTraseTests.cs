@@ -7,6 +7,7 @@ using Marshal.Domain.Tasks;
 using Marshal.Infrastructure;
 using Marshal.Infrastructure.Data;
 using Marshal.UI;
+using Marshal.Domain.Areas;
 using Marshal.UI.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -176,6 +177,37 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         blok.StartText.Should().Be("09:00");
         blok.EndText.Should().Be("09:30");
+    }
+
+    [Fact]
+    public async Task Oszacowanie_z_przetwarzania_dociera_do_ekranu_teraz()
+    {
+        // Sedno: ekran „Teraz" dobiera pod dostępne minuty i poziom sił, więc zadanie
+        // bez oszacowania nie trafia tam nigdy. Dotąd dało się to wpisać dopiero
+        // w szczegółach — po przetworzeniu, z listy, drugim otwarciem.
+        var main = Usluga<MainViewModel>();
+
+        main.CaptureText = "Zadzwonić do przychodni";
+        await main.CaptureCommand.ExecuteAsync(null);
+
+        var przetwarzanie = Usluga<ClarifyViewModel>();
+        await przetwarzanie.LoadAsync();
+
+        przetwarzanie.Current.Should().NotBeNull();
+        przetwarzanie.SelectedArea = przetwarzanie.Areas.First();
+        przetwarzanie.EstimatedMinutes = 15;
+        przetwarzanie.SelectedEnergy = EnergyLevelChoice.All.Single(e => e.Value == Energy.Low);
+
+        await przetwarzanie.MakeNextCommand.ExecuteAsync(null);
+
+        var teraz = Usluga<NowViewModel>();
+        await teraz.LoadAsync();
+
+        teraz.SelectedMinutes = MinutesChoice.All.First(m => m.Minutes >= 15);
+        teraz.SelectedEnergy = EnergyChoice.All.Single(e => e.Value == Energy.Low);
+        await teraz.RefreshCommand.ExecuteAsync(null);
+
+        teraz.Picks.Should().Contain(w => w.Task.Title == "Zadzwonić do przychodni");
     }
 
     [Fact]

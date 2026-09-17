@@ -287,6 +287,26 @@
         <ComboBox ItemsSource="{Binding Areas}" SelectedItem="{Binding SelectedArea}"
                   HorizontalAlignment="Stretch" Margin="0,4,0,16" />
 
+        <!-- Długość i siły pytane tutaj, przy decyzji: ekran „Teraz" dobiera pod
+             dostępne minuty i poziom sił, więc zadanie bez oszacowania nie trafia tam
+             nigdy. Dotąd dało się to wpisać tylko w szczegółach — czyli trzeba było
+             przetworzyć skrzynkę, znaleźć zadanie na liście i otworzyć je jeszcze raz.
+             Myśl jest najświeższa właśnie teraz. -->
+        <Grid ColumnDefinitions="*,*" Margin="0,0,0,10">
+          <StackPanel Grid.Column="0" Margin="0,0,6,0">
+            <TextBlock Text="Ile to zajmie (minuty)" Classes="hint" />
+            <NumericUpDown Value="{Binding EstimatedMinutes}" Minimum="1" Maximum="600"
+                           Increment="5" FormatString="0" HorizontalAlignment="Stretch" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Margin="6,0,0,0">
+            <TextBlock Text="Ile trzeba mieć w sobie" Classes="hint" />
+            <ComboBox ItemsSource="{Binding Energies}" SelectedItem="{Binding SelectedEnergy}"
+                      HorizontalAlignment="Stretch" />
+          </StackPanel>
+        </Grid>
+        <TextBlock Classes="hint" Margin="2,0,0,16" TextWrapping="Wrap"
+                   Text="{Binding EstimateHint}" />
+
         <TextBlock Text="Nie wymaga działania" Classes="hint" Margin="0,0,0,6" />
         <Button Classes="branch" Command="{Binding TrashCommand}" Content="Kosz" />
         <Button Classes="branch" Command="{Binding SomedayCommand}" Content="Kiedyś-może" />
