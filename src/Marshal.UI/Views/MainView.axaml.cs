@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -148,21 +149,91 @@ public partial class MainView : UserControl
         }
     }
 
-    private void BlokRuszony(object? nadawca, PointerEventArgs e)
+    /// <summary>Dzień i wysokość pod wskaźnikiem, przeliczone na współrzędne siatki.</summary>
+    /// <remarks>
+    /// Z położenia wskaźnika, a nie z tego, co pod nim: przy przechwyconym wskaźniku
+    /// zdarzenia trafiają do przeciąganego bloku niezależnie od tego, nad czym stoi.
+    /// </remarks>
+    private (DateOnly Dzien, double Wysokosc)? Cel(PointerEventArgs e)
     {
-        var doRuszenia = _wciesniety is { TaskId: not null }
-            || _wciesniety is { SourceId: not null, ExternalId: not null };
+        if (_kalendarz is null
+            || _warstwaGodzin is null
+            || this.FindControl<ItemsControl>("KolumnyDni") is not { } kolumny)
+        {
+            return null;
+        }
 
-        if (!doRuszenia || _przeciagam)
+        var szerokosc = _kalendarz.ColumnWidth + 2;
+        var numer = Math.Clamp(
+            (int)(e.GetPosition(kolumny).X / szerokosc), 0, _kalendarz.VisibleDays - 1);
+
+        return (_kalendarz.Anchor.AddDays(numer), e.GetPosition(_warstwaGodzin).Y);
+    }
+
+    /// <summary>
+    /// Podgląd przeciąganego bloku: co i dokąd.
+    /// </summary>
+    /// <remarks>
+    /// Bez niego przeciąganie jest ruchem w ciemno — o właściwej godzinie dowiadujesz
+    /// się dopiero po puszczeniu, czyli po zapisie. Przy wydarzeniach z Google znaczy
+    /// to po zapisie w cudzym kalendarzu.
+    /// </remarks>
+    private void PokazPodglad(PointerEventArgs e, SlotBox slot)
+    {
+        if (this.FindControl<Border>("Podglad") is not { } podglad
+            || this.FindControl<TextBlock>("PodgladTytul") is not { } tytul
+            || this.FindControl<TextBlock>("PodgladKiedy") is not { } kiedy
+            || Cel(e) is not var (dzien, wysokosc))
         {
             return;
         }
 
-        var teraz = e.GetPosition(this);
+        var pora = CalendarViewModel.Pora(wysokosc);
 
-        if (Math.Abs(teraz.X - _skad.X) > ProgPrzeciagniecia
-            || Math.Abs(teraz.Y - _skad.Y) > ProgPrzeciagniecia)
+        tytul.Text = slot.Title;
+        kiedy.Text = $"{dzien:dd.MM} · {pora:HH}:{pora:mm}";
+
+        var gdzie = e.GetPosition(this);
+        Canvas.SetLeft(podglad, gdzie.X + 14);
+        Canvas.SetTop(podglad, gdzie.Y + 14);
+
+        podglad.IsVisible = true;
+    }
+
+    private void SchowajPodglad()
+    {
+        if (this.FindControl<Border>("Podglad") is { } podglad)
         {
+            podglad.IsVisible = false;
+        }
+    }
+
+    private void BlokRuszony(object? nadawca, PointerEventArgs e)
+    {
+        if (_wciesniety is not { } slot)
+        {
+            return;
+        }
+
+        // Zadania ruszamy zawsze, wydarzenia tylko takie, które mają dokąd wrócić.
+        var doRuszenia = slot.TaskId is not null
+            || (slot.SourceId is not null && slot.ExternalId is not null);
+
+        if (!doRuszenia)
+        {
+            return;
+        }
+
+        if (!_przeciagam)
+        {
+            var teraz = e.GetPosition(this);
+
+            if (Math.Abs(teraz.X - _skad.X) <= ProgPrzeciagniecia
+                && Math.Abs(teraz.Y - _skad.Y) <= ProgPrzeciagniecia)
+            {
+                return;
+            }
+
             _przeciagam = true;
 
             if (nadawca is Control blok)
@@ -171,6 +242,8 @@ public partial class MainView : UserControl
                 e.Pointer.Capture(blok);
             }
         }
+
+        PokazPodglad(e, slot);
     }
 
     /// <summary>
@@ -189,6 +262,8 @@ public partial class MainView : UserControl
             blok.Opacity = 1;
             e.Pointer.Capture(null);
         }
+
+        SchowajPodglad();
 
         var slot = _wciesniety;
         var przeciagniete = _przeciagam;
@@ -213,19 +288,10 @@ public partial class MainView : UserControl
             return;
         }
 
-        if (this.FindControl<ItemsControl>("KolumnyDni") is not { } kolumny
-            || _warstwaGodzin is null)
+        if (Cel(e) is not var (dzien, wysokosc) || _kalendarz is null)
         {
             return;
         }
-
-        var wKolumnach = e.GetPosition(kolumny);
-        var szerokosc = _kalendarz.ColumnWidth + 2;
-        var numer = Math.Clamp((int)(wKolumnach.X / szerokosc), 0, _kalendarz.VisibleDays - 1);
-
-        var wysokosc = e.GetPosition(_warstwaGodzin).Y;
-
-        var dzien = _kalendarz.Anchor.AddDays(numer);
 
         // Zadanie idzie naszą drogą, wydarzenie — prosto do kalendarza, z którego
         // pochodzi. To druga rzecz, nie ta sama z innym zapisem.
@@ -295,8 +361,22 @@ public partial class MainView : UserControl
             return;
         }
 
-        if (e.Source is Control zrodlo
-            && zrodlo.FindAncestorOfType<TimePicker>() is null
+        if (e.Source is not Control zrodlo)
+        {
+            return;
+        }
+
+        // Rozwinięta lista godzin albo dni przewija **siebie**. Poprzednia poprawka
+        // odbierała jej kółko i oddawała je oknu, więc wybieranie godziny przestało
+        // działać — naprawa jednego przewijania zepsuła drugie.
+        if (zrodlo.FindAncestorOfType<TimePickerPresenter>() is not null
+            || zrodlo.FindAncestorOfType<DatePickerPresenter>() is not null
+            || zrodlo.FindAncestorOfType<Popup>() is not null)
+        {
+            return;
+        }
+
+        if (zrodlo.FindAncestorOfType<TimePicker>() is null
             && zrodlo.FindAncestorOfType<DatePicker>() is null
             && zrodlo.FindAncestorOfType<NumericUpDown>() is null)
         {

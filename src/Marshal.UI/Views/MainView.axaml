@@ -55,6 +55,8 @@
       <Setter Property="IsHitTestVisible" Value="False" />
       <Setter Property="Padding" Value="0" />
       <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Margin" Value="0" />
     </Style>
     <!-- Blok jest przyciskiem, żeby kliknięcie otwierało szczegół. Własna oprawa
          przycisku wyłączona: barwę bloku niesie ramka w środku, a domyślne tło
@@ -749,8 +751,11 @@
                                    w chwili najechania. Samo pole jest przezroczyste i
                                    nieklikalne do czasu najechania — niewidoczne, ale
                                    klikalne byłoby gorsze niż jedno i drugie naraz. -->
-                              <Panel Grid.Column="0" Width="22" IsVisible="{Binding CanComplete}">
+                              <Panel Grid.Column="0" Width="{Binding CheckSize}"
+                                     IsVisible="{Binding ShowCheck}">
                                 <CheckBox Classes="odhacz" VerticalAlignment="Top"
+                                          Width="{Binding CheckSize}"
+                                          Height="{Binding CheckSize}"
                                           Command="{Binding $parent[DockPanel].((vm:CalendarViewModel)DataContext).CompleteCommand}"
                                           CommandParameter="{Binding TaskId}" />
                               </Panel>
@@ -1568,6 +1573,18 @@
            Ta sama sztuczka co przy przetwarzaniu: widoczność na jednym elemencie,
            podmiana kontekstu na drugim, bo DataContext ustawiony na elemencie
            obowiązuje też dla pozostałych powiązań na tym samym elemencie. -->
+      <!-- Podgląd przeciąganego bloku. Nad wszystkim i nieprzezroczysty dla wskaźnika,
+           żeby nie łapał zdarzeń, które należą do siatki pod nim. -->
+      <Canvas Name="WarstwaPodgladu" IsHitTestVisible="False">
+        <Border Name="Podglad" IsVisible="False" Padding="8,5" CornerRadius="6"
+                Background="#E6303030" BorderBrush="#80FFFFFF" BorderThickness="1">
+          <StackPanel>
+            <TextBlock Name="PodgladTytul" FontSize="12" FontWeight="SemiBold" />
+            <TextBlock Name="PodgladKiedy" FontSize="12" Opacity="0.85" />
+          </StackPanel>
+        </Border>
+      </Canvas>
+
       <Panel IsVisible="{Binding Detail.IsOpen}" Background="#CC101010"
              PointerPressed="TloSzczegolu">
       <!-- Kliknięcie w przyciemnione tło zamyka okno, kliknięcie w samo okno nie:

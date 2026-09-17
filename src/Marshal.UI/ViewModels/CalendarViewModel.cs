@@ -50,6 +50,17 @@ public sealed record SlotBox(
     /// </remarks>
     public bool ShowTimes => Width >= 120 && Height >= 34;
 
+    /// <summary>Czy na bloku mieści się pole do odhaczenia.</summary>
+    /// <remarks>
+    /// Kwadrans ma trzynaście punktów wysokości, a pole razem z oprawą potrzebuje
+    /// dwudziestu — na krótkim bloku wystawało poza jego krawędź i zasłaniało sąsiada.
+    /// Krótkie zadanie odhacza się z listy albo po otwarciu szczegółu.
+    /// </remarks>
+    public bool ShowCheck => CanComplete && Height >= 26 && Width >= 60;
+
+    /// <summary>Rozmiar pola do odhaczenia — mniejszy na niskich blokach.</summary>
+    public double CheckSize => Height >= 44 ? 18 : 14;
+
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
     private const string DomyslneWydarzenie = "#6C8FBF";
 
@@ -249,7 +260,7 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public async Task MoveAsync(Guid taskId, DateOnly day, double punkty)
     {
-        var pora = Kwadrans(punkty);
+        var pora = Pora(punkty);
 
         try
         {
@@ -296,7 +307,7 @@ public sealed partial class CalendarViewModel(
         }
 
         var strefa = clock.Now.Offset;
-        var start = new DateTimeOffset(day.ToDateTime(Kwadrans(punkty)), strefa);
+        var start = new DateTimeOffset(day.ToDateTime(Pora(punkty)), strefa);
         var dlugosc = TimeSpan.FromHours(Math.Max(0.25, blok.Height / HourHeight));
 
         try
@@ -385,19 +396,21 @@ public sealed partial class CalendarViewModel(
         OnPropertyChanged(nameof(UndoText));
     }
 
-    /// <summary>
-    /// Godzina z wysokości na siatce, zaokrąglona w dół do kwadransa.
-    /// </summary>
-    /// <remarks>
-    /// Minuta wzięta co do punktu byłaby udawaną precyzją: trafienie w 14:07 nie znaczy,
-    /// że ktoś planuje na 14:07.
-    /// </remarks>
-    private static TimeOnly Kwadrans(double punkty)
-    {
-        var minuty = Math.Clamp(punkty / HourHeight * 60, 0, (24 * 60) - 15);
-        var kwadranse = (int)(minuty / 15) * 15;
 
-        return new TimeOnly(kwadranse / 60, kwadranse % 60);
+    /// <summary>Krok, do którego przyciąga się godzina przy przeciąganiu.</summary>
+    /// <remarks>
+    /// Pięć minut: kwadrans był za grubą miarką na spotkanie o 9:35, a minuta co do
+    /// punktu byłaby udawaną precyzją — trafienie w 14:07 nie znaczy, że ktoś planuje
+    /// na 14:07.
+    /// </remarks>
+    private const int Krok = 5;
+
+    public static TimeOnly Pora(double punkty)
+    {
+        var minuty = Math.Clamp(punkty / HourHeight * 60, 0, (24 * 60) - Krok);
+        var kroki = (int)(minuty / Krok) * Krok;
+
+        return new TimeOnly(kroki / 60, kroki % 60);
     }
 
     /// <summary>Kliknięcie w pustą siatkę: nowe zadanie na tym dniu i o tej godzinie.</summary>
@@ -412,7 +425,7 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public void NewAt(DateOnly day, double punkty)
     {
-        NewTaskRequested?.Invoke(day, Kwadrans(punkty));
+        NewTaskRequested?.Invoke(day, Pora(punkty));
     }
 
     public async Task LoadAsync()
