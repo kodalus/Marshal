@@ -112,4 +112,21 @@ public sealed class IcalFeedTests
 
         IcalFeed.Parse(plik, Teraz).Should().BeEmpty();
     }
+
+    [Fact]
+    public void Barwa_kanalu_czyta_sie_z_pola_X()
+    {
+        // Pole spoza normy, ale wystawia je wszystko, co w ogóle podaje kolor.
+        // Biblioteka do rozbioru nie wpuszcza własnych pól na X, stąd szukanie
+        // w tekście — i stąd ten test, bo to jedyne miejsce, gdzie widać literówkę.
+        var plik = Kalendarz("X-APPLE-CALENDAR-COLOR:#34AADC\r\n");
+
+        IcalFeed.ParseColor(plik).Should().Be("#34AADC");
+    }
+
+    [Fact]
+    public void Kanal_bez_barwy_nie_zmysla_koloru()
+    {
+        IcalFeed.ParseColor(Kalendarz(string.Empty)).Should().BeNull();
+    }
 }

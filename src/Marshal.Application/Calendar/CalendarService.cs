@@ -133,6 +133,18 @@ public sealed class CalendarSyncService(
                         zrodlo.Id, wynik.Events.Select(e => e.ExternalId).ToList(), ct);
                 }
 
+                // Barwa dociągana przy każdym pobraniu, nie tylko przy podłączaniu.
+                // Inaczej kalendarze podłączone przed wprowadzeniem barw zostałyby
+                // szare na zawsze, a jedyną drogą byłoby odłączenie ich i dodanie od
+                // nowa — czyli kazanie komuś naprawiać ręką coś, co aplikacja wie.
+                // Puste znaczy „źródło nie mówi", więc nie kasuje barwy już zapisanej.
+                // Porównanie przed zapisem, bo inaczej każde odświeżenie na każdym
+                // urządzeniu dopisywałoby tę samą zmianę do dziennika synchronizacji.
+                if (!string.IsNullOrWhiteSpace(wynik.Color) && wynik.Color != zrodlo.Color)
+                {
+                    zrodlo.SetColor(wynik.Color, hlc.Next());
+                }
+
                 store.SaveCursor(zrodlo.Id, wynik.SyncToken, teraz);
                 await store.SaveChangesAsync(ct);
 

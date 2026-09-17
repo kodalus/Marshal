@@ -98,7 +98,35 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
         }
         while (!string.IsNullOrEmpty(strona));
 
-        return new FeedResult(wydarzenia, nowyZeton, pelny);
+        return new FeedResult(wydarzenia, nowyZeton, pelny, await BarwaAsync(source, ct));
+    }
+
+    /// <summary>
+    /// Barwa kalendarza z konta Google.
+    /// </summary>
+    /// <remarks>
+    /// Barwy nie ma w odpowiedzi z wydarzeniami — siedzi na liście kalendarzy konta,
+    /// stąd osobne zapytanie. Jedno na kalendarz na odświeżenie, a odświeżenie jest
+    /// ręczne albo raz na godzinę.
+    /// <para>
+    /// Kalendarza, którego nie ma na liście konta (na przykład publicznego, dodanego
+    /// po samym identyfikatorze), da się czytać, ale barwy dla niego nie ma — i to
+    /// jest jedyny przypadek, w którym 404 nie jest tu błędem. Nie połykamy przez to
+    /// niczego innego: wszystkie pozostałe niepowodzenia idą dalej i lądują w raporcie.
+    /// </para>
+    /// </remarks>
+    private async Task<string?> BarwaAsync(CalendarSource source, CancellationToken ct)
+    {
+        try
+        {
+            var wpis = await service.CalendarList.Get(source.ExternalId).ExecuteAsync(ct);
+
+            return wpis.BackgroundColor;
+        }
+        catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
     }
 
     private static FeedEvent? Convert(Google.Apis.Calendar.v3.Data.Event wydarzenie)

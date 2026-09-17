@@ -35,7 +35,44 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
         ArgumentNullException.ThrowIfNull(source);
 
         var tresc = await http.GetStringAsync(source.ExternalId, ct);
-        return new FeedResult(Parse(tresc, DateTime.UtcNow), SyncToken: null, IsFull: true);
+
+        return new FeedResult(
+            Parse(tresc, DateTime.UtcNow), SyncToken: null, IsFull: true, ParseColor(tresc));
+    }
+
+    /// <summary>
+    /// Barwa kanału, jeśli ją podaje.
+    /// </summary>
+    /// <remarks>
+    /// <c>X-APPLE-CALENDAR-COLOR</c> nie jest w normie iCal, ale wystawia je wszystko,
+    /// co w ogóle podaje kolor — biblioteka do rozbioru nie wpuszcza własnych pól
+    /// zaczynających się od X, więc szukamy w tekście. Wartość to zwykle <c>#RRGGBB</c>
+    /// albo <c>#RRGGBBAA</c>; ósemki nie skracamy, bo alfę i tak nakłada siatka.
+    /// </remarks>
+    public static string? ParseColor(string content)
+    {
+        foreach (var linia in content.Split('\n'))
+        {
+            var oczyszczona = linia.Trim();
+
+            if (!oczyszczona.StartsWith("X-APPLE-CALENDAR-COLOR", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var dwukropek = oczyszczona.IndexOf(':', StringComparison.Ordinal);
+
+            if (dwukropek < 0)
+            {
+                continue;
+            }
+
+            var barwa = oczyszczona[(dwukropek + 1)..].Trim();
+
+            return string.IsNullOrEmpty(barwa) ? null : barwa;
+        }
+
+        return null;
     }
 
     /// <summary>

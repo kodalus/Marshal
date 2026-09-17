@@ -321,6 +321,35 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Barwa_dociaga_sie_przy_pobraniu()
+    {
+        // Kalendarze podłączone przed wprowadzeniem barw mają w bazie pusto i bez
+        // tego zostałyby szare na zawsze — a jedyną drogą byłoby odłączenie ich
+        // i dodanie od nowa, czyli naprawianie ręką czegoś, co aplikacja wie.
+        _kanal.Next = new FeedResult([], SyncToken: null, IsFull: true, Color: "#8E24AA");
+
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.SourcesAsync())
+            .Single(z => z.Id == _zrodlo.Id).Color.Should().Be("#8E24AA");
+    }
+
+    [Fact]
+    public async Task Brak_barwy_u_zrodla_nie_kasuje_zapisanej()
+    {
+        // „Nie wiem" i „bez koloru" to dwie różne odpowiedzi. Kanał, który barwy nie
+        // podaje, nie ma podstaw, żeby czyścić tę, którą już mamy.
+        _kanal.Next = new FeedResult([], SyncToken: null, IsFull: true, Color: "#8E24AA");
+        await _usluga.RefreshAsync(force: true);
+
+        _kanal.Next = new FeedResult([], SyncToken: null, IsFull: true);
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.SourcesAsync())
+            .Single(z => z.Id == _zrodlo.Id).Color.Should().Be("#8E24AA");
+    }
+
+    [Fact]
     public async Task Wydarzenie_dostaje_barwe_swojego_kalendarza()
     {
         // Barwa siedzi na kalendarzu, a rysuje się wydarzenie — i to jest jedyna

@@ -20,8 +20,15 @@ public sealed record FeedEvent(
 /// Bez tego rozróżnienia nie da się posprzątać wydarzeń, które zniknęły: przy odczycie
 /// przyrostowym „nie przyszło" znaczy „bez zmian", a przy pełnym — „już go nie ma".
 /// </remarks>
+/// <param name="Color">
+/// Barwa kalendarza u źródła, jeśli ją podaje. Puste znaczy „nie wiem", a nie
+/// „bez koloru" — dlatego nie kasuje barwy już zapisanej. Jedenaście kalendarzy
+/// podłączonych przed wprowadzeniem barw ma w bazie pusto i inaczej zostałoby
+/// szare na zawsze: droga przez odłączenie i podłączenie od nowa to nie jest
+/// coś, czego można wymagać od kogokolwiek.
+/// </param>
 public sealed record FeedResult(
-    IReadOnlyList<FeedEvent> Events, string? SyncToken, bool IsFull);
+    IReadOnlyList<FeedEvent> Events, string? SyncToken, bool IsFull, string? Color = null);
 
 /// <summary>
 /// Odczyt kalendarza zewnętrznego (spec 10.1). Tylko odczyt — zapis jest świadomie
