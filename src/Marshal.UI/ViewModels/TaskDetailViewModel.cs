@@ -6,6 +6,7 @@ using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.UI.ViewModels;
@@ -19,7 +20,8 @@ namespace Marshal.UI.ViewModels;
 /// cztery dotyczą tej samej decyzji: kiedy to ma się zdarzyć.
 /// </remarks>
 public sealed partial class TaskDetailViewModel(
-    TaskEditService edit, IClock clock, IAreaRepository areas, InboxService inbox)
+    TaskEditService edit, IClock clock, IAreaRepository areas, InboxService inbox,
+    IActivityLog log)
     : ObservableObject
 {
     private Guid _id;
@@ -300,8 +302,12 @@ public sealed partial class TaskDetailViewModel(
 
         if (problem is not null)
         {
-            // Zdanie podsumowujące pokazuje już, czego brakuje; czerwony napis obok
-            // powtarzałby to samo drugi raz.
+            // Do dziś była tu cicha odmowa: przycisk klikał, okno zostawało otwarte
+            // i nic nie mówiło dlaczego. Zdanie podsumowujące rytm bywa niżej,
+            // poza widokiem, więc powód idzie także tutaj.
+            Problem = problem;
+            OnPropertyChanged(nameof(HasProblem));
+            await log.RecordAsync("Zadanie: zapis", Title, ActivityLevel.Problem, problem);
             return;
         }
 
@@ -313,6 +319,11 @@ public sealed partial class TaskDetailViewModel(
                 {
                     Problem = "Nowe zadanie potrzebuje nazwy.";
                     OnPropertyChanged(nameof(HasProblem));
+
+                    await log.RecordAsync(
+                        "Zadanie: zapis", "bez nazwy", ActivityLevel.Problem,
+                        "Nowe zadanie zapisane bez nazwy nie powstaje.");
+
                     return;
                 }
 
@@ -332,15 +343,28 @@ public sealed partial class TaskDetailViewModel(
                 SelectedArea?.Id,
                 DoTime is { } pora ? TimeOnly.FromTimeSpan(pora) : null));
         }
-        catch (Exception e) when (e is InvalidOperationException or ArgumentException)
+        catch (Exception e) when (e is not OperationCanceledException)
         {
-            // Zapis, który się nie udał, zamykał okno tak samo jak udany. Pole z datą
-            // wracało puste dopiero przy następnym otwarciu — czyli dużo później
-            // i bez związku z przyczyną.
+            // **Każdy** wyjątek, nie wybrane rodzaje. Polecenie wołane jest bez
+            // oczekiwania na wynik, więc rodzaj spoza listy nie miał dokąd trafić:
+            // znikał bez śladu, a okno zostawało otwarte bez słowa wyjaśnienia.
             Problem = e.Message;
             OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Zadanie: zapis", Title, ActivityLevel.Problem,
+                $"{e.GetType().Name}: {e.Message}");
+
             return;
         }
+
+        // Ślad także po udanym zapisie: „zapisało się, ale nie widać" i „nie zapisało
+        // się" wyglądają na ekranie tak samo, a to dwie różne rzeczy do zrobienia.
+        await log.RecordAsync(
+            "Zadanie: zapis",
+            $"{Title} — dzień {ToDate(DoDate)?.ToString("yyyy-MM-dd") ?? "brak"}, "
+                + $"godzina {(DoTime is { } g ? g.ToString(@"hh\:mm") : "brak")}, "
+                + $"obszar {SelectedArea?.Name ?? "brak"}");
 
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);
