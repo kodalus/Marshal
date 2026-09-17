@@ -904,25 +904,36 @@ public partial class MainView : UserControl
     }
 
     /// <summary>
-    /// Pozycje menu od udostępniania — albo żadne, gdy nie ma dokąd.
+    /// Pozycje menu od kalendarza — albo żadne, gdy nie ma dokąd przenosić.
     /// </summary>
     /// <remarks>
-    /// Udostępnione zadanie pokazuje jedną pozycję: zdjęcie udostępnienia. Lista
-    /// kalendarzy przy czymś, co już gdzieś stoi, sugerowałaby, że da się je postawić
-    /// w dwóch naraz — a wydarzenie ma jedno miejsce i jeden identyfikator.
+    /// Zadanie stoi w jednym kalendarzu naraz, więc lista pokazuje **pozostałe**,
+    /// a nie wszystkie: „przenieś tam, gdzie już jest" nie jest czynnością. Zadanie
+    /// wyniesione poza główny dostaje dodatkowo powrót — bo to jest jedyny sposób,
+    /// żeby zniknęło z cudzego widoku, nie znikając ze swojego.
     /// </remarks>
     private IReadOnlyList<object> Udostepnianie(
         MainViewModel model, TaskItem zadanie, IReadOnlyList<CalendarSource> kalendarze)
     {
-        if (zadanie.IsShared)
+        var gdzieJest = zadanie.SharedCalendarId;
+        var glowny = model.MainCalendarId;
+
+        var pozostale = kalendarze.Where(k => k.Id != gdzieJest).ToList();
+        var pozycje = new List<object>();
+
+        if (pozostale.Count > 0)
         {
-            return [Pozycja("Przestań udostępniać", () => model.UnshareTaskAsync(zadanie))];
+            pozycje.Add(Galaz("Przenieś do kalendarza", [.. pozostale.Select(k =>
+                Pozycja(k.Name, () => model.ShareTaskAsync(zadanie, k.Id)))]));
         }
 
-        return kalendarze.Count == 0
-            ? []
-            : [Galaz("Udostępnij w kalendarzu", [.. kalendarze.Select(k =>
-                Pozycja(k.Name, () => model.ShareTaskAsync(zadanie, k.Id)))])];
+        if (gdzieJest is not null && glowny is not null && gdzieJest != glowny)
+        {
+            pozycje.Add(Pozycja(
+                "Z powrotem na kalendarz główny", () => model.UnshareTaskAsync(zadanie)));
+        }
+
+        return pozycje;
     }
 
     /// <summary>Pozycja menu. Woła metodę wprost — wyjątek ma dokąd trafić.</summary>

@@ -45,8 +45,11 @@ public sealed class TaskEditService(
     /// </summary>
     /// <remarks>
     /// Wołane z każdej ścieżki, która zmienia to, co widać w wydarzeniu: nazwę, dzień,
-    /// godzinę, długość i odhaczenie. Zadanie nieudostępnione nie kosztuje przy tym nic —
-    /// odbicie odpada na pierwszym sprawdzeniu.
+    /// godzinę, długość i odhaczenie. O tym, czy jest co wysyłać, rozstrzyga samo
+    /// odbicie: zadanie bez dnia albo bez godziny odpada, a bez ustawionego kalendarza
+    /// głównego odpada wszystko. Sprawdzanie tego tutaj znaczyłoby dwa miejsca z tą
+    /// samą regułą — i to właśnie przez takie sprawdzenie zadania nie trafiały do
+    /// kalendarza głównego same.
     ///
     /// Po zapisie u nas, nie przed: baza jest prawdą, a kalendarz jej odbiciem. Gdyby
     /// wysyłka szła pierwsza, nieudany zapis lokalny zostawiałby w cudzym kalendarzu
@@ -54,7 +57,7 @@ public sealed class TaskEditService(
     /// </remarks>
     private async Task OdbijAsync(TaskItem? zadanie, CancellationToken ct)
     {
-        if (zadanie is { SharedCalendarId: not null })
+        if (zadanie is not null)
         {
             await mirror.PushAsync(zadanie, ct);
         }

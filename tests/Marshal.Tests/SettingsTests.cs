@@ -119,6 +119,10 @@ public sealed class SettingsTests : IDisposable
 
         public bool GoogleCalendarEnabled => false;
 
+        public Guid? MainCalendarId => null;
+
+        public void SetMainCalendar(Guid? calendarId) => throw new NotSupportedException();
+
         public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
 
         public void SetZone(string id) => throw new NotSupportedException();

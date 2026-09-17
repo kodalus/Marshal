@@ -161,6 +161,35 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// </remarks>
     public ObservableCollection<GoogleCalendarInfo> AvailableGoogleCalendars { get; } = [];
 
+    /// <summary>Pozycja „nigdzie" na liście kalendarza domyślnego.</summary>
+    private static readonly MainCalendarChoice BezKalendarza = new(null, "nigdzie — tylko w Marshalu");
+
+    private bool _wczytywanieKalendarza;
+
+    /// <summary>
+    /// Kalendarz, w którym lądują zadania z godziną.
+    /// </summary>
+    /// <remarks>
+    /// Bez tego każde zadanie trzeba było przenosić do kalendarza ręcznie, jedno po
+    /// drugim — a synchronizacja, o której trzeba pamiętać przy każdym zadaniu, nie
+    /// jest synchronizacją. Zadanie stoi w jednym kalendarzu naraz: przeniesione do
+    /// wspólnego znika z tego, a wraca po cofnięciu.
+    /// </remarks>
+    [ObservableProperty]
+    public partial MainCalendarChoice? MainCalendar { get; set; }
+
+    public ObservableCollection<MainCalendarChoice> MainCalendars { get; } = [];
+
+    partial void OnMainCalendarChanged(MainCalendarChoice? value)
+    {
+        if (_wczytywanieKalendarza)
+        {
+            return;
+        }
+
+        _settings.SetMainCalendar(value?.Id);
+    }
+
     public bool HasAvailableGoogleCalendars => AvailableGoogleCalendars.Count > 0;
 
     [RelayCommand]
@@ -313,6 +342,21 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             Calendars.Add(zrodlo);
         }
+
+        // Do wyboru tylko te, do których umiemy pisać. Kanał iCal jest do odczytu,
+        // więc postawienie go tu byłoby ustawieniem bez skutku.
+        MainCalendars.Clear();
+        MainCalendars.Add(BezKalendarza);
+
+        foreach (var zrodlo in Calendars.Where(z => _kalendarze.CanWrite(z.Kind)))
+        {
+            MainCalendars.Add(new MainCalendarChoice(zrodlo.Id, zrodlo.Name));
+        }
+
+        _wczytywanieKalendarza = true;
+        MainCalendar = MainCalendars.FirstOrDefault(w => w.Id == _settings.MainCalendarId)
+            ?? BezKalendarza;
+        _wczytywanieKalendarza = false;
 
         OnPropertyChanged(nameof(HasCalendars));
     }
@@ -526,4 +570,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         Status = $"Dni liczone w strefie {_settings.Zone.Id}.";
         OnPropertyChanged(nameof(Now));
     }
+}
+
+/// <summary>Kalendarz domyślny na liście wyboru. Puste znaczy „nigdzie".</summary>
+public sealed record MainCalendarChoice(Guid? Id, string Name)
+{
+    public override string ToString() => Name;
 }

@@ -954,13 +954,17 @@ public sealed partial class MainViewModel : ObservableObject
             .Where(z => _kalendarze.CanWrite(z.Kind))
             .ToList();
 
+    /// <summary>Kalendarz, w którym zadania lądują domyślnie.</summary>
+    public Guid? MainCalendarId => _odbicie.MainCalendarId;
+
     /// <summary>
-    /// Udostępnienie zadania w wybranym kalendarzu.
+    /// Przeniesienie zadania do wybranego kalendarza.
     /// </summary>
     /// <remarks>
     /// Po to, żeby ktoś bez Marshala widział u siebie to, co go dotyczy. Pojedyncze
     /// zadania, nie całe obszary: obszar rodzinny mieści i „odebrać dziecko",
-    /// i „kupić prezent", a widzieć je mają różne osoby.
+    /// i „kupić prezent", a widzieć je mają różne osoby. Przeniesienie, nie dołożenie —
+    /// zadanie stoi w jednym kalendarzu naraz.
     /// </remarks>
     public async Task ShareTaskAsync(TaskItem task, Guid calendarId)
     {

@@ -23,6 +23,8 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     public const string GoogleCalendarKey = "google-calendar";
 
+    public const string MainCalendarKey = "main-calendar";
+
     /// <summary>
     /// Strefa domyślna, gdy nic nie zapisano (spec 3.4). Wpisana wprost, nie brana
     /// z systemu — żeby świeżo zainstalowana aplikacja liczyła dni tak samo na
@@ -43,6 +45,8 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     private string? _googleSecret;
 
     private bool? _googleCalendar;
+
+    private string? _glownyKalendarz;
 
     public TimeZoneInfo Zone
     {
@@ -96,6 +100,29 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     public bool GoogleCalendarEnabled
     {
         get { lock (_gate) { return _googleCalendar ??= Read(GoogleCalendarKey) == "1"; } }
+    }
+
+    public Guid? MainCalendarId
+    {
+        get
+        {
+            lock (_gate)
+            {
+                _glownyKalendarz ??= Read(MainCalendarKey) ?? string.Empty;
+
+                return Guid.TryParse(_glownyKalendarz, out var id) ? id : null;
+            }
+        }
+    }
+
+    public void SetMainCalendar(Guid? calendarId)
+    {
+        lock (_gate)
+        {
+            var zapis = calendarId?.ToString() ?? string.Empty;
+            Write(MainCalendarKey, zapis);
+            _glownyKalendarz = zapis;
+        }
     }
 
     public void SetGoogleCalendarEnabled(bool enabled)

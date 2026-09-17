@@ -86,6 +86,27 @@ public interface ISettings
     /// </remarks>
     bool GoogleCalendarEnabled { get; }
 
+    /// <summary>
+    /// Kalendarz, w którym domyślnie lądują zadania z godziną. Puste = w żadnym.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zadanie zapisane w Marshalu ma być widoczne na telefonie i w kalendarzu, do
+    /// którego zagląda się tak czy owak. Bez tego każde trzeba było udostępniać ręcznie,
+    /// jedno po drugim — a synchronizacja, która wymaga pamiętania o niej przy każdym
+    /// zadaniu, nie jest synchronizacją.
+    /// </para>
+    /// <para>
+    /// Zadanie stoi w **jednym** kalendarzu naraz. Przeniesienie go do innego —
+    /// na przykład wspólnego z drugą osobą — zabiera je z głównego, a cofnięcie wraca
+    /// tam z powrotem. Stanie w dwóch naraz znaczyłoby dwa wpisy na jedną rzecz
+    /// w jednym widoku telefonu.
+    /// </para>
+    /// </remarks>
+    Guid? MainCalendarId { get; }
+
+    void SetMainCalendar(Guid? calendarId);
+
     void SetGoogleCalendarEnabled(bool enabled);
 
     void SetZone(string id);

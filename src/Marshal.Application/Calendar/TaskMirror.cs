@@ -34,14 +34,12 @@ public sealed class TaskMirror(
     /// <summary>Ile trwa udostępnione zadanie bez podanej długości.</summary>
     private const int DomyslneMinuty = 30;
 
+    /// <summary>Kalendarz, w którym zadania lądują domyślnie. Na potrzeby menu w oknie.</summary>
+    public Guid? MainCalendarId => settings.MainCalendarId;
+
     public async Task PushAsync(TaskItem task, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(task);
-
-        if (task.SharedCalendarId is not { } kalendarz)
-        {
-            return;
-        }
 
         // Zadanie, które przestało mieć dzień albo godzinę, przestaje być wydarzeniem.
         // Kalendarz nie ma jak pokazać „kiedyś w tym tygodniu", a zostawione w nim
@@ -52,12 +50,20 @@ public sealed class TaskMirror(
             return;
         }
 
-        var szkic = Szkic(task);
+        // Kalendarz zadania albo domyślny. To jest cała reguła: zadanie z godziną leci
+        // do kalendarza głównego samo, a przeniesione gdzie indziej zostaje tam, gdzie
+        // je przeniesiono. Bez domyślnego trzeba było pamiętać o udostępnieniu przy
+        // każdym zadaniu z osobna — a synchronizacja, o której trzeba pamiętać, nie
+        // jest synchronizacją.
+        if ((task.SharedCalendarId ?? settings.MainCalendarId) is not { } kalendarz)
+        {
+            return;
+        }
 
         var identyfikator = await calendar.SaveEventAsync(
-            kalendarz, task.SharedEventId, szkic, ct);
+            kalendarz, task.SharedEventId, Szkic(task), ct);
 
-        if (identyfikator != task.SharedEventId)
+        if (identyfikator != task.SharedEventId || task.SharedCalendarId != kalendarz)
         {
             task.Share(kalendarz, identyfikator, hlc.Next());
             await unitOfWork.SaveChangesAsync(ct);
@@ -82,7 +88,14 @@ public sealed class TaskMirror(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
-    /// <summary>Udostępnienie zadania po raz pierwszy. Oddaje powód odmowy albo nic.</summary>
+    /// <summary>
+    /// Przeniesienie zadania do wskazanego kalendarza. Oddaje powód odmowy albo nic.
+    /// </summary>
+    /// <remarks>
+    /// Przeniesienie, nie dołożenie: zadanie stoi w jednym kalendarzu naraz. Stanie
+    /// w dwóch znaczyłoby dwa wpisy na jedną rzecz w jednym widoku telefonu — i dwa
+    /// miejsca, w których trzeba by je potem odhaczyć.
+    /// </remarks>
     public async Task<string?> ShareAsync(Guid taskId, Guid calendarId, CancellationToken ct = default)
     {
         if (await tasks.FindAsync(taskId, ct) is not { } zadanie)
@@ -106,6 +119,15 @@ public sealed class TaskMirror(
             return "Najpierw dzień i godzina — kalendarz nie ma jak pokazać zadania bez pory.";
         }
 
+        if (zadanie.SharedCalendarId == calendarId)
+        {
+            return null;
+        }
+
+        // Ze starego miejsca najpierw, żeby nie zostały dwa wpisy, gdyby zapis
+        // w nowym padł. Kolejność odwrotna kosztowałaby duplikat w cudzym kalendarzu.
+        await RemoveAsync(zadanie, ct);
+
         var identyfikator = await calendar.SaveEventAsync(calendarId, null, Szkic(zadanie), ct);
 
         zadanie.Share(calendarId, identyfikator, hlc.Next());
@@ -115,15 +137,13 @@ public sealed class TaskMirror(
     }
 
     /// <summary>
-    /// Zdjęcie udostępnienia — bez kasowania wydarzenia.
+    /// Powrót zadania do kalendarza głównego.
     /// </summary>
     /// <remarks>
-    /// „Przestaję to udostępniać" znaczy „przestaję tym zarządzać stąd", a nie
-    /// „odwołuję to". Wydarzenie stoi już w cudzym kalendarzu i ktoś na nim opiera
-    /// swój dzień; skasowanie go przy zrywaniu powiązania byłoby odwołaniem spotkania
-    /// bez uprzedzenia, w cudzym imieniu. Od odwoływania jest kosz — tam zadanie
-    /// przestaje istnieć po obu stronach i to jest zgodne z tym, co się właśnie
-    /// postanowiło.
+    /// „Przestaję to udostępniać" nie znaczy „odwołuję to": zadanie dalej jest do
+    /// zrobienia i dalej ma stać w kalendarzu, do którego zaglądam sama. Znika tylko
+    /// z tego wspólnego — czyli z widoku drugiej osoby, i to jest dokładnie ta zmiana,
+    /// którą się właśnie postanowiło. Od odwoływania jest kosz.
     /// </remarks>
     public async Task UnshareAsync(Guid taskId, CancellationToken ct = default)
     {
@@ -132,8 +152,14 @@ public sealed class TaskMirror(
             return;
         }
 
-        zadanie.Unshare(hlc.Next());
-        await unitOfWork.SaveChangesAsync(ct);
+        if (settings.MainCalendarId is { } glowny && zadanie.SharedCalendarId != glowny)
+        {
+            await ShareAsync(taskId, glowny, ct);
+            return;
+        }
+
+        // Bez kalendarza głównego nie ma dokąd wracać — zostaje samo zdjęcie wpisu.
+        await RemoveAsync(zadanie, ct);
     }
 
     /// <summary>

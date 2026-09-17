@@ -1402,7 +1402,17 @@
         <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !HasCalendars}"
                    Text="Nie ma podłączonego żadnego. Dopóki go nie ma, siatka godzinowa pokazuje same zadania." />
 
-        <ItemsControl ItemsSource="{Binding Calendars}" Margin="0,4,0,0">
+        <!-- Kalendarz domyślny. Bez niego każde zadanie trzeba było przenosić do
+             kalendarza ręcznie, jedno po drugim — a synchronizacja, o której trzeba
+             pamiętać przy każdym zadaniu, nie jest synchronizacją. -->
+        <TextBlock Classes="label" Margin="0,14,0,0" Text="Zadania z godziną lądują w kalendarzu" />
+        <ComboBox ItemsSource="{Binding MainCalendars}" SelectedItem="{Binding MainCalendar}"
+                  HorizontalAlignment="Stretch" IsVisible="{Binding HasCalendars}" />
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   IsVisible="{Binding HasCalendars}"
+                   Text="Zadanie stoi w jednym kalendarzu naraz. Przeniesione stąd do innego — na przykład wspólnego z kimś — znika z tego, a wraca po cofnięciu przeniesienia. Bez dnia i godziny nie trafia nigdzie: kalendarz nie ma jak pokazać „kiedyś w tym tygodniu”." />
+
+        <ItemsControl ItemsSource="{Binding Calendars}" Margin="0,14,0,0">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="dc:CalendarSource">
               <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">

@@ -89,6 +89,10 @@ public sealed class CalendarStoreTests : IDisposable
 
         public bool GoogleCalendarEnabled => false;
 
+        public Guid? MainCalendarId { get; set; }
+
+        public void SetMainCalendar(Guid? calendarId) => MainCalendarId = calendarId;
+
         public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
 
         public void SetZone(string id) => throw new NotSupportedException();
@@ -700,6 +704,92 @@ public sealed class CalendarStoreTests : IDisposable
             .Should().Contain("dzień i godzina");
 
         _pisarz.Wyslane.Should().BeEmpty("odmowa nie dotyka kalendarza");
+    }
+
+    /// <summary>
+    /// Zadanie z godziną ląduje w kalendarzu głównym samo, bez proszenia.
+    /// </summary>
+    /// <remarks>
+    /// Bez tego każde trzeba było przenosić ręcznie, jedno po drugim — a synchronizacja,
+    /// o której trzeba pamiętać przy każdym zadaniu, nie jest synchronizacją.
+    /// </remarks>
+    [Fact]
+    public async Task Zadanie_z_godzina_trafia_do_kalendarza_glownego_samo()
+    {
+        var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia);
+
+        var edycja = new TaskEditService(
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar,
+            new AreaRepository(_db), odbicie);
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Odebrać Sanię", _zegar.Now, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        // Sam dzień to za mało: kalendarz nie ma jak pokazać „kiedyś w tym tygodniu".
+        await edycja.RescheduleAsync(zadanie.Id, Dzis, null);
+        _pisarz.Wyslane.Should().BeEmpty();
+
+        await edycja.RescheduleAsync(zadanie.Id, Dzis, new TimeOnly(16, 0));
+
+        _pisarz.Wyslane.Should().ContainSingle()
+            .Which.Co.Should().Be("utworzenie");
+        _db.Tasks.Single(t => t.Id == zadanie.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
+    }
+
+    /// <summary>
+    /// Przeniesienie do wspólnego zabiera zadanie z głównego, a cofnięcie wraca.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie stoi w jednym kalendarzu naraz. Stanie w dwóch znaczyłoby dwa wpisy
+    /// na jedną rzecz w jednym widoku telefonu — i dwa miejsca, w których trzeba by
+    /// je potem odhaczyć.
+    /// </remarks>
+    [Fact]
+    public async Task Przeniesienie_do_wspolnego_i_z_powrotem_zostawia_jeden_wpis()
+    {
+        var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia);
+
+        // Drugi kalendarz zakładany tutaj, nie w konstruktorze: odświeżanie przechodzi
+        // po **wszystkich** źródłach tym samym kanałem atrapy, więc stały drugi kalendarz
+        // podwajałby wydarzenia w każdym innym teście w tym pliku.
+        var wspolny = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/wspolny.ics", "Rodzina");
+
+        _db.CalendarSources.Add(wspolny);
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Wywiadówka", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(17, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        await odbicie.PushAsync(_db.Tasks.Single(t => t.Id == zadanie.Id));
+        _db.Tasks.Single(t => t.Id == zadanie.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
+
+        (await odbicie.ShareAsync(zadanie.Id, wspolny.Id)).Should().BeNull();
+
+        // Najpierw znika ze starego, dopiero potem powstaje w nowym — inaczej przy
+        // nieudanym zapisie zostałyby dwa wpisy na jedną rzecz.
+        _pisarz.Wyslane.Select(w => w.Co).Should().ContainInOrder("skasowanie", "utworzenie");
+        _db.Tasks.Single(t => t.Id == zadanie.Id).SharedCalendarId.Should().Be(wspolny.Id);
+
+        await odbicie.UnshareAsync(zadanie.Id);
+
+        _db.Tasks.Single(t => t.Id == zadanie.Id).SharedCalendarId
+            .Should().Be(_zrodlo.Id, "cofnięcie wraca na główny, a nie znikąd");
+        _pisarz.Wyslane[^1].Co.Should().Be("utworzenie");
     }
 
     [Fact]
