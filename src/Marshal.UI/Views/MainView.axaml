@@ -33,6 +33,12 @@
       <Setter Property="MinWidth" Value="0" />
     </Style>
 
+    <Style Selector="ToggleButton.ikona">
+      <Setter Property="Margin" Value="0,0,6,0" />
+      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="FontSize" Value="16" />
+    </Style>
+
     <Style Selector="TextBlock.godzina">
       <Setter Property="FontSize" Value="10" />
       <Setter Property="Opacity" Value="0.85" />
@@ -53,6 +59,9 @@
     <!-- Blok jest przyciskiem, żeby kliknięcie otwierało szczegół. Własna oprawa
          przycisku wyłączona: barwę bloku niesie ramka w środku, a domyślne tło
          motywu zamalowałoby kolor kalendarza przy najechaniu. -->
+    <Style Selector="Border.slot">
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
     <Style Selector="Button.slot">
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Background" Value="Transparent" />
@@ -66,7 +75,7 @@
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
     </Style>
-    <Style Selector="Button.slot:pointerover CheckBox.odhacz">
+    <Style Selector="Border.slot:pointerover CheckBox.odhacz">
       <Setter Property="Opacity" Value="1" />
       <Setter Property="IsHitTestVisible" Value="True" />
     </Style>
@@ -238,7 +247,7 @@
       <!-- Dwuklik otwiera szczegół. Do dziś jedyną drogą do wrzutu było przetwarzanie,
            więc dopisanie godziny do myśli, która już leży w skrzynce, wymagało przejścia
            przez całe drzewko decyzji. -->
-      <ListBox ItemsSource="{Binding InboxItems}" DoubleTapped="OtworzWrzut">
+      <ListBox ItemsSource="{Binding InboxItems}" DoubleTapped="OtworzZListy">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
             <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Padding="0,4" />
@@ -314,7 +323,7 @@
     </Panel>
 
     <!-- Następne akcje -->
-    <ListBox IsVisible="{Binding IsNext}" ItemsSource="{Binding NextActions}">
+    <ListBox IsVisible="{Binding IsNext}" ItemsSource="{Binding NextActions}" DoubleTapped="OtworzZListy">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:TaskRow">
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
@@ -459,7 +468,7 @@
       </StackPanel>
       <TextBlock Classes="hint" Margin="2,4,0,0" IsVisible="{Binding !HasToday}"
                  Text="Na dziś nic nie ma terminu ani dnia wykonania. To jest poprawny stan, nie pusty ekran." />
-      <ListBox ItemsSource="{Binding TodayItems}" IsVisible="{Binding HasToday}">
+      <ListBox ItemsSource="{Binding TodayItems}" IsVisible="{Binding HasToday}" DoubleTapped="OtworzZListy">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TaskRow">
             <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
@@ -490,7 +499,7 @@
     <!-- Plany -->
     <DockPanel IsVisible="{Binding IsPlans}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" Text="Najbliższe trzydzieści dni." />
-      <ListBox ItemsSource="{Binding PlanItems}">
+      <ListBox ItemsSource="{Binding PlanItems}" DoubleTapped="OtworzZListy">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TaskRow">
             <Grid ColumnDefinitions="*,Auto" Margin="0,3">
@@ -514,7 +523,7 @@
     <DockPanel IsVisible="{Binding IsSomeday}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Bez presji i bez terminu. Wraca, gdy dojrzeje." />
-      <ListBox ItemsSource="{Binding SomedayItems}">
+      <ListBox ItemsSource="{Binding SomedayItems}" DoubleTapped="OtworzZListy">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
             <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Padding="0,4" />
@@ -707,15 +716,18 @@
                       </ItemsControl.ItemContainerTheme>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SlotBox">
-                          <Button Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
+                          <!-- Ramka, nie przycisk. Przycisk obsługuje wciśnięcie
+                               wskaźnika sam i oznacza je jako załatwione, więc nasze
+                               powiadomienia o przeciąganiu **nigdy do nas nie docierały**
+                               i blok nie dawał się ruszyć. Kliknięcie rozpoznajemy sami:
+                               puszczenie bez przejechania progu. -->
+                          <Border Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
                                   Tag="{Binding}"
-                                  Click="BlokKlikniety"
                                   PointerPressed="BlokWcisniety"
                                   PointerMoved="BlokRuszony"
-                                  PointerReleased="BlokPuszczony">
-                          <Border Opacity="{Binding Opacity}"
-                                  Background="{Binding Background}" CornerRadius="4" Padding="4,2"
-                                  HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                  PointerReleased="BlokPuszczony"
+                                  Opacity="{Binding Opacity}"
+                                  Background="{Binding Background}" CornerRadius="4" Padding="4,2">
                             <Grid ColumnDefinitions="Auto,*,Auto">
 
                               <!-- Miejsce na odhaczenie zajęte na stałe, a nie odsłaniane:
@@ -742,7 +754,6 @@
 
                             </Grid>
                           </Border>
-                          </Button>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -1253,7 +1264,7 @@
     <DockPanel IsVisible="{Binding IsWaiting}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Czekanie jest prawidłowym stanem. Próg ponaglenia jest własnością obszaru — urząd nie odpowiada w tydzień." />
-      <ListBox ItemsSource="{Binding WaitingItems}">
+      <ListBox ItemsSource="{Binding WaitingItems}" DoubleTapped="OtworzZListy">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="rev:WaitingItem">
             <Grid ColumnDefinitions="*,Auto" Margin="0,4">
@@ -1497,7 +1508,7 @@
     <DockPanel IsVisible="{Binding IsArchive}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Wykonane i wyrzucone, najnowsze pierwsze. Nic nie znika z bazy." />
-      <ListBox ItemsSource="{Binding ArchiveItems}">
+      <ListBox ItemsSource="{Binding ArchiveItems}" DoubleTapped="OtworzZListy">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
             <Grid ColumnDefinitions="*,Auto" Margin="0,4">
@@ -1553,7 +1564,7 @@
       <ScrollViewer Name="SzczegolPrzewijanie" DataContext="{Binding Detail}">
         <StackPanel x:DataType="vm:TaskDetailViewModel">
 
-          <TextBox Text="{Binding Title}" FontSize="18" />
+          <TextBox Text="{Binding Title}" FontSize="18" KeyDown="NazwaKlawisz" />
 
           <!-- Nieudany zapis zamykał okno tak samo jak udany. -->
           <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Foreground="#D0553C"
@@ -1592,18 +1603,30 @@
                w dziewięciu zadaniach na dziesięć zostaje puste, jest w oknie kosztem,
                a nie możliwością. Podsumowanie obok, żeby zwinięte nie znaczyło
                „nie wiadomo, co tam jest". -->
-          <Grid ColumnDefinitions="Auto,*" Margin="0,14,0,0">
-            <ToggleButton Grid.Column="0" Classes="nav" IsChecked="{Binding ShowMore}"
-                          Content="Więcej" />
-            <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center"
-                       Margin="10,0,0,0" TextTrimming="CharacterEllipsis"
-                       Text="{Binding MoreSummary}" IsVisible="{Binding !ShowMore}" />
-          </Grid>
+          <!-- Pasek ikon: każda odsłania swoją rzecz. Dopisanie terminu nie ma
+               wywlekać rytmu, wagi i energii, których się nie dotyka. Podpowiedzi
+               po najechaniu, bo dziesięć symboli do zapamiętania to za dużo przy
+               oknie otwieranym kilka razy dziennie. -->
+          <WrapPanel Margin="0,14,0,0">
+            <ToggleButton Classes="ikona" IsChecked="{Binding ShowDeadline}"
+                          Content="📅" ToolTip.Tip="Termin" />
+            <ToggleButton Classes="ikona" IsChecked="{Binding ShowReminder}"
+                          Content="🔔" ToolTip.Tip="Przypomnienie" />
+            <ToggleButton Classes="ikona" IsChecked="{Binding ShowPriority}"
+                          Content="❗" ToolTip.Tip="Waga" />
+            <ToggleButton Classes="ikona" IsChecked="{Binding ShowEnergy}"
+                          Content="🔋" ToolTip.Tip="Ile trzeba mieć w sobie" />
+            <ToggleButton Classes="ikona" IsChecked="{Binding ShowRepeat}"
+                          Content="🔁" ToolTip.Tip="Rytm" />
+          </WrapPanel>
 
-          <StackPanel IsVisible="{Binding ShowMore}">
-          <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
-          <DatePicker SelectedDate="{Binding Deadline}" HorizontalAlignment="Stretch" />
+          <StackPanel>
+          <StackPanel IsVisible="{Binding ShowDeadline}">
+            <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
+            <DatePicker SelectedDate="{Binding Deadline}" HorizontalAlignment="Stretch" />
+          </StackPanel>
 
+          <StackPanel IsVisible="{Binding ShowReminder}">
           <TextBlock Classes="label" Text="Przypomnienie — kiedy chcesz o tym usłyszeć" />
           <Grid ColumnDefinitions="*,Auto">
             <DatePicker Grid.Column="0" SelectedDate="{Binding ReminderDay}"
@@ -1613,10 +1636,13 @@
           </Grid>
           <TextBlock Classes="hint" Margin="2,4,0,0"
                      Text="Bez godziny znaczy rano. Sama godzina bez dnia nie znaczy nic." />
+          </StackPanel>
 
-          <TextBlock Classes="label" Text="Waga" />
-          <ComboBox ItemsSource="{Binding Priorities}" SelectedItem="{Binding SelectedPriority}"
-                    HorizontalAlignment="Stretch" />
+          <StackPanel IsVisible="{Binding ShowPriority}">
+            <TextBlock Classes="label" Text="Waga" />
+            <ComboBox ItemsSource="{Binding Priorities}" SelectedItem="{Binding SelectedPriority}"
+                      HorizontalAlignment="Stretch" />
+          </StackPanel>
 
           <!-- Bez oszacowania zadanie nigdy nie trafi do „Teraz" (8.1). To nie jest
                surowość, tylko warunek: widok dobierający pod dostępne minuty nie ma jak
@@ -1625,15 +1651,17 @@
           <NumericUpDown Value="{Binding EstimatedMinutes}" Minimum="1" Maximum="600"
                          Increment="5" FormatString="0" />
 
-          <TextBlock Classes="label" Text="Ile trzeba mieć w sobie" />
-          <ComboBox ItemsSource="{Binding Energies}" SelectedItem="{Binding SelectedEnergyLevel}"
-                    HorizontalAlignment="Stretch" />
-          <TextBlock Classes="hint" Margin="2,4,0,0"
-                     Text="Nieokreślona przechodzi przy każdym poziomie — brak decyzji nie udaje decyzji." />
+          <StackPanel IsVisible="{Binding ShowEnergy}">
+            <TextBlock Classes="label" Text="Ile trzeba mieć w sobie" />
+            <ComboBox ItemsSource="{Binding Energies}" SelectedItem="{Binding SelectedEnergyLevel}"
+                      HorizontalAlignment="Stretch" />
+            <TextBlock Classes="hint" Margin="2,4,0,0"
+                       Text="Nieokreślona przechodzi przy każdym poziomie — brak decyzji nie udaje decyzji." />
+          </StackPanel>
           </StackPanel>
 
           <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="#18808080"
-                  IsVisible="{Binding ShowMore}">
+                  IsVisible="{Binding ShowRepeat}">
             <StackPanel>
 
               <TextBlock Text="Rytm" FontWeight="SemiBold" />

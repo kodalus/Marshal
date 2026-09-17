@@ -76,6 +76,30 @@ public sealed partial class TaskDetailViewModel(
     [ObservableProperty]
     public partial bool ShowMore { get; set; }
 
+    /// <summary>
+    /// Pojedyncze sekcje pod paskiem ikon.
+    /// </summary>
+    /// <remarks>
+    /// Każda ikona odsłania swoją rzecz, zamiast jednego przełącznika na wszystko:
+    /// dopisanie terminu nie ma wywlekać rytmu, wagi i energii, których się nie
+    /// dotyka. Sekcja z wypełnioną wartością otwiera się sama — ukryta wartość,
+    /// która coś znaczy, jest gorsza od pustego pola na wierzchu.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool ShowDeadline { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowReminder { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowPriority { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowEnergy { get; set; }
+
+    [ObservableProperty]
+    public partial bool ShowRepeat { get; set; }
+
     /// <summary>Podsumowanie schowanego: żeby zwinięte nie znaczyło „nie wiadomo co tam jest".</summary>
     public string MoreSummary
     {
@@ -307,6 +331,11 @@ public sealed partial class TaskDetailViewModel(
 
         _loading = false;
         ShowMore = false;
+        ShowDeadline = false;
+        ShowReminder = false;
+        ShowPriority = false;
+        ShowEnergy = false;
+        ShowRepeat = false;
         Refresh();
         OnPropertyChanged(nameof(IsExisting));
         IsOpen = true;
@@ -495,19 +524,60 @@ public sealed partial class TaskDetailViewModel(
     /// przy tym samym dniu i tej samej godzinie — a oszacowanie mogło zostać z innego
     /// planu. Koniec przed początkiem znaczy przejście przez północ.
     /// </remarks>
-    private int? Minuty()
-    {
-        if (DoTime is { } poczatek && EndTime is { } koniec)
-        {
-            var dlugosc = koniec > poczatek
-                ? koniec - poczatek
-                : koniec + TimeSpan.FromDays(1) - poczatek;
+    private int? Minuty() => EstimatedMinutes is { } minuty ? (int)minuty : null;
 
-            return Math.Max(1, (int)dlugosc.TotalMinutes);
+    /// <summary>
+    /// Długość i godzina zakończenia trzymane zgodnie.
+    /// </summary>
+    /// <remarks>
+    /// To jest jedna wartość pokazana na dwa sposoby, więc zmiana każdego z nich
+    /// przelicza drugi. Do dziś koniec wygrywał przy zapisie — a koniec wpisuje się
+    /// sam, jako pół godziny od początku. Wpisanie „15 minut" w polu długości znikało
+    /// więc bez śladu, zastąpione trzydziestoma z pola, którego nikt nie dotykał.
+    /// </remarks>
+    partial void OnEndTimeChanged(TimeSpan? value)
+    {
+        if (_loading || _zgodne || DoTime is not { } poczatek || value is not { } koniec)
+        {
+            return;
         }
 
-        return EstimatedMinutes is { } minuty ? (int)minuty : null;
+        var dlugosc = koniec > poczatek
+            ? koniec - poczatek
+            : koniec + TimeSpan.FromDays(1) - poczatek;
+
+        _zgodne = true;
+        EstimatedMinutes = Math.Max(1, (int)dlugosc.TotalMinutes);
+        _zgodne = false;
     }
+
+    partial void OnEstimatedMinutesChanged(decimal? value)
+    {
+        if (_loading || _zgodne || DoTime is not { } poczatek || value is not { } minuty)
+        {
+            return;
+        }
+
+        _zgodne = true;
+        EndTime = poczatek + TimeSpan.FromMinutes((double)Math.Max(1, minuty));
+        _zgodne = false;
+    }
+
+    partial void OnDoTimeChanged(TimeSpan? value)
+    {
+        if (_loading || _zgodne || value is not { } poczatek)
+        {
+            return;
+        }
+
+        _zgodne = true;
+        EndTime = poczatek + TimeSpan.FromMinutes(
+            (double)(EstimatedMinutes ?? DomyslneMinuty));
+        _zgodne = false;
+    }
+
+    /// <summary>Blokada wzajemnego przeliczania, żeby nie goniło się w kółko.</summary>
+    private bool _zgodne;
 
     /// <summary>Odhaczenie z okna szczegółu. Zostawia ślad, bo zamyka okno tak samo jak zapis.</summary>
     public async Task CompleteAsync()

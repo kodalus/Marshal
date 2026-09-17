@@ -55,9 +55,21 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .ThenBy(t => t.DoDate)
             .ToListAsync(ct);
 
+    /// <summary>
+    /// Zadania w oknie dni — razem z odhaczonymi, które na te dni przypadały.
+    /// </summary>
+    /// <remarks>
+    /// Siatka kalendarza bierze zadania stąd, a odhaczone ma pokazywać z ptaszkiem,
+    /// nie usuwać. Blok znikający po odhaczeniu zabierał z dnia ślad po tym, że coś
+    /// się stało — i sprawiał, że wieczorem kalendarz wyglądał na dzień, w którym
+    /// nic nie było zaplanowane.
+    /// </remarks>
     public async Task<IReadOnlyList<TaskItem>> UpcomingAsync(
         DateOnly after, DateOnly until, CancellationToken ct = default) =>
-        await Otwarte()
+        await db.Tasks
+            .Where(t => !t.Deleted
+                     && t.State != TaskState.Trashed
+                     && t.State != TaskState.Inbox)
             .Where(t => (t.DoDate != null && t.DoDate > after && t.DoDate <= until)
                      || (t.Deadline != null && t.Deadline > after && t.Deadline <= until))
             .OrderBy(t => t.DoDate ?? t.Deadline)

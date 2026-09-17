@@ -6,6 +6,8 @@ using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Marshal.Application.Review;
+using Marshal.Application.UseCases;
 using Marshal.Domain.Tasks;
 using Marshal.UI.ViewModels;
 
@@ -106,6 +108,16 @@ public partial class MainView : UserControl
             return Task.CompletedTask;
         });
 
+    /// <summary>Enter w nazwie zadania zapisuje — tak jak w każdym polu z jedną linijką.</summary>
+    private void NazwaKlawisz(object? nadawca, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Return)
+        {
+            e.Handled = true;
+            Zadanie("Zadanie: zapis z klawisza", m => m.SaveAsync());
+        }
+    }
+
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
     /// <remarks>
     /// Wszystkie kolumny mają tę samą górną krawędź siatki, więc wystarczy jedna:
@@ -128,7 +140,7 @@ public partial class MainView : UserControl
 
     private void BlokWcisniety(object? nadawca, PointerPressedEventArgs e)
     {
-        if (nadawca is Control blok && blok.Tag is SlotBox slot && slot.TaskId is not null)
+        if (nadawca is Control blok && blok.Tag is SlotBox slot)
         {
             _wciesniety = slot;
             _skad = e.GetPosition(this);
@@ -138,7 +150,7 @@ public partial class MainView : UserControl
 
     private void BlokRuszony(object? nadawca, PointerEventArgs e)
     {
-        if (_wciesniety is null || _przeciagam)
+        if (_wciesniety is not { TaskId: not null } || _przeciagam)
         {
             return;
         }
@@ -175,13 +187,28 @@ public partial class MainView : UserControl
             e.Pointer.Capture(null);
         }
 
-        if (!_przeciagam || _wciesniety is not { TaskId: { } zadanie } || _kalendarz is null)
+        var slot = _wciesniety;
+        var przeciagniete = _przeciagam;
+
+        _wciesniety = null;
+        _przeciagam = false;
+
+        // Puszczenie bez przejechania progu jest kliknięciem. Przycisk robił to za nas,
+        // ale przy okazji zjadał wciśnięcie i przeciąganie nie miało jak się zacząć.
+        if (!przeciagniete)
         {
-            _wciesniety = null;
+            if (slot is not null)
+            {
+                _kalendarz?.OpenTaskCommand.Execute(slot);
+            }
+
             return;
         }
 
-        _wciesniety = null;
+        if (slot is not { TaskId: { } zadanie } || _kalendarz is null)
+        {
+            return;
+        }
 
         if (this.FindControl<ItemsControl>("KolumnyDni") is not { } kolumny
             || _warstwaGodzin is null)
@@ -200,20 +227,7 @@ public partial class MainView : UserControl
             () => _kalendarz.MoveAsync(zadanie, _kalendarz.Anchor.AddDays(numer), wysokosc));
     }
 
-    /// <summary>Kliknięcie w blok. Po przeciągnięciu nie otwiera szczegółu.</summary>
-    private void BlokKlikniety(object? nadawca, RoutedEventArgs e)
-    {
-        if (_przeciagam)
-        {
-            _przeciagam = false;
-            return;
-        }
 
-        if (nadawca is Control blok && blok.Tag is SlotBox slot)
-        {
-            _kalendarz?.OpenTaskCommand.Execute(slot);
-        }
-    }
 
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
     private void TloSzczegolu(object? nadawca, PointerPressedEventArgs e) => _szczegol?.Close();
@@ -289,14 +303,34 @@ public partial class MainView : UserControl
         e.Handled = true;
     }
 
-    /// <summary>Dwuklik we wrzut otwiera jego szczegół.</summary>
-    private void OtworzWrzut(object? nadawca, RoutedEventArgs e)
+    /// <summary>
+    /// Dwuklik na dowolnej liście otwiera szczegół zadania.
+    /// </summary>
+    /// <remarks>
+    /// Jedna obsługa na wszystkie listy, bo wiersze różnią się typem, a nie
+    /// zachowaniem. Dotąd część widoków — skrzynka, oczekiwane, kiedyś, archiwum —
+    /// nie miała **żadnej** drogi do edycji: zadanie dało się tam zobaczyć i nic
+    /// więcej. Lista, z której nie da się otworzyć tego, co się widzi, jest ślepa.
+    /// </remarks>
+    private void OtworzZListy(object? nadawca, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel model
-            && nadawca is ListBox lista
-            && lista.SelectedItem is TaskItem zadanie)
+        if (DataContext is not MainViewModel model || nadawca is not ListBox lista)
         {
-            _ = Probuj("Skrzynka: otwarcie wrzutu", () => model.Detail.LoadAsync(zadanie));
+            return;
+        }
+
+        var zadanie = lista.SelectedItem switch
+        {
+            TaskItem wprost => wprost,
+            TaskRow wiersz => wiersz.Task,
+            WaitingItem czekajace => czekajace.Task,
+            NowPick wybor => wybor.Task,
+            _ => null,
+        };
+
+        if (zadanie is not null)
+        {
+            _ = Probuj("Lista: otwarcie zadania", () => model.Detail.LoadAsync(zadanie));
         }
     }
 
