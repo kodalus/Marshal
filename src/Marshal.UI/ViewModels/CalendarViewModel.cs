@@ -32,7 +32,8 @@ public sealed record SlotBox(
     Guid? TaskId,
     string DayText,
     Guid? SourceId,
-    string? ExternalId)
+    string? ExternalId,
+    bool IsDone)
 {
     /// <summary>Odhaczyć da się zadanie, nie cudze wydarzenie z kalendarza.</summary>
     /// <remarks>
@@ -66,6 +67,17 @@ public sealed record SlotBox(
 
     /// <summary>Rozmiar pola do odhaczenia — dopasowany do wysokości bloku.</summary>
     public double CheckSize => Math.Clamp(Height - 4, 10, 18);
+
+    /// <summary>
+    /// Pomniejszenie pola wyboru do rozmiaru bloku.
+    /// </summary>
+    /// <remarks>
+    /// Sama szerokość nie wystarcza: kwadrat pola jest w motywie wpisany na stałe,
+    /// więc pole ustawione na dwanaście punktów i tak rysowało się na dwadzieścia
+    /// i wychodziło poza bloczek. Skala zmienia to, co widać, a nie tylko miejsce,
+    /// które pole dostaje.
+    /// </remarks>
+    public ITransform CheckScale => new ScaleTransform(CheckSize / 20, CheckSize / 20);
 
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
     private const string DomyslneWydarzenie = "#6C8FBF";
@@ -254,7 +266,8 @@ public sealed partial class CalendarViewModel(
         OpenTaskCommand.Execute(new SlotBox(
             wpis.Title, 0, 0, 0, 0, IsTask: false, Color: null,
             StartText: "—", EndText: "—", TaskId: null,
-            DayText: Anchor.ToString("dd.MM.yyyy"), wpis.SourceId, wpis.ExternalId));
+            DayText: Anchor.ToString("dd.MM.yyyy"), wpis.SourceId, wpis.ExternalId,
+            IsDone: false));
     }
 
     /// <summary>
@@ -849,6 +862,7 @@ public sealed partial class CalendarViewModel(
             slot.Entry.TaskId,
             slot.Entry.Start.ToString("dd.MM.yyyy"),
             slot.Entry.SourceId,
-            slot.Entry.ExternalId);
+            slot.Entry.ExternalId,
+            slot.Entry.IsDone);
     }
 }

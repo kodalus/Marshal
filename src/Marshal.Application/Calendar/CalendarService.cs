@@ -336,16 +336,17 @@ public sealed class CalendarSyncService(
         {
             var poczatekDnia = WStrefie(dzien.ToDateTime(TimeOnly.MinValue), zone);
             return new AgendaEntry(
-                task.State == TaskState.Done ? $"✓ {task.Title}" : task.Title,
-                poczatekDnia, poczatekDnia.AddDays(1),
-                IsAllDay: true, AgendaKind.Task, task.Color, task.Id);
+                task.Title, poczatekDnia, poczatekDnia.AddDays(1),
+                IsAllDay: true, AgendaKind.Task, task.Color, task.Id,
+                SourceId: null, ExternalId: null, IsDone: task.State == TaskState.Done);
         }
 
         var start = WStrefie(dzien.ToDateTime(godzina), zone);
         var dlugosc = TimeSpan.FromMinutes(task.EstimatedMinutes ?? 30);
 
         return new AgendaEntry(
-            task.State == TaskState.Done ? $"✓ {task.Title}" : task.Title,
-            start, start + dlugosc, IsAllDay: false, AgendaKind.Task, task.Color, task.Id);
+            task.Title, start, start + dlugosc, IsAllDay: false, AgendaKind.Task,
+            task.Color, task.Id, SourceId: null, ExternalId: null,
+            IsDone: task.State == TaskState.Done);
     }
 }

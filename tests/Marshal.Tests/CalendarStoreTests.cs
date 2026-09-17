@@ -575,7 +575,7 @@ public sealed class CalendarStoreTests : IDisposable
         var wydarzenie = new SlotBox(
             "Zebranie", 0, 48, 0, 200, IsTask: false, Color: null,
             "10:00", "11:00", TaskId: null, "17.09.2026",
-            SourceId: null, ExternalId: null);
+            SourceId: null, ExternalId: null, IsDone: false);
 
         model.OpenTaskCommand.Execute(wydarzenie);
 

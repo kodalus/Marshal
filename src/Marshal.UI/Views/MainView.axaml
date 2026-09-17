@@ -82,6 +82,16 @@
       <Setter Property="IsHitTestVisible" Value="True" />
     </Style>
 
+    <!-- Ptaszek i pole wyboru zajmują to samo miejsce: widać jedno albo drugie. -->
+    <Style Selector="TextBlock.ptaszek">
+      <Setter Property="Opacity" Value="0.9" />
+      <Setter Property="LineHeight" Value="1" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.slot:pointerover TextBlock.ptaszek">
+      <Setter Property="Opacity" Value="0" />
+    </Style>
+
     <!-- Pasek dolny: pole dotyku na całą szerokość kolumny i wysokość, w którą trafia
          kciuk. Przycisk wielkości napisu jest na telefonie celem, nie przyciskiem. -->
     <Style Selector="Button.tab">
@@ -771,11 +781,21 @@
                                    w chwili najechania. Samo pole jest przezroczyste i
                                    nieklikalne do czasu najechania — niewidoczne, ale
                                    klikalne byłoby gorsze niż jedno i drugie naraz. -->
+                              <!-- Bez najechania widać sam ptaszek, po najechaniu pole
+                                   wyboru. Odhaczenie mieszka w polu, nie obok nazwy:
+                                   ptaszek dopisany do tytułu był napisem, a nie stanem,
+                                   i nie dawał się kliknąć. -->
                               <Panel Grid.Column="0" Width="{Binding CheckSize}"
                                      IsVisible="{Binding ShowCheck}">
+                                <TextBlock Classes="ptaszek" Text="✓"
+                                           IsVisible="{Binding IsDone}"
+                                           FontSize="{Binding CheckSize}"
+                                           VerticalAlignment="Top" />
                                 <CheckBox Classes="odhacz" VerticalAlignment="Top"
-                                          Width="{Binding CheckSize}"
-                                          Height="{Binding CheckSize}"
+                                          IsChecked="{Binding IsDone, Mode=OneWay}"
+                                          IsEnabled="{Binding !IsDone}"
+                                          RenderTransform="{Binding CheckScale}"
+                                          RenderTransformOrigin="0%,0%"
                                           Command="{Binding $parent[DockPanel].((vm:CalendarViewModel)DataContext).CompleteCommand}"
                                           CommandParameter="{Binding TaskId}" />
                               </Panel>

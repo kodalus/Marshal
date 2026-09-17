@@ -23,7 +23,10 @@ public sealed record AgendaEntry(
     Guid? SourceId = null,
 
     /// <summary>Identyfikator u źródła — bez niego nie da się tam nic zmienić.</summary>
-    string? ExternalId = null)
+    string? ExternalId = null,
+
+    /// <summary>Czy zadanie jest już odhaczone. Ptaszek należy do pola, nie do nazwy.</summary>
+    bool IsDone = false)
 {
     public double StartHour => Start.TimeOfDay.TotalHours;
 
