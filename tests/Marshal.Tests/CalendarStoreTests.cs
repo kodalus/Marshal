@@ -7,6 +7,7 @@ using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Calendar;
 using Marshal.Infrastructure.Data;
+using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Repositories;
 using Marshal.Infrastructure.Sync;
 using Marshal.Infrastructure.Time;
@@ -80,6 +81,7 @@ public sealed class CalendarStoreTests : IDisposable
     private readonly Kanal _kanal = new(CalendarKind.Ical);
     private readonly CalendarSyncService _usluga;
     private readonly CalendarSource _zrodlo;
+    private readonly TaskEditService _edycja;
 
     public CalendarStoreTests()
     {
@@ -95,6 +97,9 @@ public sealed class CalendarStoreTests : IDisposable
 
         _usluga = new CalendarSyncService(
             _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc);
+
+        _edycja = new TaskEditService(
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar);
 
         _zrodlo = new CalendarSource(
             Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
@@ -310,12 +315,75 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Szerokosc_kolumny_idzie_za_oknem()
+    {
+        // Stała szerokość na widok zostawiała dwie trzecie pustego miejsca obok siatki
+        // na monitorze i kazała przewijać w bok w wąskim oknie. Bloki liczą się od
+        // szerokości kolumny, więc muszą się przeliczyć razem z nią.
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        model.SetAvailableWidth(900);
+
+        model.ColumnWidth.Should().Be(300, "trzy dni z dziewięciuset punktów");
+        model.Columns.SelectMany(k => k.Slots).Should().OnlyContain(b => b.Width <= 300);
+
+        // Dolna granica: siedem kolumn po czternaście punktów to nie jest tydzień,
+        // tylko siedem nieczytelnych pasków. Węższe okno ma się przewijać w bok.
+        model.SetAvailableWidth(100);
+        model.ColumnWidth.Should().BeGreaterThanOrEqualTo(96);
+    }
+
+    [Fact]
+    public async Task Kreska_teraz_stoi_tylko_na_dzisiejszej_kolumnie()
+    {
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        var dzisiejsze = model.Columns.Where(k => k.IsToday).ToList();
+
+        dzisiejsze.Should().ContainSingle("dzisiaj jest jedno");
+        dzisiejsze[0].Date.Should().Be(_zegar.Today);
+
+        // Zegar testu stoi na 9:00, godzina ma 48 punktów.
+        dzisiejsze[0].NowTop.Should().Be(9 * 48);
+    }
+
+    [Fact]
+    public async Task Odhaczenie_z_siatki_zamyka_zadanie()
+    {
+        // Odhaczenie ma iść tą samą drogą co z ekranu szczegółu — przez usługę edycji,
+        // a nie przez wyrzucenie bloku z siatki. Blok znikający bez zapisu wyglądałby
+        // identycznie i wracałby przy następnym odświeżeniu.
+        var zadanie = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(Guid.CreateVersion7(), _zegar.Today, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        await _db.SaveChangesAsync();
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        var blok = model.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Zadzwonić");
+        blok.CanComplete.Should().BeTrue("zadanie da się odhaczyć, cudze wydarzenie nie");
+
+        await model.CompleteCommand.ExecuteAsync(blok.TaskId);
+
+        _db.Tasks.Single(z => z.Id == zadanie.Id).State.Should().Be(TaskState.Done);
+    }
+
+    [Fact]
     public async Task Siatka_otwiera_sie_na_biezacej_godzinie()
     {
         // Doba ma 1152 punkty, a ekran telefonu mieści z tego jakąś jedną czwartą:
         // otwarcie o północy pokazuje godziny, w których się śpi, i za każdym razem
         // zaczyna się od przewijania. Godzina zapasu u góry, stąd nie 9 * 48, a 8 * 48.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes());
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
 
         double? dokad = null;
         model.ScrollRequested += punkty => dokad = punkty;
@@ -330,7 +398,7 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Godzina z innego dnia nie jest odpowiedzią na nic, a skok kasowałby
         // pozycję, którą użytkownik ustawił ręką przed chwilą.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes());
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
 
         await model.LoadAsync();
 
@@ -356,7 +424,7 @@ public sealed class CalendarStoreTests : IDisposable
         await _usluga.RefreshAsync(force: true);
 
         var notes = new Notes();
-        var model = new CalendarViewModel(_usluga, _zegar, notes);
+        var model = new CalendarViewModel(_usluga, _zegar, notes, _edycja);
 
         await model.LoadAsync();
 

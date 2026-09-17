@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
+using Marshal.Application.UseCases;
 using Marshal.Domain.Diagnostics;
 
 namespace Marshal.UI.ViewModels;
@@ -17,8 +18,33 @@ namespace Marshal.UI.ViewModels;
 /// na dzień, czy na tydzień.
 /// </remarks>
 public sealed record SlotBox(
-    string Title, double Top, double Height, double Left, double Width, bool IsTask, string? Color)
+    string Title,
+    double Top,
+    double Height,
+    double Left,
+    double Width,
+    bool IsTask,
+    string? Color,
+    string StartText,
+    string EndText,
+    Guid? TaskId)
 {
+    /// <summary>Odhaczyć da się zadanie, nie cudze wydarzenie z kalendarza.</summary>
+    /// <remarks>
+    /// Odhaczenie wydarzenia Google znaczyłoby zapis do cudzego kalendarza, a zapis
+    /// jest świadomie odłożony (spec 10.2): błąd w dwustronnej synchronizacji potrafi
+    /// skasować wydarzenia w prawdziwym kalendarzu.
+    /// </remarks>
+    public bool CanComplete => IsTask && TaskId is not null;
+
+    /// <summary>Godziny pokazujemy tylko wtedy, gdy blok ma je gdzie zmieścić.</summary>
+    /// <remarks>
+    /// Przy siedmiu dniach kolumna schodzi poniżej stu punktów i „10:00" zjadłoby
+    /// cały tytuł. Kwadrans ma trzynaście punktów wysokości — dwie linijki godzin
+    /// się tam nie mieszczą, więc też odpadają.
+    /// </remarks>
+    public bool ShowTimes => Width >= 120 && Height >= 34;
+
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
     private const string DomyslneWydarzenie = "#6C8FBF";
 
@@ -57,7 +83,9 @@ public sealed record CalendarColumn(
     DateOnly Date,
     string Header,
     IReadOnlyList<string> AllDay,
-    IReadOnlyList<SlotBox> Slots)
+    IReadOnlyList<SlotBox> Slots,
+    bool IsToday,
+    double NowTop)
 {
     public bool HasAllDay => AllDay.Count > 0;
 
@@ -68,7 +96,8 @@ public sealed record CalendarColumn(
 /// Kalendarz godzinowy: dzień, trzy dni, tydzień (spec 11).
 /// </summary>
 public sealed partial class CalendarViewModel(
-    CalendarSyncService calendar, IClock clock, IActivityLog log) : ObservableObject
+    CalendarSyncService calendar, IClock clock, IActivityLog log, TaskEditService edit)
+    : ObservableObject
 {
     /// <summary>Wysokość godziny w punktach.</summary>
     /// <remarks>
@@ -105,13 +134,51 @@ public sealed partial class CalendarViewModel(
 
     public double GridHeight => 24 * HourHeight;
 
-    /// <summary>Szerokość kolumny dnia. Im więcej dni, tym węziej — i to jest cała różnica.</summary>
-    public double ColumnWidth => VisibleDays switch
+    /// <summary>Szerokość, jaką okno oddaje na kolumny. Zero, dopóki okno się nie zmierzy.</summary>
+    /// <remarks>
+    /// Podawana przez widok, bo tylko on ją zna. Model widoku nie pyta okna o rozmiar —
+    /// dostaje go i przelicza, co z niego wynika.
+    /// </remarks>
+    private double _doDyspozycji;
+
+    /// <summary>Najwęższa kolumna, jaką da się jeszcze czytać.</summary>
+    private const double NajwezszaKolumna = 96;
+
+    /// <summary>
+    /// Szerokość kolumny dnia.
+    /// </summary>
+    /// <remarks>
+    /// Liczona z tego, co okno faktycznie ma, a nie ze stałej na widok: przy trzech
+    /// dniach na szerokim monitorze zostawało dwie trzecie pustego miejsca obok siatki,
+    /// a w wąskim oknie trzeba było przewijać w bok, żeby zobaczyć trzeci dzień.
+    /// Dolna granica jest po to, żeby tydzień w wąskim oknie dał się przewinąć w bok,
+    /// zamiast zostać siedmioma nieczytelnymi paskami.
+    /// </remarks>
+    public double ColumnWidth => _doDyspozycji <= 0
+        ? VisibleDays switch { 1 => 520, 3 => 240, _ => 130 }
+        : Math.Max(NajwezszaKolumna, _doDyspozycji / VisibleDays);
+
+    /// <summary>
+    /// Nowa szerokość od okna. Przelicza siatkę, o ile zmiana cokolwiek znaczy.
+    /// </summary>
+    /// <remarks>
+    /// Zdarzenie rozmiaru sypie się przy każdym ruchu ramki okna, a przeliczenie siatki
+    /// to przebudowanie wszystkich bloków. Próg pół punktu odcina ruch, którego i tak
+    /// nie widać, bo blok o pół punktu szerszy wygląda identycznie.
+    /// </remarks>
+    public void SetAvailableWidth(double width)
     {
-        1 => 520,
-        3 => 240,
-        _ => 130,
-    };
+        var stara = ColumnWidth;
+        _doDyspozycji = Math.Max(0, width);
+
+        if (Math.Abs(ColumnWidth - stara) < 0.5)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(ColumnWidth));
+        Przelicz();
+    }
 
     public IReadOnlyList<string> HourLabels =>
         [.. Enumerable.Range(0, 24).Select(h => $"{h:00}:00")];
@@ -144,23 +211,21 @@ public sealed partial class CalendarViewModel(
         PrzewinDoTeraz();
     }
 
+    /// <summary>
+    /// Ostatnio złożona siatka. Trzymana, żeby zmiana szerokości okna nie musiała
+    /// jechać do bazy — bloki zależą od szerokości, a dane nie.
+    /// </summary>
+    private IReadOnlyList<AgendaDay> _dni = [];
+
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        var dni = await calendar.AgendaAsync(Anchor, VisibleDays);
+        _dni = await calendar.AgendaAsync(Anchor, VisibleDays);
 
-        Columns.Clear();
-        foreach (var dzien in dni)
-        {
-            Columns.Add(new CalendarColumn(
-                dzien.Date,
-                $"{DayNames[((int)dzien.Date.DayOfWeek + 6) % 7]} {dzien.Date.Day}",
-                dzien.AllDay.Select(e => e.Title).ToList(),
-                dzien.Timed.Select(Box).ToList()));
-        }
+        Przelicz();
 
         var wBazie = await calendar.StoredEventCountAsync();
-        var naSiatce = dni.Sum(d => d.AllDay.Count + d.Timed.Count);
+        var naSiatce = _dni.Sum(d => d.AllDay.Count + d.Timed.Count);
 
         Summary = $"W bazie {wBazie}, na tych dniach {naSiatce}.";
 
@@ -300,6 +365,45 @@ public sealed partial class CalendarViewModel(
         }
     }
 
+    /// <summary>Złożenie kolumn z ostatnio pobranych dni. Bez sieci i bez bazy.</summary>
+    private void Przelicz()
+    {
+        var dzis = clock.Today;
+        var teraz = clock.Now.TimeOfDay.TotalHours * HourHeight;
+
+        Columns.Clear();
+        foreach (var dzien in _dni)
+        {
+            Columns.Add(new CalendarColumn(
+                dzien.Date,
+                $"{DayNames[((int)dzien.Date.DayOfWeek + 6) % 7]} {dzien.Date.Day}",
+                dzien.AllDay.Select(e => e.Title).ToList(),
+                dzien.Timed.Select(Box).ToList(),
+                dzien.Date == dzis,
+                teraz));
+        }
+    }
+
+    /// <summary>
+    /// Odhaczenie zadania wprost z siatki.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie z rytmem rodzi przy odhaczeniu następne wystąpienie, więc siatka musi
+    /// się przeliczyć z bazy, a nie tylko wyrzucić odhaczony blok: następnik potrafi
+    /// wypaść na tym samym widocznym dniu.
+    /// </remarks>
+    [RelayCommand]
+    private async Task CompleteAsync(Guid? id)
+    {
+        if (id is not { } identyfikator)
+        {
+            return;
+        }
+
+        await edit.CompleteAsync(identyfikator);
+        await RefreshAsync();
+    }
+
     private SlotBox Box(AgendaSlot slot)
     {
         var szerokosc = ColumnWidth / Math.Max(1, slot.Columns);
@@ -311,6 +415,12 @@ public sealed partial class CalendarViewModel(
             slot.Column * szerokosc,
             szerokosc - 2,
             slot.Entry.Kind == AgendaKind.Task,
-            slot.Entry.Color);
+            slot.Entry.Color,
+
+            // Godziny z wpisu, nie z pozycji na siatce: wpis przycięty do dnia ma
+            // północ na krawędzi, a pokazać trzeba to, co jest umówione.
+            slot.Entry.Start.ToString("HH:mm"),
+            slot.Entry.End.ToString("HH:mm"),
+            slot.Entry.TaskId);
     }
 }

@@ -19,6 +19,30 @@
       <Setter Property="Margin" Value="0,0,8,0" />
       <Setter Property="Padding" Value="14,8" />
     </Style>
+    <!-- Godziny na bloku kalendarza: mniejsze od tytułu, bo są odpowiedzią na drugie
+         pytanie, nie na pierwsze. -->
+    <Style Selector="TextBlock.godzina">
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="Opacity" Value="0.85" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+    </Style>
+
+    <!-- Odhaczenie odsłaniane najechaniem. Przezroczystość zamiast widoczności, żeby
+         tytuł nie skakał; nieklikalne razem z niewidocznym, bo pole, które nic nie
+         pokazuje, a łapie kliknięcia, jest gorsze od obu tych rzeczy osobno.
+         Na dotyku najechania nie ma i pole zostaje ukryte — odhaczanie z siatki jest
+         skrótem dla myszy, a nie jedyną drogą: pozostaje ekran szczegółu. -->
+    <Style Selector="CheckBox.odhacz">
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="IsHitTestVisible" Value="False" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+    </Style>
+    <Style Selector="Border.slot:pointerover CheckBox.odhacz">
+      <Setter Property="Opacity" Value="1" />
+      <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+
     <!-- Pasek dolny: pole dotyku na całą szerokość kolumny i wysokość, w którą trafia
          kciuk. Przycisk wielkości napisu jest na telefonie celem, nie przyciskiem. -->
     <Style Selector="Button.tab">
@@ -608,15 +632,48 @@
                       </ItemsControl.ItemContainerTheme>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SlotBox">
-                          <Border Width="{Binding Width}" Height="{Binding Height}"
+                          <Border Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
                                   Opacity="{Binding Opacity}"
                                   Background="{Binding Background}" CornerRadius="4" Padding="4,2">
-                            <TextBlock Text="{Binding Title}" FontSize="11"
-                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+
+                              <!-- Miejsce na odhaczenie zajęte na stałe, a nie odsłaniane:
+                                   pole pojawiające się pod kursorem przesuwałoby tytuł
+                                   w chwili najechania. Samo pole jest przezroczyste i
+                                   nieklikalne do czasu najechania — niewidoczne, ale
+                                   klikalne byłoby gorsze niż jedno i drugie naraz. -->
+                              <Panel Grid.Column="0" Width="22" IsVisible="{Binding CanComplete}">
+                                <CheckBox Classes="odhacz" VerticalAlignment="Top"
+                                          Command="{Binding $parent[DockPanel].((vm:CalendarViewModel)DataContext).CompleteCommand}"
+                                          CommandParameter="{Binding TaskId}" />
+                              </Panel>
+
+                              <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="11"
+                                         TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+
+                              <!-- Godziny przy prawej krawędzi. Blok pokazuje, ile coś trwa,
+                                   ale nie od której — a to jest pierwsze pytanie o wpis. -->
+                              <StackPanel Grid.Column="2" Margin="4,0,0,0"
+                                          IsVisible="{Binding ShowTimes}">
+                                <TextBlock Classes="godzina" Text="{Binding StartText}" />
+                                <TextBlock Classes="godzina" Text="{Binding EndText}" />
+                              </StackPanel>
+
+                            </Grid>
                           </Border>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Bieżąca godzina, tylko na dzisiejszej kolumnie i **nad** blokami.
+                         Pod nimi ginęłaby dokładnie wtedy, gdy coś teraz trwa — czyli
+                         w jedynym momencie, w którym cokolwiek znaczy. -->
+                    <Canvas IsVisible="{Binding IsToday}">
+                      <Border Canvas.Top="{Binding NowTop}" Canvas.Left="0" Height="2"
+                              Background="#D0553C"
+                              Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}" />
+                    </Canvas>
+
                   </Panel>
 
                 </StackPanel>

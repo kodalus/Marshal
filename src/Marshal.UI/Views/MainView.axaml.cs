@@ -52,6 +52,7 @@ public partial class MainView : UserControl
     private void WireCalendar(MainViewModel model)
     {
         _siatka ??= this.FindControl<ScrollViewer>("SiatkaKalendarza");
+        _kalendarz = model.Calendar;
 
         model.Calendar.ScrollRequested -= NaProsbeOPrzewiniecie;
         model.Calendar.ScrollRequested += NaProsbeOPrzewiniecie;
@@ -60,6 +61,31 @@ public partial class MainView : UserControl
         {
             _siatka.LayoutUpdated -= NaUkladzie;
             _siatka.LayoutUpdated += NaUkladzie;
+            _siatka.SizeChanged -= NaZmianieSzerokosci;
+            _siatka.SizeChanged += NaZmianieSzerokosci;
+
+            // Pierwsze podanie szerokości: zdarzenie rozmiaru potrafi wypaść przed
+            // podstawieniem modelu, a wtedy siatka zostałaby na szerokości zapasowej.
+            Szerokosc(_siatka.Bounds.Width);
+        }
+    }
+
+    private CalendarViewModel? _kalendarz;
+
+    /// <summary>Szerokość kolumny godzin z lewej. Odpowiednik szerokości w XAML-u.</summary>
+    private const double SlupekGodzin = 52;
+
+    /// <summary>Zapas na suwak i odstęp między kolumnami.</summary>
+    private const double Zapas = 14;
+
+    private void NaZmianieSzerokosci(object? nadawca, SizeChangedEventArgs e) =>
+        Szerokosc(e.NewSize.Width);
+
+    private void Szerokosc(double calosc)
+    {
+        if (calosc > 0)
+        {
+            _kalendarz?.SetAvailableWidth(calosc - SlupekGodzin - Zapas);
         }
     }
 
