@@ -1338,19 +1338,34 @@
     </DockPanel>
 
     <!-- Projekty: obszar, cel, projekt -->
-    <ListBox IsVisible="{Binding IsProjects}" ItemsSource="{Binding ProjectRows}">
-      <ListBox.ItemTemplate>
-        <DataTemplate x:DataType="uc:ProjectRow">
-          <StackPanel Orientation="Horizontal" Margin="0,5" Spacing="10">
-            <Border Width="{Binding Indent}" />
-            <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
-            <!-- N1 napisem, nie kolorem: plakietka bez treści uczy ignorowania. -->
-            <TextBlock Classes="badge" Text="{Binding Marker}"
-                       IsVisible="{Binding IsBlocked}" VerticalAlignment="Center" />
-          </StackPanel>
-        </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
+    <DockPanel IsVisible="{Binding IsProjects}">
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" TextWrapping="Wrap"
+                 Text="Kwadracik po lewej ustawia barwę. Barwa obszaru schodzi na jego projekty i zadania, projekt może ją nadpisać. Prawy przycisk usuwa pusty projekt." />
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" TextWrapping="Wrap"
+                 Text="{Binding ProjectsNotice}"
+                 IsVisible="{Binding ProjectsNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <ListBox ItemsSource="{Binding ProjectRows}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProjectTreeRow">
+            <StackPanel Orientation="Horizontal" Margin="0,5" Spacing="10">
+              <Border Width="{Binding Indent}" />
+              <!-- Kwadracik barwy jest przyciskiem: barwę ustawia się tam, gdzie się ją
+                   widzi. Osobny ekran ustawień kolorów znaczyłby, że po każdej zmianie
+                   trzeba wrócić tutaj, żeby sprawdzić, co z tego wyszło. -->
+              <Border Name="Barwa" Width="14" Height="14" CornerRadius="3"
+                      VerticalAlignment="Center" Cursor="Hand"
+                      Background="{Binding Swatch}"
+                      BorderThickness="1" BorderBrush="#40808080"
+                      PointerPressed="NaBarwie" />
+              <TextBlock Text="{Binding Label}" TextWrapping="Wrap" VerticalAlignment="Center" />
+              <!-- N1 napisem, nie kolorem: plakietka bez treści uczy ignorowania. -->
+              <TextBlock Classes="badge" Text="{Binding Marker}"
+                         IsVisible="{Binding IsBlocked}" VerticalAlignment="Center" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </DockPanel>
 
     <!-- Obszary: tabela równowagi (8.5) plus progi -->
     <DockPanel IsVisible="{Binding IsAreas}">

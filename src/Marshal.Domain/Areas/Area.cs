@@ -73,6 +73,20 @@ public sealed class Area : Entity
         Touch(now);
     }
 
+    /// <summary>
+    /// Barwa obszaru — dziedziczona przez projekty i zadania, które nie mają własnej.
+    /// </summary>
+    /// <remarks>
+    /// Kolor jest tu po to, żeby na siatce dało się jednym spojrzeniem odróżnić pracę
+    /// od dzieci, a nie żeby ozdobić listę. Dlatego dziedziczy w dół: obszar nadaje
+    /// ton, projekt może go doprecyzować, zadanie może się wyłamać.
+    /// </remarks>
+    public void SetColor(string? color, Hlc now)
+    {
+        Color = color;
+        Touch(now);
+    }
+
     public void SetActive(bool isActive, Hlc now)
     {
         IsActive = isActive;

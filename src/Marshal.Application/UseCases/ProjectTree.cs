@@ -5,7 +5,7 @@ namespace Marshal.Application.UseCases;
 
 /// <summary>Wiersz drzewa: obszar albo projekt, z głębokością zagnieżdżenia.</summary>
 public sealed record ProjectRow(
-    Guid Id, string Label, int Depth, bool IsArea, bool IsBlocked = false)
+    Guid Id, string Label, int Depth, bool IsArea, bool IsBlocked = false, string? Color = null)
 {
     /// <summary>Wcięcie w punktach. Liczba, nie typ interfejsu — warstwa aplikacji nie zna Avalonii.</summary>
     public double Indent => Depth * 20.0;
@@ -43,7 +43,7 @@ public static class ProjectTree
 
         foreach (var area in areas.OrderBy(a => a.SortOrder))
         {
-            rows.Add(new ProjectRow(area.Id, area.Name, 0, IsArea: true));
+            rows.Add(new ProjectRow(area.Id, area.Name, 0, IsArea: true, Color: area.Color));
 
             // Korzeniem w obszarze jest projekt bez rodzica **albo taki, którego rodzic
             // nie dotarł**. Przy synchronizacji plikowej zmiany przychodzą w kolejności
@@ -58,7 +58,7 @@ public static class ProjectTree
 
             foreach (var projekt in korzenie)
             {
-                Dopisz(projekt, depth: 1, rows, byParent, odwiedzone, blocked);
+                Dopisz(projekt, depth: 1, rows, byParent, odwiedzone, blocked, area.Color);
             }
         }
 
@@ -71,7 +71,8 @@ public static class ProjectTree
         List<ProjectRow> rows,
         Dictionary<Guid, List<Project>> byParent,
         HashSet<Guid> odwiedzone,
-        IReadOnlySet<Guid>? blocked)
+        IReadOnlySet<Guid>? blocked,
+        string? barwaObszaru)
     {
         // Zabezpieczenie przed cyklem: przy scalaniu dwóch urządzeń da się otrzymać
         // projekt będący własnym przodkiem, mimo że żadne z osobna na to nie pozwala.
@@ -80,18 +81,24 @@ public static class ProjectTree
             return;
         }
 
+        // Barwa własna albo odziedziczona — ta sama reguła, którą stosuje kalendarz.
+        // Wiersz pokazuje więc kolor, jaki zadania naprawdę dostaną, a nie puste pole
+        // przy projekcie, który kolor ma, tyle że po rodzicu.
+        var barwa = string.IsNullOrWhiteSpace(projekt.Color) ? barwaObszaru : projekt.Color;
+
         rows.Add(new ProjectRow(
             projekt.Id,
             projekt.Outcome,
             depth,
             IsArea: false,
-            IsBlocked: blocked?.Contains(projekt.Id) ?? false));
+            IsBlocked: blocked?.Contains(projekt.Id) ?? false,
+            Color: barwa));
 
         if (byParent.TryGetValue(projekt.Id, out var dzieci))
         {
             foreach (var dziecko in dzieci)
             {
-                Dopisz(dziecko, depth + 1, rows, byParent, odwiedzone, blocked);
+                Dopisz(dziecko, depth + 1, rows, byParent, odwiedzone, blocked, barwa);
             }
         }
     }

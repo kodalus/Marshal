@@ -155,6 +155,7 @@ public static class DependencyInjection
             sp.GetRequiredService<IDeviceIdentity>(),
             databasePath));
         services.AddSingleton<InboxService>();
+        services.AddSingleton<ProjectEditService>();
         services.AddSingleton<TagService>();
 
         return services;

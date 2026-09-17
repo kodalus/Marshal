@@ -1,6 +1,7 @@
 using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Projects;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.Calendar;
@@ -33,7 +34,9 @@ public sealed class CalendarSyncService(
     IClock clock,
     IHlcSource hlc,
     ISettings settings,
-    IEnumerable<ICalendarWriter> writers)
+    IEnumerable<ICalendarWriter> writers,
+    IProjectRepository projects,
+    IAreaRepository areas)
 {
     /// <summary>Czy do tego kalendarza da się pisać. Na ekran — żeby nie kusić przyciskiem bez skutku.</summary>
     public bool CanWrite(CalendarKind kind) => writers.Any(w => w.Kind == kind);
@@ -305,9 +308,16 @@ public sealed class CalendarSyncService(
                 wydarzenie.ExternalId));
         }
 
+        // Barwy dziedziczone w dół: zadanie bierze swoją, a gdy jej nie ma — projektu,
+        // a gdy i tego nie ma — obszaru. Ustawienie koloru raz na obszarze koloruje
+        // więc wszystko, co do niego należy, bez dotykania pojedynczych zadań.
+        var barwyObszarow = (await areas.AllAsync(ct))
+            .ToDictionary(o => o.Id, o => o.Color);
+        var barwyProjektow = BarwyProjektow(await projects.AllAsync(ct), barwyObszarow);
+
         foreach (var zadanie in await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct))
         {
-            if (Entry(zadanie, strefa) is { } wpis)
+            if (Entry(zadanie, strefa, Barwa(zadanie, barwyProjektow, barwyObszarow)) is { } wpis)
             {
                 wpisy.Add(wpis);
             }
@@ -325,7 +335,71 @@ public sealed class CalendarSyncService(
     private static DateTimeOffset WStrefie(DateTime lokalna, TimeZoneInfo strefa) =>
         new(lokalna, strefa.GetUtcOffset(lokalna));
 
-    private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone)
+    /// <summary>
+    /// Barwa każdego projektu po rozwinięciu dziedziczenia: własna, rodzica, obszaru.
+    /// </summary>
+    /// <remarks>
+    /// Rozwinięcie tutaj, a nie przy każdym zadaniu, bo podprojekt potrafi mieć kilku
+    /// przodków, a zadań w tygodniu są setki. Przejście zabezpieczone licznikiem:
+    /// po scaleniu dwóch urządzeń projekt umie stać się własnym przodkiem.
+    /// </remarks>
+    private static Dictionary<Guid, string?> BarwyProjektow(
+        IReadOnlyList<Project> projekty,
+        IReadOnlyDictionary<Guid, string?> obszary)
+    {
+        var wedlugId = projekty.ToDictionary(p => p.Id);
+        var wynik = new Dictionary<Guid, string?>(projekty.Count);
+
+        foreach (var projekt in projekty)
+        {
+            string? znaleziona = null;
+            Project? biezacy = projekt;
+
+            for (var krok = 0; krok < projekty.Count && biezacy is not null; krok++)
+            {
+                if (!string.IsNullOrWhiteSpace(biezacy.Color))
+                {
+                    znaleziona = biezacy.Color;
+                    break;
+                }
+
+                biezacy = biezacy.ParentProjectId is { } rodzic
+                    && wedlugId.TryGetValue(rodzic, out var wyzej)
+                        ? wyzej
+                        : null;
+            }
+
+            wynik[projekt.Id] = znaleziona
+                ?? (obszary.TryGetValue(projekt.AreaId, out var zObszaru) ? zObszaru : null);
+        }
+
+        return wynik;
+    }
+
+    /// <summary>Barwa zadania: własna, projektu albo obszaru — w tej kolejności.</summary>
+    private static string? Barwa(
+        TaskItem task,
+        IReadOnlyDictionary<Guid, string?> projekty,
+        IReadOnlyDictionary<Guid, string?> obszary)
+    {
+        if (!string.IsNullOrWhiteSpace(task.Color))
+        {
+            return task.Color;
+        }
+
+        if (task.ProjectId is { } projekt
+            && projekty.TryGetValue(projekt, out var zProjektu)
+            && !string.IsNullOrWhiteSpace(zProjektu))
+        {
+            return zProjektu;
+        }
+
+        return task.AreaId is { } obszar && obszary.TryGetValue(obszar, out var zObszaru)
+            ? zObszaru
+            : null;
+    }
+
+    private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone, string? barwa)
     {
         if (task.DoDate is not { } dzien)
         {
@@ -337,7 +411,7 @@ public sealed class CalendarSyncService(
             var poczatekDnia = WStrefie(dzien.ToDateTime(TimeOnly.MinValue), zone);
             return new AgendaEntry(
                 task.Title, poczatekDnia, poczatekDnia.AddDays(1),
-                IsAllDay: true, AgendaKind.Task, task.Color, task.Id,
+                IsAllDay: true, AgendaKind.Task, barwa, task.Id,
                 SourceId: null, ExternalId: null, IsDone: task.State == TaskState.Done);
         }
 
@@ -346,7 +420,7 @@ public sealed class CalendarSyncService(
 
         return new AgendaEntry(
             task.Title, start, start + dlugosc, IsAllDay: false, AgendaKind.Task,
-            task.Color, task.Id, SourceId: null, ExternalId: null,
+            barwa, task.Id, SourceId: null, ExternalId: null,
             IsDone: task.State == TaskState.Done);
     }
 }

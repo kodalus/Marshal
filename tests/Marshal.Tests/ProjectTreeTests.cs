@@ -105,4 +105,43 @@ public class ProjectTreeTests
 
         wiersze.Select(w => w.Label).Should().Equal("Pierwszy", "Drugi", "Trzeci");
     }
+
+    /// <summary>
+    /// Barwa schodzi obszar → projekt → podprojekt, dopóki ktoś jej nie nadpisze.
+    /// </summary>
+    /// <remarks>
+    /// Wiersz musi pokazywać barwę **odziedziczoną**, nie własną. Inaczej projekt bez
+    /// własnego koloru wyglądałby na bezbarwny, a jego zadania byłyby na siatce
+    /// kolorowe — i nie dałoby się zgadnąć, skąd ten kolor.
+    /// </remarks>
+    [Fact]
+    public void Barwa_schodzi_z_obszaru_na_projekty()
+    {
+        var obszar = Obszar("Praca", 1);
+        obszar.SetColor("#4E7FD8", Stamp());
+
+        var cel = Projekt("Cel", obszar.Id);
+        var krok = Projekt("Krok", obszar.Id, rodzic: cel.Id);
+
+        var wiersze = ProjectTree.Build([obszar], [cel, krok]);
+
+        wiersze.Select(w => w.Color).Should().AllBeEquivalentTo("#4E7FD8");
+    }
+
+    [Fact]
+    public void Wlasna_barwa_projektu_wygrywa_i_schodzi_nizej()
+    {
+        var obszar = Obszar("Praca", 1);
+        obszar.SetColor("#4E7FD8", Stamp());
+
+        var cel = Projekt("Cel", obszar.Id);
+        cel.SetColor("#CF5757", Stamp());
+        var krok = Projekt("Krok", obszar.Id, rodzic: cel.Id);
+
+        var wiersze = ProjectTree.Build([obszar], [cel, krok]);
+
+        wiersze.Single(w => w.Label == "Praca").Color.Should().Be("#4E7FD8");
+        wiersze.Single(w => w.Label == "Cel").Color.Should().Be("#CF5757");
+        wiersze.Single(w => w.Label == "Krok").Color.Should().Be("#CF5757");
+    }
 }

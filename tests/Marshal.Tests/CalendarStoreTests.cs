@@ -2,6 +2,7 @@ using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Projects;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Tasks;
@@ -164,7 +165,8 @@ public sealed class CalendarStoreTests : IDisposable
         _sklad = new CalendarStore(_db);
 
         _usluga = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), [_pisarz]);
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), [_pisarz],
+            new ProjectRepository(_db), new AreaRepository(_db));
 
         _edycja = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar, new AreaRepository(_db));
@@ -341,6 +343,44 @@ public sealed class CalendarStoreTests : IDisposable
         dzien.AllDay.Select(e => e.Title).Should().Equal("Kupić mleko");
     }
 
+    /// <summary>
+    /// Zadanie bierze barwę obszaru, a gdy ma projekt z własną — barwę projektu.
+    /// </summary>
+    /// <remarks>
+    /// Sens jest taki, że barwę ustawia się raz na obszarze, a nie przy każdym zadaniu.
+    /// Kolorowanie po jednym zadaniu przestaje cokolwiek znaczyć po pierwszym tygodniu,
+    /// bo barwa opisuje wtedy nastrój przy wpisywaniu, a nie przynależność.
+    /// </remarks>
+    [Fact]
+    public async Task Zadanie_dziedziczy_barwe_obszaru_i_projektu()
+    {
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        obszar.SetColor("#3FA36B", _hlc.Next());
+        _db.Areas.Add(obszar);
+
+        var projekt = new Project(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Opony na aucie", obszar.Id, 0);
+        projekt.SetColor("#CF5757", _hlc.Next());
+        _db.Projects.Add(projekt);
+
+        var zObszaru = TaskItem.Capture("Z obszaru", _zegar.Now, _hlc.Next());
+        zObszaru.Schedule(obszar.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        zObszaru.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+
+        var zProjektu = TaskItem.Capture("Z projektu", _zegar.Now, _hlc.Next());
+        zProjektu.Schedule(obszar.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        zProjektu.SetDoTime(new TimeOnly(11, 0), _hlc.Next());
+        zProjektu.MoveTo(obszar.Id, projekt.Id, _hlc.Next());
+
+        _db.Tasks.AddRange(zObszaru, zProjektu);
+        _db.SaveChanges();
+
+        var dzien = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0];
+
+        dzien.Timed.Single(s => s.Entry.Title == "Z obszaru").Entry.Color.Should().Be("#3FA36B");
+        dzien.Timed.Single(s => s.Entry.Title == "Z projektu").Entry.Color.Should().Be("#CF5757");
+    }
+
     [Fact]
     public async Task Zadanie_bez_dnia_wykonania_nie_trafia_na_siatke()
     {
@@ -431,7 +471,8 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Kalendarz_bez_pisarza_mowi_ze_jest_do_odczytu()
     {
         var bezPisarza = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), []);
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), [],
+            new ProjectRepository(_db), new AreaRepository(_db));
 
         var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
 

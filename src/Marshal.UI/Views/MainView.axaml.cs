@@ -401,6 +401,14 @@ public partial class MainView : UserControl
             return;
         }
 
+        if (Wiersz(zrodlo) is { } wiersz)
+        {
+            e.Handled = true;
+            _ = Probuj("Menu: projekt", () => PokazMenuProjektuAsync(model, zrodlo, wiersz));
+
+            return;
+        }
+
         // Blok na siatce niesie sam identyfikator, nie całe zadanie — trzeba je dobrać.
         if (Blok(zrodlo) is { TaskId: { } identyfikator })
         {
@@ -466,6 +474,72 @@ public partial class MainView : UserControl
         };
 
         menu.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    /// <summary>Wiersz ekranu „Projekty” spod wskaźnika.</summary>
+    private static ProjectTreeRow? Wiersz(Control zrodlo) =>
+        zrodlo.GetSelfAndVisualAncestors()
+            .OfType<Control>()
+            .Select(k => k.DataContext)
+            .OfType<ProjectTreeRow>()
+            .FirstOrDefault();
+
+    /// <summary>
+    /// Kliknięcie w kwadracik barwy — paleta od razu, bez prawego przycisku.
+    /// </summary>
+    /// <remarks>
+    /// Lewym przyciskiem, bo barwa jest tu główną czynnością wiersza, a nie czymś
+    /// schowanym w menu podręcznym. Zdarzenie zatrzymane: bez tego lista zaznaczyłaby
+    /// wiersz pod paletą i paleta wyskoczyłaby nad zmienionym zaznaczeniem.
+    /// </remarks>
+    private void NaBarwie(object? nadawca, PointerPressedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || nadawca is not Control kwadracik
+            || kwadracik.DataContext is not ProjectTreeRow wiersz)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        PokazPalete(model, kwadracik, wiersz);
+    }
+
+    private void PokazPalete(MainViewModel model, Control zrodlo, ProjectTreeRow wiersz) =>
+        new MenuFlyout
+        {
+            ItemsSource = ColorChoice.All
+                .Select(b => Pozycja(b.Label, () => model.SetRowColorAsync(wiersz, b.Value)))
+                .ToList(),
+        }.ShowAt(zrodlo);
+
+    /// <summary>
+    /// Menu wiersza „Projektów”: barwa i usunięcie.
+    /// </summary>
+    /// <remarks>
+    /// Powód odmowy sprawdzany **przed** pokazaniem menu, więc pozycja „Usuń” albo
+    /// działa, albo mówi napisem, czego brakuje. Pozycja, która po kliknięciu nic nie
+    /// robi, uczy nieufności do całego menu.
+    /// </remarks>
+    private async Task PokazMenuProjektuAsync(MainViewModel model, Control zrodlo, ProjectTreeRow wiersz)
+    {
+        var przeszkoda = await model.WhyCannotDeleteAsync(wiersz);
+
+        var pozycje = new List<object>
+        {
+            Galaz("Barwa", [.. ColorChoice.All.Select(b =>
+                Pozycja(b.Label, () => model.SetRowColorAsync(wiersz, b.Value)))]),
+        };
+
+        if (!wiersz.IsArea)
+        {
+            pozycje.Add(new Separator());
+            pozycje.Add(przeszkoda is null
+                ? Pozycja("Usuń projekt", () => model.DeleteProjectAsync(wiersz))
+                : new MenuItem { Header = przeszkoda, IsEnabled = false });
+        }
+
+        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
     }
 
     /// <summary>Pozycja menu. Woła metodę wprost — wyjątek ma dokąd trafić.</summary>

@@ -50,6 +50,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly InAppNotifier _notifier;
     private readonly IActivityLog _dziennik;
     private readonly NoteService _notes;
+    private readonly ProjectEditService _projectEdit;
 
     public MainViewModel(
         InboxService inbox,
@@ -71,9 +72,11 @@ public sealed partial class MainViewModel : ObservableObject
         SettingsViewModel settings,
         JournalViewModel journal,
         IActivityLog dziennik,
-        NoteService noteService)
+        NoteService noteService,
+        ProjectEditService projectEdit)
     {
         _inbox = inbox;
+        _projectEdit = projectEdit;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -188,7 +191,18 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<Area> AreaItems { get; } = [];
 
-    public ObservableCollection<ProjectRow> ProjectRows { get; } = [];
+    public ObservableCollection<ProjectTreeRow> ProjectRows { get; } = [];
+
+    /// <summary>
+    /// Wyjaśnienie odmowy na ekranie „Projekty" — na przykład czemu projekt nie chce się usunąć.
+    /// </summary>
+    /// <remarks>
+    /// Napis na ekranie, nie okienko: odmowa jest tu odpowiedzią na kliknięcie, które
+    /// nie przyniosło skutku, a okienko wymaga jeszcze jednego kliknięcia, żeby wrócić
+    /// do tego samego miejsca.
+    /// </remarks>
+    [ObservableProperty]
+    public partial string ProjectsNotice { get; set; } = string.Empty;
 
     /// <summary>„Dzisiaj" jest ekranem startowym — to on odpowiada na pytanie „co teraz".</summary>
     [ObservableProperty]
@@ -591,7 +605,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         foreach (var row in rows)
         {
-            ProjectRows.Add(row);
+            ProjectRows.Add(new ProjectTreeRow(row));
         }
     }
 
@@ -859,6 +873,52 @@ public sealed partial class MainViewModel : ObservableObject
     {
         await _edit.SetProjectAsync(task.Id, projectId);
         await ReloadAsync();
+    }
+
+    /// <summary>Barwa wiersza z ekranu „Projekty" — obszaru albo projektu.</summary>
+    public async Task SetRowColorAsync(ProjectTreeRow row, string? color)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (row.IsArea)
+        {
+            await _projectEdit.SetAreaColorAsync(row.Id, color);
+        }
+        else
+        {
+            await _projectEdit.SetProjectColorAsync(row.Id, color);
+        }
+
+        ProjectsNotice = string.Empty;
+        await ShowProjectsAsync();
+    }
+
+    /// <summary>
+    /// Usunięcie projektu. Obszarów stąd nie da się usunąć — zostałyby po nich
+    /// zadania bez przynależności, a każde zadanie musi mieć obszar (N11).
+    /// </summary>
+    public async Task DeleteProjectAsync(ProjectTreeRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (row.IsArea)
+        {
+            ProjectsNotice = "Obszaru nie usuwa się stąd — można go wyłączyć na ekranie „Obszary”.";
+            return;
+        }
+
+        ProjectsNotice = await _projectEdit.DeleteProjectAsync(row.Id) ?? string.Empty;
+        await ShowProjectsAsync();
+    }
+
+    /// <summary>Czy ten projekt da się usunąć — menu ma nie proponować rzeczy bez skutku.</summary>
+    public async Task<string?> WhyCannotDeleteAsync(ProjectTreeRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        return row.IsArea
+            ? "Obszaru nie usuwa się stąd."
+            : await _projectEdit.WhyCannotDeleteAsync(row.Id);
     }
 
     public async Task ToNoteAsync(TaskItem task)
