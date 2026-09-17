@@ -75,6 +75,21 @@
       <Setter Property="Margin" Value="0,0,8,0" />
       <Setter Property="Padding" Value="14,8" />
     </Style>
+
+    <!-- Pozycja bocznego paska: cała szerokość i napis od lewej. Przycisk szerokości
+         napisu daje trzynaście różnych szerokości jedna pod drugą, po których oko
+         jedzie zygzakiem zamiast w dół. -->
+    <Style Selector="Button.boczny">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="12,9" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="Button.boczny:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Pole}" />
+    </Style>
     <!-- Godziny na bloku kalendarza: mniejsze od tytułu, bo są odpowiedzią na drugie
          pytanie, nie na pierwsze. -->
     <!-- Pole godziny ma własną szerokość najmniejszą, liczoną na trzy panele
@@ -218,6 +233,66 @@
   <Grid>
   <DockPanel Margin="12">
 
+    <!-- Nawigacja z boku, nie u góry.
+         Rząd przycisków nad treścią zabierał pas na całą szerokość okna po to, żeby
+         pomieścić trzynaście pozycji, a przy węższym oknie zawijał się na dwa rzędy
+         i odsuwał kalendarz jeszcze niżej. Z boku lista rośnie w dół, gdzie miejsca
+         jest pod dostatkiem, a treść dostaje całą wysokość okna.
+
+         Dokowany jako **pierwszy**, przed paskami odmowy i przypomnień: te dotyczą
+         tego, co się właśnie robi, więc mają stać nad treścią, a nie nad wszystkim
+         razem z nawigacją.
+
+         Sto osiemdziesiąt sześć punktów, nie dwieście z okładem: pasek zabiera je
+         kalendarzowi na stałe, a tydzień potrzebuje siedmiu kolumn po dziewięćdziesiąt
+         sześć. Przy oknie węższym niż mniej więcej tysiąc punktów siatka i tak zacznie
+         się przewijać w bok — dlatego węższego paska nie da się tu wymienić na
+         wygodniejszy, tylko na mniej ciasny. -->
+    <Border DockPanel.Dock="Left" Width="186" Margin="0,0,12,0" Padding="0,0,8,0"
+            BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Krawedz}"
+            IsVisible="{Binding ShowWideNav}">
+      <DockPanel>
+
+        <!-- Znak i nazwa u góry paska: to jest miejsce, w którym oko ląduje najpierw,
+             i jedyne, gdzie ikona aplikacji ma szansę cokolwiek znaczyć. -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="9"
+                    Margin="6,2,0,14">
+          <Image Source="/Assets/marshal.png" Width="22" Height="22"
+                 VerticalAlignment="Center" />
+          <TextBlock Text="Marshal" FontWeight="SemiBold" FontSize="16"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <Button Classes="boczny" Command="{Binding ShowTodayCommand}" Content="Dzisiaj" />
+          <Button Classes="boczny" Command="{Binding ShowNowCommand}" Content="Teraz" />
+          <Button Classes="boczny" Command="{Binding ShowInboxCommand}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Skrzynka" />
+              <Border Background="#40808080" CornerRadius="9" Padding="7,1"
+                      IsVisible="{Binding HasInbox}">
+                <TextBlock Text="{Binding InboxCount}" FontSize="12" />
+              </Border>
+            </StackPanel>
+          </Button>
+          <Button Classes="boczny" Command="{Binding ShowNextCommand}" Content="Następne" />
+          <Button Classes="boczny" Command="{Binding ShowProjectsCommand}" Content="Obszary i projekty" />
+          <Button Classes="boczny" Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
+          <Button Classes="boczny" Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
+          <Button Classes="boczny" Command="{Binding ShowReviewCommand}" Content="Przegląd" />
+          <Button Classes="boczny" Command="{Binding ShowCalendarCommand}" Content="Kalendarz" />
+          <Button Classes="boczny" Command="{Binding ShowNotesCommand}" Content="Notatki" />
+          <Button Classes="boczny" Command="{Binding ShowFiltersCommand}" Content="Filtry" />
+          <Button Classes="boczny" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
+          <Button Classes="boczny" Command="{Binding ShowSettingsCommand}" Content="Ustawienia" />
+          <Button Classes="boczny" Command="{Binding ShowJournalCommand}" Content="Co się działo" />
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+
     <!-- Odmowa, która nie miała gdzie się pokazać. Jeden pasek na całe okno, bo
          kliknięcie bez skutku zdarza się na każdym ekranie, a ramka z wyjaśnieniem
          stała tylko na jednym. -->
@@ -253,32 +328,6 @@
       </DockPanel>
     </Border>
 
-    <!-- Nawigacja szeroka: wszystkie ekrany naraz. Na pulpicie mieszczą się w rzędzie
-         albo dwóch i są najkrótszą drogą do każdego z nich. -->
-    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,16" IsVisible="{Binding ShowWideNav}">
-      <Button Classes="nav" Command="{Binding ShowTodayCommand}" Content="Dzisiaj" />
-      <Button Classes="nav" Command="{Binding ShowNowCommand}" Content="Teraz" />
-      <Button Classes="nav" Command="{Binding ShowInboxCommand}">
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Text="Skrzynka" />
-          <Border Background="#40808080" CornerRadius="9" Padding="7,1"
-                  IsVisible="{Binding HasInbox}">
-            <TextBlock Text="{Binding InboxCount}" FontSize="12" />
-          </Border>
-        </StackPanel>
-      </Button>
-      <Button Classes="nav" Command="{Binding ShowNextCommand}" Content="Następne" />
-      <Button Classes="nav" Command="{Binding ShowProjectsCommand}" Content="Obszary i projekty" />
-      <Button Classes="nav" Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
-      <Button Classes="nav" Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
-      <Button Classes="nav" Command="{Binding ShowReviewCommand}" Content="Przegląd" />
-      <Button Classes="nav" Command="{Binding ShowCalendarCommand}" Content="Kalendarz" />
-      <Button Classes="nav" Command="{Binding ShowNotesCommand}" Content="Notatki" />
-      <Button Classes="nav" Command="{Binding ShowFiltersCommand}" Content="Filtry" />
-      <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
-      <Button Classes="nav" Command="{Binding ShowSettingsCommand}" Content="Ustawienia" />
-      <Button Classes="nav" Command="{Binding ShowJournalCommand}" Content="Co się działo" />
-    </WrapPanel>
 
     <!-- Pasek dolny (wąskie okno). Cztery ekrany dnia codziennego pod kciukiem plus
          „Więcej" na resztę. Wybór czwórki nie jest dowolny: Dzisiaj jest ekranem
