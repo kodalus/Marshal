@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Data;
@@ -39,7 +40,8 @@ public sealed class InboxServiceTests : IDisposable
             new ProjectRepository(_db),
             new UnitOfWork(_db),
             _zegar,
-            new HlcSource(_zegar, "testy"));
+            new HlcSource(_zegar, "testy"),
+            new NoTaskMirror());
     }
 
     private async Task<Guid> Wrzut(string tytul = "Zadzwonić do przychodni") =>

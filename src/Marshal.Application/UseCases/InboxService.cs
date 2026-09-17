@@ -1,4 +1,5 @@
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Projects;
 using Marshal.Domain.Tasks;
@@ -18,7 +19,8 @@ public sealed class InboxService(
     IProjectRepository projects,
     IUnitOfWork unitOfWork,
     IClock clock,
-    IHlcSource hlc)
+    IHlcSource hlc,
+    ITaskMirror mirror)
 {
     /// <summary>
     /// Wrzut. Jedyne pole to tytuł — zasada 1.3. Ma kosztować dwie sekundy.
@@ -37,9 +39,23 @@ public sealed class InboxService(
     public Task<int> CountAsync(CancellationToken ct = default) =>
         tasks.InboxCountAsync(ct);
 
-    /// <summary>Nie wymaga działania → kosz.</summary>
-    public Task TrashAsync(Guid id, CancellationToken ct = default) =>
-        MutateAsync(id, task => task.Trash(hlc.Next()), ct);
+    /// <summary>
+    /// Nie wymaga działania → kosz.
+    /// </summary>
+    /// <remarks>
+    /// Udostępnione zadanie zabiera ze sobą swoje wydarzenie. Zostawione w cudzym
+    /// kalendarzu byłoby zaproszeniem na coś, co po tej stronie już nie istnieje —
+    /// i nikt by go stamtąd nie zdjął, bo nie miałby po czym poznać, że trzeba.
+    /// </remarks>
+    public async Task TrashAsync(Guid id, CancellationToken ct = default)
+    {
+        var task = await Required(id, ct);
+
+        await mirror.RemoveAsync(task, ct);
+
+        task.Trash(hlc.Next());
+        await unitOfWork.SaveChangesAsync(ct);
+    }
 
     /// <summary>Nie wymaga działania teraz → kiedyś-może.</summary>
     public Task PostponeAsync(Guid id, Guid areaId, DateOnly? deferUntil, CancellationToken ct = default) =>

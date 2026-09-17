@@ -2,11 +2,13 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Domain.Diagnostics;
 using Marshal.Application.Repositories;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Calendar;
 using Marshal.Domain.Projects;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
@@ -50,6 +52,8 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IActivityLog _dziennik;
     private readonly NoteService _notes;
     private readonly StructureEditService _szkielet;
+    private readonly TaskMirror _odbicie;
+    private readonly CalendarSyncService _kalendarze;
 
     public MainViewModel(
         InboxService inbox,
@@ -72,10 +76,14 @@ public sealed partial class MainViewModel : ObservableObject
         JournalViewModel journal,
         IActivityLog dziennik,
         NoteService noteService,
-        StructureEditService szkielet)
+        StructureEditService szkielet,
+        TaskMirror odbicie,
+        CalendarSyncService kalendarze)
     {
         _inbox = inbox;
         _szkielet = szkielet;
+        _odbicie = odbicie;
+        _kalendarze = kalendarze;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -931,6 +939,39 @@ public sealed partial class MainViewModel : ObservableObject
     public async Task SetProjectAsync(TaskItem task, Guid? projectId)
     {
         await _edit.SetProjectAsync(task.Id, projectId);
+        await ReloadAsync();
+    }
+
+    /// <summary>
+    /// Kalendarze, do których da się udostępnić zadanie. Puste, gdy żadnego nie ma.
+    /// </summary>
+    public async Task<IReadOnlyList<CalendarSource>> WritableCalendarsAsync() =>
+        (await _kalendarze.SourcesAsync())
+            .Where(z => _kalendarze.CanWrite(z.Kind))
+            .ToList();
+
+    /// <summary>
+    /// Udostępnienie zadania w wybranym kalendarzu.
+    /// </summary>
+    /// <remarks>
+    /// Po to, żeby ktoś bez Marshala widział u siebie to, co go dotyczy. Pojedyncze
+    /// zadania, nie całe obszary: obszar rodzinny mieści i „odebrać dziecko",
+    /// i „kupić prezent", a widzieć je mają różne osoby.
+    /// </remarks>
+    public async Task ShareTaskAsync(TaskItem task, Guid calendarId)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        Notice = await _odbicie.ShareAsync(task.Id, calendarId) ?? string.Empty;
+        await ReloadAsync();
+    }
+
+    public async Task UnshareTaskAsync(TaskItem task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        await _odbicie.UnshareAsync(task.Id);
+        Notice = string.Empty;
         await ReloadAsync();
     }
 

@@ -99,6 +99,13 @@ public static class DependencyInjection
         services.AddSingleton<ICalendarStore, CalendarStore>();
         services.AddSingleton<CalendarSyncService>();
 
+        // Odbicie zadań w kalendarzu. Rejestrowane pod interfejsem i pod własnym typem:
+        // edycja zadań zna wyłącznie interfejs (inaczej dwie usługi wskazywałyby na
+        // siebie i kontener nie miałby od czego zacząć), a okno woła po udostępnienie
+        // i zdjęcie udostępnienia wprost.
+        services.AddSingleton<TaskMirror>();
+        services.AddSingleton<ITaskMirror>(sp => sp.GetRequiredService<TaskMirror>());
+
         // Kanał iCal działa bez żadnych poświadczeń, więc jest podłączony od razu.
         services.AddSingleton<HttpClient>();
         services.AddSingleton<ICalendarFeed, IcalFeed>();

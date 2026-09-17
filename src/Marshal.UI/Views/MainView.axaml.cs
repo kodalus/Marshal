@@ -10,6 +10,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Calendar;
 using Marshal.Domain.Notes;
 using Marshal.Domain.Tasks;
 using Marshal.UI.ViewModels;
@@ -562,6 +563,7 @@ public partial class MainView : UserControl
     {
         var dzis = model.Dzisiaj;
         var projekty = await model.ActiveProjectsAsync();
+        var kalendarze = await model.WritableCalendarsAsync();
 
         var menu = new MenuFlyout
         {
@@ -611,6 +613,13 @@ public partial class MainView : UserControl
                 ]),
 
                 new Separator(),
+
+                // Udostępnianie pojedynczego zadania, nie całego obszaru: obszar
+                // rodzinny mieści i „odebrać dziecko”, i „kupić prezent”, a widzieć
+                // je mają różne osoby. Gałąź pokazuje się tylko wtedy, gdy jest dokąd
+                // udostępniać — pozycja bez skutku uczy nieufności do całego menu.
+                .. Udostepnianie(model, zadanie, kalendarze),
+
                 Pozycja("Weź na dziś", () => model.FocusTaskAsync(zadanie)),
                 Pozycja("Pokaż w kalendarzu", () => model.ShowInCalendarAsync(zadanie)),
                 Pozycja("Zamień na notatkę", () => model.ToNoteAsync(zadanie)),
@@ -859,6 +868,28 @@ public partial class MainView : UserControl
         }
 
         new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Pozycje menu od udostępniania — albo żadne, gdy nie ma dokąd.
+    /// </summary>
+    /// <remarks>
+    /// Udostępnione zadanie pokazuje jedną pozycję: zdjęcie udostępnienia. Lista
+    /// kalendarzy przy czymś, co już gdzieś stoi, sugerowałaby, że da się je postawić
+    /// w dwóch naraz — a wydarzenie ma jedno miejsce i jeden identyfikator.
+    /// </remarks>
+    private IReadOnlyList<object> Udostepnianie(
+        MainViewModel model, TaskItem zadanie, IReadOnlyList<CalendarSource> kalendarze)
+    {
+        if (zadanie.IsShared)
+        {
+            return [Pozycja("Przestań udostępniać", () => model.UnshareTaskAsync(zadanie))];
+        }
+
+        return kalendarze.Count == 0
+            ? []
+            : [Galaz("Udostępnij w kalendarzu", [.. kalendarze.Select(k =>
+                Pozycja(k.Name, () => model.ShareTaskAsync(zadanie, k.Id)))])];
     }
 
     /// <summary>Pozycja menu. Woła metodę wprost — wyjątek ma dokąd trafić.</summary>

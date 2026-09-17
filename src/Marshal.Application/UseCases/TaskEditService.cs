@@ -1,4 +1,5 @@
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
@@ -36,8 +37,29 @@ public sealed class TaskEditService(
     IUnitOfWork unitOfWork,
     IHlcSource hlc,
     IClock clock,
-    IAreaRepository areas)
+    IAreaRepository areas,
+    ITaskMirror mirror)
 {
+    /// <summary>
+    /// Wyrównanie odbicia w kalendarzu po zapisie.
+    /// </summary>
+    /// <remarks>
+    /// Wołane z każdej ścieżki, która zmienia to, co widać w wydarzeniu: nazwę, dzień,
+    /// godzinę, długość i odhaczenie. Zadanie nieudostępnione nie kosztuje przy tym nic —
+    /// odbicie odpada na pierwszym sprawdzeniu.
+    ///
+    /// Po zapisie u nas, nie przed: baza jest prawdą, a kalendarz jej odbiciem. Gdyby
+    /// wysyłka szła pierwsza, nieudany zapis lokalny zostawiałby w cudzym kalendarzu
+    /// wydarzenie opisujące zadanie, które u nas wygląda inaczej.
+    /// </remarks>
+    private async Task OdbijAsync(TaskItem? zadanie, CancellationToken ct)
+    {
+        if (zadanie is { SharedCalendarId: not null })
+        {
+            await mirror.PushAsync(zadanie, ct);
+        }
+    }
+
     public async Task<TaskItem?> ApplyAsync(Guid id, TaskEdit edit, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(edit);
@@ -104,6 +126,8 @@ public sealed class TaskEditService(
         }
 
         await unitOfWork.SaveChangesAsync(ct);
+        await OdbijAsync(zadanie, ct);
+
         return zadanie;
     }
 
@@ -152,6 +176,7 @@ public sealed class TaskEditService(
         {
             zadanie.SetEstimate(minutes, zadanie.Energy, hlc.Next());
             await unitOfWork.SaveChangesAsync(ct);
+            await OdbijAsync(zadanie, ct);
         }
 
         return zadanie;
@@ -229,6 +254,7 @@ public sealed class TaskEditService(
         zadanie.SetDoTime(time, hlc.Next());
 
         await unitOfWork.SaveChangesAsync(ct);
+        await OdbijAsync(zadanie, ct);
 
         return zadanie;
     }
@@ -261,6 +287,8 @@ public sealed class TaskEditService(
         }
 
         await unitOfWork.SaveChangesAsync(ct);
+        await OdbijAsync(zadanie, ct);
+
         return nastepne;
     }
 
@@ -287,6 +315,7 @@ public sealed class TaskEditService(
 
         zadanie.Reopen(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
+        await OdbijAsync(zadanie, ct);
 
         return zadanie;
     }

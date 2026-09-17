@@ -487,6 +487,42 @@ public sealed class TaskItem : Entity
     }
 
     /// <summary>
+    /// Kalendarz, w którym to zadanie jest widoczne dla innych. Puste = nigdzie.
+    /// </summary>
+    /// <remarks>
+    /// Udostępnianie jest **per zadanie**, nie per obszar, i to jest rozstrzygnięcie,
+    /// nie wygoda. Nie wszystko z obszaru rodzinnego ma trafiać do wspólnego kalendarza:
+    /// „kupić prezent" należy do tego samego obszaru co „odebrać dziecko", a widzieć
+    /// je ma tylko jedna z tych dwóch osób. Powiązanie po obszarze zmuszałoby do
+    /// przenoszenia zadań między obszarami po to, żeby sterować widocznością — czyli
+    /// do psucia podziału odpowiedzialności w celu, do którego nie służy.
+    /// </remarks>
+    public Guid? SharedCalendarId { get; private set; }
+
+    /// <summary>Identyfikator odpowiadającego wydarzenia u źródła.</summary>
+    public string? SharedEventId { get; private set; }
+
+    public bool IsShared => SharedCalendarId is not null;
+
+    /// <summary>Zapamiętanie, gdzie to zadanie żyje jako wydarzenie.</summary>
+    public void Share(Guid calendarId, string eventId, Hlc stamp)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventId);
+
+        SharedCalendarId = calendarId;
+        SharedEventId = eventId;
+        Touch(stamp);
+    }
+
+    /// <summary>Zapomnienie o powiązaniu. Samo wydarzenie kasuje warstwa wyżej.</summary>
+    public void Unshare(Hlc stamp)
+    {
+        SharedCalendarId = null;
+        SharedEventId = null;
+        Touch(stamp);
+    }
+
+    /// <summary>
     /// Wyjęcie z „kiedyś-może” z powrotem do rzeczy do zrobienia.
     /// </summary>
     /// <remarks>

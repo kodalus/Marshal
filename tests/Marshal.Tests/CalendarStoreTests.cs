@@ -182,7 +182,8 @@ public sealed class CalendarStoreTests : IDisposable
             new ProjectRepository(_db), new AreaRepository(_db));
 
         _edycja = new TaskEditService(
-            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar, new AreaRepository(_db));
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar, new AreaRepository(_db),
+            new NoTaskMirror());
 
         _zrodlo = new CalendarSource(
             Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
@@ -588,6 +589,117 @@ public sealed class CalendarStoreTests : IDisposable
         await model.ResizeAsync(blok, 8 * 48);
 
         _db.Tasks.Single(t => t.Id == zadanie.Id).EstimatedMinutes.Should().Be(5);
+    }
+
+    /// <summary>
+    /// Udostępnione zadanie żyje w kalendarzu jako wydarzenie i nadąża za zmianami.
+    /// </summary>
+    /// <remarks>
+    /// Po to, żeby ktoś bez Marshala widział u siebie to, co go dotyczy. Udostępnia się
+    /// pojedyncze zadania, nie całe obszary: obszar rodzinny mieści i „odebrać dziecko",
+    /// i „kupić prezent", a widzieć je mają różne osoby.
+    /// </remarks>
+    [Fact]
+    public async Task Udostepnione_zadanie_ma_swoje_wydarzenie_i_nadaza_za_zmianami()
+    {
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia());
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Odebrać Sanię", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(16, 0), _hlc.Next());
+        zadanie.SetEstimate(30, Energy.Medium, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        (await odbicie.ShareAsync(zadanie.Id, _zrodlo.Id)).Should().BeNull("miało się udać");
+
+        _pisarz.Wyslane.Should().ContainSingle()
+            .Which.Should().Be(("utworzenie", "Odebrać Sanię", (string?)null));
+
+        _db.Tasks.Single(t => t.Id == zadanie.Id).SharedEventId.Should().Be("nowe-1");
+
+        // Przesunięcie po siatce ma dojść do kalendarza, bo tam ktoś na to patrzy.
+        var edycja = new TaskEditService(
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar,
+            new AreaRepository(_db), odbicie);
+
+        await edycja.RescheduleAsync(zadanie.Id, Dzis, new TimeOnly(17, 30));
+
+        _pisarz.Wyslane.Should().HaveCount(2);
+        _pisarz.Wyslane[1].Co.Should().Be("zmiana");
+
+        // Odhaczenie dokłada ptaszek do nazwy — druga osoba widzi, że zrobione.
+        await edycja.CompleteAsync(zadanie.Id);
+        _pisarz.Wyslane[^1].Tytul.Should().Be("✓ Odebrać Sanię");
+
+        // I najważniejsze: na siatce stoi **jeden** blok, nie dwa. Zapis do kalendarza
+        // wraca do naszej kopii jako wydarzenie; narysowane obok zadania dałoby dwa
+        // bloki na tę samą rzecz, z których jeden nie dawałby się odhaczyć.
+        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+            .Should().ContainSingle()
+            .Which.Entry.TaskId.Should().Be(zadanie.Id);
+    }
+
+    /// <summary>
+    /// Zadanie wyrzucone do kosza zabiera ze sobą swoje wydarzenie.
+    /// </summary>
+    /// <remarks>
+    /// Zostawione w cudzym kalendarzu byłoby zaproszeniem na coś, co po tej stronie
+    /// już nie istnieje — i nikt by go stamtąd nie zdjął, bo nie miałby po czym poznać.
+    /// </remarks>
+    [Fact]
+    public async Task Kosz_zabiera_ze_soba_udostepnione_wydarzenie()
+    {
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia());
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Odwołane", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        await odbicie.ShareAsync(zadanie.Id, _zrodlo.Id);
+
+        var skrzynka = new InboxService(
+            new TaskRepository(_db), new ProjectRepository(_db), new UnitOfWork(_db),
+            _zegar, _hlc, odbicie);
+
+        await skrzynka.TrashAsync(zadanie.Id);
+
+        _pisarz.Wyslane[^1].Co.Should().Be("skasowanie");
+
+        var po = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        po.SharedCalendarId.Should().BeNull();
+        po.SharedEventId.Should().BeNull();
+    }
+
+    /// <summary>Bez godziny nie ma czego udostępnić — i mówimy to wprost.</summary>
+    [Fact]
+    public async Task Zadanie_bez_godziny_nie_da_sie_udostepnic()
+    {
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia());
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Kiedyś w tym tygodniu", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        (await odbicie.ShareAsync(zadanie.Id, _zrodlo.Id))
+            .Should().Contain("dzień i godzina");
+
+        _pisarz.Wyslane.Should().BeEmpty("odmowa nie dotyka kalendarza");
     }
 
     [Fact]

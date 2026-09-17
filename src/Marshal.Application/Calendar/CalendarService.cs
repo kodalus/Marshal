@@ -345,8 +345,25 @@ public sealed class CalendarSyncService(
             .Select(z => z.Id)
             .ToHashSet();
 
+        // Zadania wczytane **przed** wydarzeniami, bo to one rozstrzygają, czego nie
+        // rysować. Zadanie udostępnione ma w kalendarzu swoje odbicie, które wraca do
+        // nas przy odświeżaniu — narysowane obok zadania dałoby dwa bloki na tę samą
+        // rzecz, w tym samym miejscu, z których jeden nie dawałby się odhaczyć.
+        // Prawdą jest zadanie; wydarzenie jest jego cieniem.
+        var zadania = await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct);
+
+        var odbicia = zadania
+            .Where(z => z.SharedEventId is not null)
+            .Select(z => z.SharedEventId!)
+            .ToHashSet();
+
         foreach (var wydarzenie in await store.EventsAsync(poczatek, koniec, ct))
         {
+            if (odbicia.Contains(wydarzenie.ExternalId))
+            {
+                continue;
+            }
+
             // Całodniowe **nie** przelicza się na strefę. To jest data, nie chwila:
             // Google oddaje ją jako północ bez strefy, a przeliczenie na Warszawę robiło
             // z niej drugą w nocy — czyli koniec wypadał drugiej w nocy **następnego**
@@ -380,7 +397,7 @@ public sealed class CalendarSyncService(
             .ToDictionary(o => o.Id, o => o.Color);
         var barwyProjektow = BarwyProjektow(await projects.AllAsync(ct), barwyObszarow);
 
-        foreach (var zadanie in await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct))
+        foreach (var zadanie in zadania)
         {
             if (Entry(zadanie, strefa, Barwa(zadanie, barwyProjektow, barwyObszarow)) is { } wpis)
             {
