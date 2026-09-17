@@ -121,6 +121,75 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Gdzie ląduje żeton — żeby dało się go skasować i zalogować od nowa.</summary>
     public string TokenFolder => _dysk.TokenFolder;
 
+    public string Now => $"{_clock.Now:dd.MM.yyyy HH:mm} — dzisiaj to {_clock.Today:dd.MM.yyyy}";
+
+    [RelayCommand]
+    private async Task ExportAsync()
+    {
+        if (SaveRequested is null)
+        {
+            return;
+        }
+
+        var nazwa = $"marshal-{_clock.Today:yyyy-MM-dd}.json";
+
+        try
+        {
+            await using var strumien = await SaveRequested(nazwa);
+
+            if (strumien is null)
+            {
+                return;
+            }
+
+            await _backup.ExportAsync(strumien);
+            Status = $"Zapisane do {nazwa}.";
+        }
+        catch (Exception e)
+        {
+            // Łapane szeroko **celowo**. Polecenie wołane jest bez oczekiwania na wynik,
+            // więc wyjątek, którego tu nie złapiemy, nie ma dokąd trafić: przycisk
+            // wygląda na kliknięty, pliku nie ma i nikt się o tym nie dowie. Przy kopii
+            // zapasowej cicha porażka jest gorsza niż brak kopii, bo zostawia
+            // przekonanie, że kopia jest. Treść wyjątku, nie „coś poszło nie tak".
+            Status = $"Nie udało się zapisać: {e.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportAsync()
+    {
+        if (OpenRequested is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var strumien = await OpenRequested();
+
+            if (strumien is null)
+            {
+                return;
+            }
+
+            var tryb = ReplaceOnImport ? ImportMode.Replace : ImportMode.Merge;
+            var raport = await _backup.ImportAsync(strumien, tryb);
+
+            Status = raport.Applied == 0
+                ? $"Wczytane {raport.Read} wpisów — wszystkie starsze niż to, co już jest."
+                : $"Wczytane {raport.Read} wpisów, nałożone {raport.Applied}.";
+
+            Imported?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception e)
+        {
+            // Jak wyżej. Wgranie jest w transakcji, więc baza została w stanie sprzed
+            // próby — komunikat jest jedyną rzeczą, której brakuje.
+            Status = $"Nie udało się wczytać: {e.Message}";
+        }
+    }
+
     /// <summary>
     /// Ile czekamy na powrót z przeglądarki, zanim uznamy, że nie wróci.
     /// </summary>
