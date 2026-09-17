@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Infrastructure.Data;
+using Marshal.Infrastructure.Sync;
 using Marshal.Infrastructure.Time;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -20,9 +21,12 @@ public sealed class SettingsTests : IDisposable
     public SettingsTests()
     {
         _polaczenie.Open();
+        // Z przechwytywaczem dziennika, inaczej sprawdzenie „poświadczenia nie trafiają
+        // do dziennika" przechodziłoby dlatego, że dziennika nie ma wcale.
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
                 .UseSqlite(_polaczenie)
+                .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
         _db.Database.Migrate();
         _ustawienia = new LocalSettings(_db);
@@ -35,6 +39,30 @@ public sealed class SettingsTests : IDisposable
         // liczyć dni tak samo na telefonie kupionym z inną strefą fabryczną.
         _ustawienia.Zone.Should().Be(TimeZoneInfo.FindSystemTimeZoneById(LocalSettings.DefaultZoneId));
         _ustawienia.Theme.Should().Be(ThemeChoice.System);
+    }
+
+    [Fact]
+    public void Poswiadczenia_dysku_przezywaja_ponowne_otwarcie_i_sa_przycinane()
+    {
+        // Kopiowanie z konsoli Google wciąga spację albo koniec wiersza, a logowanie
+        // odbija się wtedy komunikatem o złym kliencie — po którym nie widać, że
+        // chodziło o jeden znak.
+        _ustawienia.SetGoogle("  123.apps.googleusercontent.com\n", " GOCSPX-tajne ");
+
+        var znowu = new LocalSettings(_db);
+
+        znowu.GoogleClientId.Should().Be("123.apps.googleusercontent.com");
+        znowu.GoogleClientSecret.Should().Be("GOCSPX-tajne");
+    }
+
+    [Fact]
+    public void Poswiadczenia_dysku_sa_lokalne_i_nie_trafiaja_do_dziennika_zmian()
+    {
+        // Dziennik zmian jest zwykłym tekstem lądującym na Dysku. Poświadczenia do
+        // Dysku nie mają jechać przez Dysk — na drugim urządzeniu wkleja się je jeszcze raz.
+        _ustawienia.SetGoogle("123.apps.googleusercontent.com", "GOCSPX-tajne");
+
+        _db.Changes.Should().BeEmpty();
     }
 
     [Fact]
@@ -63,15 +91,23 @@ public sealed class SettingsTests : IDisposable
         znowu.Zone.Should().NotBeNull();
     }
 
+    /// <summary>Ustawienia o jednej wartości — na potrzeby sprawdzenia samego zegara.</summary>
     private sealed class Strefa(string id) : ISettings
     {
         public TimeZoneInfo Zone { get; } = TimeZoneInfo.FindSystemTimeZoneById(id);
 
         public ThemeChoice Theme => ThemeChoice.System;
 
+        public string? GoogleClientId => null;
+
+        public string? GoogleClientSecret => null;
+
         public void SetZone(string id) => throw new NotSupportedException();
 
         public void SetTheme(ThemeChoice theme) => throw new NotSupportedException();
+
+        public void SetGoogle(string? clientId, string? clientSecret) =>
+            throw new NotSupportedException();
     }
 
     private sealed class StalyMoment(DateTimeOffset now) : IClock
