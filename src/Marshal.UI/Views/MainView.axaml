@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Marshal.UI.ViewModels"
              xmlns:tasks="using:Marshal.Domain.Tasks"
-             xmlns:areas="using:Marshal.Domain.Areas"
              xmlns:uc="using:Marshal.Application.UseCases"
              xmlns:abs="using:Marshal.Application.Abstractions"
              xmlns:rev="using:Marshal.Application.Review"
@@ -1683,12 +1682,17 @@
           <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="60"
                    TextWrapping="Wrap" Watermark="Cokolwiek, co pomoże zacząć" />
 
-          <TextBlock Classes="label" Text="Obszar — do czego to należy" />
-          <ComboBox ItemsSource="{Binding Areas}" SelectedItem="{Binding SelectedArea}"
-                    HorizontalAlignment="Stretch" PlaceholderText="jeszcze nierozstrzygnięty">
+          <TextBlock Classes="label" Text="Miejsce — obszar albo projekt w nim" />
+          <!-- Jedna lista, wcięciem udająca drzewko: wybór projektu jest zarazem
+               wyborem jego obszaru, więc nie da się wskazać sprzecznej pary. -->
+          <ComboBox ItemsSource="{Binding Placements}" SelectedItem="{Binding SelectedPlacement}"
+                    HorizontalAlignment="Stretch" PlaceholderText="jeszcze nierozstrzygnięte">
             <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="areas:Area">
-                <TextBlock Text="{Binding Name}" />
+              <DataTemplate x:DataType="vm:PlacementChoice">
+                <StackPanel Orientation="Horizontal">
+                  <Border Width="{Binding Indent}" />
+                  <TextBlock Text="{Binding Label}" />
+                </StackPanel>
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>

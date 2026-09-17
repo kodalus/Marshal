@@ -7,6 +7,16 @@ namespace Marshal.Application.UseCases;
 public sealed record ProjectRow(
     Guid Id, string Label, int Depth, bool IsArea, bool IsBlocked = false, string? Color = null)
 {
+    /// <summary>
+    /// Obszar wiersza. Dla wiersza obszaru to on sam.
+    /// </summary>
+    /// <remarks>
+    /// Potrzebny przy wybieraniu miejsca dla zadania: wybór podprojektu musi ustawić
+    /// **obszar i projekt naraz**, bo zadanie w projekcie zawsze należy do obszaru (N11),
+    /// a odczytywanie go z kolejności wierszy byłoby zgadywaniem z układu ekranu.
+    /// </remarks>
+    public Guid AreaId { get; init; }
+
     /// <summary>Wcięcie w punktach. Liczba, nie typ interfejsu — warstwa aplikacji nie zna Avalonii.</summary>
     public double Indent => Depth * 20.0;
 
@@ -43,7 +53,10 @@ public static class ProjectTree
 
         foreach (var area in areas.OrderBy(a => a.SortOrder))
         {
-            rows.Add(new ProjectRow(area.Id, area.Name, 0, IsArea: true, Color: area.Color));
+            rows.Add(new ProjectRow(area.Id, area.Name, 0, IsArea: true, Color: area.Color)
+            {
+                AreaId = area.Id,
+            });
 
             // Korzeniem w obszarze jest projekt bez rodzica **albo taki, którego rodzic
             // nie dotarł**. Przy synchronizacji plikowej zmiany przychodzą w kolejności
@@ -92,7 +105,10 @@ public static class ProjectTree
             depth,
             IsArea: false,
             IsBlocked: blocked?.Contains(projekt.Id) ?? false,
-            Color: barwa));
+            Color: barwa)
+        {
+            AreaId = projekt.AreaId,
+        });
 
         if (byParent.TryGetValue(projekt.Id, out var dzieci))
         {

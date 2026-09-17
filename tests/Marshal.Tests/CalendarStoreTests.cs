@@ -694,8 +694,12 @@ public sealed class CalendarStoreTests : IDisposable
         await model.ShowThreeDaysCommand.ExecuteAsync(null);
         model.SetAvailableWidth(900);
 
-        model.ColumnWidth.Should().Be(300, "trzy dni z dziewięciuset punktów");
-        model.Columns.SelectMany(k => k.Slots).Should().OnlyContain(b => b.Width <= 300);
+        // Dwieście dziewięćdziesiąt osiem, nie trzysta: kolumny dzieli odstęp i on też
+        // zajmuje miejsce. Liczony wcześniej poza szerokością kolumny robił siatkę
+        // o czternaście punktów szerszą niż okno — i stąd brał się poziomy pasek
+        // przewijania przy oknie rozciągniętym na cały ekran.
+        model.ColumnWidth.Should().Be(298, "trzy dni z dziewięciuset punktów bez odstępów");
+        model.Columns.SelectMany(k => k.Slots).Should().OnlyContain(b => b.Width <= 298);
 
         // Dolna granica: siedem kolumn po czternaście punktów to nie jest tydzień,
         // tylko siedem nieczytelnych pasków. Węższe okno ma się przewijać w bok.

@@ -5,7 +5,6 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
-using Marshal.Domain.Areas;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Tasks;
 
@@ -20,8 +19,8 @@ namespace Marshal.UI.ViewModels;
 /// cztery dotyczą tej samej decyzji: kiedy to ma się zdarzyć.
 /// </remarks>
 public sealed partial class TaskDetailViewModel(
-    TaskEditService edit, IClock clock, IAreaRepository areas, InboxService inbox,
-    IActivityLog log)
+    TaskEditService edit, IClock clock, IAreaRepository areas, IProjectRepository projects,
+    InboxService inbox, IActivityLog log)
     : ObservableObject
 {
     private Guid _id;
@@ -57,11 +56,20 @@ public sealed partial class TaskDetailViewModel(
     [ObservableProperty]
     public partial TimeSpan? EndTime { get; set; }
 
-    /// <summary>Obszar. Pusty znaczy „jeszcze nierozstrzygnięty" — tak wygląda wrzut.</summary>
+    /// <summary>
+    /// Miejsce zadania: obszar albo projekt w nim. Puste znaczy „jeszcze
+    /// nierozstrzygnięte” — tak wygląda wrzut.
+    /// </summary>
+    /// <remarks>
+    /// Do dziś było tu samo pole obszaru, a projekt dało się ustawić wyłącznie z menu
+    /// podręcznego na liście — czyli szczegół zadania pokazywał **część** jego
+    /// przynależności i nie dawało się jej stąd poprawić. Jedno drzewko zamiast dwóch
+    /// pól zamyka też stan sprzeczny: projekt z jednego obszaru przy wybranym drugim.
+    /// </remarks>
     [ObservableProperty]
-    public partial Area? SelectedArea { get; set; }
+    public partial PlacementChoice? SelectedPlacement { get; set; }
 
-    public ObservableCollection<Area> Areas { get; } = [];
+    public ObservableCollection<PlacementChoice> Placements { get; } = [];
 
     /// <summary>
     /// Czy pokazywać resztę pól.
@@ -272,6 +280,25 @@ public sealed partial class TaskDetailViewModel(
     public event EventHandler? Saved;
 
     /// <summary>
+    /// Drzewko miejsc: obszary z zagnieżdżonymi projektami.
+    /// </summary>
+    /// <remarks>
+    /// Dociągane przy każdym otwarciu, bo obszary i projekty zmienia się na osobnym
+    /// ekranie — zapamiętana lista zrobiłaby się nieprawdziwa dokładnie wtedy, gdy
+    /// ktoś właśnie założył projekt i chce do niego coś wrzucić.
+    /// </remarks>
+    private async Task WczytajMiejscaAsync()
+    {
+        var drzewko = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
+
+        Placements.Clear();
+        foreach (var wiersz in drzewko)
+        {
+            Placements.Add(PlacementChoice.From(wiersz));
+        }
+    }
+
+    /// <summary>
     /// Otwarcie szczegółu. Obszary dociągane przy każdym otwarciu, bo lista bywa
     /// zmieniana na osobnym ekranie i zapamiętana zrobiłaby się nieprawdziwa.
     /// </summary>
@@ -279,14 +306,7 @@ public sealed partial class TaskDetailViewModel(
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        var czynne = await areas.ActiveAsync();
-
-        Areas.Clear();
-        foreach (var obszar in czynne)
-        {
-            Areas.Add(obszar);
-        }
-
+        await WczytajMiejscaAsync();
         Load(task);
     }
 
@@ -301,13 +321,7 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     public async Task NewAsync(DateOnly day, TimeOnly time)
     {
-        var czynne = await areas.ActiveAsync();
-
-        Areas.Clear();
-        foreach (var obszar in czynne)
-        {
-            Areas.Add(obszar);
-        }
+        await WczytajMiejscaAsync();
 
         _loading = true;
         _id = Guid.Empty;
@@ -322,7 +336,7 @@ public sealed partial class TaskDetailViewModel(
         SelectedPriority = Priorities[0];
         SelectedEnergyLevel = Energies[0];
         EstimatedMinutes = null;
-        SelectedArea = Areas.FirstOrDefault();
+        SelectedPlacement = Placements.FirstOrDefault();
         LoadRule(null);
 
         DoDate = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), clock.Now.Offset);
@@ -362,7 +376,11 @@ public sealed partial class TaskDetailViewModel(
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
         EstimatedMinutes = task.EstimatedMinutes;
         DoTime = task.DoTime?.ToTimeSpan();
-        SelectedArea = Areas.FirstOrDefault(o => o.Id == task.AreaId);
+        // Projekt ma pierwszeństwo przed samym obszarem: gdy zadanie należy do projektu,
+        // wskazanie na obszar mówiłoby mniej, niż aplikacja wie — i zapis odpiąłby projekt.
+        SelectedPlacement =
+            Placements.FirstOrDefault(m => task.ProjectId is { } p && m.ProjectId == p)
+            ?? Placements.FirstOrDefault(m => m.ProjectId is null && m.AreaId == task.AreaId);
 
         // Koniec z początku i długości — nie ma go w modelu, bo byłby drugą prawdą
         // o tej samej rzeczy.
@@ -495,8 +513,16 @@ public sealed partial class TaskDetailViewModel(
                 Waga,
                 Minuty(),
                 Sila,
-                SelectedArea?.Id,
+                SelectedPlacement?.AreaId,
                 DoTime is { } pora ? TimeOnly.FromTimeSpan(pora) : null));
+
+            // Projekt osobnym wywołaniem, a nie kolejnym polem edycji: pole typu
+            // Guid? nie umie odróżnić „zostaw jak jest" od „wyjmij z projektu",
+            // a drzewko zawsze wyraża pełną decyzję o obu.
+            if (SelectedPlacement is { } miejsce)
+            {
+                await edit.SetProjectAsync(_id, miejsce.ProjectId);
+            }
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -519,7 +545,7 @@ public sealed partial class TaskDetailViewModel(
             "Zadanie: zapis",
             $"{Title} — dzień {ToDate(DoDate)?.ToString("yyyy-MM-dd") ?? "brak"}, "
                 + $"godzina {(DoTime is { } g ? g.ToString(@"hh\:mm") : "brak")}, "
-                + $"obszar {SelectedArea?.Name ?? "brak"}");
+                + $"miejsce {SelectedPlacement?.Label ?? "brak"}");
 
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);

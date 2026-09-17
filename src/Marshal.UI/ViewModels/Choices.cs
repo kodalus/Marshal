@@ -1,3 +1,4 @@
+using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
 
@@ -77,6 +78,32 @@ public sealed record PriorityChoice(Priority Value, string Label)
         new(Priority.Normal, "zwykła"),
         new(Priority.High, "wysoka"),
     ];
+
+    public override string ToString() => Label;
+}
+
+/// <summary>
+/// Miejsce zadania: obszar albo projekt w obszarze — jedna lista zamiast dwóch pól.
+/// </summary>
+/// <remarks>
+/// Dwa osobne pola, „obszar” i „projekt”, dają cztery stany, z których jeden jest
+/// sprzeczny: projekt z jednego obszaru wybrany przy drugim. Jedno drzewko nie pozwala
+/// takiego stanu wyprodukować, bo wybór projektu **jest** wyborem jego obszaru.
+/// Wcięcie robi z listy drzewko: ekran „Projekty” pokazuje tę samą hierarchię i ta
+/// sama hierarchia ma wyglądać tu tak samo.
+/// </remarks>
+public sealed record PlacementChoice(Guid AreaId, Guid? ProjectId, string Label, double Indent)
+{
+    public static PlacementChoice From(ProjectRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        return new PlacementChoice(
+            row.AreaId,
+            row.IsArea ? null : row.Id,
+            row.Label,
+            row.Indent);
+    }
 
     public override string ToString() => Label;
 }
