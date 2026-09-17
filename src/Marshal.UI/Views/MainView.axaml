@@ -21,6 +21,18 @@
     </Style>
     <!-- Godziny na bloku kalendarza: mniejsze od tytułu, bo są odpowiedzią na drugie
          pytanie, nie na pierwsze. -->
+    <!-- Pole godziny ma własną szerokość najmniejszą, liczoną na trzy panele
+         z sekundami — dwa takie pola obok siebie nie mieściły się w karcie i wychodziły
+         poza jej krawędź. Zerowa szerokość najmniejsza oddaje rozstrzygnięcie siatce,
+         w której leżą; ta sama poprawka dotyczy przycisku w środku, bo on ma swoją. -->
+    <Style Selector="TimePicker.waska">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="TimePicker.waska /template/ Button#PART_FlyoutButton">
+      <Setter Property="MinWidth" Value="0" />
+    </Style>
+
     <Style Selector="TextBlock.godzina">
       <Setter Property="FontSize" Value="10" />
       <Setter Property="Opacity" Value="0.85" />
@@ -636,7 +648,13 @@
                     <ItemsControl ItemsSource="{Binding Slots}"
                                   Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).GridHeight}"
                                   Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
-                                  Background="Transparent">
+                                  Background="{x:Null}">
+                      <!-- Tło **puste**, nie przezroczyste. Przezroczyste jest w Avalonii
+                           normalnym celem kliknięcia, więc warstwa bloków zjadała każde
+                           kliknięcie na całej wysokości kolumny — także w miejscach, gdzie
+                           nie ma żadnego bloku. Zakładanie zadania klikiem w pustą siatkę
+                           nie działało wcale, bo zdarzenie nigdy nie docierało do warstwy
+                           z liniami godzin. Puste tło przepuszcza klik dalej. -->
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <Canvas />
@@ -712,7 +730,7 @@
          wygląda jak zepsuty przycisk. -->
     <Panel DataContext="{Binding Calendar}" IsVisible="{Binding HasOpened}"
            Background="#CC101010">
-      <Border x:DataType="vm:CalendarViewModel" MaxWidth="420" Margin="12" Padding="20"
+      <Border x:DataType="vm:CalendarViewModel" MaxWidth="480" Margin="12" Padding="20"
               CornerRadius="10" Background="#FF1E1E1E" VerticalAlignment="Center">
         <StackPanel Spacing="8">
 
@@ -722,11 +740,11 @@
           <TextBlock Classes="hint" Text="{Binding Opened.DayText}" />
 
           <Grid ColumnDefinitions="*,Auto,*">
-            <TimePicker Grid.Column="0" SelectedTime="{Binding OpenedStart}"
+            <TimePicker Classes="waska" Grid.Column="0" SelectedTime="{Binding OpenedStart}"
                         ClockIdentifier="24HourClock" IsEnabled="{Binding CanEditOpened}"
                         HorizontalAlignment="Stretch" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <TimePicker Grid.Column="2" SelectedTime="{Binding OpenedEnd}"
+            <TimePicker Classes="waska" Grid.Column="2" SelectedTime="{Binding OpenedEnd}"
                         ClockIdentifier="24HourClock" IsEnabled="{Binding CanEditOpened}"
                         HorizontalAlignment="Stretch" />
           </Grid>
@@ -748,7 +766,7 @@
 
           <WrapPanel Margin="0,8,0,0" HorizontalAlignment="Right">
             <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
-                    Command="{Binding SaveOpenedCommand}" Content="Zapisz w Google" />
+                    Command="{Binding SaveOpenedCommand}" Content="Zapisz" />
             <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
                     Command="{Binding DeleteOpenedCommand}" Content="Skasuj" />
             <Button Classes="nav" Command="{Binding CloseOpenedCommand}" Content="Zamknij" />
@@ -1512,10 +1530,10 @@
 
           <TextBlock Classes="label" Text="Od której do której" />
           <Grid ColumnDefinitions="*,Auto,*">
-            <TimePicker Grid.Column="0" SelectedTime="{Binding DoTime}"
+            <TimePicker Classes="waska" Grid.Column="0" SelectedTime="{Binding DoTime}"
                         ClockIdentifier="24HourClock" HorizontalAlignment="Stretch" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <TimePicker Grid.Column="2" SelectedTime="{Binding EndTime}"
+            <TimePicker Classes="waska" Grid.Column="2" SelectedTime="{Binding EndTime}"
                         ClockIdentifier="24HourClock" HorizontalAlignment="Stretch" />
           </Grid>
           <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
@@ -1528,7 +1546,7 @@
           <Grid ColumnDefinitions="*,Auto">
             <DatePicker Grid.Column="0" SelectedDate="{Binding ReminderDay}"
                         HorizontalAlignment="Stretch" />
-            <TimePicker Grid.Column="1" Margin="6,0,0,0" SelectedTime="{Binding ReminderTime}"
+            <TimePicker Classes="waska" Grid.Column="1" Margin="6,0,0,0" SelectedTime="{Binding ReminderTime}"
                         ClockIdentifier="24HourClock" />
           </Grid>
           <TextBlock Classes="hint" Margin="2,4,0,0"

@@ -90,6 +90,13 @@ public partial class MainView : UserControl
             return;
         }
 
+        // Tylko lewy przycisk. Prawy i środkowy też dają PointerPressed, a zakładanie
+        // zadania menu podręcznym byłoby niespodzianką.
+        if (!e.GetCurrentPoint(warstwa).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
         _kalendarz?.NewAt(dzien, e.GetPosition(warstwa).Y);
     }
 
