@@ -255,7 +255,7 @@ public sealed partial class CalendarViewModel(
         {
             await edit.RescheduleAsync(taskId, day, pora);
             await log.RecordAsync(
-                "Kalendarz: przełożenie", $"{day:yyyy-MM-dd} {pora:HH\:mm}");
+                "Kalendarz: przełożenie", $"{day:yyyy-MM-dd} {pora:HH}:{pora:mm}");
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
