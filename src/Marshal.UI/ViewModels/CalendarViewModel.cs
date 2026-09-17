@@ -83,18 +83,26 @@ public sealed record SlotBox(
     }
 }
 
+/// <summary>Wpis na pasku całodniowym — z tożsamością, żeby dało się go otworzyć.</summary>
+/// <remarks>
+/// Do dziś pasek był jednym napisem sklejonym z tytułów. Zadanie na cały dzień nie
+/// miało więc **żadnej** drogi do edycji: bloku na siatce nie ma, a napisu nie da się
+/// kliknąć. Godzinę można było dopisać tylko przez listę „Następne".
+/// </remarks>
+public sealed record AllDayBox(string Title, Guid? TaskId, Guid? SourceId, string? ExternalId);
+
 /// <summary>Jeden dzień siatki gotowy do narysowania.</summary>
 public sealed record CalendarColumn(
     DateOnly Date,
     string Header,
-    IReadOnlyList<string> AllDay,
+    IReadOnlyList<AllDayBox> AllDay,
     IReadOnlyList<SlotBox> Slots,
     bool IsToday,
     double NowTop)
 {
     public bool HasAllDay => AllDay.Count > 0;
 
-    public string AllDayText => string.Join("  ·  ", AllDay);
+    public string AllDayText => string.Join("  ·  ", AllDay.Select(w => w.Title));
 }
 
 /// <summary>
@@ -119,7 +127,8 @@ public sealed partial class CalendarViewModel(
     public partial DateOnly Anchor { get; set; }
 
     [ObservableProperty]
-    public partial int VisibleDays { get; set; } = 3;
+    /// <summary>Tydzień jako widok domyślny — o to prosi układ tygodnia, nie trzy dni.</summary>
+    public partial int VisibleDays { get; set; } = 7;
 
     [ObservableProperty]
     public partial string? Problem { get; set; }
@@ -210,6 +219,26 @@ public sealed partial class CalendarViewModel(
     /// to ta sama nakładka, która otwiera się z list, i ma zostać jedna.
     /// </summary>
     public event Action<Guid>? TaskRequested;
+
+    /// <summary>Otwarcie wpisu z paska całodniowego — zadania albo wydarzenia.</summary>
+    public void OpenAllDay(AllDayBox? wpis)
+    {
+        if (wpis is null)
+        {
+            return;
+        }
+
+        if (wpis.TaskId is { } identyfikator)
+        {
+            TaskRequested?.Invoke(identyfikator);
+            return;
+        }
+
+        OpenTaskCommand.Execute(new SlotBox(
+            wpis.Title, 0, 0, 0, 0, IsTask: false, Color: null,
+            StartText: "—", EndText: "—", TaskId: null,
+            DayText: Anchor.ToString("dd.MM.yyyy"), wpis.SourceId, wpis.ExternalId));
+    }
 
     /// <summary>Kliknięcie w pustą siatkę: nowe zadanie na tym dniu i o tej godzinie.</summary>
     public event Action<DateOnly, TimeOnly>? NewTaskRequested;
@@ -415,7 +444,8 @@ public sealed partial class CalendarViewModel(
             Columns.Add(new CalendarColumn(
                 dzien.Date,
                 $"{DayNames[((int)dzien.Date.DayOfWeek + 6) % 7]} {dzien.Date.Day}",
-                dzien.AllDay.Select(e => e.Title).ToList(),
+                dzien.AllDay.Select(e => new AllDayBox(
+                    e.Title, e.TaskId, e.SourceId, e.ExternalId)).ToList(),
                 dzien.Timed.Select(Box).ToList(),
                 dzien.Date == dzis,
                 teraz));

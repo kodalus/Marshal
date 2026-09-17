@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Marshal.Domain.Tasks;
 using Marshal.UI.ViewModels;
 
 namespace Marshal.UI.Views;
@@ -98,6 +99,26 @@ public partial class MainView : UserControl
             m.Close();
             return Task.CompletedTask;
         });
+
+    /// <summary>Dwuklik we wrzut otwiera jego szczegół.</summary>
+    private void OtworzWrzut(object? nadawca, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model
+            && nadawca is ListBox lista
+            && lista.SelectedItem is TaskItem zadanie)
+        {
+            _ = Probuj("Skrzynka: otwarcie wrzutu", () => model.Detail.LoadAsync(zadanie));
+        }
+    }
+
+    /// <summary>Kliknięcie w pasek całodniowy — zadanie na cały dzień też ma szczegół.</summary>
+    private void OtworzCalodniowe(object? nadawca, RoutedEventArgs e)
+    {
+        if (nadawca is Control przycisk && przycisk.Tag is AllDayBox wpis)
+        {
+            _kalendarz?.OpenAllDay(wpis);
+        }
+    }
 
     private void Zadanie(string co, Func<TaskDetailViewModel, Task> praca)
     {

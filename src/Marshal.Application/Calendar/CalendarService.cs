@@ -284,10 +284,19 @@ public sealed class CalendarSyncService(
 
         foreach (var wydarzenie in await store.EventsAsync(poczatek, koniec, ct))
         {
+            // Całodniowe **nie** przelicza się na strefę. To jest data, nie chwila:
+            // Google oddaje ją jako północ bez strefy, a przeliczenie na Warszawę robiło
+            // z niej drugą w nocy — czyli koniec wypadał drugiej w nocy **następnego**
+            // dnia i wpis rozlewał się na dwa dni. Pełnia widoczna w Google na piątek
+            // stała u nas na piątku i sobocie.
             wpisy.Add(new AgendaEntry(
                 wydarzenie.Title,
-                TimeZoneInfo.ConvertTime(wydarzenie.StartsAt, strefa),
-                TimeZoneInfo.ConvertTime(wydarzenie.EndsAt, strefa),
+                wydarzenie.IsAllDay
+                    ? wydarzenie.StartsAt
+                    : TimeZoneInfo.ConvertTime(wydarzenie.StartsAt, strefa),
+                wydarzenie.IsAllDay
+                    ? wydarzenie.EndsAt
+                    : TimeZoneInfo.ConvertTime(wydarzenie.EndsAt, strefa),
                 wydarzenie.IsAllDay,
                 AgendaKind.Event,
                 barwy.GetValueOrDefault(wydarzenie.SourceId),

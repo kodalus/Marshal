@@ -235,7 +235,10 @@
               Content="Przetwórz skrzynkę" />
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Przetwarzanie pokazuje jedną pozycję naraz." />
-      <ListBox ItemsSource="{Binding InboxItems}">
+      <!-- Dwuklik otwiera szczegół. Do dziś jedyną drogą do wrzutu było przetwarzanie,
+           więc dopisanie godziny do myśli, która już leży w skrzynce, wymagało przejścia
+           przez całe drzewko decyzji. -->
+      <ListBox ItemsSource="{Binding InboxItems}" DoubleTapped="OtworzWrzut">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
             <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Padding="0,4" />
@@ -614,10 +617,24 @@
 
                   <!-- Pasek całodniowy nad siatką, nie w niej: wydarzenie bez godziny
                        umieszczone o północy kłamałoby o porze. -->
-                  <Border Height="24" Padding="4,2" CornerRadius="4" Background="#18808080"
+                  <Border Height="24" CornerRadius="4" Background="#18808080"
                           IsVisible="{Binding HasAllDay}">
-                    <TextBlock Text="{Binding AllDayText}" FontSize="11"
-                               TextTrimming="CharacterEllipsis" />
+                    <ItemsControl ItemsSource="{Binding AllDay}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AllDayBox">
+                          <Button Classes="slot" Padding="4,2" Margin="0,0,4,0"
+                                  Click="OtworzCalodniowe" Tag="{Binding}">
+                            <TextBlock Text="{Binding Title}" FontSize="11"
+                                       TextTrimming="CharacterEllipsis" />
+                          </Button>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                   </Border>
                   <Border Height="24" IsVisible="{Binding !HasAllDay}" />
 
@@ -1647,8 +1664,10 @@
                i drugie potrafi cicho odmówić — odmowa wygląda wtedy dokładnie jak
                martwy przycisk i nie zostawia śladu nigdzie. -->
           <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,20,0,0">
+            <!-- Przy zakładaniu nie ma czego odhaczać, a przycisk stojący obok
+                 „Zapisz" był po prostu pułapką: jedno i drugie zamyka okno. -->
             <Button Grid.Column="0" Content="Zrobione" Padding="14,8"
-                    Click="OdhaczZadanie" />
+                    IsVisible="{Binding IsExisting}" Click="OdhaczZadanie" />
             <Button Grid.Column="2" Content="Zapisz" Padding="14,8"
                     Click="ZapiszZadanie" />
           </Grid>

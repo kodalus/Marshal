@@ -119,6 +119,13 @@ public sealed partial class TaskDetailViewModel(
 
     public bool HasProblem => !string.IsNullOrEmpty(Problem);
 
+    /// <summary>Czy okno pokazuje zadanie, które już istnieje.</summary>
+    /// <remarks>
+    /// Przy zakładaniu nie ma czego odhaczać, a przycisk „Zrobione" stojący obok
+    /// „Zapisz" był pułapką: oba zamykają okno, więc pomyłki nie było jak zauważyć.
+    /// </remarks>
+    public bool IsExisting => _id != Guid.Empty;
+
     [ObservableProperty]
     public partial DateTimeOffset? Deadline { get; set; }
 
@@ -301,6 +308,7 @@ public sealed partial class TaskDetailViewModel(
         _loading = false;
         ShowMore = false;
         Refresh();
+        OnPropertyChanged(nameof(IsExisting));
         IsOpen = true;
     }
 
@@ -332,6 +340,7 @@ public sealed partial class TaskDetailViewModel(
         LoadRule(task.Recurrence);
 
         _loading = false;
+        OnPropertyChanged(nameof(IsExisting));
         ShowMore = Deadline is not null
             || ReminderDay is not null
             || Rytm is not null

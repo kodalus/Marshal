@@ -490,6 +490,28 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Calodniowe_stoi_na_jednym_dniu_a_nie_na_dwoch()
+    {
+        // Całodniowe to data, nie chwila. Google oddaje ją jako północ bez strefy;
+        // przeliczenie na Warszawę robiło z niej drugą w nocy, więc koniec wypadał
+        // drugiej w nocy **następnego** dnia i wpis rozlewał się na dwa dni.
+        // Pełnia widoczna w Google na piątek stała u nas na piątku i sobocie.
+        var dzien = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.Zero);
+
+        await _sklad.UpsertAsync(_zrodlo.Id,
+        [
+            new FeedEvent("ksiezyc", "Pierwsza kwadra", dzien, dzien.AddDays(1),
+                IsAllDay: true, null, false),
+        ]);
+        await _sklad.SaveChangesAsync();
+
+        var dni = await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 2);
+
+        dni[0].AllDay.Should().ContainSingle(e => e.Title == "Pierwsza kwadra");
+        dni[1].AllDay.Should().BeEmpty("to jest jeden dzień, a nie dwa");
+    }
+
+    [Fact]
     public async Task Godziny_licza_sie_ze_strefy_wydarzenia_a_nie_z_dzisiejszej()
     {
         // Sedno usterki: przesunięcie brane było **na teraz** i kładzione na każde
