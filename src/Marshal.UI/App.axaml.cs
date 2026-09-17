@@ -81,7 +81,8 @@ public partial class App : Avalonia.Application
 
                 await services.GetRequiredService<IActivityLog>().RecordAsync(
                     "Start",
-                    $"strefa {ustawienia.Zone.Id}, teraz {zegar.Now:yyyy-MM-dd HH:mm zzz}",
+                    $"strefa {ustawienia.Zone.Id}, teraz {zegar.Now:yyyy-MM-dd HH:mm zzz}, "
+                        + $"wydanie {Wydanie()}",
                     ustawienia.ZoneProblem is null ? ActivityLevel.Ok : ActivityLevel.Problem,
                     ustawienia.ZoneProblem);
             }
@@ -112,6 +113,31 @@ public partial class App : Avalonia.Application
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// Kiedy zbudowano to, co właśnie działa.
+    /// </summary>
+    /// <remarks>
+    /// Połowa dzisiejszych rozmów utknęła na pytaniu, którego nie dało się rozstrzygnąć:
+    /// czy uruchomiona aplikacja zawiera poprawkę sprzed dziesięciu minut, czy jeszcze
+    /// nie. „Nie ma wpisu w dzienniku" znaczy co innego w wersji, która tych wpisów
+    /// jeszcze nie robi. Data zbudowania pliku rozstrzyga to jedną linijką.
+    /// </remarks>
+    private static string Wydanie()
+    {
+        try
+        {
+            var plik = typeof(App).Assembly.Location;
+
+            return string.IsNullOrEmpty(plik)
+                ? "nieznane"
+                : File.GetLastWriteTime(plik).ToString("yyyy-MM-dd HH:mm");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return "nieznane";
+        }
     }
 
     private static ThemeVariant Variant(ThemeChoice wybor) => wybor switch

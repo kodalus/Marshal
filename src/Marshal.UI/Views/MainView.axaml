@@ -1420,6 +1420,8 @@
         <WrapPanel>
           <Button Classes="nav" Command="{Binding RefreshCommand}" Content="Odśwież" />
           <Button Classes="nav" Command="{Binding ClearCommand}" Content="Wyczyść" />
+          <CheckBox Margin="8,0,0,0" VerticalAlignment="Center"
+                    IsChecked="{Binding OnlyProblems}" Content="tylko problemy" />
         </WrapPanel>
         <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Text="{Binding Summary}" />
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"

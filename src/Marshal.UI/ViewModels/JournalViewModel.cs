@@ -38,6 +38,12 @@ public sealed partial class JournalViewModel(IActivityLog log, IClock clock) : O
     [ObservableProperty]
     public partial string Summary { get; set; } = string.Empty;
 
+    /// <summary>Tylko problemy. Przy pytaniu „co się zepsuło" reszta jest szumem.</summary>
+    [ObservableProperty]
+    public partial bool OnlyProblems { get; set; }
+
+    partial void OnOnlyProblemsChanged(bool value) => _ = LoadAsync();
+
     public bool HasRows => Rows.Count > 0;
 
     public async Task LoadAsync()
@@ -45,8 +51,12 @@ public sealed partial class JournalViewModel(IActivityLog log, IClock clock) : O
         var strefa = clock.Now.Offset;
         var wpisy = await log.RecentAsync();
 
+        var widoczne = OnlyProblems
+            ? wpisy.Where(w => w.Level == ActivityLevel.Problem).ToList()
+            : wpisy;
+
         Rows.Clear();
-        foreach (var wpis in wpisy)
+        foreach (var wpis in widoczne)
         {
             Rows.Add(new JournalRow(
                 wpis.At.ToOffset(strefa).ToString("MM-dd HH:mm:ss"),

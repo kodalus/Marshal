@@ -385,9 +385,18 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Przeliczenie ekranu po zmianie danych.
+    /// </summary>
+    /// <remarks>
+    /// Skrzynka i bieżący ekran osobno, każde z własnym zabezpieczeniem. Do dziś szły
+    /// jednym ciągiem: wywrotka przy liczeniu skrzynki zabierała ze sobą odświeżenie
+    /// ekranu, na którym akurat się było, i nic się nie przerysowywało — po zapisie,
+    /// który się udał. Jedno popsute miejsce ma psuć jedno miejsce.
+    /// </remarks>
     private async Task ReloadAsync()
     {
-        await RefreshInboxAsync();
+        await Probuj("Ekran: przeliczenie skrzynki", RefreshInboxAsync);
 
         var zadanie = Current switch
         {
@@ -407,7 +416,7 @@ public sealed partial class MainViewModel : ObservableObject
             _ => Task.CompletedTask,
         };
 
-        await zadanie;
+        await Probuj($"Ekran: przeliczenie ({Current})", () => zadanie);
     }
 
     /// <summary>
