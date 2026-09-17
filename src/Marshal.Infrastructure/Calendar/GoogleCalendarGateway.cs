@@ -130,6 +130,20 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
             .ExecuteAsync(ct);
     }
 
+    /// <summary>Zmiana samej nazwy — jedno pole w Patchu, więc godzin nie ma czym ruszyć.</summary>
+    public async Task RenameAsync(
+        CalendarSource source, string externalId, string title, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+
+        await PolaczAsync(ct);
+
+        await _usluga!.Events
+            .Patch(new Event { Summary = title }, source.ExternalId, Podstawowe(externalId))
+            .ExecuteAsync(ct);
+    }
+
     public async Task DeleteAsync(
         CalendarSource source, string externalId, CancellationToken ct = default)
     {

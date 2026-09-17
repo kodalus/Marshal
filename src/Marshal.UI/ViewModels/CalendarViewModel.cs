@@ -33,15 +33,22 @@ public sealed record SlotBox(
     string DayText,
     Guid? SourceId,
     string? ExternalId,
-    bool IsDone)
+    bool IsDone,
+
+    /// <summary>Czy do kalendarza, z którego pochodzi wpis, da się pisać.</summary>
+    bool CanWrite = false)
 {
-    /// <summary>Odhaczyć da się zadanie, nie cudze wydarzenie z kalendarza.</summary>
+    /// <summary>
+    /// Co da się odhaczyć: własne zadanie i wydarzenie z kalendarza, do którego umiemy pisać.
+    /// </summary>
     /// <remarks>
-    /// Odhaczenie wydarzenia Google znaczyłoby zapis do cudzego kalendarza, a zapis
-    /// jest świadomie odłożony (spec 10.2): błąd w dwustronnej synchronizacji potrafi
-    /// skasować wydarzenia w prawdziwym kalendarzu.
+    /// Wydarzenie nie ma u nas pola „zrobione" — ptaszek idzie do jego nazwy w Google,
+    /// więc bez prawa zapisu odhaczenie nie miałoby gdzie wylądować. Kanał iCal jest
+    /// tylko do odczytu i pole wyboru się tam nie pokazuje: przycisk, który nic nie
+    /// robi, jest gorszy od jego braku.
     /// </remarks>
-    public bool CanComplete => IsTask && TaskId is not null;
+    public bool CanComplete =>
+        IsTask ? TaskId is not null : CanWrite && SourceId is not null && ExternalId is not null;
 
     /// <summary>Godziny pokazujemy tylko wtedy, gdy blok ma je gdzie zmieścić.</summary>
     /// <remarks>
@@ -139,7 +146,20 @@ public sealed record SlotBox(
 /// miało więc **żadnej** drogi do edycji: bloku na siatce nie ma, a napisu nie da się
 /// kliknąć. Godzinę można było dopisać tylko przez listę „Następne".
 /// </remarks>
-public sealed record AllDayBox(string Title, Guid? TaskId, Guid? SourceId, string? ExternalId);
+public sealed record AllDayBox(
+    string Title, Guid? TaskId, Guid? SourceId, string? ExternalId, bool IsDone = false)
+{
+    /// <summary>
+    /// Napis na pasku — z ptaszkiem, gdy wpis jest odhaczony.
+    /// </summary>
+    /// <remarks>
+    /// Na pasku całodniowym nie ma miejsca na pole wyboru, a znak zdejmowany jest
+    /// z nazwy przy rysowaniu. Bez dopisania go tutaj odhaczone wydarzenie całodniowe
+    /// wyglądałoby na pasku tak samo jak nieodhaczone — czyli ptaszek postawiony
+    /// w Google przestawałby być widoczny u nas.
+    /// </remarks>
+    public string Label => IsDone ? $"✓ {Title}" : Title;
+}
 
 /// <summary>Jeden dzień siatki gotowy do narysowania.</summary>
 public sealed record CalendarColumn(
@@ -662,7 +682,7 @@ public sealed partial class CalendarViewModel(
                 dzien.Date,
                 $"{DayNames[((int)dzien.Date.DayOfWeek + 6) % 7]} {dzien.Date.Day}",
                 dzien.AllDay.Select(e => new AllDayBox(
-                    e.Title, e.TaskId, e.SourceId, e.ExternalId)).ToList(),
+                    e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone)).ToList(),
                 dzien.Timed.Select(Box).ToList(),
                 dzien.Date == dzis,
                 teraz));
@@ -686,6 +706,52 @@ public sealed partial class CalendarViewModel(
         }
 
         await edit.CompleteAsync(identyfikator);
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Odhaczenie wpisu z siatki — zadania albo wydarzenia, w obie strony.
+    /// </summary>
+    /// <remarks>
+    /// Jedno wejście dla obu rodzajów, bo z punktu widzenia ręki to ta sama czynność:
+    /// kliknięcie w kwadracik przy bloku. Że pod spodem raz idzie zapis do bazy, a raz
+    /// zmiana nazwy w cudzym kalendarzu, jest rzeczą do rozstrzygnięcia tutaj, a nie
+    /// w oknie — inaczej okno musiałoby wiedzieć, czym blok jest, żeby wiedzieć, co wołać.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ToggleAsync(SlotBox? blok)
+    {
+        if (blok is not { CanComplete: true })
+        {
+            return;
+        }
+
+        if (blok.IsTask)
+        {
+            await (blok.IsDone ? ReopenAsync(blok.TaskId) : CompleteAsync(blok.TaskId));
+            return;
+        }
+
+        if (blok is not { SourceId: { } zrodlo, ExternalId: { } zewnetrzny })
+        {
+            return;
+        }
+
+        var co = blok.IsDone ? "Kalendarz: zdjęcie ptaszka w Google" : "Kalendarz: odhaczenie w Google";
+
+        try
+        {
+            await calendar.SetEventDoneAsync(zrodlo, zewnetrzny, !blok.IsDone);
+            await log.RecordAsync(co, blok.Title);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(co, "nie udało się", ActivityLevel.Problem, e.Message);
+        }
+
         await RefreshAsync();
     }
 
@@ -909,6 +975,7 @@ public sealed partial class CalendarViewModel(
             slot.Entry.Start.ToString("dd.MM.yyyy"),
             slot.Entry.SourceId,
             slot.Entry.ExternalId,
-            slot.Entry.IsDone);
+            slot.Entry.IsDone,
+            slot.Entry.CanWrite);
     }
 }

@@ -329,15 +329,15 @@ public partial class MainView : UserControl
         e.Handled = true;
 
         if (nadawca is not Control kwadracik
-            || kwadracik.Tag is not SlotBox { TaskId: { } zadanie } blok
+            || kwadracik.Tag is not SlotBox blok
             || _kalendarz is null)
         {
             return;
         }
 
-        _ = blok.IsDone
-            ? Probuj("Kalendarz: zdjęcie ptaszka", () => _kalendarz.ReopenCommand.ExecuteAsync(zadanie))
-            : Probuj("Kalendarz: odhaczenie", () => _kalendarz.CompleteCommand.ExecuteAsync(zadanie));
+        // Jedno polecenie na oba rodzaje bloku i oba kierunki. Okno nie musi wiedzieć,
+        // czy pod spodem idzie zapis do bazy, czy zmiana nazwy w cudzym kalendarzu.
+        _ = Probuj("Kalendarz: kwadracik", () => _kalendarz.ToggleCommand.ExecuteAsync(blok));
     }
 
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>

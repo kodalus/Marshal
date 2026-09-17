@@ -25,8 +25,18 @@ public sealed record AgendaEntry(
     /// <summary>Identyfikator u źródła — bez niego nie da się tam nic zmienić.</summary>
     string? ExternalId = null,
 
-    /// <summary>Czy zadanie jest już odhaczone. Ptaszek należy do pola, nie do nazwy.</summary>
-    bool IsDone = false)
+    /// <summary>Czy wpis jest już odhaczony. Ptaszek należy do pola, nie do nazwy.</summary>
+    bool IsDone = false,
+
+    /// <summary>
+    /// Czy da się zapisać zmianę tam, skąd wpis pochodzi.
+    /// </summary>
+    /// <remarks>
+    /// Liczone tutaj, a nie w oknie: to, czy kalendarz ma pisarza, jest wiedzą warstwy
+    /// aplikacji, a okno musiałoby po nią sięgać osobno przy każdym rysowaniu siatki.
+    /// Przy zadaniach Marshala zawsze prawda — własne zadania zapisujemy u siebie.
+    /// </remarks>
+    bool CanWrite = false)
 {
     public double StartHour => Start.TimeOfDay.TotalHours;
 

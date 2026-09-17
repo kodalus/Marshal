@@ -671,7 +671,7 @@
                                   Height="24" VerticalContentAlignment="Center"
                                   Background="#20808080"
                                   Click="OtworzCalodniowe" Tag="{Binding}">
-                            <TextBlock Text="{Binding Title}" FontSize="11"
+                            <TextBlock Text="{Binding Label}" FontSize="11"
                                        VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                           </Button>

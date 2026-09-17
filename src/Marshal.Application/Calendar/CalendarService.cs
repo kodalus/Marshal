@@ -105,6 +105,58 @@ public sealed class CalendarSyncService(
         }
     }
 
+    /// <summary>
+    /// Odhaczenie wydarzenia z podłączonego kalendarza — ptaszkiem przy jego nazwie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wydarzenie nie ma u nas stanu „zrobione” i nie powinno mieć: własna kolumna
+    /// znaczyłaby ptaszek widoczny wyłącznie w Marshalu, a to jest jedyne miejsce,
+    /// w którym i tak patrzy się najrzadziej. Znak w nazwie widać w Google, na telefonie
+    /// i w powiadomieniu, a po odświeżeniu wraca do nas sam.
+    /// </para>
+    /// <para>
+    /// Kolejność jak przy każdym innym zapisie na zewnątrz: najpierw źródło, potem nasza
+    /// kopia. Odwrotna zostawiałaby przy nieudanym zapisie ptaszek widoczny u nas
+    /// i nieistniejący nigdzie indziej — czyli dokładnie to kłamstwo, przed którym
+    /// zapis dwustronny ma chronić.
+    /// </para>
+    /// </remarks>
+    public async Task SetEventDoneAsync(
+        Guid sourceId, string externalId, bool done, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+
+        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+
+        var nasze = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
+
+        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
+            is not { } wydarzenie)
+        {
+            throw new InvalidOperationException(
+                "Tego wydarzenia nie ma już w pobranej kopii kalendarza. Odśwież i spróbuj raz jeszcze.");
+        }
+
+        var nazwa = EventMark.Set(wydarzenie.Title, done);
+
+        if (nazwa == wydarzenie.Title)
+        {
+            return;
+        }
+
+        await pisarz.RenameAsync(zrodlo, externalId, nazwa, ct);
+
+        await store.UpsertAsync(
+            sourceId,
+            [new FeedEvent(
+                externalId, nazwa, wydarzenie.StartsAt, wydarzenie.EndsAt,
+                wydarzenie.IsAllDay, wydarzenie.Location, Cancelled: false)],
+            ct);
+
+        await store.SaveChangesAsync(ct);
+    }
+
     private async Task<(CalendarSource Source, ICalendarWriter Writer)> DoZapisuAsync(
         Guid sourceId, CancellationToken ct)
     {
@@ -283,7 +335,15 @@ public sealed class CalendarSyncService(
 
         // Barwa jest cechą kalendarza, nie wydarzenia: przy jedenastu podłączonych
         // kalendarzach to jedyna rzecz, po której widać, do którego z nich coś należy.
-        var barwy = (await store.SourcesAsync(ct)).ToDictionary(z => z.Id, z => z.Color);
+        var zrodla = await store.SourcesAsync(ct);
+        var barwy = zrodla.ToDictionary(z => z.Id, z => z.Color);
+
+        // Do których kalendarzy umiemy pisać. Bez tego okno pokazywałoby pole wyboru
+        // przy wydarzeniu z kanału iCal, czyli przycisk bez żadnego skutku.
+        var zapisywalne = zrodla
+            .Where(z => writers.Any(w => w.Kind == z.Kind))
+            .Select(z => z.Id)
+            .ToHashSet();
 
         foreach (var wydarzenie in await store.EventsAsync(poczatek, koniec, ct))
         {
@@ -292,8 +352,11 @@ public sealed class CalendarSyncService(
             // z niej drugą w nocy — czyli koniec wypadał drugiej w nocy **następnego**
             // dnia i wpis rozlewał się na dwa dni. Pełnia widoczna w Google na piątek
             // stała u nas na piątku i sobocie.
+            // Ptaszek zdejmowany z nazwy przy rysowaniu: jest stanem, nie częścią nazwy.
+            // Zostawiony w tytule stałby obok kwadracika jako drugi ptaszek, a przy
+            // zmianie nazwy w oknie szczegółu wróciłby do Google zapisany dwa razy.
             wpisy.Add(new AgendaEntry(
-                wydarzenie.Title,
+                EventMark.Strip(wydarzenie.Title),
                 wydarzenie.IsAllDay
                     ? wydarzenie.StartsAt
                     : TimeZoneInfo.ConvertTime(wydarzenie.StartsAt, strefa),
@@ -305,7 +368,9 @@ public sealed class CalendarSyncService(
                 barwy.GetValueOrDefault(wydarzenie.SourceId),
                 TaskId: null,
                 wydarzenie.SourceId,
-                wydarzenie.ExternalId));
+                wydarzenie.ExternalId,
+                IsDone: EventMark.IsDone(wydarzenie.Title),
+                CanWrite: zapisywalne.Contains(wydarzenie.SourceId)));
         }
 
         // Barwy dziedziczone w dół: zadanie bierze swoją, a gdy jej nie ma — projektu,
@@ -412,7 +477,8 @@ public sealed class CalendarSyncService(
             return new AgendaEntry(
                 task.Title, poczatekDnia, poczatekDnia.AddDays(1),
                 IsAllDay: true, AgendaKind.Task, barwa, task.Id,
-                SourceId: null, ExternalId: null, IsDone: task.State == TaskState.Done);
+                SourceId: null, ExternalId: null, IsDone: task.State == TaskState.Done,
+                CanWrite: true);
         }
 
         var start = WStrefie(dzien.ToDateTime(godzina), zone);
@@ -421,6 +487,6 @@ public sealed class CalendarSyncService(
         return new AgendaEntry(
             task.Title, start, start + dlugosc, IsAllDay: false, AgendaKind.Task,
             barwa, task.Id, SourceId: null, ExternalId: null,
-            IsDone: task.State == TaskState.Done);
+            IsDone: task.State == TaskState.Done, CanWrite: true);
     }
 }

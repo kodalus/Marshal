@@ -48,5 +48,17 @@ public interface ICalendarWriter
         CalendarSource source, string externalId, CalendarDraft draft,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Zmiana samej nazwy wydarzenia.
+    /// </summary>
+    /// <remarks>
+    /// Osobno od <see cref="UpdateAsync"/>, bo tamta wysyła też godziny — a godziny
+    /// wydarzenia całodniowego idą do Google innym polem i w innym formacie. Odhaczenie
+    /// całodniowego przez pełną zmianę zrobiłoby z niego wydarzenie o godzinie, i to
+    /// w cudzym kalendarzu. Tu leci jedno pole, więc nie ma czego zepsuć.
+    /// </remarks>
+    Task RenameAsync(
+        CalendarSource source, string externalId, string title, CancellationToken ct = default);
+
     Task DeleteAsync(CalendarSource source, string externalId, CancellationToken ct = default);
 }

@@ -133,6 +133,19 @@ public sealed class CalendarStoreTests : IDisposable
             return Task.CompletedTask;
         }
 
+        public Task RenameAsync(
+            CalendarSource source, string externalId, string title,
+            CancellationToken ct = default)
+        {
+            if (Rzuca)
+            {
+                throw new HttpRequestException("kalendarz nie odpowiada");
+            }
+
+            Wyslane.Add(("nazwa", title, externalId));
+            return Task.CompletedTask;
+        }
+
         public Task DeleteAsync(
             CalendarSource source, string externalId, CancellationToken ct = default)
         {
@@ -441,6 +454,80 @@ public sealed class CalendarStoreTests : IDisposable
 
         (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
             .Single(b => b.Entry.TaskId == zadanie.Id).Entry.IsDone.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Odhaczenie wydarzenia stawia ptaszek w jego nazwie u źródła.
+    /// </summary>
+    /// <remarks>
+    /// Wydarzenie nie ma u nas pola „zrobione" i nie powinno mieć: własna kolumna
+    /// znaczyłaby ptaszek widoczny wyłącznie w Marshalu. Znak w nazwie widać w Google,
+    /// na telefonie i w powiadomieniu — i wraca do nas sam przy odświeżeniu.
+    /// </remarks>
+    [Fact]
+    public async Task Odhaczenie_wydarzenia_stawia_ptaszek_w_nazwie_u_zrodla()
+    {
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: true);
+
+        _pisarz.Wyslane.Should().ContainSingle()
+            .Which.Should().Be(("nazwa", "✓ Spotkanie", "s1"));
+
+        var wpis = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Single();
+        wpis.Entry.IsDone.Should().BeTrue();
+
+        // Sam ptaszek nie jest częścią nazwy: obok kwadracika stałby drugi raz,
+        // a zmiana nazwy w oknie odesłałaby go do Google zapisanego podwójnie.
+        wpis.Entry.Title.Should().Be("Spotkanie");
+    }
+
+    [Fact]
+    public async Task Zdjecie_ptaszka_z_wydarzenia_wraca_do_czystej_nazwy()
+    {
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "✓ Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+            .Timed.Single().Entry.IsDone.Should().BeTrue();
+
+        await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: false);
+
+        _pisarz.Wyslane.Should().ContainSingle()
+            .Which.Should().Be(("nazwa", "Spotkanie", "s1"));
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+            .Timed.Single().Entry.IsDone.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Nieudany zapis u źródła nie zostawia ptaszka u nas.
+    /// </summary>
+    /// <remarks>
+    /// Najpierw źródło, potem nasza kopia. Odwrotna kolejność dawałaby ptaszek widoczny
+    /// w Marshalu i nieistniejący nigdzie indziej — czyli dokładnie to kłamstwo,
+    /// przed którym zapis dwustronny ma chronić.
+    /// </remarks>
+    [Fact]
+    public async Task Nieudane_odhaczenie_wydarzenia_nie_zostawia_ptaszka_u_nas()
+    {
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+        _pisarz.Rzuca = true;
+
+        var odhacz = async () => await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: true);
+
+        await odhacz.Should().ThrowAsync<HttpRequestException>();
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+            .Timed.Single().Entry.IsDone.Should().BeFalse();
     }
 
     [Fact]
