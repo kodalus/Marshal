@@ -1,3 +1,4 @@
+using Google.Apis.Auth.OAuth2.Responses;
 using Marshal.Application.Abstractions;
 using Marshal.Infrastructure.Data;
 
@@ -50,20 +51,29 @@ public sealed class GoogleSyncService(
 
         try
         {
-            using var polaczenie = await GoogleDriveFactory.ConnectAsync(
-                settings.GoogleClientId!,
-                settings.GoogleClientSecret!,
-                TokenFolder,
-                ct);
+            return await PrzebiegAsync(ct);
+        }
+        catch (TokenResponseException e) when (e.Error?.Error == "invalid_grant")
+        {
+            // Żeton przestał być ważny. Przy aplikacji w trybie testowym Google wydaje
+            // żeton odświeżalny **na siedem dni** — niezależnie od zakresu — więc to
+            // nie jest awaria, tylko tydzień, który minął. Zapisany żeton jest wtedy
+            // bezużyteczny i jedynym wyjściem jest zapytać o zgodę jeszcze raz;
+            // bez tego synchronizacja przestawałaby działać co tydzień, zostawiając
+            // komunikat, z którego nic nie wynika.
+            try
+            {
+                if (Directory.Exists(TokenFolder))
+                {
+                    Directory.Delete(TokenFolder, recursive: true);
+                }
 
-            var silnik = new SyncEngine(db, polaczenie.Transport, hlc, device.Id);
-            var raport = await silnik.SyncAsync(ct);
-
-            return new SyncOutcome(
-                true,
-                $"Wysłane {raport.Sent}, przyjęte {raport.Applied}.",
-                raport.Sent,
-                raport.Applied);
+                return await PrzebiegAsync(ct);
+            }
+            catch (Exception ponownie)
+            {
+                return new SyncOutcome(false, ponownie.Message);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -76,5 +86,23 @@ public sealed class GoogleSyncService(
             // powrotu, brak konta na liście testowej — ale tylko wtedy, gdy widać który.
             return new SyncOutcome(false, e.Message);
         }
+    }
+
+    private async Task<SyncOutcome> PrzebiegAsync(CancellationToken ct)
+    {
+        using var polaczenie = await GoogleDriveFactory.ConnectAsync(
+            settings.GoogleClientId!,
+            settings.GoogleClientSecret!,
+            TokenFolder,
+            ct);
+
+        var silnik = new SyncEngine(db, polaczenie.Transport, hlc, device.Id);
+        var raport = await silnik.SyncAsync(ct);
+
+        return new SyncOutcome(
+            true,
+            $"Wysłane {raport.Sent}, przyjęte {raport.Applied}.",
+            raport.Sent,
+            raport.Applied);
     }
 }

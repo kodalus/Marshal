@@ -38,8 +38,36 @@ na Twoim koncie, a dziennik zmian to kilobajty.
 4. Zakresy: **nie dodawaj żadnego ręcznie.** Aplikacja prosi o
    `.../auth/drive.file`, a to uprawnienie jest **nieuznane za wrażliwe**, więc
    nie wymaga przeglądu Google ani weryfikacji.
-5. Użytkownicy testowi: dodaj **swój adres Gmail**. Bez tego logowanie odbije się
-   komunikatem o niezweryfikowanej aplikacji.
+5. Użytkownicy testowi: dodaj **swój adres Gmail**. Bez tego logowanie odbija się
+   komunikatem „Dostęp zablokowany: aplikacja nie przeszła weryfikacji Google",
+   błąd 403 `access_denied`. Dotyczy to **każdego** zakresu, także tych nieuznanych
+   za wrażliwe: w trybie testowym decyduje lista, a nie rodzaj uprawnienia.
+
+### Tryb testowy kontra produkcyjny
+
+To jest decyzja, nie formalność, i przy synchronizacji ma konkretną cenę.
+
+**W trybie testowym Google wydaje żeton odświeżalny na siedem dni.** Po tygodniu
+logowanie trzeba powtórzyć — niezależnie od zakresu i od tego, że nic się nie zmieniło.
+Aplikacja sobie z tym radzi (kasuje nieważny żeton i pyta o zgodę jeszcze raz), ale
+znaczy to przeglądarkę raz w tygodniu, na każdym urządzeniu.
+
+**W trybie produkcyjnym żeton nie wygasa.** Przy samym `drive.file` przejście do
+produkcji **nie wymaga żadnej weryfikacji**, bo to uprawnienie nie jest wrażliwe —
+klikasz „Opublikuj aplikację" i tyle. Przy `calendar.readonly` jest inaczej: ono
+**jest** wrażliwe, więc produkcja wymagałaby przeglądu Google.
+
+Stąd zalecenie:
+
+| Czego chcesz | Co ustawić |
+|---|---|
+| Sama synchronizacja (`drive.file`) | **Opublikuj aplikację** — żeton bezterminowy, bez weryfikacji |
+| Dodatkowo kalendarz Google | Zostaw **testowy** i pogódź się z logowaniem co tydzień |
+| Kalendarze bez logowania | Kanały iCal — nie wymagają niczego z tej instrukcji |
+
+Przy dwóch ostatnich wierszach warto rozważyć, czy kalendarz Google jest wart
+cotygodniowego logowania — adres `.ics` daje to samo na siatce godzinowej i nie
+wymaga konta.
 
 ### Dlaczego akurat `drive.file`
 
@@ -107,7 +135,7 @@ na drugim urządzeniu wkleja się je jeszcze raz.
 
 Przy pierwszym **Zapisz i zsynchronizuj** otworzy się przeglądarka i poprosi o zgodę.
 Zgadzasz się raz — odświeżalny żeton zostaje w danych aplikacji i kolejne przebiegi
-nie pytają. Ścieżkę do katalogu z żetonem widać pod przyciskiem; skasowanie go cofa
+nie pytają. W trybie testowym „raz" znaczy „raz na tydzień" — zob. krok 3. Ścieżkę do katalogu z żetonem widać pod przyciskiem; skasowanie go cofa
 do stanu sprzed logowania.
 
 Na Dysku pojawi się katalog `Marshal`, a w nim pliki `{urządzenie}.{porcja}.jsonl`.
@@ -126,8 +154,9 @@ wiadomo, że droga działa.
 Komunikat pod przyciskiem jest treścią błędu od Google, nie naszym „coś poszło nie tak".
 Trzy najczęstsze przy pierwszym podejściu:
 
-- **niezweryfikowana aplikacja** — Twojego adresu nie ma na liście użytkowników
-  testowych (krok 3, punkt 5);
+- **„Dostęp zablokowany: aplikacja nie przeszła weryfikacji", błąd 403
+  `access_denied`** — Twojego adresu nie ma na liście użytkowników testowych, albo
+  aplikacja nie jest opublikowana (krok 3, punkt 5 i akapit o trybach);
 - **zły identyfikator klienta** — najczęściej spacja albo koniec wiersza wklejony
   razem z tekstem; aplikacja przycina jedno i drugie, więc jeśli to nadal wychodzi,
   poświadczenia są z innego projektu;
