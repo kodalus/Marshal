@@ -89,12 +89,27 @@ public sealed class SettingsTests : IDisposable
         var znowu = new LocalSettings(_db);
 
         znowu.Zone.Should().NotBeNull();
+
+        // I nie po cichu. Zastępstwo przesuwa **wszystkie** godziny naraz, a przesunięte
+        // wszystko wygląda dokładnie tak samo jak źle pobrane dane — dwie zupełnie różne
+        // rzeczy do zrobienia. Ślad zostaje i widać go na ekranie oraz w dzienniku.
+        znowu.ZoneProblem.Should().NotBeNullOrEmpty();
+        znowu.ZoneProblem.Should().Contain("Mars/Olympus_Mons");
+    }
+
+    [Fact]
+    public void Dzialajaca_strefa_nie_zglasza_klopotu()
+    {
+        // Ostrzeżenie, które świeci zawsze, przestaje być ostrzeżeniem.
+        _ustawienia.ZoneProblem.Should().BeNull();
     }
 
     /// <summary>Ustawienia o jednej wartości — na potrzeby sprawdzenia samego zegara.</summary>
     private sealed class Strefa(string id) : ISettings
     {
         public TimeZoneInfo Zone { get; } = TimeZoneInfo.FindSystemTimeZoneById(id);
+
+        public string? ZoneProblem => null;
 
         public ThemeChoice Theme => ThemeChoice.System;
 

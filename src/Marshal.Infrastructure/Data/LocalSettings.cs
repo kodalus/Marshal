@@ -34,6 +34,8 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     private TimeZoneInfo? _zone;
 
+    private string? _klopotZeStrefa;
+
     private ThemeChoice? _theme;
 
     private string? _googleId;
@@ -49,6 +51,21 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
             lock (_gate)
             {
                 return _zone ??= Resolve(Read(ZoneKey) ?? DefaultZoneId);
+            }
+        }
+    }
+
+    public string? ZoneProblem
+    {
+        get
+        {
+            lock (_gate)
+            {
+                // Sięgnięcie po strefę, bo dopiero ono ją rozstrzyga — inaczej pytanie
+                // o kłopot przed pierwszym użyciem zegara zawsze dawałoby „nie ma".
+                _ = _zone ??= Resolve(Read(ZoneKey) ?? DefaultZoneId);
+
+                return _klopotZeStrefa;
             }
         }
     }
@@ -110,6 +127,10 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     public void SetZone(string id)
     {
+        // Wybranie strefy ręcznie kasuje poprzedni kłopot: jeśli nowa się rozstrzyga,
+        // ostrzeżenie o starej byłoby już nieprawdą.
+        _klopotZeStrefa = null;
+
         var strefa = Resolve(id);
 
         lock (_gate)
@@ -139,7 +160,16 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     /// aplikacji. Cofamy się wtedy do domyślnej, bo brak czasu jest gorszy niż
     /// czas w niewłaściwej strefie.
     /// </remarks>
-    private static TimeZoneInfo Resolve(string id)
+    /// <summary>
+    /// Strefa po identyfikatorze, z odnotowaniem zastępstwa.
+    /// </summary>
+    /// <remarks>
+    /// Zastępstwo było dotąd ciche i to była najgorsza możliwa cicha awaria w tym
+    /// projekcie: przesuwała **wszystkie** godziny naraz, a przesunięte wszystko
+    /// wygląda identycznie jak źle pobrane dane. Teraz zostaje ślad, który widać
+    /// w ustawieniach i w dzienniku.
+    /// </remarks>
+    private TimeZoneInfo Resolve(string id)
     {
         try
         {
@@ -147,7 +177,21 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         }
         catch (Exception e) when (e is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            return id == DefaultZoneId ? TimeZoneInfo.Utc : Resolve(DefaultZoneId);
+            if (id != DefaultZoneId)
+            {
+                var zastepcza = Resolve(DefaultZoneId);
+
+                _klopotZeStrefa =
+                    $"Ten system nie zna strefy „{id}”. Godziny liczone są w „{zastepcza.Id}”.";
+
+                return zastepcza;
+            }
+
+            _klopotZeStrefa =
+                $"Ten system nie zna strefy „{id}”. Godziny liczone są w czasie uniwersalnym, "
+                + "czyli o godzinę lub dwie wcześniej niż w Polsce. Wybierz strefę w ustawieniach.";
+
+            return TimeZoneInfo.Utc;
         }
     }
 

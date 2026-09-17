@@ -977,6 +977,11 @@
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                    Text="Nie bierzemy jej z systemu. Termin i dzień wykonania są bez strefy — ale to ona rozstrzyga, który dzień jest dzisiaj." />
         <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Now}" />
+        <!-- Strefa nie do rozpoznania przesuwa wszystkie godziny naraz i wygląda
+             przez to jak źle pobrane dane. Ostrzeżenie zamiast ciszy. -->
+        <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                   Foreground="#D0553C"
+                   Text="{Binding ZoneProblem}" IsVisible="{Binding HasZoneProblem}" />
 
         <TextBlock Classes="label" Margin="0,18,0,0" Text="Kopia zapasowa" />
         <TextBlock Classes="hint" Margin="2,0,0,8" TextWrapping="Wrap"

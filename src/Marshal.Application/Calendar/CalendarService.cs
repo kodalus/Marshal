@@ -31,8 +31,19 @@ public sealed class CalendarSyncService(
     ITaskRepository tasks,
     IEnumerable<ICalendarFeed> feeds,
     IClock clock,
-    IHlcSource hlc)
+    IHlcSource hlc,
+    ISettings settings)
 {
+    /// <summary>Strefa, w której rysowana jest siatka. Na ekran, nie do liczenia.</summary>
+    /// <remarks>
+    /// Widoczna, bo „wszystkie godziny o dwie za wcześnie" i „pobrało się nie to"
+    /// wyglądają na siatce identycznie, a są to dwie zupełnie różne rzeczy do zrobienia.
+    /// </remarks>
+    public string ZoneName => settings.Zone.Id;
+
+    /// <summary>Co jest nie tak ze strefą, jeśli cokolwiek. Puste, gdy wszystko gra.</summary>
+    public string? ZoneProblem => settings.ZoneProblem;
+
     public Task<IReadOnlyList<CalendarSource>> SourcesAsync(CancellationToken ct = default) =>
         store.SourcesAsync(ct);
 
@@ -172,9 +183,16 @@ public sealed class CalendarSyncService(
     public async Task<IReadOnlyList<AgendaDay>> AgendaAsync(
         DateOnly from, int days, CancellationToken ct = default)
     {
-        var strefa = clock.Now.Offset;
-        var poczatek = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), strefa);
-        var koniec = poczatek.AddDays(days);
+        // Strefa, nie przesunięcie.
+        //
+        // Do dziś szło tu `clock.Now.Offset` — przesunięcie obowiązujące **w tej chwili**
+        // — i było kładzione na każde wydarzenie niezależnie od jego daty. Po ostatniej
+        // niedzieli października Polska ma +1, a nie +2: wszystko oglądane spoza
+        // bieżącej zmiany czasu rysowało się i podpisywało godzinę obok. Przesunięcie
+        // jest cechą chwili, nie kalendarza, więc liczy się je dla każdej chwili osobno.
+        var strefa = settings.Zone;
+        var poczatek = WStrefie(from.ToDateTime(TimeOnly.MinValue), strefa);
+        var koniec = WStrefie(from.AddDays(days).ToDateTime(TimeOnly.MinValue), strefa);
 
         var wpisy = new List<AgendaEntry>();
 
@@ -186,8 +204,8 @@ public sealed class CalendarSyncService(
         {
             wpisy.Add(new AgendaEntry(
                 wydarzenie.Title,
-                wydarzenie.StartsAt.ToOffset(strefa),
-                wydarzenie.EndsAt.ToOffset(strefa),
+                TimeZoneInfo.ConvertTime(wydarzenie.StartsAt, strefa),
+                TimeZoneInfo.ConvertTime(wydarzenie.EndsAt, strefa),
                 wydarzenie.IsAllDay,
                 AgendaKind.Event,
                 barwy.GetValueOrDefault(wydarzenie.SourceId),
@@ -210,7 +228,11 @@ public sealed class CalendarSyncService(
     /// zrobiłoby z listy zadań kalendarz, w którym wszystko jest umówione, a to jest
     /// dokładnie ten rodzaj planowania, który się nie utrzymuje.
     /// </summary>
-    private static AgendaEntry? Entry(TaskItem task, TimeSpan zone)
+    /// <summary>Chwila lokalna w strefie, z przesunięciem obowiązującym **tego dnia**.</summary>
+    private static DateTimeOffset WStrefie(DateTime lokalna, TimeZoneInfo strefa) =>
+        new(lokalna, strefa.GetUtcOffset(lokalna));
+
+    private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone)
     {
         if (task.DoDate is not { } dzien)
         {
@@ -219,13 +241,13 @@ public sealed class CalendarSyncService(
 
         if (task.DoTime is not { } godzina)
         {
-            var poczatekDnia = new DateTimeOffset(dzien.ToDateTime(TimeOnly.MinValue), zone);
+            var poczatekDnia = WStrefie(dzien.ToDateTime(TimeOnly.MinValue), zone);
             return new AgendaEntry(
                 task.Title, poczatekDnia, poczatekDnia.AddDays(1),
                 IsAllDay: true, AgendaKind.Task, task.Color, task.Id);
         }
 
-        var start = new DateTimeOffset(dzien.ToDateTime(godzina), zone);
+        var start = WStrefie(dzien.ToDateTime(godzina), zone);
         var dlugosc = TimeSpan.FromMinutes(task.EstimatedMinutes ?? 30);
 
         return new AgendaEntry(

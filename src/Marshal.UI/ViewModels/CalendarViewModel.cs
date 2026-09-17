@@ -227,7 +227,16 @@ public sealed partial class CalendarViewModel(
         var wBazie = await calendar.StoredEventCountAsync();
         var naSiatce = _dni.Sum(d => d.AllDay.Count + d.Timed.Count);
 
-        Summary = $"W bazie {wBazie}, na tych dniach {naSiatce}.";
+        Summary = $"W bazie {wBazie}, na tych dniach {naSiatce}. "
+            + $"Godziny w strefie {calendar.ZoneName}.";
+
+        // Zła strefa przesuwa wszystko naraz i wygląda przez to jak źle pobrane dane.
+        // Nie nadpisujemy kłopotu z pobierania — ten jest świeższy i bardziej konkretny.
+        if (Problem is null && calendar.ZoneProblem is { } klopot)
+        {
+            Problem = klopot;
+            OnPropertyChanged(nameof(HasProblem));
+        }
 
         // Zapisujemy tylko przypadek podejrzany: wydarzenia są, a siatka pusta.
         // Wpis przy każdym przerysowaniu zalałby dziennik tym, co widać na ekranie,

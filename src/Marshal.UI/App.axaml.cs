@@ -74,8 +74,16 @@ public partial class App : Avalonia.Application
 
                 await viewModel.InitializeAsync();
 
-                await services.GetRequiredService<IActivityLog>()
-                    .RecordAsync("Start", "baza gotowa, okno złożone");
+                // Strefa w dzienniku przy każdym starcie: przesuwa wszystkie godziny
+                // naraz, a przesunięte wszystko wygląda tak samo jak źle pobrane dane.
+                var ustawienia = services.GetRequiredService<ISettings>();
+                var zegar = services.GetRequiredService<IClock>();
+
+                await services.GetRequiredService<IActivityLog>().RecordAsync(
+                    "Start",
+                    $"strefa {ustawienia.Zone.Id}, teraz {zegar.Now:yyyy-MM-dd HH:mm zzz}",
+                    ustawienia.ZoneProblem is null ? ActivityLevel.Ok : ActivityLevel.Problem,
+                    ustawienia.ZoneProblem);
             }
             catch (Exception ex)
             {

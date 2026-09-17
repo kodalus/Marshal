@@ -40,6 +40,18 @@ public interface ISettings
     /// </remarks>
     TimeZoneInfo Zone { get; }
 
+    /// <summary>
+    /// Dlaczego strefa jest inna, niż zapisano. Puste, gdy jest ta zapisana.
+    /// </summary>
+    /// <remarks>
+    /// Strefa nie do rozpoznania na tym systemie kończyła się po cichu przejściem na
+    /// czas uniwersalny. Objaw: **wszystkie** godziny w kalendarzu przesunięte o dwie
+    /// (zimą o jedną) i kreska bieżącej godziny w złym miejscu, bez niczego na ekranie,
+    /// co by na to wskazywało. Przesunięte wszystko naraz wygląda dokładnie tak samo
+    /// jak źle pobrane dane — a to dwie zupełnie różne rzeczy do zrobienia.
+    /// </remarks>
+    string? ZoneProblem { get; }
+
     ThemeChoice Theme { get; }
 
     /// <summary>Identyfikator klienta OAuth z konsoli Google. Pusty, dopóki nie podany.</summary>

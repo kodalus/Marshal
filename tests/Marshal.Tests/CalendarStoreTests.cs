@@ -73,6 +73,31 @@ public sealed class CalendarStoreTests : IDisposable
         public Task ClearAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
+    /// <summary>Ustawienia z jedną strefą. Warszawa, bo o nią w tym projekcie chodzi.</summary>
+    private sealed class Ustawienia : ISettings
+    {
+        public TimeZoneInfo Zone { get; } = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
+
+        public string? ZoneProblem => null;
+
+        public ThemeChoice Theme => ThemeChoice.System;
+
+        public string? GoogleClientId => null;
+
+        public string? GoogleClientSecret => null;
+
+        public bool GoogleCalendarEnabled => false;
+
+        public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
+
+        public void SetZone(string id) => throw new NotSupportedException();
+
+        public void SetTheme(ThemeChoice theme) => throw new NotSupportedException();
+
+        public void SetGoogle(string? clientId, string? clientSecret) =>
+            throw new NotSupportedException();
+    }
+
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
     private readonly Zegar _zegar = new();
@@ -96,7 +121,7 @@ public sealed class CalendarStoreTests : IDisposable
         _sklad = new CalendarStore(_db);
 
         _usluga = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc);
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia());
 
         _edycja = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar);
@@ -322,6 +347,32 @@ public sealed class CalendarStoreTests : IDisposable
 
         // Nagrobek, nie usunięcie — wybór kalendarzy się synchronizuje (spec 5.1).
         _db.CalendarSources.Count(z => z.Id == dodany.Id).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Godziny_licza_sie_ze_strefy_wydarzenia_a_nie_z_dzisiejszej()
+    {
+        // Sedno usterki: przesunięcie brane było **na teraz** i kładzione na każde
+        // wydarzenie. Polska ma +2 latem i +1 zimą, więc oglądany w czerwcu grudzień
+        // rysował się i podpisywał godzinę obok. Przesunięcie jest cechą chwili,
+        // nie kalendarza.
+        //
+        // Południe UTC to 14:00 w Warszawie w lipcu i 13:00 w grudniu.
+        var lato = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+        var zima = new DateTimeOffset(2026, 12, 15, 12, 0, 0, TimeSpan.Zero);
+
+        await _sklad.UpsertAsync(_zrodlo.Id,
+        [
+            new FeedEvent("lato", "Lipiec", lato, lato.AddHours(1), false, null, false),
+            new FeedEvent("zima", "Grudzień", zima, zima.AddHours(1), false, null, false),
+        ]);
+        await _sklad.SaveChangesAsync();
+
+        var wLipcu = await _usluga.AgendaAsync(new DateOnly(2026, 7, 15), 1);
+        var wGrudniu = await _usluga.AgendaAsync(new DateOnly(2026, 12, 15), 1);
+
+        wLipcu[0].Timed.Single().Entry.Start.Hour.Should().Be(14, "w lipcu Polska ma +2");
+        wGrudniu[0].Timed.Single().Entry.Start.Hour.Should().Be(13, "w grudniu +1");
     }
 
     [Fact]

@@ -320,7 +320,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Gdzie ląduje żeton — żeby dało się go skasować i zalogować od nowa.</summary>
     public string TokenFolder => _dysk.TokenFolder;
 
-    public string Now => $"{_clock.Now:dd.MM.yyyy HH:mm} — dzisiaj to {_clock.Today:dd.MM.yyyy}";
+    public string Now =>
+        $"{_clock.Now:dd.MM.yyyy HH:mm zzz} — dzisiaj to {_clock.Today:dd.MM.yyyy}";
+
+    /// <summary>Co jest nie tak ze strefą. Puste, gdy działa ta wybrana.</summary>
+    public string? ZoneProblem => _settings.ZoneProblem;
+
+    public bool HasZoneProblem => !string.IsNullOrEmpty(ZoneProblem);
 
     [RelayCommand]
     private async Task ExportAsync()
