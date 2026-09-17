@@ -164,6 +164,52 @@ public sealed class PrzezCalaTraseTests : IDisposable
         teraz.Picks.Should().Contain(w => w.Task.Id == zadanie.Id);
     }
 
+    /// <summary>
+    /// „Kiedyś" da się pokazać w „Teraz" i na liście kandydatów — na wyraźne życzenie.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie z dopisaną długością i siłą jest już opisane tak, jak opisuje się rzeczy
+    /// do zrobienia, a mimo to nie dawało się go wybrać nigdzie poza menu podręcznym
+    /// na ekranie „Kiedyś". Granica zostaje — przełącznik jest wyłączony domyślnie
+    /// i zeruje się przy każdym wejściu — ale da się ją przekroczyć.
+    /// </remarks>
+    [Fact]
+    public async Task Kiedys_z_dlugoscia_i_sila_da_sie_pokazac_w_teraz_i_w_kandydatach()
+    {
+        var main = Usluga<MainViewModel>();
+        var obszar = (await Usluga<IAreaRepository>().ActiveAsync())[0];
+
+        var zadania = Usluga<ITaskRepository>();
+        var hlc = Usluga<IHlcSource>();
+        var zegar = Usluga<IClock>();
+
+        var zadanie = TaskItem.Capture("test na 15 minut i resztkę energii", zegar.Now, hlc.Next());
+        zadanie.Postpone(obszar.Id, null, hlc.Next());
+        zadanie.SetEstimate(15, Energy.Low, hlc.Next());
+        zadania.Add(zadanie);
+        await Usluga<IUnitOfWork>().SaveChangesAsync();
+
+        await main.Now.LoadAsync();
+        main.Now.AlsoSomeday.Should().BeFalse("wejście na ekran nie otwiera go na wszystko");
+        main.Now.Picks.Should().NotContain(w => w.Task.Id == zadanie.Id);
+
+        // Sam dobór sprawdzany wprost w usłudze, nie przez przełącznik w oknie:
+        // przeliczenie po zmianie pola idzie bez czekania i test nie ma czego dopilnować,
+        // a pytanie dotyczy tego, kogo dobieranie bierze pod uwagę.
+        var teraz = Usluga<NowService>();
+        (await teraz.PickAsync(30, Energy.Medium))
+            .Should().NotContain(w => w.Task.Id == zadanie.Id);
+        (await teraz.PickAsync(30, Energy.Medium, includeSomeday: true))
+            .Should().Contain(w => w.Task.Id == zadanie.Id);
+
+        await main.ShowTodayCommand.ExecuteAsync(null);
+        main.FocusCandidates.Should().NotContain(w => w.Task.Id == zadanie.Id);
+
+        main.AlsoSomeday = true;
+        await main.ShowTodayCommand.ExecuteAsync(null);
+        main.FocusCandidates.Should().Contain(w => w.Task.Id == zadanie.Id);
+    }
+
     [Fact]
     public async Task Data_nadana_wrzutowi_nie_ginie_po_drodze()
     {

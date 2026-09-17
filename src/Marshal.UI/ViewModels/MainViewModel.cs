@@ -456,6 +456,21 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Czy lista kandydatów na dziś ma sięgać także do „kiedyś-może".
+    /// </summary>
+    /// <remarks>
+    /// Zadanie, któremu dopisano długość i poziom sił, jest już opisane tak, jak opisuje
+    /// się rzeczy do zrobienia — a mimo to nie dawało się go wybrać na dziś inaczej niż
+    /// z menu podręcznego na ekranie „Kiedyś". Przełącznik przenosi tę możliwość tam,
+    /// gdzie się o niej myśli, nie zacierając przy tym granicy: domyślnie wyłączony.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool AlsoSomeday { get; set; }
+
+    partial void OnAlsoSomedayChanged(bool value) =>
+        Bezpiecznie("Dzisiaj: kandydaci", RefreshFocusAsync);
+
+    /// <summary>
     /// Piątka na dziś i kandydaci do niej. Kandydaci to „Następne" oraz zaplanowane
     /// na dziś albo wcześniej (spec 8.6) — nie wszystko, co ma dzisiejszą datę.
     /// </summary>
@@ -482,7 +497,19 @@ public sealed partial class MainViewModel : ObservableObject
         var kandydaci = (await _tasks.ByStateAsync(TaskState.Next))
             .Concat(await _tasks.ByStateAsync(TaskState.Scheduled))
             .Where(t => t.State == TaskState.Next || t.DoDate <= dzis)
-            .Where(t => !wybrane.Contains(t.Id));
+            .ToList();
+
+        // „Kiedyś-może" tylko na wyraźne życzenie. Wzięcie stamtąd czegoś na dziś
+        // wyjmuje to z tego stanu — więc lista kandydatów jest właściwym miejscem
+        // na taką decyzję, ale nie na stałe: inaczej wszystko, co się kiedykolwiek
+        // odłożyło, wracałoby tu codziennie i odkładanie przestałoby cokolwiek dawać.
+        if (AlsoSomeday)
+        {
+            kandydaci.AddRange((await _tasks.ByStateAsync(TaskState.Someday))
+                .Where(t => t.DeferUntil is null || t.DeferUntil <= dzis));
+        }
+
+        kandydaci = kandydaci.Where(t => !wybrane.Contains(t.Id)).ToList();
 
         FocusCandidates.Clear();
         foreach (var zadanie in kandydaci)

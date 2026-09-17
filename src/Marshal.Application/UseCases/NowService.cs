@@ -27,8 +27,23 @@ public sealed class NowService(
     /// <summary>Poniżej tylu kandydatów ekran prosi o oszacowanie zamiast wybierać.</summary>
     public const int TooFewCandidates = 3;
 
+    /// <param name="includeSomeday">
+    /// Czy sięgnąć także do „kiedyś-może".
+    /// </param>
+    /// <remarks>
+    /// Domyślnie nie, i to jest rozstrzygnięcie, nie zaniedbanie: „kiedyś-może" jest
+    /// z założenia **poza** systemem rzeczy do zrobienia i przegląda się je raz
+    /// w tygodniu. Wpuszczone tu na stałe zrobiłyby z „Teraz" drugą listę wszystkiego,
+    /// czyli dokładnie to, czym ten ekran nie ma być.
+    ///
+    /// Ale zadanie, któremu ktoś dopisał długość i poziom sił, jest już opisane tak,
+    /// jak opisuje się rzeczy do zrobienia — i odmowa pokazania go, kiedy pyta się
+    /// wprost, byłaby upieraniem się przy metodzie wbrew człowiekowi, który jej używa.
+    /// Stąd przełącznik: granica zostaje, ale da się ją przekroczyć świadomie.
+    /// </remarks>
     public async Task<IReadOnlyList<NowPick>> PickAsync(
-        int availableMinutes, Energy energy, CancellationToken ct = default)
+        int availableMinutes, Energy energy, bool includeSomeday = false,
+        CancellationToken ct = default)
     {
         var dzis = clock.Today;
         // Następne akcje **i** to, co zaplanowane na dziś albo wcześniej (spec 8.6).
@@ -39,6 +54,11 @@ public sealed class NowService(
             .Concat((await tasks.ByStateAsync(TaskState.Scheduled, ct))
                 .Where(t => t.DoDate is { } dzien && dzien <= dzis))
             .ToList();
+
+        if (includeSomeday)
+        {
+            wszystkie.AddRange(await tasks.ByStateAsync(TaskState.Someday, ct));
+        }
 
         // Projekt wstrzymany („kiedyś") albo zamknięty wyklucza swoje zadania: leżą
         // w bazie poprawnie, ale nie są tym, co można teraz zrobić.

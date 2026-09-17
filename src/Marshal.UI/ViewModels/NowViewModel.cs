@@ -58,6 +58,18 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
     [ObservableProperty]
     public partial int Unestimated { get; set; }
 
+    /// <summary>
+    /// Czy sięgnąć także do „kiedyś-może".
+    /// </summary>
+    /// <remarks>
+    /// Wyłączone na starcie i przy każdym wejściu, bo „kiedyś-może" jest z założenia
+    /// poza systemem rzeczy do zrobienia. Zapamiętane zostawiałoby ten ekran na stałe
+    /// otwarty na wszystko, co się kiedykolwiek odłożyło — czyli zamieniłoby go
+    /// w drugą listę wszystkiego.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool AlsoSomeday { get; set; }
+
     public ObservableCollection<NowPick> Picks { get; } = [];
 
     public IReadOnlyList<MinutesChoice> Minutes => MinutesChoice.All;
@@ -86,6 +98,12 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
         // Podpowiedź z pory dnia ustawiana tylko przy wejściu, nigdy w trakcie:
         // przestawienie suwaka użytkownikowi pod ręką jest gorsze od złej podpowiedzi.
         SelectedEnergy = Energies.First(e => e.Value == now.SuggestEnergy());
+
+        // Zerowane przy każdym wejściu, nie zapamiętywane: sięgnięcie do „kiedyś-może"
+        // ma być decyzją podjętą teraz, a nie stanem, w którym ekran został z zeszłego
+        // tygodnia i po cichu pokazuje wszystko.
+        AlsoSomeday = false;
+
         await RefreshAsync();
     }
 
@@ -97,7 +115,8 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
         Unestimated = await now.UnestimatedCountAsync();
 
         Picks.Clear();
-        foreach (var pick in await now.PickAsync(SelectedMinutes.Minutes, SelectedEnergy.Value))
+        foreach (var pick in await now.PickAsync(
+            SelectedMinutes.Minutes, SelectedEnergy.Value, AlsoSomeday))
         {
             Picks.Add(pick);
         }
@@ -127,4 +146,6 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
     partial void OnSelectedMinutesChanged(MinutesChoice value) => _ = RefreshAsync();
 
     partial void OnSelectedEnergyChanged(EnergyChoice value) => _ = RefreshAsync();
+
+    partial void OnAlsoSomedayChanged(bool value) => _ = RefreshAsync();
 }

@@ -505,7 +505,14 @@
                Nie to samo co lista poniżej — większość następnych akcji nie ma daty
                wykonania i bez tego miejsca nie dałoby się ich w ogóle wybrać. -->
           <StackPanel IsVisible="{Binding !FocusIsFull}">
-            <TextBlock Classes="label" Text="Do wyboru" />
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Classes="label" Text="Do wyboru" />
+              <!-- Granica „kiedyś-może" zostaje, ale da się ją przekroczyć świadomie.
+                   Zadanie z dopisaną długością i siłą jest już opisane jak rzecz do
+                   zrobienia, a mimo to nie dawało się go stąd wybrać w ogóle. -->
+              <CheckBox Grid.Column="1" IsChecked="{Binding AlsoSomeday}"
+                        Content="także z „Kiedyś”" FontSize="12" VerticalAlignment="Center" />
+            </Grid>
             <ScrollViewer MaxHeight="220">
               <ItemsControl ItemsSource="{Binding FocusCandidates}">
                 <ItemsControl.ItemTemplate>
@@ -630,6 +637,13 @@
                   HorizontalAlignment="Stretch" />
         <TextBlock Classes="hint" Margin="2,4,0,0"
                    Text="Podpowiedziane z pory dnia. Do nadpisania jednym kliknięciem." />
+
+        <!-- „Kiedyś-może" jest z założenia poza systemem rzeczy do zrobienia i dlatego
+             ten ekran go nie rusza. Ale zadanie, któremu dopisano długość i siłę, jest
+             już opisane tak jak rzecz do zrobienia — i odmowa pokazania go, gdy pyta
+             się wprost, byłaby upieraniem się przy metodzie wbrew człowiekowi. -->
+        <CheckBox IsChecked="{Binding AlsoSomeday}" Margin="0,10,0,0"
+                  Content="sięgnij też do „Kiedyś”" />
 
         <!-- Pusty ekran z komunikatem „nic nie pasuje" byłby prawdą bezużyteczną.
              Zamiast niego mikrozadanie, które samo się rozwiązuje w miarę używania. -->
