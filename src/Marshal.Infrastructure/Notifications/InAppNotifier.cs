@@ -42,6 +42,17 @@ public sealed class InAppNotifier : INotifier
     /// </remarks>
     public static Func<Notification, CancellationToken, Task>? Systemowe { get; set; }
 
+    /// <summary>
+    /// Co wyszło z podpinania powiadomień systemowych. Do dziennika przy starcie.
+    /// </summary>
+    /// <remarks>
+    /// Bez tego „nie ma powiadomienia" ma trzy przyczyny wyglądające identycznie:
+    /// pakiet się nie podpiął, podpiął się i Windows odmówił, albo w ogóle nie było
+    /// czego pokazać. Pierwsza jest do naprawienia w kodzie, druga po stronie systemu,
+    /// trzecia nie jest usterką — a z samego braku dymka nie da się ich rozróżnić.
+    /// </remarks>
+    public static string StanSystemowych { get; set; } = "nie podpięto";
+
     public event EventHandler<Notification>? Shown;
 
     public async Task ShowAsync(Notification notification, CancellationToken ct = default)
@@ -65,9 +76,10 @@ public sealed class InAppNotifier : INotifier
         {
             await systemowe(notification, ct);
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // Zostaje pasek w oknie.
+            StanSystemowych = $"pokazanie nie udało się: {e.GetType().Name}: {e.Message}";
         }
     }
 

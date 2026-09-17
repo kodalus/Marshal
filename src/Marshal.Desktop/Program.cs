@@ -36,6 +36,7 @@ internal static class Program
     {
         if (!OperatingSystem.IsWindows())
         {
+            InAppNotifier.StanSystemowych = "ten system nie ma dymków Windowsa";
             return;
         }
 
@@ -45,6 +46,7 @@ internal static class Program
                 WindowsApplicationContext.FromCurrentProcess("Marshal"));
 
             menedzer.Initialize().GetAwaiter().GetResult();
+            InAppNotifier.StanSystemowych = "podpięte";
 
             // Drugi parametr to chwila wygaśnięcia i jest wymagany. Puste znaczy
             // „niech zostanie w centrum powiadomień" — przypomnienie, które znika samo
@@ -58,11 +60,13 @@ internal static class Program
                     },
                     expirationTime: null);
         }
-        catch (Exception)
+        catch (Exception e)
         {
             // Bez powiadomień systemowych. Pasek w oknie zostaje i działa jak dotąd.
             // Windows odmawia dymków aplikacjom bez skrótu w menu Start — to jest
-            // najczęstszy powód i nie jest usterką aplikacji.
+            // najczęstszy powód i nie jest usterką aplikacji, ale trzeba to napisać,
+            // bo z samego braku dymka nie da się tego poznać.
+            InAppNotifier.StanSystemowych = $"{e.GetType().Name}: {e.Message}";
         }
     }
 

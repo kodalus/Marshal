@@ -1,4 +1,5 @@
 using Marshal.Application.Abstractions;
+using Marshal.Domain.Diagnostics;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Tasks;
 
@@ -29,7 +30,8 @@ public sealed class TaskMirror(
     ITaskRepository tasks,
     IUnitOfWork unitOfWork,
     IHlcSource hlc,
-    ISettings settings) : ITaskMirror
+    ISettings settings,
+    IActivityLog dziennik) : ITaskMirror
 {
     /// <summary>Ile trwa udostępnione zadanie bez podanej długości.</summary>
     private const int DomyslneMinuty = 30;
@@ -57,16 +59,38 @@ public sealed class TaskMirror(
         // jest synchronizacją.
         if ((task.SharedCalendarId ?? settings.MainCalendarId) is not { } kalendarz)
         {
+            // Zapisane, bo brak kalendarza głównego i awaria wysyłki wyglądają z zewnątrz
+            // identycznie: zadanie jest w Marshalu, a w Google go nie ma. Pierwsze jest
+            // do ustawienia w dwie sekundy, drugie do naprawienia w kodzie.
+            await dziennik.RecordAsync(
+                "Kalendarz: wysłanie zadania",
+                $"{task.Title} — pominięte",
+                ActivityLevel.Ok,
+                "Nie ustawiono kalendarza głównego (Ustawienia → Kalendarze).");
+
             return;
         }
 
-        var identyfikator = await calendar.SaveEventAsync(
-            kalendarz, task.SharedEventId, Szkic(task), ct);
-
-        if (identyfikator != task.SharedEventId || task.SharedCalendarId != kalendarz)
+        try
         {
-            task.Share(kalendarz, identyfikator, hlc.Next());
-            await unitOfWork.SaveChangesAsync(ct);
+            var identyfikator = await calendar.SaveEventAsync(
+                kalendarz, task.SharedEventId, Szkic(task), ct);
+
+            if (identyfikator != task.SharedEventId || task.SharedCalendarId != kalendarz)
+            {
+                task.Share(kalendarz, identyfikator, hlc.Next());
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+
+            await dziennik.RecordAsync("Kalendarz: wysłanie zadania", task.Title);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            await dziennik.RecordAsync(
+                "Kalendarz: wysłanie zadania", task.Title, ActivityLevel.Problem,
+                $"{e.GetType().Name}: {e.Message}");
+
+            throw;
         }
     }
 

@@ -607,7 +607,7 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Udostepnione_zadanie_ma_swoje_wydarzenie_i_nadaza_za_zmianami()
     {
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
 
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
@@ -659,7 +659,7 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Kosz_zabiera_ze_soba_udostepnione_wydarzenie()
     {
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
 
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
@@ -690,7 +690,7 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Zadanie_bez_godziny_nie_da_sie_udostepnic()
     {
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
 
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
@@ -718,7 +718,7 @@ public sealed class CalendarStoreTests : IDisposable
     {
         var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia);
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes());
 
         var edycja = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar,
@@ -755,7 +755,7 @@ public sealed class CalendarStoreTests : IDisposable
     {
         var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia);
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes());
 
         // Drugi kalendarz zakładany tutaj, nie w konstruktorze: odświeżanie przechodzi
         // po **wszystkich** źródłach tym samym kanałem atrapy, więc stały drugi kalendarz

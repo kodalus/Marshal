@@ -2,6 +2,23 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Marshal.UI.App"
              RequestedThemeVariant="Default">
+  <!-- Znaczek w zasobniku systemowym. Nie jest ozdobą: przy zamkniętym oknie to
+       jedyny ślad, że Marshal chodzi i ma prawo się odezwać. Dwuklik przywraca okno,
+       bo zwinięta aplikacja bez drogi powrotu wygląda na zawieszoną. -->
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon Icon="/Assets/marshal.ico" ToolTipText="Marshal"
+                Clicked="PokazOkno">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="Pokaż Marshala" Click="PokazOkno" />
+            <NativeMenuItem Header="Zakończ" Click="Zakoncz" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
+
   <Application.Styles>
     <FluentTheme />
     <!-- Wybieraczka barw mieszka w osobnym pakiecie i niesie własny motyw.

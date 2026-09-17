@@ -1,9 +1,11 @@
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Marshal.Application.Abstractions;
 using Marshal.Domain.Diagnostics;
+using Marshal.Infrastructure.Notifications;
 using Marshal.UI.ViewModels;
 using Marshal.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +19,31 @@ namespace Marshal.UI;
 public partial class App : Avalonia.Application
 {
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
+
+    /// <summary>
+    /// Przywrócenie okna ze znaczka w zasobniku.
+    /// </summary>
+    /// <remarks>
+    /// Zwinięta aplikacja bez drogi powrotu wygląda na zawieszoną, a znaczek, który
+    /// nic nie robi po kliknięciu, jest gorszy od jego braku.
+    /// </remarks>
+    private void PokazOkno(object? nadawca, EventArgs e)
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } okno })
+        {
+            okno.Show();
+            okno.WindowState = WindowState.Normal;
+            okno.Activate();
+        }
+    }
+
+    private void Zakoncz(object? nadawca, EventArgs e)
+    {
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime pulpit)
+        {
+            pulpit.Shutdown();
+        }
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -82,7 +109,9 @@ public partial class App : Avalonia.Application
                 await services.GetRequiredService<IActivityLog>().RecordAsync(
                     "Start",
                     $"strefa {ustawienia.Zone.Id}, teraz {zegar.Now:yyyy-MM-dd HH:mm zzz}, "
-                        + $"wydanie {Wydanie()}",
+                        + $"wydanie {Wydanie()}, "
+                        + $"powiadomienia systemowe: {InAppNotifier.StanSystemowych}, "
+                        + $"kalendarz główny: {ustawienia.MainCalendarId?.ToString() ?? "nieustawiony"}",
                     ustawienia.ZoneProblem is null ? ActivityLevel.Ok : ActivityLevel.Problem,
                     ustawienia.ZoneProblem);
             }
