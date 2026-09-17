@@ -173,7 +173,6 @@
         </StackPanel>
       </Button>
       <Button Classes="nav" Command="{Binding ShowNextCommand}" Content="Następne" />
-      <Button Classes="nav" Command="{Binding ShowPlansCommand}" Content="Plany" />
       <Button Classes="nav" Command="{Binding ShowProjectsCommand}" Content="Projekty" />
       <Button Classes="nav" Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
       <Button Classes="nav" Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
@@ -517,33 +516,11 @@
       </ListBox>
     </DockPanel>
 
-    <!-- Plany -->
-    <DockPanel IsVisible="{Binding IsPlans}">
-      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" Text="Najbliższe trzydzieści dni." />
-      <ListBox ItemsSource="{Binding PlanItems}" DoubleTapped="OtworzZListy">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:TaskRow">
-            <Grid ColumnDefinitions="*,Auto" Margin="0,3">
-              <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
-                <TextBlock Classes="hint" Text="{Binding Task.DoDate, StringFormat='{}{0:yyyy-MM-dd}'}" />
-                <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
-                           IsVisible="{Binding HasBadges}" />
-              </StackPanel>
-              <Button Grid.Column="1" Content="Szczegół" Padding="10,4"
-                      VerticalAlignment="Center"
-                      Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).OpenCommand}"
-                      CommandParameter="{Binding}" />
-            </Grid>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-    </DockPanel>
-
     <!-- Kiedyś-może -->
     <DockPanel IsVisible="{Binding IsSomeday}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
-                 Text="Bez presji i bez terminu. Wraca, gdy dojrzeje." />
+                 TextWrapping="Wrap"
+                 Text="Bez presji i bez terminu. Wraca, gdy dojrzeje. Prawy przycisk na pozycji — „Weź na dziś” wyjmuje ją stąd i robi z niej następną akcję." />
       <ListBox ItemsSource="{Binding SomedayItems}" DoubleTapped="OtworzZListy">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
@@ -925,9 +902,11 @@
           </ListBox>
         </DockPanel>
 
-        <!-- Edytor i podgląd obok siebie. Przełącznik „pisz / oglądaj" każe pamiętać,
-             w którym trybie się jest — przy notatce pisanej raz i czytanej dziesięć
-             razy to pytanie zadawane bez potrzeby. -->
+        <!-- Edytor na całą szerokość, podgląd dopiero wtedy, gdy jest co podglądać.
+             Stojąc zawsze, przy zwykłej notatce pokazywał dosłownie drugą kopię tego
+             samego tekstu i zabierał na to połowę okna. Przełącznika „pisz / oglądaj"
+             nadal nie ma: kazałby pamiętać, w którym trybie się jest, przy notatce
+             pisanej raz i czytanej dziesięć razy. -->
         <DockPanel IsVisible="{Binding IsEditing}">
 
           <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
@@ -942,14 +921,15 @@
                        Text="Przypięta trafia do kroku zerowego przeglądu — tam, gdzie wizja i zasady." />
           </StackPanel>
 
-          <Grid ColumnDefinitions="*,*">
+          <Grid ColumnDefinitions="*,Auto">
 
-            <TextBox Grid.Column="0" Margin="0,0,6,0" Text="{Binding Content}"
+            <TextBox Grid.Column="0" Text="{Binding Content}"
                      AcceptsReturn="True" TextWrapping="Wrap"
                      VerticalContentAlignment="Top"
                      Watermark="Markdown: # nagłówek, - punkt, **gruby**, *pochyły*" />
 
-            <ScrollViewer Grid.Column="1">
+            <ScrollViewer Grid.Column="1" Width="320" Margin="10,0,0,0"
+                          IsVisible="{Binding HasMarkup}">
               <ItemsControl ItemsSource="{Binding Preview}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:BlockView">
@@ -1621,7 +1601,6 @@
       <ScrollViewer MaxHeight="440">
         <StackPanel>
           <Button Classes="sheet" Content="Następne" Command="{Binding ShowNextCommand}" />
-          <Button Classes="sheet" Content="Plany" Command="{Binding ShowPlansCommand}" />
           <Button Classes="sheet" Content="Projekty" Command="{Binding ShowProjectsCommand}" />
           <Button Classes="sheet" Content="Oczekiwane" Command="{Binding ShowWaitingCommand}" />
           <Button Classes="sheet" Content="Kiedyś" Command="{Binding ShowSomedayCommand}" />

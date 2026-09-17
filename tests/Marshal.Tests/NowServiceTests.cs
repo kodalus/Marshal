@@ -351,6 +351,35 @@ public sealed class NowServiceTests : IDisposable
         _db.Tasks.Single(t => t.Id == zadanie.Id).FocusMissCount.Should().Be(0);
     }
 
+    /// <summary>
+    /// Wzięcie z „kiedyś-może” na dziś wyjmuje zadanie z tego stanu.
+    /// </summary>
+    /// <remarks>
+    /// Sama data wyboru zostawiała je w stanie, którego reszta aplikacji świadomie nie
+    /// pokazuje: zadanie było wybrane na dziś i jednocześnie niewidoczne w „Teraz”,
+    /// czyli tam, gdzie zadaje się pytanie „co teraz”. Data odroczenia znika razem
+    /// ze stanem — jest obietnicą, żeby nie wracać przed czasem, a właśnie się wróciło.
+    /// </remarks>
+    [Fact]
+    public async Task Wziecie_z_kiedys_na_dzis_czyni_zadanie_nastepna_akcja()
+    {
+        var zadanie = TaskItem.Capture("Nauczyć się gotować", _zegar.Now, _hlc.Next());
+        zadanie.Postpone(_obszar.Id, Dzis.AddDays(90), _hlc.Next());
+        zadanie.SetEstimate(15, Energy.Low, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        (await _wybor.TryFocusAsync(zadanie.Id)).Accepted.Should().BeTrue();
+
+        var poWzieciu = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        poWzieciu.State.Should().Be(TaskState.Next);
+        poWzieciu.DeferUntil.Should().BeNull();
+        poWzieciu.FocusDate.Should().Be(Dzis);
+
+        (await _teraz.PickAsync(30, Energy.Medium))
+            .Select(w => w.Task.Id).Should().Contain(zadanie.Id);
+    }
+
     [Fact]
     public async Task Ponowny_wybor_tego_samego_zadania_nie_zajmuje_drugiego_slotu()
     {

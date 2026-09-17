@@ -21,7 +21,6 @@ public enum Screen
     Inbox,
     Clarify,
     Next,
-    Plans,
     Projects,
     Someday,
     Waiting,
@@ -153,8 +152,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<TaskRow> TodayItems { get; } = [];
 
-    public ObservableCollection<TaskRow> PlanItems { get; } = [];
-
     /// <summary>Przypomnienia, które odezwały się przy tym uruchomieniu.</summary>
     public ObservableCollection<Notification> Reminders { get; } = [];
 
@@ -278,8 +275,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsNext => Current == Screen.Next;
 
-    public bool IsPlans => Current == Screen.Plans;
-
     public bool IsProjects => Current == Screen.Projects;
 
     public bool IsSomeday => Current == Screen.Someday;
@@ -321,7 +316,6 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsInbox));
         OnPropertyChanged(nameof(IsClarify));
         OnPropertyChanged(nameof(IsNext));
-        OnPropertyChanged(nameof(IsPlans));
         OnPropertyChanged(nameof(IsProjects));
         OnPropertyChanged(nameof(IsSomeday));
         OnPropertyChanged(nameof(IsWaiting));
@@ -435,7 +429,6 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Today => ShowTodayAsync(),
             Screen.Now => Now.LoadAsync(),
             Screen.Next => ShowNextAsync(),
-            Screen.Plans => ShowPlansAsync(),
             Screen.Someday => ShowSomedayAsync(),
             Screen.Archive => ShowArchiveAsync(),
             Screen.Projects => ShowProjectsAsync(),
@@ -709,14 +702,6 @@ public sealed partial class MainViewModel : ObservableObject
 
         OnPropertyChanged(nameof(HasNudges));
         OnPropertyChanged(nameof(HasBlocked));
-    }
-
-    [RelayCommand]
-    private async Task ShowPlansAsync()
-    {
-        Current = Screen.Plans;
-        var dzis = Today();
-        await Fill(PlanItems, _tasks.UpcomingAsync(dzis, dzis.AddDays(30)));
     }
 
     [RelayCommand]

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application;
@@ -134,7 +135,26 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
         {
             Preview.Add(BlockView.From(blok));
         }
+
+        OnPropertyChanged(nameof(HasMarkup));
     }
+
+    /// <summary>
+    /// Czy notatka ma cokolwiek do pokazania w podglądzie.
+    /// </summary>
+    /// <remarks>
+    /// Podgląd stał dotąd zawsze i przy zwykłej notatce był dosłownie drugą kopią tego
+    /// samego tekstu — dwie połówki okna z tą samą treścią. Podgląd ma sens dopiero
+    /// wtedy, gdy pokazuje coś, czego w polu edycji nie widać: nagłówek, punkt listy,
+    /// cytat, wyróżnienie, odnośnik. Bez tego zabiera połowę szerokości za nic.
+    /// </remarks>
+    public bool HasMarkup =>
+        Preview.Any(b =>
+            b.IsListItem || b.IsQuote || b.IsCode || b.Indent > 0
+            || b.Weight != FontWeight.Normal
+            || b.Spans.Any(w => w.IsLink || w.IsCode
+                || w.Weight != FontWeight.Normal
+                || w.Style != FontStyle.Normal));
 
     partial void OnContentChanged(string value) => RenderPreview();
 

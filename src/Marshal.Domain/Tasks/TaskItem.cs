@@ -486,6 +486,33 @@ public sealed class TaskItem : Entity
         Touch(stamp);
     }
 
+    /// <summary>
+    /// Wyjęcie z „kiedyś-może” z powrotem do rzeczy do zrobienia.
+    /// </summary>
+    /// <remarks>
+    /// Wzięcie czegoś na dziś **jest** decyzją, że to już nie jest „kiedyś”. Bez tego
+    /// przejścia zadanie dostawało datę wyboru, ale zostawało w stanie, którego reszta
+    /// aplikacji świadomie nie pokazuje — w „Teraz” nie było go widać, choć zostało
+    /// wybrane na dziś. Data odroczenia znika razem ze stanem: jest obietnicą, żeby
+    /// do tego nie wracać przed czasem, a właśnie się do tego wróciło.
+    /// </remarks>
+    public void Activate(Hlc stamp)
+    {
+        if (State != TaskState.Someday)
+        {
+            return;
+        }
+
+        if (AreaId is not { } obszar)
+        {
+            throw new InvalidOperationException(
+                "Zadanie z kiedyś-może bez obszaru — nie da się go uczynić następną akcją (N11).");
+        }
+
+        DeferUntil = null;
+        MakeNext(obszar, stamp);
+    }
+
     public void Complete(DateTimeOffset now, Hlc stamp)
     {
         State = TaskState.Done;

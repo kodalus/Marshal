@@ -61,6 +61,10 @@ public sealed class FocusService(
             return new FocusResult(false, wybrane);
         }
 
+        // Wzięcie z „kiedyś-może” aktywuje zadanie. Sama data wyboru zostawiała je
+        // w stanie, którego „Teraz” nie pokazuje — wybrane na dziś i niewidoczne tam,
+        // gdzie pyta się „co teraz”.
+        zadanie.Activate(hlc.Next());
         zadanie.Focus(dzis, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
