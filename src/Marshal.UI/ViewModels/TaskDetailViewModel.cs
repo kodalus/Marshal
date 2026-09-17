@@ -651,6 +651,19 @@ public sealed partial class TaskDetailViewModel(
             Refresh();
         }
 
+        // Zabrana godzina gasi wyprzedzenia od razu na ekranie, a nie dopiero w bazie
+        // przy zapisie. Kwadraciki schowane, ale wciąż zaznaczone, pokazywałyby przy
+        // ponownym wpisaniu godziny stan, którego zadanie już nie ma.
+        if (!_loading && value is null)
+        {
+            foreach (var wyprzedzenie in Leads)
+            {
+                wyprzedzenie.IsChecked = false;
+            }
+
+            Refresh();
+        }
+
         if (_loading || _zgodne || value is not { } poczatek)
         {
             return;
@@ -803,12 +816,12 @@ public sealed partial class TaskDetailViewModel(
     }
 
     /// <summary>
-    /// Wyprzedzenia do zapisu. Zadanie bez godziny zwraca <c>null</c> — czyli
-    /// „zostaw jak jest", a nie „wyczyść". Zabranie godziny na chwilę nie ma kasować
-    /// ustawionych przypomnień, bo po jej wpisaniu z powrotem nie byłoby ich skąd wziąć.
+    /// Wyprzedzenia do zapisu. Zadanie bez godziny zwraca pustą listę, czyli „żadnych":
+    /// wyprzedzenie liczy się od godziny, więc zabranie jej zabiera to, od czego liczyło.
+    /// Przypomnienie, które zostałoby przy zadaniu bez pory, nie miałoby kiedy się odezwać.
     /// </summary>
-    private IReadOnlyList<int>? WybraneWyprzedzenia() =>
-        HasTime ? Leads.Where(w => w.IsChecked).Select(w => w.Minutes).ToList() : null;
+    private IReadOnlyList<int> WybraneWyprzedzenia() =>
+        HasTime ? Leads.Where(w => w.IsChecked).Select(w => w.Minutes).ToList() : [];
 
     private void Refresh()
     {

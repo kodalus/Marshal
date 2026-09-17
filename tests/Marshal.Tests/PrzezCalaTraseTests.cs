@@ -550,6 +550,17 @@ public sealed class PrzezCalaTraseTests : IDisposable
         szczegol.Load(zapisane);
         szczegol.Leads.Where(w => w.IsChecked).Select(w => w.Minutes)
             .Should().Equal(new[] { 0, 30, 120 }, "wczytanie ma pokazać to samo, co się zapisało");
+
+        // Zabrana godzina zabiera to, od czego wyprzedzenia się liczyły — więc i je.
+        szczegol.DoTime = null;
+
+        szczegol.Leads.Should().NotContain(
+            w => w.IsChecked, "okno ma pokazywać to, co się zapisze");
+
+        await szczegol.SaveAsync();
+
+        (await Usluga<ITaskRepository>().FindAsync(zadanie.Id))!
+            .ReminderLeads.Should().BeEmpty("bez godziny nie ma od czego liczyć");
     }
 
     [Fact]
