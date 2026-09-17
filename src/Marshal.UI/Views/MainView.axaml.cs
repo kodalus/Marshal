@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -55,6 +56,7 @@ public partial class MainView : UserControl
     {
         _siatka ??= this.FindControl<ScrollViewer>("SiatkaKalendarza");
         _kalendarz = model.Calendar;
+        _szczegol = model.Detail;
 
         model.Calendar.ScrollRequested -= NaProsbeOPrzewiniecie;
         model.Calendar.ScrollRequested += NaProsbeOPrzewiniecie;
@@ -69,6 +71,57 @@ public partial class MainView : UserControl
             // Pierwsze podanie szerokości: zdarzenie rozmiaru potrafi wypaść przed
             // podstawieniem modelu, a wtedy siatka zostałaby na szerokości zapasowej.
             Szerokosc(_siatka.Bounds.Width);
+        }
+    }
+
+    /// <summary>Model szczegółu zadania. Podstawiany razem z resztą, przy zmianie kontekstu.</summary>
+    private TaskDetailViewModel? _szczegol;
+
+    /// <summary>
+    /// Przyciski okna szczegółu wołane wprost.
+    /// </summary>
+    /// <remarks>
+    /// Przez polecenia kliknięcie w „Zapisz" kończyło się niczym i nie zostawiało śladu
+    /// nawet w pierwszej linijce zapisu — czyli do metody w ogóle nie docierało.
+    /// Tu wyjątek też ma dokąd trafić: bez tego byłaby to ta sama pułapka, tylko
+    /// przeniesiona o warstwę niżej.
+    /// </remarks>
+    private void ZapiszZadanie(object? nadawca, RoutedEventArgs e) =>
+        Zadanie("Zadanie: zapis z okna", m => m.SaveAsync());
+
+    private void OdhaczZadanie(object? nadawca, RoutedEventArgs e) =>
+        Zadanie("Zadanie: odhaczenie z okna", m => m.CompleteAsync());
+
+    private void ZamknijZadanie(object? nadawca, RoutedEventArgs e) =>
+        Zadanie("Zadanie: zamknięcie okna", m =>
+        {
+            m.Close();
+            return Task.CompletedTask;
+        });
+
+    private void Zadanie(string co, Func<TaskDetailViewModel, Task> praca)
+    {
+        if (_szczegol is not { } model)
+        {
+            return;
+        }
+
+        _ = Probuj(co, () => praca(model));
+    }
+
+    private async Task Probuj(string co, Func<Task> praca)
+    {
+        try
+        {
+            await praca();
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            if (DataContext is MainViewModel model)
+            {
+                await model.Journal.RecordAsync(
+                    co, "nie udało się", $"{e.GetType().Name}: {e.Message}");
+            }
         }
     }
 

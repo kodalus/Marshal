@@ -1642,14 +1642,18 @@
             </StackPanel>
           </Border>
 
+          <!-- Bez pośrednika: okno woła metodę wprost. Polecenie asynchroniczne ma
+               własny warunek wykonalności i własne pilnowanie jednoczesności, a jedno
+               i drugie potrafi cicho odmówić — odmowa wygląda wtedy dokładnie jak
+               martwy przycisk i nie zostawia śladu nigdzie. -->
           <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,20,0,0">
             <Button Grid.Column="0" Content="Zrobione" Padding="14,8"
-                    Command="{Binding CompleteCommand}" />
+                    Click="OdhaczZadanie" />
             <Button Grid.Column="2" Content="Zapisz" Padding="14,8"
-                    Command="{Binding SaveCommand}" />
+                    Click="ZapiszZadanie" />
           </Grid>
           <Button HorizontalAlignment="Stretch" Margin="0,8,0,0" Padding="14,8"
-                  Command="{Binding CloseCommand}" Content="Zamknij bez zapisywania" />
+                  Click="ZamknijZadanie" Content="Zamknij bez zapisywania" />
 
         </StackPanel>
       </ScrollViewer>

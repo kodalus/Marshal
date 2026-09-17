@@ -364,11 +364,25 @@ public sealed partial class TaskDetailViewModel(
         Sunday = dni.Includes(DayOfWeek.Sunday);
     }
 
-    [RelayCommand]
-    private void Close() => IsOpen = false;
+    public void Close()
+    {
+        _ = log.RecordAsync("Zadanie: zamknięcie okna bez zapisu", Title);
+        IsOpen = false;
+    }
 
-    [RelayCommand]
-    private async Task SaveAsync()
+    /// <summary>
+    /// Zapis szczegółu.
+    /// </summary>
+    /// <remarks>
+    /// <b>Publiczna i wołana wprost z okna</b>, a nie przez polecenie. Kliknięcie
+    /// w „Zapisz" nie robiło nic i nie zostawiało śladu nawet w pierwszej linijce tej
+    /// metody — czyli warstwa poleceń nie doprowadzała do niej wcale. Polecenie
+    /// asynchroniczne ma własny warunek wykonalności i własne pilnowanie
+    /// jednoczesności; jedno i drugie potrafi cicho odmówić, a odmowa wygląda
+    /// dokładnie jak martwy przycisk. Droga bez pośrednika jest krótsza o wszystko,
+    /// czego tu nie potrzebujemy.
+    /// </remarks>
+    public async Task SaveAsync()
     {
         // Ślad **przed** wszystkim innym. Do dziś pierwszą rzeczą w tym poleceniu było
         // budowanie reguły rytmu, i to poza blokiem chroniącym: wyjątek stamtąd nie
@@ -486,9 +500,18 @@ public sealed partial class TaskDetailViewModel(
         return EstimatedMinutes is { } minuty ? (int)minuty : null;
     }
 
-    [RelayCommand]
-    private async Task CompleteAsync()
+    /// <summary>Odhaczenie z okna szczegółu. Zostawia ślad, bo zamyka okno tak samo jak zapis.</summary>
+    public async Task CompleteAsync()
     {
+        await log.RecordAsync("Zadanie: odhaczenie z okna", Title);
+
+        if (_id == Guid.Empty)
+        {
+            Problem = "Nowe zadanie nie da się odhaczyć, zanim powstanie.";
+            OnPropertyChanged(nameof(HasProblem));
+            return;
+        }
+
         await edit.CompleteAsync(_id);
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);

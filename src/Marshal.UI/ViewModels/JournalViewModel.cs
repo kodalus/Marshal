@@ -46,6 +46,10 @@ public sealed partial class JournalViewModel(IActivityLog log, IClock clock) : O
 
     public bool HasRows => Rows.Count > 0;
 
+    /// <summary>Wpis prosto z okna — żeby kod okna nie musiał znać dziennika.</summary>
+    public Task RecordAsync(string operation, string outcome, string? detail = null) =>
+        log.RecordAsync(operation, outcome, ActivityLevel.Problem, detail);
+
     public async Task LoadAsync()
     {
         var strefa = clock.Now.Offset;

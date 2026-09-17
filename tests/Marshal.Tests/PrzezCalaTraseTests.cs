@@ -95,7 +95,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         szczegol.DoTime.Should().Be(new TimeSpan(16, 0, 0));
 
         szczegol.Title = "Odebrać Sanię";
-        await szczegol.SaveCommand.ExecuteAsync(null);
+        await szczegol.SaveAsync();
 
         szczegol.Problem.Should().BeNull("zapis miał się udać");
         szczegol.IsOpen.Should().BeFalse("udany zapis zamyka okno");
@@ -130,7 +130,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         szczegol.DoTime = new TimeSpan(16, 0, 0);
         szczegol.EndTime = new TimeSpan(17, 30, 0);
 
-        await szczegol.SaveCommand.ExecuteAsync(null);
+        await szczegol.SaveAsync();
 
         szczegol.Problem.Should().BeNull("zapis miał się udać");
 
@@ -167,7 +167,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         szczegol.EndTime = null;
         szczegol.EstimatedMinutes = null;
 
-        await szczegol.SaveCommand.ExecuteAsync(null);
+        await szczegol.SaveAsync();
 
         var kalendarz = Usluga<CalendarViewModel>();
         await kalendarz.LoadAsync();
@@ -189,7 +189,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         szczegol.Load(zadanie);
         szczegol.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
 
-        await szczegol.SaveCommand.ExecuteAsync(null);
+        await szczegol.SaveAsync();
 
         // Odczyt z bazy, nie z obiektu w pamięci: chodzi o to, czy reguła **przeżyła zapis**.
         var zapisane = await Usluga<ITaskRepository>().FindAsync(zadanie.Id);
@@ -215,7 +215,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         szczegol.Load(zadanie);
         szczegol.ReminderTime = new TimeSpan(14, 30, 0);
 
-        await szczegol.SaveCommand.ExecuteAsync(null);
+        await szczegol.SaveAsync();
 
         (await Usluga<ITaskRepository>().FindAsync(zadanie.Id))!
             .ReminderAt.Should().BeNull("sama pora bez dnia nie wskazuje chwili");
@@ -225,7 +225,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
             Usluga<IClock>().Today.ToDateTime(TimeOnly.MinValue), Usluga<IClock>().Now.Offset);
         szczegol.ReminderTime = new TimeSpan(14, 30, 0);
 
-        await szczegol.SaveCommand.ExecuteAsync(null);
+        await szczegol.SaveAsync();
 
         var zapisane = await Usluga<ITaskRepository>().FindAsync(zadanie.Id);
 
