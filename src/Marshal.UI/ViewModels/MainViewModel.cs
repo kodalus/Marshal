@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
+using Marshal.Domain.Diagnostics;
 using Marshal.Application.Repositories;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
@@ -45,6 +46,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly FocusService _focus;
     private readonly IReviewQueries _queries;
     private readonly InAppNotifier _notifier;
+    private readonly IActivityLog _dziennik;
 
     public MainViewModel(
         InboxService inbox,
@@ -64,7 +66,8 @@ public sealed partial class MainViewModel : ObservableObject
         NotesViewModel notes,
         FiltersViewModel filters,
         SettingsViewModel settings,
-        JournalViewModel journal)
+        JournalViewModel journal,
+        IActivityLog dziennik)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -75,6 +78,7 @@ public sealed partial class MainViewModel : ObservableObject
         _focus = focus;
         _queries = queries;
         _notifier = notifier;
+        _dziennik = dziennik;
         Clarify = clarify;
         Detail = detail;
         Review = review;
@@ -84,36 +88,37 @@ public sealed partial class MainViewModel : ObservableObject
         Filters = filters;
         Settings = settings;
         Journal = journal;
-        Clarify.Emptied += async (_, _) => await ShowInboxAsync();
+        Clarify.Emptied += (_, _) => Bezpiecznie("Skrzynka opróżniona", ShowInboxAsync);
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
         // wykonania potrafi przenieść zadanie na inną listę niż ta, z której je otwarto.
-        Detail.Saved += async (_, _) => await ReloadAsync();
+        Detail.Saved += (_, _) => Bezpiecznie("Ekran: odświeżenie po zapisie", ReloadAsync);
 
         // Przegląd zmienia stan zadań i projektów, więc ekran pod spodem musi się
         // przeliczyć — także liczniki niezmienników w „Dzisiaj".
-        Review.Changed += async (_, _) => await ReloadAsync();
+        Review.Changed += (_, _) => Bezpiecznie("Ekran: odświeżenie po przeglądzie", ReloadAsync);
 
         // Krok skrzynki prowadzi do drzewka przetwarzania. Przegląd zostaje otwarty —
         // wznowi się na tym samym kroku, bo jego stan siedzi w bazie, a nie w ekranie.
-        Review.InboxRequested += async (_, _) => await ShowClarifyAsync();
-        Now.Changed += async (_, _) => await RefreshFocusAsync();
+        Review.InboxRequested += (_, _) => Bezpiecznie("Przegląd: skrzynka", ShowClarifyAsync);
+        Now.Changed += (_, _) => Bezpiecznie("Teraz: odświeżenie piątki", RefreshFocusAsync);
 
         // Wgranie kopii zmienia wszystko naraz, więc ekran pod spodem musi się
         // przeliczyć — inaczej lista pokazuje stan sprzed wczytania, wyglądając
         // na aktualną.
-        Settings.Imported += async (_, _) => await ReloadAsync();
+        Settings.Imported += (_, _) => Bezpiecznie("Ekran: odświeżenie po wczytaniu kopii", ReloadAsync);
 
         // Kliknięcie w blok na siatce otwiera tę samą nakładkę, co kliknięcie na liście.
-        Calendar.NewTaskRequested += async (dzien, pora) => await Detail.NewAsync(dzien, pora);
+        Calendar.NewTaskRequested += (dzien, pora) =>
+            Bezpiecznie("Kalendarz: nowe zadanie", () => Detail.NewAsync(dzien, pora));
 
-        Calendar.TaskRequested += async id =>
+        Calendar.TaskRequested += id => Bezpiecznie("Kalendarz: otwarcie zadania", async () =>
         {
             if (await _tasks.FindAsync(id) is { } zadanie)
             {
                 await Detail.LoadAsync(zadanie);
             }
-        };
+        });
     }
 
     public ClarifyViewModel Clarify { get; }
@@ -355,6 +360,31 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Przeładowuje bieżący ekran — po zapisie, który mógł zmienić przynależność.</summary>
+    /// <summary>
+    /// Robota wywołana zdarzeniem, z której wyjątek ma dokąd trafić.
+    /// </summary>
+    /// <remarks>
+    /// Wszystkie te zdarzenia były dotąd obsługiwane wyrażeniami <c>async</c> bez
+    /// wartości zwracanej. Taki kod nie ma komu oddać wyjątku: awaria odświeżania
+    /// ekranu po zapisie kończyła się tym, że ekran po prostu **nie odświeżał się**,
+    /// bez śladu w oknie i bez śladu nigdzie indziej. Wyglądało to dokładnie tak,
+    /// jakby zapis się nie udał — a zapis się udawał.
+    /// </remarks>
+    private void Bezpiecznie(string co, Func<Task> praca) => _ = Probuj(co, praca);
+
+    private async Task Probuj(string co, Func<Task> praca)
+    {
+        try
+        {
+            await praca();
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            await _dziennik.RecordAsync(
+                co, "nie udało się", ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
+        }
+    }
+
     private async Task ReloadAsync()
     {
         await RefreshInboxAsync();

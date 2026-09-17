@@ -63,6 +63,56 @@ public sealed partial class TaskDetailViewModel(
 
     public ObservableCollection<Area> Areas { get; } = [];
 
+    /// <summary>
+    /// Czy pokazywać resztę pól.
+    /// </summary>
+    /// <remarks>
+    /// Okno miało dwanaście pól jedno pod drugim i trzeba było przewijać, żeby dojść
+    /// do przycisku zapisu. Widoczne zostaje to, co wypełnia się przy **każdym**
+    /// zadaniu — nazwa, dzień, godziny — a rzadkie schodzą pod jeden przełącznik.
+    /// Pole, które w dziewięciu zadaniach na dziesięć zostaje puste, jest w oknie
+    /// kosztem, a nie możliwością.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool ShowMore { get; set; }
+
+    /// <summary>Podsumowanie schowanego: żeby zwinięte nie znaczyło „nie wiadomo co tam jest".</summary>
+    public string MoreSummary
+    {
+        get
+        {
+            var czesci = new List<string>();
+
+            if (Deadline is { } termin)
+            {
+                czesci.Add($"termin {termin:dd.MM}");
+            }
+
+            if (ReminderDay is not null)
+            {
+                czesci.Add("przypomnienie");
+            }
+
+            if (SelectedPriority.Value != Priority.None)
+            {
+                czesci.Add(SelectedPriority.Label);
+            }
+
+            if (SelectedEnergyLevel.Value != Energy.Unknown)
+            {
+                czesci.Add(SelectedEnergyLevel.Label);
+            }
+
+            if (SelectedRepeat.Kind is not null)
+            {
+                czesci.Add("powtarza się");
+            }
+
+            return czesci.Count == 0 ? "termin, przypomnienie, waga, energia, rytm"
+                : string.Join(" · ", czesci);
+        }
+    }
+
     /// <summary>Co poszło nie tak przy zapisie. Puste, gdy poszło.</summary>
     [ObservableProperty]
     public partial string? Problem { get; set; }
@@ -233,6 +283,7 @@ public sealed partial class TaskDetailViewModel(
         EndTime = time.ToTimeSpan() + TimeSpan.FromMinutes(DomyslneMinuty);
 
         _loading = false;
+        ShowMore = false;
         Refresh();
         IsOpen = true;
     }
@@ -265,6 +316,11 @@ public sealed partial class TaskDetailViewModel(
         LoadRule(task.Recurrence);
 
         _loading = false;
+        ShowMore = Deadline is not null
+            || ReminderDay is not null
+            || SelectedRepeat.Kind is not null
+            || SelectedPriority.Value != Priority.None;
+
         Refresh();
         IsOpen = true;
     }
@@ -467,6 +523,7 @@ public sealed partial class TaskDetailViewModel(
 
     private void Refresh()
     {
+        OnPropertyChanged(nameof(MoreSummary));
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(IsRepeating));
         OnPropertyChanged(nameof(NeedsInterval));

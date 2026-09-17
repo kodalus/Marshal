@@ -1539,6 +1539,20 @@
           <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                      Text="Bez godziny zadanie idzie na pasek całodniowy. Bez godziny końca trwa pół godziny." />
 
+          <!-- Rzadkie pola pod jednym przełącznikiem. Okno miało dwanaście pól jedno
+               pod drugim i do przycisku zapisu trzeba było przewijać; pole, które
+               w dziewięciu zadaniach na dziesięć zostaje puste, jest w oknie kosztem,
+               a nie możliwością. Podsumowanie obok, żeby zwinięte nie znaczyło
+               „nie wiadomo, co tam jest". -->
+          <Grid ColumnDefinitions="Auto,*" Margin="0,14,0,0">
+            <ToggleButton Grid.Column="0" Classes="nav" IsChecked="{Binding ShowMore}"
+                          Content="Więcej" />
+            <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center"
+                       Margin="10,0,0,0" TextTrimming="CharacterEllipsis"
+                       Text="{Binding MoreSummary}" IsVisible="{Binding !ShowMore}" />
+          </Grid>
+
+          <StackPanel IsVisible="{Binding ShowMore}">
           <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
           <DatePicker SelectedDate="{Binding Deadline}" HorizontalAlignment="Stretch" />
 
@@ -1568,8 +1582,10 @@
                     HorizontalAlignment="Stretch" />
           <TextBlock Classes="hint" Margin="2,4,0,0"
                      Text="Nieokreślona przechodzi przy każdym poziomie — brak decyzji nie udaje decyzji." />
+          </StackPanel>
 
-          <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="#18808080">
+          <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="#18808080"
+                  IsVisible="{Binding ShowMore}">
             <StackPanel>
 
               <TextBlock Text="Rytm" FontWeight="SemiBold" />
