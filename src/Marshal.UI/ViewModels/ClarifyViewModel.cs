@@ -19,8 +19,13 @@ public sealed partial class ClarifyViewModel(
     InboxService inbox,
     NoteService notes,
     IAreaRepository areas,
+    IProjectRepository projects,
+    FocusService focus,
     TaskEditService edit) : ObservableObject
 {
+    /// <summary>Komunikat do pokazania po przejściu do następnego wrzutu.</summary>
+    private string? _doPowiedzenia;
+
     [ObservableProperty]
     public partial TaskItem? Current { get; set; }
 
@@ -57,8 +62,17 @@ public sealed partial class ClarifyViewModel(
     [ObservableProperty]
     public partial int Remaining { get; set; }
 
+    /// <summary>
+    /// Miejsce: obszar albo projekt w nim — to samo drzewko, co w szczegółach zadania.
+    /// </summary>
+    /// <remarks>
+    /// Sama lista obszarów znaczyła, że wrzut przetworzony do istniejącego projektu
+    /// trzeba było potem znaleźć na liście i przypiąć ręcznie. „To projekt" zakłada
+    /// nowy, a nie wkłada do istniejącego — i to są dwie różne rzeczy, z których
+    /// dostępna była tylko pierwsza.
+    /// </remarks>
     [ObservableProperty]
-    public partial AreaChoice? SelectedArea { get; set; }
+    public partial PlacementChoice? SelectedArea { get; set; }
 
     [ObservableProperty]
     public partial string WaitingForWho { get; set; } = string.Empty;
@@ -72,7 +86,7 @@ public sealed partial class ClarifyViewModel(
     [ObservableProperty]
     public partial string? Problem { get; set; }
 
-    public ObservableCollection<AreaChoice> Areas { get; } = [];
+    public ObservableCollection<PlacementChoice> Areas { get; } = [];
 
     public bool HasProblem => !string.IsNullOrEmpty(Problem);
 
@@ -83,12 +97,15 @@ public sealed partial class ClarifyViewModel(
 
     public async Task LoadAsync()
     {
-        if (Areas.Count == 0)
+        // Dociągane przy każdym wejściu, nie raz na życie okna: obszary i projekty
+        // zmienia się na osobnych ekranach, a zapamiętana lista robi się nieprawdziwa
+        // dokładnie wtedy, gdy ktoś właśnie założył projekt i chce do niego coś wrzucić.
+        var drzewko = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
+
+        Areas.Clear();
+        foreach (var wiersz in drzewko)
         {
-            foreach (var area in await areas.ActiveAsync())
-            {
-                Areas.Add(AreaChoice.From(area));
-            }
+            Areas.Add(PlacementChoice.From(wiersz));
         }
 
         await NextAsync();
@@ -119,7 +136,7 @@ public sealed partial class ClarifyViewModel(
     private Task Trash() => Run(id => inbox.TrashAsync(id), needsArea: false);
 
     [RelayCommand]
-    private Task Someday() => Run(id => inbox.PostponeAsync(id, SelectedArea!.Id, null));
+    private Task Someday() => Run(id => inbox.PostponeAsync(id, SelectedArea!.AreaId, null));
 
     /// <summary>
     /// Gałąź „materiał referencyjny" z drzewka (spec 7): nie wymaga działania, ale ma
@@ -134,24 +151,48 @@ public sealed partial class ClarifyViewModel(
     private Task ToNote() => Run(id => notes.ConvertToNoteAsync(id), needsArea: false);
 
     [RelayCommand]
-    private Task DoNow() => Run(id => inbox.DoNowAsync(id, SelectedArea!.Id));
+    private Task DoNow() => Run(id => inbox.DoNowAsync(id, SelectedArea!.AreaId));
 
     [RelayCommand]
     private Task Delegate() =>
-        Run(id => inbox.DelegateAsync(id, SelectedArea!.Id, WaitingForWho),
+        Run(id => inbox.DelegateAsync(id, SelectedArea!.AreaId, WaitingForWho),
             validate: () => string.IsNullOrWhiteSpace(WaitingForWho) ? "Na kogo czekasz?" : null);
 
     [RelayCommand]
-    private Task MakeNext() => Run(id => inbox.MakeNextAsync(id, SelectedArea!.Id));
+    private Task MakeNext() =>
+        Run(id => inbox.MakeNextAsync(id, SelectedArea!.AreaId, SelectedArea.ProjectId));
+
+    /// <summary>
+    /// Następna akcja **i od razu na dziś**.
+    /// </summary>
+    /// <remarks>
+    /// Z przetwarzania nie dawało się dotąd wziąć czegoś na dziś w ogóle: „Zaplanuj"
+    /// nadaje dzień, czyli stawia zadanie na siatce kalendarza, a to jest inna decyzja
+    /// niż „robię to dzisiaj, nie wiem o której". Przy wrzucie, który się właśnie
+    /// oszacowało, ta druga jest częstsza — i była jedyną, której tu brakowało.
+    /// </remarks>
+    [RelayCommand]
+    private Task Today() =>
+        Run(async id =>
+        {
+            await inbox.MakeNextAsync(id, SelectedArea!.AreaId, SelectedArea.ProjectId);
+
+            if (!(await focus.TryFocusAsync(id)).Accepted)
+            {
+                // Odkładane, nie ustawiane wprost: przejście do następnego wrzutu
+                // czyści komunikat, więc napisany tutaj zniknąłby w tej samej chwili.
+                _doPowiedzenia = "Pięć zadań na dziś już jest — to zostaje wśród następnych akcji.";
+            }
+        });
 
     [RelayCommand]
     private Task Schedule() =>
-        Run(id => inbox.ScheduleAsync(id, SelectedArea!.Id, DateOnly.FromDateTime(ScheduledFor!.Value.Date)),
+        Run(id => inbox.ScheduleAsync(id, SelectedArea!.AreaId, DateOnly.FromDateTime(ScheduledFor!.Value.Date)),
             validate: () => ScheduledFor is null ? "Na który dzień?" : null);
 
     [RelayCommand]
     private Task PromoteToProject() =>
-        Run(id => inbox.PromoteToProjectAsync(id, SelectedArea!.Id, ProjectOutcome, Current!.Title),
+        Run(id => inbox.PromoteToProjectAsync(id, SelectedArea!.AreaId, ProjectOutcome, Current!.Title),
             validate: () => string.IsNullOrWhiteSpace(ProjectOutcome)
                 ? "Po czym poznasz, że projekt jest skończony?"
                 : null);
@@ -189,6 +230,8 @@ public sealed partial class ClarifyViewModel(
             return;
         }
 
+        Problem = null;
+
         var identyfikator = Current.Id;
 
         await action(identyfikator);
@@ -198,5 +241,11 @@ public sealed partial class ClarifyViewModel(
         await ZapiszOszacowanieAsync(identyfikator);
 
         await NextAsync();
+
+        if (_doPowiedzenia is { } slowo)
+        {
+            Problem = slowo;
+            _doPowiedzenia = null;
+        }
     }
 }

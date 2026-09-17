@@ -255,6 +255,49 @@ public sealed class PrzezCalaTraseTests : IDisposable
         main.BalanceRows.Should().NotContain(w => w.AreaId == dodany.AreaId);
     }
 
+    /// <summary>
+    /// „Robię to dzisiaj” ze skrzynki: wrzut z oszacowaniem ląduje w piątce i w „Teraz".
+    /// </summary>
+    /// <remarks>
+    /// Z przetwarzania nie dawało się wziąć czegoś na dziś w ogóle. „Zaplanuj" nadaje
+    /// dzień, czyli stawia zadanie na siatce kalendarza — a to jest inna decyzja niż
+    /// „robię to dzisiaj, nie wiem o której". Przy wrzucie, który się właśnie
+    /// oszacowało, ta druga jest częstsza i była jedyną, której brakowało.
+    /// </remarks>
+    [Fact]
+    public async Task Wrzut_da_sie_wziac_na_dzis_wprost_z_przetwarzania()
+    {
+        var main = Usluga<MainViewModel>();
+        main.CaptureText = "Zrobić zakupy";
+        await main.CaptureCommand.ExecuteAsync(null);
+
+        var clarify = main.Clarify;
+        await clarify.LoadAsync();
+
+        clarify.Current.Should().NotBeNull();
+        clarify.Areas.Should().NotBeEmpty("miejsce trzeba z czegoś wybrać");
+        clarify.SelectedArea = clarify.Areas.First(m => m.ProjectId is null);
+        clarify.EstimatedMinutes = 30;
+        clarify.SelectedEnergy = EnergyLevelChoice.All.First(e => e.Value == Energy.Medium);
+
+        await clarify.TodayCommand.ExecuteAsync(null);
+
+        clarify.Problem.Should().BeNull("piątka jest pusta, nie ma czego odmawiać");
+
+        var zadanie = (await Usluga<ITaskRepository>().ByStateAsync(TaskState.Next))
+            .Should().ContainSingle(t => t.Title == "Zrobić zakupy").Which;
+
+        zadanie.EstimatedMinutes.Should().Be(30);
+        zadanie.Energy.Should().Be(Energy.Medium);
+        zadanie.FocusDate.Should().Be(Usluga<IClock>().Today, "„dzisiaj” znaczy piątkę na dziś");
+
+        await main.ShowTodayCommand.ExecuteAsync(null);
+        main.FocusItems.Should().ContainSingle(t => t.Id == zadanie.Id);
+
+        (await Usluga<NowService>().PickAsync(30, Energy.Medium))
+            .Should().Contain(w => w.Task.Id == zadanie.Id);
+    }
+
     [Fact]
     public async Task Data_nadana_wrzutowi_nie_ginie_po_drodze()
     {

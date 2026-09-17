@@ -356,8 +356,11 @@
              pasek nawigacji jest w tym widoku schowany, żeby decyzja nie konkurowała
              z resztą aplikacji — ale „nie konkuruje" nie znaczy „nie da się wyjść". -->
         <Grid ColumnDefinitions="Auto,*">
+          <!-- Z powrotem do skrzynki, nie na kalendarz: przetwarzanie zaczyna się
+               w skrzynce i przerwanie go w połowie znaczy „wracam do reszty wrzutów",
+               a nie „chcę teraz obejrzeć tydzień". -->
           <Button Grid.Column="0" Classes="nav" Content="◀ wyjdź"
-                  Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ShowCalendarCommand}" />
+                  Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ShowInboxCommand}" />
           <TextBlock Grid.Column="1" Classes="hint" HorizontalAlignment="Center"
                      VerticalAlignment="Center"
                      Text="{Binding Remaining, StringFormat='Do rozstrzygnięcia: {0}'}" />
@@ -367,9 +370,18 @@
           <TextBlock Text="{Binding Current.Title}" FontSize="22" TextWrapping="Wrap" />
         </Border>
 
-        <TextBlock Text="Obszar" Classes="hint" />
+        <TextBlock Text="Miejsce — obszar albo projekt w nim" Classes="hint" />
         <ComboBox ItemsSource="{Binding Areas}" SelectedItem="{Binding SelectedArea}"
-                  HorizontalAlignment="Stretch" Margin="0,4,0,16" />
+                  HorizontalAlignment="Stretch" Margin="0,4,0,16">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:PlacementChoice">
+              <StackPanel Orientation="Horizontal">
+                <Border Width="{Binding Indent}" />
+                <TextBlock Text="{Binding Label}" />
+              </StackPanel>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
 
         <!-- Długość i siły pytane tutaj, przy decyzji: ekran „Teraz" dobiera pod
              dostępne minuty i poziom sił, więc zadanie bez oszacowania nie trafia tam
@@ -399,7 +411,10 @@
         <TextBlock Text="Wymaga działania" Classes="hint" Margin="0,14,0,6" />
         <Button Classes="branch" Command="{Binding DoNowCommand}"
                 Content="Zrobione teraz (krócej niż dwie minuty)" />
+        <Button Classes="branch" Command="{Binding TodayCommand}" Content="Robię to dzisiaj" />
         <Button Classes="branch" Command="{Binding MakeNextCommand}" Content="Następna akcja" />
+        <TextBlock Classes="hint" Margin="2,0,0,4" TextWrapping="Wrap"
+                   Text="„Robię to dzisiaj” trafia od razu do piątki na dziś. „Następna akcja” zostaje na liście i w „Teraz”, bez przypisania do dnia. „Zaplanuj” niżej stawia zadanie na konkretnym dniu kalendarza." />
 
         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
           <TextBox Grid.Column="0" Text="{Binding WaitingForWho}" Watermark="Na kogo czekasz?" />
