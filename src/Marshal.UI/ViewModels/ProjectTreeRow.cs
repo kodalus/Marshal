@@ -29,6 +29,9 @@ public sealed record ProjectTreeRow(ProjectRow Row, AreaBalance? Balance = null)
 
     public bool IsArea => Row.IsArea;
 
+    /// <summary>Obszar wiersza. Dla wiersza obszaru to on sam.</summary>
+    public Guid AreaId => Row.AreaId;
+
     /// <summary>Barwa po dziedziczeniu — ta sama, którą dostaną zadania.</summary>
     public string? Color => Row.Color;
 

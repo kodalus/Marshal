@@ -228,31 +228,55 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await main.AddAreaCommand.ExecuteAsync(null);
 
         main.NewAreaName.Should().BeEmpty("pole ma się opróżnić po dodaniu");
-        var dodany = main.BalanceRows.Should().ContainSingle(w => w.Name == "Rodzina").Which;
 
-        await main.RenameAreaAsync(dodany.AreaId, "Rodzina i dom");
-        main.BalanceRows.Should().ContainSingle(w => w.Name == "Rodzina i dom");
+        var dodany = main.ProjectRows.Should()
+            .ContainSingle(w => w.Label == "Rodzina" && w.IsArea).Which;
 
-        // Z zadaniem w środku usunięcie ma odmówić i powiedzieć dlaczego.
+        // Liczby równowagi stoją przy obszarze, a nie w osobnej tabeli na innym ekranie.
+        dodany.HasBalance.Should().BeTrue();
+
+        await main.RenameRowAsync(dodany, "Rodzina i dom");
+        var poNazwie = main.ProjectRows.Should()
+            .ContainSingle(w => w.Id == dodany.Id).Which;
+        poNazwie.Label.Should().Be("Rodzina i dom");
+
+        // Projekt zakłada się pod obszarem, z tego samego menu co reszta.
+        await main.AddProjectAsync(poNazwie, "Kuchnia wyremontowana");
+        var projekt = main.ProjectRows.Should()
+            .ContainSingle(w => w.Label == "Kuchnia wyremontowana").Which;
+        projekt.IsArea.Should().BeFalse();
+        projekt.AreaId.Should().Be(poNazwie.Id, "podprojekt dziedziczy obszar rodzica");
+
+        // Obszar z projektem w środku ma odmówić usunięcia i powiedzieć dlaczego.
+        await main.DeleteRowAsync(poNazwie);
+        main.Notice.Should().Contain("projekty");
+        main.ProjectRows.Should().Contain(w => w.Id == poNazwie.Id);
+
+        // Zadanie w projekcie blokuje usunięcie projektu z tego samego powodu.
         var zadania = Usluga<ITaskRepository>();
         var hlc = Usluga<IHlcSource>();
         var zegar = Usluga<IClock>();
 
         var zadanie = TaskItem.Capture("Zakupy", zegar.Now, hlc.Next());
-        zadanie.MakeNext(dodany.AreaId, hlc.Next());
+        zadanie.MakeNext(poNazwie.Id, hlc.Next());
+        zadanie.MoveTo(poNazwie.Id, projekt.Id, hlc.Next());
         zadania.Add(zadanie);
         await Usluga<IUnitOfWork>().SaveChangesAsync();
 
-        await main.DeleteAreaAsync(dodany.AreaId);
+        await main.ShowProjectsCommand.ExecuteAsync(null);
+        await main.DeleteRowAsync(main.ProjectRows.Single(w => w.Id == projekt.Id));
         main.Notice.Should().Contain("zadania");
-        main.BalanceRows.Should().ContainSingle(w => w.AreaId == dodany.AreaId);
 
-        // Po opróżnieniu — usuwa się i znika z tabeli.
+        // Po opróżnieniu schodzi wszystko: najpierw projekt, potem obszar.
         await main.TrashTaskAsync(zadanie);
-        await main.DeleteAreaAsync(dodany.AreaId);
+        await main.ShowProjectsCommand.ExecuteAsync(null);
 
+        await main.DeleteRowAsync(main.ProjectRows.Single(w => w.Id == projekt.Id));
         main.Notice.Should().BeEmpty();
-        main.BalanceRows.Should().NotContain(w => w.AreaId == dodany.AreaId);
+
+        await main.DeleteRowAsync(main.ProjectRows.Single(w => w.Id == poNazwie.Id));
+        main.Notice.Should().BeEmpty();
+        main.ProjectRows.Should().NotContain(w => w.Id == poNazwie.Id);
     }
 
     /// <summary>
