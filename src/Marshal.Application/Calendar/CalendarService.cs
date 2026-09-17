@@ -36,6 +36,10 @@ public sealed class CalendarSyncService(
     public Task<IReadOnlyList<CalendarSource>> SourcesAsync(CancellationToken ct = default) =>
         store.SourcesAsync(ct);
 
+    /// <summary>Wydarzenia w bazie w ogóle — do odróżnienia „nic nie ma" od „nie na te dni".</summary>
+    public Task<int> StoredEventCountAsync(CancellationToken ct = default) =>
+        store.CountAsync(ct);
+
     /// <summary>
     /// Podłączenie kalendarza. Do etapu 10 nie było **żadnej** drogi, żeby to zrobić:
     /// odświeżanie przechodziło po źródłach, których nikt nie umiał dodać.

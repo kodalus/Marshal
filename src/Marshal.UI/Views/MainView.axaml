@@ -522,6 +522,8 @@
           <Button Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
         </WrapPanel>
         <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />
+        <!-- Pusta siatka ma trzy przyczyny wyglądające tak samo. Ta linijka je rozdziela. -->
+        <TextBlock Classes="hint" Margin="2,2,0,0" Text="{Binding Summary}" />
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                    Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
       </StackPanel>

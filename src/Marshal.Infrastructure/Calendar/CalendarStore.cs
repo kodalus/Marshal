@@ -106,6 +106,9 @@ public sealed class CalendarStore(MarshalDbContext db) : ICalendarStore
         return policzone;
     }
 
+    public Task<int> CountAsync(CancellationToken ct = default) =>
+        db.CalendarEvents.CountAsync(e => !e.Cancelled, ct);
+
     public void AddSource(CalendarSource source) => db.CalendarSources.Add(source);
 
     public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);

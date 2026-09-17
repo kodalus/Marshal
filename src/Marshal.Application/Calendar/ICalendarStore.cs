@@ -29,6 +29,16 @@ public interface ICalendarStore
     Task<int> MarkMissingCancelledAsync(
         Guid sourceId, IReadOnlyList<string> seen, CancellationToken ct = default);
 
+    /// <summary>
+    /// Ile wydarzeń leży w bazie w ogóle, bez zakresu i bez odwołanych.
+    /// </summary>
+    /// <remarks>
+    /// Do jednego pytania: czy pusta siatka znaczy „nic nie pobrano", czy „pobrano,
+    /// ale nie na te dni". Bez tej liczby jedno od drugiego nie różni się niczym,
+    /// co widać na ekranie.
+    /// </remarks>
+    Task<int> CountAsync(CancellationToken ct = default);
+
     void AddSource(CalendarSource source);
 
     Task SaveChangesAsync(CancellationToken ct = default);

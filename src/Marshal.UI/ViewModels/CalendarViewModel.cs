@@ -59,6 +59,17 @@ public sealed partial class CalendarViewModel(
     [ObservableProperty]
     public partial string? Problem { get; set; }
 
+    /// <summary>
+    /// Co jest w bazie, a co w tym zakresie.
+    /// </summary>
+    /// <remarks>
+    /// Pusta siatka ma trzy różne przyczyny — nic nie pobrano, pobrano nie na te dni,
+    /// albo pobrano i nie narysowano — a wyglądają identycznie. Ta jedna linijka
+    /// rozdziela je bez zgadywania i bez kabla.
+    /// </remarks>
+    [ObservableProperty]
+    public partial string Summary { get; set; } = string.Empty;
+
     public ObservableCollection<CalendarColumn> Columns { get; } = [];
 
     public double GridHeight => 24 * HourHeight;
@@ -104,6 +115,11 @@ public sealed partial class CalendarViewModel(
                 dzien.AllDay.Select(e => e.Title).ToList(),
                 dzien.Timed.Select(Box).ToList()));
         }
+
+        var wBazie = await calendar.StoredEventCountAsync();
+        var naSiatce = dni.Sum(d => d.AllDay.Count + d.Timed.Count);
+
+        Summary = $"W bazie {wBazie}, na tych dniach {naSiatce}.";
 
         OnPropertyChanged(nameof(Range));
     }
