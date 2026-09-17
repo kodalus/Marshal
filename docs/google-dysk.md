@@ -43,6 +43,28 @@ na Twoim koncie, a dziennik zmian to kilobajty.
    błąd 403 `access_denied`. Dotyczy to **każdego** zakresu, także tych nieuznanych
    za wrażliwe: w trybie testowym decyduje lista, a nie rodzaj uprawnienia.
 
+### Strona „Marka" — bez niej nie da się opublikować
+
+Konsola rozbiła dawny jeden ekran zgody na kilka zakładek. Przycisk **Opublikuj
+aplikację** zostaje szary, dopóki nie jest wypełniona **Marka** (*Branding*),
+a komunikat pod nim mówi dokładnie to i podaje odnośnik.
+
+Do wypełnienia są trzy rzeczy i tylko one są obowiązkowe:
+
+1. **Nazwa aplikacji** — `Marshal`.
+2. **Adres e-mail pomocy technicznej** — Twój własny.
+3. **Dane kontaktowe dewelopera** — ten sam adres.
+
+Logo, strona główna, polityka prywatności i regulamin są **opcjonalne** przy
+uprawnieniach nieuznanych za wrażliwe. Zostaw je puste: wpisanie adresu strony
+pociąga za sobą **domeny autoryzowane**, a te wymagają potwierdzenia własności
+domeny w Search Console. Przy aplikacji dla siebie samej nie ma czego potwierdzać.
+
+Gdyby konsola mimo to zażądała adresu strony albo polityki prywatności — to jest
+moment, w którym publikacja przestaje być darmowa w sensie czasu. Wtedy sensowniej
+zostać na trybie testowym i pogodzić się z logowaniem raz w tygodniu, niż zakładać
+domenę dla aplikacji, z której korzysta jedna osoba.
+
 ### Tryb testowy kontra produkcyjny
 
 To jest decyzja, nie formalność, i przy synchronizacji ma konkretną cenę.
