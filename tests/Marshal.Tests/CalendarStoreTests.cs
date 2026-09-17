@@ -499,28 +499,29 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
-    public void Klikniecie_w_puste_miejsce_zaokragla_godzine_do_kwadransa()
+    public void Klikniecie_w_puste_miejsce_zaokragla_godzine_do_piatki_minut()
     {
-        // Minuta wzięta co do punktu byłaby udawaną precyzją: trafienie w 14:07
-        // nie znaczy, że ktoś planuje na 14:07.
+        // Pięć minut, nie kwadrans: kwadrans był za grubą miarką na spotkanie o 9:35.
+        // Minuta co do punktu byłaby za to udawaną precyzją — trafienie w 14:07 nie
+        // znaczy, że ktoś planuje na 14:07.
         var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
 
         (DateOnly Dzien, TimeOnly Pora)? poproszono = null;
         model.NewTaskRequested += (dzien, pora) => poproszono = (dzien, pora);
 
-        // 14 godzin i 7 minut w punktach: 14 * 48 + 7 * 0,8.
+        // Czternasta i siedem minut w punktach: 14 * 48 plus 5,6.
         model.NewAt(new DateOnly(2026, 9, 17), (14 * 48) + 5.6);
 
         poproszono.Should().NotBeNull();
         poproszono!.Value.Dzien.Should().Be(new DateOnly(2026, 9, 17));
-        poproszono.Value.Pora.Should().Be(new TimeOnly(14, 0));
+        poproszono.Value.Pora.Should().Be(new TimeOnly(14, 5));
 
         model.NewAt(new DateOnly(2026, 9, 17), (14 * 48) + 24);
         poproszono!.Value.Pora.Should().Be(new TimeOnly(14, 30));
 
         // Koniec doby nie przekręca się na następny dzień.
         model.NewAt(new DateOnly(2026, 9, 17), 24 * 48);
-        poproszono!.Value.Pora.Should().Be(new TimeOnly(23, 45));
+        poproszono!.Value.Pora.Should().Be(new TimeOnly(23, 55));
     }
 
     [Fact]
