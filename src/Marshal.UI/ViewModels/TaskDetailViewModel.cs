@@ -93,17 +93,17 @@ public sealed partial class TaskDetailViewModel(
                 czesci.Add("przypomnienie");
             }
 
-            if (SelectedPriority.Value != Priority.None)
+            if (Waga != Priority.None)
             {
-                czesci.Add(SelectedPriority.Label);
+                czesci.Add(SelectedPriority!.Label);
             }
 
-            if (SelectedEnergyLevel.Value != Energy.Unknown)
+            if (Sila != Energy.Unknown)
             {
-                czesci.Add(SelectedEnergyLevel.Label);
+                czesci.Add(SelectedEnergyLevel!.Label);
             }
 
-            if (SelectedRepeat.Kind is not null)
+            if (Rytm is not null)
             {
                 czesci.Add("powtarza się");
             }
@@ -133,19 +133,19 @@ public sealed partial class TaskDetailViewModel(
     public partial TimeSpan? ReminderTime { get; set; }
 
     [ObservableProperty]
-    public partial PriorityChoice SelectedPriority { get; set; } = PriorityChoice.All[0];
+    public partial PriorityChoice? SelectedPriority { get; set; } = PriorityChoice.All[0];
 
     /// <summary>Liczba dziesiętna z tego samego powodu co odstęp rytmu: NumericUpDown.</summary>
     [ObservableProperty]
     public partial decimal? EstimatedMinutes { get; set; }
 
     [ObservableProperty]
-    public partial EnergyLevelChoice SelectedEnergyLevel { get; set; } = EnergyLevelChoice.All[0];
+    public partial EnergyLevelChoice? SelectedEnergyLevel { get; set; } = EnergyLevelChoice.All[0];
 
     // --- rytm ----------------------------------------------------------------
 
     [ObservableProperty]
-    public partial RepeatChoice SelectedRepeat { get; set; } = RepeatChoice.All[0];
+    public partial RepeatChoice? SelectedRepeat { get; set; } = RepeatChoice.All[0];
 
     /// <summary>
     /// Liczby dziesiętne, nie całkowite — <c>NumericUpDown</c> operuje na
@@ -180,10 +180,10 @@ public sealed partial class TaskDetailViewModel(
     public partial decimal? DayOfMonth { get; set; }
 
     [ObservableProperty]
-    public partial AnchorChoice SelectedAnchor { get; set; } = AnchorChoice.All[0];
+    public partial AnchorChoice? SelectedAnchor { get; set; } = AnchorChoice.All[0];
 
     [ObservableProperty]
-    public partial MissedChoice SelectedMissed { get; set; } = MissedChoice.All[0];
+    public partial MissedChoice? SelectedMissed { get; set; } = MissedChoice.All[0];
 
     public IReadOnlyList<RepeatChoice> Repeats => RepeatChoice.All;
 
@@ -212,15 +212,31 @@ public sealed partial class TaskDetailViewModel(
         }
     }
 
-    public bool IsRepeating => SelectedRepeat.Kind is not null;
+    /// <summary>
+    /// Wybory z list, czytane odpornie na puste.
+    /// </summary>
+    /// <remarks>
+    /// Pola wyboru **mogą** nie mieć nic wybranego — kontrolka potrafi wpisać pustkę
+    /// przy składaniu i przy podmianie listy — a typ mówił, że nie mogą. Sięgnięcie
+    /// po <c>.Kind</c> na pustce rzucało wyjątek przed pierwszą linijką, którą cokolwiek
+    /// zapisuje: polecenie zapisu kończyło się **niczym**. Bez zapisu, bez komunikatu,
+    /// bez wpisu w dzienniku, z otwartym oknem wyglądającym jak przed kliknięciem.
+    /// </remarks>
+    private RecurrenceKind? Rytm => SelectedRepeat?.Kind;
 
-    public bool NeedsInterval => SelectedRepeat.Kind
+    private Priority Waga => SelectedPriority?.Value ?? Priority.None;
+
+    private Energy Sila => SelectedEnergyLevel?.Value ?? Energy.Unknown;
+
+    public bool IsRepeating => Rytm is not null;
+
+    public bool NeedsInterval => Rytm
         is RecurrenceKind.EveryNDays or RecurrenceKind.Weekly
         or RecurrenceKind.Monthly or RecurrenceKind.Yearly;
 
-    public bool NeedsWeekdays => SelectedRepeat.Kind == RecurrenceKind.Weekly;
+    public bool NeedsWeekdays => Rytm == RecurrenceKind.Weekly;
 
-    public bool NeedsDayOfMonth => SelectedRepeat.Kind == RecurrenceKind.Monthly;
+    public bool NeedsDayOfMonth => Rytm == RecurrenceKind.Monthly;
 
     public event EventHandler? Saved;
 
@@ -318,8 +334,8 @@ public sealed partial class TaskDetailViewModel(
         _loading = false;
         ShowMore = Deadline is not null
             || ReminderDay is not null
-            || SelectedRepeat.Kind is not null
-            || SelectedPriority.Value != Priority.None;
+            || Rytm is not null
+            || Waga != Priority.None;
 
         Refresh();
         IsOpen = true;
@@ -354,7 +370,29 @@ public sealed partial class TaskDetailViewModel(
     [RelayCommand]
     private async Task SaveAsync()
     {
-        var regula = BuildRule(out var problem);
+        // Ślad **przed** wszystkim innym. Do dziś pierwszą rzeczą w tym poleceniu było
+        // budowanie reguły rytmu, i to poza blokiem chroniącym: wyjątek stamtąd nie
+        // miał dokąd trafić, bo polecenie wołane jest bez oczekiwania na wynik.
+        await log.RecordAsync("Zadanie: polecenie zapisu", Title);
+
+        string? problem;
+        RecurrenceRule? regula;
+
+        try
+        {
+            regula = BuildRule(out problem);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Zadanie: zapis", Title, ActivityLevel.Problem,
+                $"budowanie rytmu: {e.GetType().Name}: {e.Message}");
+
+            return;
+        }
 
         if (problem is not null)
         {
@@ -393,9 +431,9 @@ public sealed partial class TaskDetailViewModel(
                 ToDate(Deadline),
                 ReminderAt(),
                 regula,
-                SelectedPriority.Value,
+                Waga,
                 Minuty(),
-                SelectedEnergyLevel.Value,
+                Sila,
                 SelectedArea?.Id,
                 DoTime is { } pora ? TimeOnly.FromTimeSpan(pora) : null));
         }
@@ -481,7 +519,7 @@ public sealed partial class TaskDetailViewModel(
     {
         problem = null;
 
-        if (SelectedRepeat.Kind is not { } rodzaj)
+        if (Rytm is not { } rodzaj)
         {
             return null;
         }
@@ -502,8 +540,8 @@ public sealed partial class TaskDetailViewModel(
                 (int)Math.Max(1, Interval),
                 dni,
                 rodzaj == RecurrenceKind.Monthly && DayOfMonth is { } dzien ? (int)dzien : null,
-                SelectedAnchor.Value,
-                SelectedMissed.Value);
+                SelectedAnchor?.Value ?? RecurrenceRule.DefaultAnchorFor(rodzaj),
+                SelectedMissed?.Value ?? OnMissed.Carry);
         }
         catch (ArgumentException)
         {
@@ -531,7 +569,7 @@ public sealed partial class TaskDetailViewModel(
         OnPropertyChanged(nameof(NeedsDayOfMonth));
     }
 
-    partial void OnSelectedRepeatChanged(RepeatChoice value)
+    partial void OnSelectedRepeatChanged(RepeatChoice? value)
     {
         if (_loading)
         {
@@ -541,7 +579,7 @@ public sealed partial class TaskDetailViewModel(
         // Domyślne zaczepienie wynika z rodzaju (spec 5.7), więc zmiana rodzaju ma je
         // przestawić. Zostawione ręcznie ustawione dałoby „co poniedziałek, licząc od
         // wykonania" jako stan domyślny — czyli rytm dryfujący na środy.
-        if (value.Kind is { } rodzaj)
+        if (value?.Kind is { } rodzaj)
         {
             SelectedAnchor = Anchors.First(a => a.Value == RecurrenceRule.DefaultAnchorFor(rodzaj));
         }
@@ -553,9 +591,9 @@ public sealed partial class TaskDetailViewModel(
 
     partial void OnDayOfMonthChanged(decimal? value) => Refresh();
 
-    partial void OnSelectedAnchorChanged(AnchorChoice value) => Refresh();
+    partial void OnSelectedAnchorChanged(AnchorChoice? value) => Refresh();
 
-    partial void OnSelectedMissedChanged(MissedChoice value) => Refresh();
+    partial void OnSelectedMissedChanged(MissedChoice? value) => Refresh();
 
     partial void OnMondayChanged(bool value) => Refresh();
 
