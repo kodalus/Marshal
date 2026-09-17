@@ -549,7 +549,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // Droga powrotna: okno otwarte drugi raz ma pokazać to samo.
         szczegol.Load(zapisane);
         szczegol.Leads.Where(w => w.IsChecked).Select(w => w.Minutes)
-            .Should().Equal(0, 30, 120, "wczytanie ma pokazać to samo, co się zapisało");
+            .Should().Equal(new[] { 0, 30, 120 }, "wczytanie ma pokazać to samo, co się zapisało");
     }
 
     [Fact]
