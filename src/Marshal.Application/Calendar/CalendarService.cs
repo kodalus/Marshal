@@ -32,8 +32,90 @@ public sealed class CalendarSyncService(
     IEnumerable<ICalendarFeed> feeds,
     IClock clock,
     IHlcSource hlc,
-    ISettings settings)
+    ISettings settings,
+    IEnumerable<ICalendarWriter> writers)
 {
+    /// <summary>Czy do tego kalendarza da się pisać. Na ekran — żeby nie kusić przyciskiem bez skutku.</summary>
+    public bool CanWrite(CalendarKind kind) => writers.Any(w => w.Kind == kind);
+
+    /// <summary>
+    /// Zapis wydarzenia u źródła i w naszej kopii (spec 10.2).
+    /// </summary>
+    /// <remarks>
+    /// Kolejność jest treścią, nie szczegółem: najpierw Google, potem baza. Odwrotna
+    /// zostawiałaby przy nieudanym zapisie wydarzenie widoczne w Marshalu, a nieistniejące
+    /// nigdzie indziej — czyli dokładnie to, przed czym zapis dwustronny miał chronić.
+    /// </remarks>
+    public async Task<string> SaveEventAsync(
+        Guid sourceId, string? externalId, CalendarDraft draft, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+
+        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+
+        var identyfikator = string.IsNullOrWhiteSpace(externalId)
+            ? await pisarz.CreateAsync(zrodlo, draft, ct)
+            : externalId;
+
+        if (!string.IsNullOrWhiteSpace(externalId))
+        {
+            await pisarz.UpdateAsync(zrodlo, externalId, draft, ct);
+        }
+
+        await store.UpsertAsync(
+            zrodlo.Id,
+            [new FeedEvent(
+                identyfikator, draft.Title, draft.Start, draft.End,
+                IsAllDay: false, draft.Location, Cancelled: false)],
+            ct);
+
+        await store.SaveChangesAsync(ct);
+
+        return identyfikator;
+    }
+
+    /// <summary>Skasowanie wydarzenia u źródła i u nas. Tylko to wskazane wprost.</summary>
+    public async Task DeleteEventAsync(
+        Guid sourceId, string externalId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+
+        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+
+        await pisarz.DeleteAsync(zrodlo, externalId, ct);
+
+        // U nas nagrobek, nie usunięcie — tak samo jak wszędzie indziej w tym modelu.
+        var nasze = await store.EventsAsync(
+            DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
+
+        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
+            is { } wydarzenie)
+        {
+            await store.UpsertAsync(
+                sourceId,
+                [new FeedEvent(
+                    externalId, wydarzenie.Title, wydarzenie.StartsAt, wydarzenie.EndsAt,
+                    wydarzenie.IsAllDay, wydarzenie.Location, Cancelled: true)],
+                ct);
+
+            await store.SaveChangesAsync(ct);
+        }
+    }
+
+    private async Task<(CalendarSource Source, ICalendarWriter Writer)> DoZapisuAsync(
+        Guid sourceId, CancellationToken ct)
+    {
+        var zrodlo = (await store.SourcesAsync(ct)).FirstOrDefault(z => z.Id == sourceId)
+            ?? throw new InvalidOperationException(
+                "Tego kalendarza już nie ma na liście podłączonych.");
+
+        var pisarz = writers.FirstOrDefault(w => w.Kind == zrodlo.Kind)
+            ?? throw new InvalidOperationException(
+                $"Kalendarze rodzaju {zrodlo.Kind} są tylko do odczytu.");
+
+        return (zrodlo, pisarz);
+    }
+
     /// <summary>Strefa, w której rysowana jest siatka. Na ekran, nie do liczenia.</summary>
     /// <remarks>
     /// Widoczna, bo „wszystkie godziny o dwie za wcześnie" i „pobrało się nie to"
@@ -209,7 +291,9 @@ public sealed class CalendarSyncService(
                 wydarzenie.IsAllDay,
                 AgendaKind.Event,
                 barwy.GetValueOrDefault(wydarzenie.SourceId),
-                TaskId: null));
+                TaskId: null,
+                wydarzenie.SourceId,
+                wydarzenie.ExternalId));
         }
 
         foreach (var zadanie in await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct))

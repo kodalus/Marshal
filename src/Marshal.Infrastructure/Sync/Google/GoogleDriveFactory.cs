@@ -41,7 +41,16 @@ public static class GoogleDriveFactory
     /// <c>static readonly</c>, nie <c>const</c>: zakresy w bibliotece Google też są polami
     /// tylko do odczytu, a nie stałymi kompilacji. Ta sama pomyłka co przy zakresie Dysku.
     /// </remarks>
+    /// <remarks>
+    /// Dwa uprawnienia, nie jedno pełne: <c>calendar.events</c> pozwala czytać i zmieniać
+    /// wydarzenia, <c>calendar.readonly</c> — wypisać kalendarze konta (samych wydarzeń
+    /// to nie obejmuje). Pełne <c>calendar</c> dołożyłoby do tego prawo do zmiany ustawień
+    /// i udostępniania kalendarzy, czego ta aplikacja nie robi i nie ma powodu móc.
+    /// </remarks>
     public static readonly string CalendarScope = CalendarService.Scope.CalendarReadonly;
+
+    /// <summary>Zmiana wydarzeń. Bez tego Marshal tylko czyta.</summary>
+    public static readonly string CalendarWriteScope = CalendarService.Scope.CalendarEvents;
 
     /// <summary>
     /// Zgoda z kalendarzem i bez niego zapisywana jest **pod osobnym kluczem**.
@@ -54,7 +63,7 @@ public static class GoogleDriveFactory
     /// że chodzi o zgodę. Osobny klucz wymusza świeżą zgodę i nie unieważnia starej.
     /// </remarks>
     private static string UserKey(bool withCalendar) =>
-        withCalendar ? "marshal-kalendarz" : "marshal";
+        withCalendar ? "marshal-kalendarz-zapis" : "marshal";
 
     /// <summary>Zgoda użytkownika. Wspólna droga dla Dysku i kalendarza.</summary>
     public static Task<UserCredential> AuthorizeAsync(
@@ -64,7 +73,9 @@ public static class GoogleDriveFactory
         bool withCalendar,
         CancellationToken ct = default)
     {
-        string[] zakresy = withCalendar ? [Scope, CalendarScope] : [Scope];
+        string[] zakresy = withCalendar
+            ? [Scope, CalendarScope, CalendarWriteScope]
+            : [Scope];
 
         return GoogleWebAuthorizationBroker.AuthorizeAsync(
             new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },

@@ -17,7 +17,13 @@ public sealed record AgendaEntry(
     bool IsAllDay,
     AgendaKind Kind,
     string? Color,
-    Guid? TaskId)
+    Guid? TaskId,
+
+    /// <summary>Kalendarz, z którego wpis pochodzi. Puste przy zadaniach Marshala.</summary>
+    Guid? SourceId = null,
+
+    /// <summary>Identyfikator u źródła — bez niego nie da się tam nic zmienić.</summary>
+    string? ExternalId = null)
 {
     public double StartHour => Start.TimeOfDay.TotalHours;
 

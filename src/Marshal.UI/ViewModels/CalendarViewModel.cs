@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
 
 namespace Marshal.UI.ViewModels;
@@ -28,7 +30,9 @@ public sealed record SlotBox(
     string StartText,
     string EndText,
     Guid? TaskId,
-    string DayText)
+    string DayText,
+    Guid? SourceId,
+    string? ExternalId)
 {
     /// <summary>Odhaczyć da się zadanie, nie cudze wydarzenie z kalendarza.</summary>
     /// <remarks>
@@ -443,7 +447,130 @@ public sealed partial class CalendarViewModel(
         }
 
         Opened = blok;
+
+        OpenedTitle = blok.Title;
+        OpenedStart = Pora(blok.StartText);
+        OpenedEnd = Pora(blok.EndText);
+        OpenedProblem = null;
+
+        // Przycisków zapisu nie pokazujemy tam, gdzie zapis i tak nie ma dokąd pójść.
+        CanEditOpened = blok.SourceId is not null
+            && blok.ExternalId is not null
+            && calendar.CanWrite(CalendarKind.Google);
+
+        OnPropertyChanged(nameof(HasOpenedProblem));
     }
+
+    private static TimeSpan? Pora(string tekst) =>
+        TimeSpan.TryParse(tekst, CultureInfo.InvariantCulture, out var pora) ? pora : null;
+
+    [ObservableProperty]
+    public partial string OpenedTitle { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial TimeSpan? OpenedStart { get; set; }
+
+    [ObservableProperty]
+    public partial TimeSpan? OpenedEnd { get; set; }
+
+    [ObservableProperty]
+    public partial bool CanEditOpened { get; set; }
+
+    [ObservableProperty]
+    public partial string? OpenedProblem { get; set; }
+
+    public bool HasOpenedProblem => !string.IsNullOrEmpty(OpenedProblem);
+
+    /// <summary>
+    /// Zapis zmienionego wydarzenia do kalendarza, z którego pochodzi.
+    /// </summary>
+    /// <remarks>
+    /// Nieudany zapis **zostawia kartę otwartą**. Zamknięcie jej wyglądałoby identycznie
+    /// jak zapis udany, a przy pisaniu do cudzego kalendarza to jest różnica między
+    /// „zmienione" a „wydaje ci się, że zmienione".
+    /// </remarks>
+    [RelayCommand]
+    private async Task SaveOpenedAsync()
+    {
+        if (Opened is not { SourceId: { } zrodlo, ExternalId: { } identyfikator } blok)
+        {
+            return;
+        }
+
+        if (OpenedStart is not { } od || OpenedEnd is not { } doGodziny)
+        {
+            OpenedProblem = "Bez godzin nie ma czego zapisać.";
+            OnPropertyChanged(nameof(HasOpenedProblem));
+            return;
+        }
+
+        try
+        {
+            var dzien = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+            var strefa = clock.Now.Offset;
+
+            var start = new DateTimeOffset(dzien.ToDateTime(TimeOnly.FromTimeSpan(od)), strefa);
+            var koniec = doGodziny > od
+                ? new DateTimeOffset(dzien.ToDateTime(TimeOnly.FromTimeSpan(doGodziny)), strefa)
+                : start.AddMinutes(30);
+
+            await calendar.SaveEventAsync(
+                zrodlo, identyfikator, new CalendarDraft(OpenedTitle, start, koniec));
+
+            await log.RecordAsync("Kalendarz: zapis wydarzenia", OpenedTitle);
+
+            Opened = null;
+            await RefreshAsync();
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            OpenedProblem = e.Message;
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: zapis wydarzenia", OpenedTitle, ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    /// <summary>Skasowanie wydarzenia u źródła. Nie wraca, więc pyta o potwierdzenie.</summary>
+    [RelayCommand]
+    private async Task DeleteOpenedAsync()
+    {
+        if (Opened is not { SourceId: { } zrodlo, ExternalId: { } identyfikator })
+        {
+            return;
+        }
+
+        if (!ConfirmDelete)
+        {
+            OpenedProblem = "Skasowanego wydarzenia nie da się odzyskać. "
+                + "Zaznacz potwierdzenie, jeśli na pewno.";
+            OnPropertyChanged(nameof(HasOpenedProblem));
+            return;
+        }
+
+        try
+        {
+            await calendar.DeleteEventAsync(zrodlo, identyfikator);
+            await log.RecordAsync("Kalendarz: skasowanie wydarzenia", OpenedTitle);
+
+            Opened = null;
+            ConfirmDelete = false;
+            await RefreshAsync();
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            OpenedProblem = e.Message;
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: skasowanie wydarzenia", OpenedTitle, ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    /// <summary>Świadome potwierdzenie kasowania. Gaśnie razem z kartą.</summary>
+    [ObservableProperty]
+    public partial bool ConfirmDelete { get; set; }
 
     /// <summary>Otwarte wydarzenie. Puste, gdy karta jest zamknięta.</summary>
     [ObservableProperty]
@@ -454,7 +581,13 @@ public sealed partial class CalendarViewModel(
     partial void OnOpenedChanged(SlotBox? value) => OnPropertyChanged(nameof(HasOpened));
 
     [RelayCommand]
-    private void CloseOpened() => Opened = null;
+    private void CloseOpened()
+    {
+        Opened = null;
+        ConfirmDelete = false;
+        OpenedProblem = null;
+        OnPropertyChanged(nameof(HasOpenedProblem));
+    }
 
     /// <summary>
     /// Przesunięcie kreski bieżącej godziny. Woła je okno co minutę.
@@ -490,6 +623,8 @@ public sealed partial class CalendarViewModel(
             slot.Entry.Start.ToString("HH:mm"),
             slot.Entry.End.ToString("HH:mm"),
             slot.Entry.TaskId,
-            slot.Entry.Start.ToString("dd.MM.yyyy"));
+            slot.Entry.Start.ToString("dd.MM.yyyy"),
+            slot.Entry.SourceId,
+            slot.Entry.ExternalId);
     }
 }

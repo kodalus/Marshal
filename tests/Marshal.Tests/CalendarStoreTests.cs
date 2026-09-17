@@ -98,6 +98,48 @@ public sealed class CalendarStoreTests : IDisposable
             throw new NotSupportedException();
     }
 
+    /// <summary>Pisarz, który tylko zapamiętuje, co by wysłał.</summary>
+    private sealed class Pisarz : ICalendarWriter
+    {
+        public List<(string Co, string Tytul, string? Id)> Wyslane { get; } = [];
+
+        public bool Rzuca { get; set; }
+
+        public CalendarKind Kind => CalendarKind.Ical;
+
+        public Task<string> CreateAsync(
+            CalendarSource source, CalendarDraft draft, CancellationToken ct = default)
+        {
+            if (Rzuca)
+            {
+                throw new HttpRequestException("kalendarz nie odpowiada");
+            }
+
+            Wyslane.Add(("utworzenie", draft.Title, null));
+            return Task.FromResult("nowe-1");
+        }
+
+        public Task UpdateAsync(
+            CalendarSource source, string externalId, CalendarDraft draft,
+            CancellationToken ct = default)
+        {
+            if (Rzuca)
+            {
+                throw new HttpRequestException("kalendarz nie odpowiada");
+            }
+
+            Wyslane.Add(("zmiana", draft.Title, externalId));
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteAsync(
+            CalendarSource source, string externalId, CancellationToken ct = default)
+        {
+            Wyslane.Add(("skasowanie", string.Empty, externalId));
+            return Task.CompletedTask;
+        }
+    }
+
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
     private readonly Zegar _zegar = new();
@@ -106,6 +148,7 @@ public sealed class CalendarStoreTests : IDisposable
     private readonly Kanal _kanal = new(CalendarKind.Ical);
     private readonly CalendarSyncService _usluga;
     private readonly CalendarSource _zrodlo;
+    private readonly Pisarz _pisarz = new();
     private readonly TaskEditService _edycja;
 
     public CalendarStoreTests()
@@ -121,7 +164,7 @@ public sealed class CalendarStoreTests : IDisposable
         _sklad = new CalendarStore(_db);
 
         _usluga = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia());
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), [_pisarz]);
 
         _edycja = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar, new AreaRepository(_db));
@@ -350,6 +393,56 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Nowe_wydarzenie_idzie_najpierw_do_zrodla_potem_do_bazy()
+    {
+        var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
+
+        var id = await _usluga.SaveEventAsync(
+            _zrodlo.Id, externalId: null,
+            new CalendarDraft("Dentysta", start, start.AddHours(1)));
+
+        id.Should().Be("nowe-1");
+        _pisarz.Wyslane.Should().ContainSingle(w => w.Co == "utworzenie" && w.Tytul == "Dentysta");
+
+        var dni = await _usluga.AgendaAsync(new DateOnly(2026, 9, 17), 1);
+        dni[0].Timed.Should().ContainSingle(s => s.Entry.Title == "Dentysta");
+    }
+
+    [Fact]
+    public async Task Nieudany_zapis_u_zrodla_nie_zostawia_wydarzenia_u_nas()
+    {
+        // Kolejność jest tu treścią, nie szczegółem. Gdyby baza szła pierwsza,
+        // nieudany zapis zostawiłby wydarzenie widoczne w Marshalu, a nieistniejące
+        // w kalendarzu — czyli dokładnie to, przed czym zapis dwustronny ma chronić.
+        _pisarz.Rzuca = true;
+        var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
+
+        var zapis = async () => await _usluga.SaveEventAsync(
+            _zrodlo.Id, externalId: null,
+            new CalendarDraft("Nie zapisze się", start, start.AddHours(1)));
+
+        await zapis.Should().ThrowAsync<HttpRequestException>();
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 17), 1))[0]
+            .Timed.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Kalendarz_bez_pisarza_mowi_ze_jest_do_odczytu()
+    {
+        var bezPisarza = new CalendarSyncService(
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), []);
+
+        var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
+
+        var zapis = async () => await bezPisarza.SaveEventAsync(
+            _zrodlo.Id, null, new CalendarDraft("Cokolwiek", start, start.AddHours(1)));
+
+        (await zapis.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*tylko do odczytu*");
+    }
+
+    [Fact]
     public void Klikniete_wydarzenie_mowi_czym_jest_zamiast_milczec()
     {
         // Wydarzenia z cudzego kalendarza nie da się tu zmienić i to jest zamierzone.
@@ -359,7 +452,8 @@ public sealed class CalendarStoreTests : IDisposable
 
         var wydarzenie = new SlotBox(
             "Zebranie", 0, 48, 0, 200, IsTask: false, Color: null,
-            "10:00", "11:00", TaskId: null, "17.09.2026");
+            "10:00", "11:00", TaskId: null, "17.09.2026",
+            SourceId: null, ExternalId: null);
 
         model.OpenTaskCommand.Execute(wydarzenie);
 

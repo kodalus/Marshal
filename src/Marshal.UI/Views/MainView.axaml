@@ -713,17 +713,45 @@
       <Border x:DataType="vm:CalendarViewModel" MaxWidth="420" Margin="12" Padding="20"
               CornerRadius="10" Background="#FF1E1E1E" VerticalAlignment="Center">
         <StackPanel Spacing="8">
-          <TextBlock Text="{Binding Opened.Title}" FontSize="18" TextWrapping="Wrap" />
+
+          <TextBox Text="{Binding OpenedTitle}" FontSize="18"
+                   IsEnabled="{Binding CanEditOpened}" />
+
           <TextBlock Classes="hint" Text="{Binding Opened.DayText}" />
-          <TextBlock>
-            <Run Text="{Binding Opened.StartText}" />
-            <Run Text="–" />
-            <Run Text="{Binding Opened.EndText}" />
-          </TextBlock>
-          <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,8,0,0"
-                     Text="Wydarzenie z podłączonego kalendarza. Marshal go tylko czyta — zmiany rób tam, gdzie powstało." />
-          <Button Classes="nav" HorizontalAlignment="Right" Margin="0,8,0,0"
-                  Command="{Binding CloseOpenedCommand}" Content="Zamknij" />
+
+          <Grid ColumnDefinitions="*,Auto,*">
+            <TimePicker Grid.Column="0" SelectedTime="{Binding OpenedStart}"
+                        ClockIdentifier="24HourClock" IsEnabled="{Binding CanEditOpened}"
+                        HorizontalAlignment="Stretch" />
+            <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
+            <TimePicker Grid.Column="2" SelectedTime="{Binding OpenedEnd}"
+                        ClockIdentifier="24HourClock" IsEnabled="{Binding CanEditOpened}"
+                        HorizontalAlignment="Stretch" />
+          </Grid>
+
+          <TextBlock Classes="hint" TextWrapping="Wrap" Foreground="#D0553C"
+                     Text="{Binding OpenedProblem}" IsVisible="{Binding HasOpenedProblem}" />
+
+          <StackPanel IsVisible="{Binding CanEditOpened}">
+            <TextBlock Classes="hint" TextWrapping="Wrap"
+                       Text="Zapis idzie prosto do kalendarza Google. Zmieniamy tylko tytuł i godziny — uczestnicy, przypomnienia i opis zostają nietknięte." />
+            <CheckBox Margin="0,8,0,0" IsChecked="{Binding ConfirmDelete}"
+                      Content="Pozwól skasować to wydarzenie" />
+            <TextBlock Classes="hint" TextWrapping="Wrap"
+                       Text="Skasowanego wydarzenia nie da się odzyskać — ani w Marshalu, ani w Google." />
+          </StackPanel>
+
+          <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !CanEditOpened}"
+                     Text="Ten kanał jest tylko do odczytu — zmiany rób tam, gdzie wydarzenie powstało." />
+
+          <WrapPanel Margin="0,8,0,0" HorizontalAlignment="Right">
+            <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
+                    Command="{Binding SaveOpenedCommand}" Content="Zapisz w Google" />
+            <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
+                    Command="{Binding DeleteOpenedCommand}" Content="Skasuj" />
+            <Button Classes="nav" Command="{Binding CloseOpenedCommand}" Content="Zamknij" />
+          </WrapPanel>
+
         </StackPanel>
       </Border>
     </Panel>
@@ -1059,7 +1087,7 @@
                  Watermark="GOCSPX-…" />
 
         <CheckBox Margin="0,10,0,0" IsChecked="{Binding GoogleCalendar}"
-                  Content="Czytaj też mój kalendarz Google" />
+                  Content="Czytaj i zmieniaj mój kalendarz Google" />
         <!-- Osobno i domyślnie wyłączone, bo te dwa uprawnienia różnią się ceną:
              drive.file nie jest wrażliwe i pozwala opublikować aplikację bez
              weryfikacji, calendar.readonly jest wrażliwe i publikacji już nie pozwoli.

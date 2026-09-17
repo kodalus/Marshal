@@ -1,6 +1,7 @@
 using Google;
 using System.Net;
 using Google.Apis.Calendar.v3;
+using Google.Apis.Calendar.v3.Data;
 using Google.Apis.Services;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
@@ -32,7 +33,8 @@ namespace Marshal.Infrastructure.Calendar;
 /// <summary>Kalendarz z konta, do wyboru na ekranie.</summary>
 public sealed record GoogleCalendarInfo(string Id, string Name, string? Color);
 
-public sealed class GoogleCalendarGateway(ISettings settings, string databasePath) : ICalendarFeed
+public sealed class GoogleCalendarGateway(ISettings settings, string databasePath)
+    : ICalendarFeed, ICalendarWriter
 {
     private GoogleCalendarFeed? _kanal;
 
@@ -88,6 +90,78 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
             .ToArray();
     }
 
+    public async Task<string> CreateAsync(
+        CalendarSource source, CalendarDraft draft, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+
+        await PolaczAsync(ct);
+
+        var utworzone = await _usluga!.Events
+            .Insert(Zbuduj(draft), source.ExternalId)
+            .ExecuteAsync(ct);
+
+        return utworzone.Id
+            ?? throw new InvalidOperationException(
+                "Google przyjął wydarzenie, ale nie oddał jego identyfikatora. "
+                + "Odśwież kalendarz, żeby je zobaczyć.");
+    }
+
+    /// <summary>
+    /// Zmiana wydarzenia.
+    /// </summary>
+    /// <remarks>
+    /// <b>Patch, nie Update.</b> Update zastępuje całe wydarzenie tym, co wyślemy —
+    /// a my znamy tylko tytuł, godziny i miejsce. Uczestnicy, przypomnienia, opis,
+    /// załączniki i powtarzalność zostałyby wtedy wyczyszczone przez samo poprawienie
+    /// literówki w tytule. Patch dotyka wyłącznie pól, które podajemy.
+    /// </remarks>
+    public async Task UpdateAsync(
+        CalendarSource source, string externalId, CalendarDraft draft,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+
+        await PolaczAsync(ct);
+
+        await _usluga!.Events
+            .Patch(Zbuduj(draft), source.ExternalId, Podstawowe(externalId))
+            .ExecuteAsync(ct);
+    }
+
+    public async Task DeleteAsync(
+        CalendarSource source, string externalId, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+
+        await PolaczAsync(ct);
+
+        await _usluga!.Events.Delete(source.ExternalId, Podstawowe(externalId)).ExecuteAsync(ct);
+    }
+
+    /// <summary>
+    /// Identyfikator wydarzenia zrozumiały dla Google.
+    /// </summary>
+    /// <remarks>
+    /// Wystąpienia serii przychodzą z API jako <c>identyfikator_20260917T140000Z</c>.
+    /// Zmiana takiego wystąpienia jest zmianą jego samego, nie całej serii — i tak ma
+    /// zostać. Ale nasz własny klucz z kanału iCal ma po kresce datę wystąpienia,
+    /// a tego Google nie zna; tu przychodzą wyłącznie identyfikatory Google, więc
+    /// oddajemy je bez zmian i pilnujemy tylko, żeby nie przemycić naszej kreski.
+    /// </remarks>
+    private static string Podstawowe(string externalId) =>
+        externalId.Split('|', 2)[0];
+
+    private static Event Zbuduj(CalendarDraft draft) => new()
+    {
+        Summary = draft.Title,
+        Location = draft.Location,
+        Start = new EventDateTime { DateTimeDateTimeOffset = draft.Start },
+        End = new EventDateTime { DateTimeDateTimeOffset = draft.End },
+    };
+
     private async Task<GoogleCalendarFeed> PolaczAsync(CancellationToken ct)
     {
         if (_kanal is not null)
@@ -105,7 +179,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         if (!settings.GoogleCalendarEnabled)
         {
             throw new InvalidOperationException(
-                "zgoda obejmuje tylko Dysk. Zaznacz „Czytaj też mój kalendarz Google” "
+                "zgoda obejmuje tylko Dysk. Zaznacz „Czytaj i zmieniaj mój kalendarz Google” "
                 + "i kliknij „Zapisz i zsynchronizuj”, żeby poprosić o dostęp do kalendarza.");
         }
 

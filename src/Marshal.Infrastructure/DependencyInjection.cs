@@ -116,6 +116,11 @@ public static class DependencyInjection
         services.AddSingleton<ICalendarFeed>(
             sp => sp.GetRequiredService<GoogleCalendarGateway>());
 
+        // Ten sam obiekt także jako pisarz: zapis potrzebuje tego samego zalogowania
+        // i tej samej usługi, co odczyt. Osobna instancja logowałaby się drugi raz.
+        services.AddSingleton<ICalendarWriter>(
+            sp => sp.GetRequiredService<GoogleCalendarGateway>());
+
         services.AddSingleton<IReviewQueries, ReviewQueries>();
         services.AddSingleton<IReviewSessionRepository, ReviewSessionRepository>();
         services.AddSingleton<ReviewService>();
