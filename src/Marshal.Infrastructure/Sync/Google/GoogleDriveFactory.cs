@@ -34,8 +34,14 @@ public static class GoogleDriveFactory
     /// </remarks>
     private static readonly string Scope = DriveService.Scope.DriveFile;
 
-    /// <summary>Odczyt kalendarza. **Uprawnienie wrażliwe** — zob. ISettings.GoogleCalendarEnabled.</summary>
-    public const string CalendarScope = CalendarService.Scope.CalendarReadonly;
+    /// <summary>
+    /// Odczyt kalendarza. **Uprawnienie wrażliwe** — zob. ISettings.GoogleCalendarEnabled.
+    /// </summary>
+    /// <remarks>
+    /// <c>static readonly</c>, nie <c>const</c>: zakresy w bibliotece Google też są polami
+    /// tylko do odczytu, a nie stałymi kompilacji. Ta sama pomyłka co przy zakresie Dysku.
+    /// </remarks>
+    public static readonly string CalendarScope = CalendarService.Scope.CalendarReadonly;
 
     /// <summary>
     /// Zgoda z kalendarzem i bez niego zapisywana jest **pod osobnym kluczem**.
