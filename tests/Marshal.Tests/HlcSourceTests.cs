@@ -50,8 +50,27 @@ public class HlcSourceTests
     [Fact]
     public void Wznowienie_z_cudzego_urzadzenia_jest_odrzucane()
     {
-        var utworz = () => new HlcSource(new ZegarStojacy(), "biurko", new Hlc(1, 0, "telefon"));
+        // Sprawdzenie przeniesione z konstruktora do pierwszego użycia: zegar powstaje
+        // przy składaniu zależności, a tożsamość i wznowienie leżą w bazie, której
+        // wtedy jeszcze nie ma. Odrzucenie nadal obowiązuje, tylko później.
+        var zrodlo = new HlcSource(new ZegarStojacy(), "biurko", new Hlc(1, 0, "telefon"));
 
-        utworz.Should().Throw<ArgumentException>();
+        var uzycie = () => zrodlo.Next();
+        uzycie.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Utworzenie_zegara_nie_siega_po_tozsamosc()
+    {
+        // Warunek, żeby kolejność składania zależności i kolejność przygotowania bazy
+        // nie musiały się o siebie opierać — zob. StartupTests.
+        var siegnieto = false;
+
+        _ = new HlcSource(
+            new ZegarStojacy(),
+            () => { siegnieto = true; return "biurko"; },
+            () => { siegnieto = true; return null; });
+
+        siegnieto.Should().BeFalse();
     }
 }

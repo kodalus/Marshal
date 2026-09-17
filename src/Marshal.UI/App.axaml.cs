@@ -20,45 +20,78 @@ public partial class App : Avalonia.Application
     public override void OnFrameworkInitializationCompleted()
     {
         var services = AppServices.Build();
-        var viewModel = services.GetRequiredService<MainViewModel>();
 
-        // Motyw przestawia aplikacja, bo dotyczy całego okna, a nie ekranu ustawień.
-        // Zastosowany od razu, żeby ciemny wybrany wczoraj nie mignął jasnym dziś.
-        viewModel.Settings.ThemeChanged += (_, wybor) => RequestedThemeVariant = Variant(wybor);
+        // Okno powstaje **puste**, a model widoku dochodzi dopiero po przygotowaniu
+        // bazy. Rozwiązanie modelu wciąga cały graf zależności, a ten sięga po
+        // tożsamość urządzenia i zapisany znacznik zegara — czyli po tabele, których
+        // przed migracją nie ma. Wcześniej działo się to przed PrepareAsync i kończyło
+        // wyjątkiem z konstruktora okna: białe tło i natychmiastowe zamknięcie,
+        // na obu platformach, przy każdym uruchomieniu.
+        var desktop = ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
+        var singleView = ApplicationLifetime as ISingleViewApplicationLifetime;
 
-        switch (ApplicationLifetime)
+        var okno = desktop is null ? null : new MainWindow();
+        var widok = singleView is null ? null : new MainView();
+
+        if (desktop is not null)
         {
-            case IClassicDesktopStyleApplicationLifetime desktop:
-                desktop.MainWindow = new MainWindow { DataContext = viewModel };
-                break;
+            desktop.MainWindow = okno;
+        }
 
-            case ISingleViewApplicationLifetime singleView:
-                singleView.MainView = new MainView { DataContext = viewModel };
-                break;
+        if (singleView is not null)
+        {
+            singleView.MainView = widok;
         }
 
         base.OnFrameworkInitializationCompleted();
 
-        // Migracje, obszary początkowe i pierwsze wczytanie skrzynki dzieją się po
-        // pokazaniu okna. Inaczej pierwsze uruchomienie wyglądałoby jak zawieszenie:
-        // zakładanie bazy to ułamek sekundy, ale na słabszym telefonie widoczny.
         Dispatcher.UIThread.Post(async void () =>
         {
             try
             {
                 await AppServices.ReadyAsync();
 
-                // Dopiero po migracji: zapisany motyw leży w bazie, a tej przed
-                // PrepareAsync jeszcze nie ma.
+                var viewModel = services.GetRequiredService<MainViewModel>();
+
+                // Motyw przestawia aplikacja, bo dotyczy całego okna, a nie ekranu
+                // ustawień. Zapisany motyw leży w bazie, więc dopiero teraz.
+                viewModel.Settings.ThemeChanged += (_, wybor) =>
+                    RequestedThemeVariant = Variant(wybor);
+
                 RequestedThemeVariant = Variant(
                     services.GetRequiredService<ISettings>().Theme);
+
+                if (okno is not null)
+                {
+                    okno.DataContext = viewModel;
+                }
+
+                if (widok is not null)
+                {
+                    widok.DataContext = viewModel;
+                }
 
                 await viewModel.InitializeAsync();
             }
             catch (Exception ex)
             {
+                // **Nie rzucamy dalej.** Wyjątek z async void zabija proces, a jedynym
+                // objawem jest zniknięcie okna — bez śladu, do którego da się dojść
+                // bez kabla. Awaria startu ma być widoczna na ekranie, bo tylko wtedy
+                // da się ją zgłosić.
                 System.Diagnostics.Debug.WriteLine(ex);
-                throw;
+
+                var awaria = StartupFailure.Build(ex);
+
+                if (okno is not null)
+                {
+                    okno.Content = awaria;
+                }
+
+                if (widok is not null)
+                {
+                    widok.Content = awaria;
+                }
             }
         });
     }

@@ -59,14 +59,19 @@ public static class DependencyInjection
             ? new DeviceIdentity(sp.GetRequiredService<MarshalDbContext>())
             : new FixedDeviceIdentity(deviceId));
 
-        // Zegar wznawiany z bazy. Rozstrzygnięcie leniwe, bo identyfikator urządzenia
-        // i zapisany znacznik leżą w bazie, a ta jest gotowa dopiero po PrepareAsync.
+        // Zegar wznawiany z bazy — ale dopiero przy pierwszym użyciu. Fabryka jest
+        // wołana przy rozwiązywaniu usługi, czyli przy składaniu okna, a baza jest
+        // gotowa dopiero po PrepareAsync. Odczyt tutaj znaczył wyjątek z konstruktora
+        // okna: białe tło i natychmiastowe zamknięcie, na obu platformach.
         services.AddSingleton<IHlcSource>(sp =>
         {
             var db = sp.GetRequiredService<MarshalDbContext>();
-            var id = sp.GetRequiredService<IDeviceIdentity>().Id;
+            var tozsamosc = sp.GetRequiredService<IDeviceIdentity>();
 
-            return new HlcSource(sp.GetRequiredService<IClock>(), id, LastHlcStore.Read(db, id));
+            return new HlcSource(
+                sp.GetRequiredService<IClock>(),
+                () => tozsamosc.Id,
+                () => LastHlcStore.Read(db, tozsamosc.Id));
         });
 
         services.AddSingleton<ITaskRepository, TaskRepository>();
