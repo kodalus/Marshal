@@ -6,6 +6,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>Marshal</AssemblyName>
     <RootNamespace>Marshal.Desktop</RootNamespace>
+
+    <!-- Ikona pliku wykonywalnego. Osobno od ikony okna: pierwszą pokazuje pulpit
+         i pasek zadań, zanim aplikacja w ogóle wstanie, drugą rysuje sama aplikacja. -->
+    <ApplicationIcon>marshal.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />

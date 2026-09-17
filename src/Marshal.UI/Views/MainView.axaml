@@ -13,7 +13,64 @@
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
+  <!--
+    Barwy w jednym miejscu, osobno dla obu motywów.
+    Do dziś karta szczegółu miała wpisane na sztywno #FF1E1E1E, a przyciemnienie tła
+    #CC101010 — czyli w motywie jasnym, który aplikacja umie ustawić, okno szczegółu
+    było czarnym prostokątem. Reszta pliku używa szarości z przezroczystością
+    (#20808080), bo ta wygląda znośnie w obu; ale powierzchnia karty musi być
+    nieprzezroczysta, więc nie da się jej tak zapisać i musi mieć dwie wersje.
+  -->
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Karta" Color="#FFFFFFFF" />
+          <SolidColorBrush x:Key="Krawedz" Color="#22000000" />
+          <SolidColorBrush x:Key="Pole" Color="#0A000000" />
+          <SolidColorBrush x:Key="Zaslona" Color="#66000000" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Karta" Color="#FF23272E" />
+          <SolidColorBrush x:Key="Krawedz" Color="#26FFFFFF" />
+          <SolidColorBrush x:Key="Pole" Color="#12FFFFFF" />
+          <SolidColorBrush x:Key="Zaslona" Color="#99000000" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+
+      <!-- Bursztyn z ikony aplikacji. Jedna barwa wyróżnienia na całe okno: dwie
+           znaczą, że żadna nie znaczy nic. Ta sama w obu motywach, bo jest czytelna
+           i na jasnym, i na ciemnym. -->
+      <SolidColorBrush x:Key="Akcent" Color="#D89B3C" />
+    </ResourceDictionary>
+  </UserControl.Resources>
+
   <UserControl.Styles>
+    <!--
+      Pola do wpisywania: wypełnienie zamiast ramki.
+      Okno szczegółu miało czternaście kontrolek, każdą w pełnej ramce, jedna pod
+      drugą — i to jest ten „ściana prostokątów", od którego oko nie ma się gdzie
+      zaczepić. Delikatne wypełnienie z włosową krawędzią pokazuje, gdzie się pisze,
+      nie rysując przy tym czternastu równorzędnych pudełek.
+    -->
+    <Style Selector="TextBox, ComboBox, NumericUpDown, DatePicker, TimePicker, CalendarDatePicker">
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
+      <Setter Property="Background" Value="{DynamicResource Pole}" />
+    </Style>
+
+    <!-- Pole daty ma własną szerokość najmniejszą, liczoną na trzy panele. W wierszu
+         przypomnienia stało obok pola godziny i wypychało je poza krawędź karty —
+         widać to było jako „hourminute" wciśnięte w sam róg. -->
+    <Style Selector="DatePicker.waska">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="DatePicker.waska /template/ Button#PART_FlyoutButton">
+      <Setter Property="MinWidth" Value="0" />
+    </Style>
+
     <Style Selector="Button.nav">
       <Setter Property="Margin" Value="0,0,8,0" />
       <Setter Property="Padding" Value="14,8" />
@@ -32,10 +89,26 @@
       <Setter Property="MinWidth" Value="0" />
     </Style>
 
+    <!-- Pasek ikon: równe kwadraty, nie prostokąty wielkości znaku. Pięć przycisków
+         o pięciu różnych szerokościach czytało się jak pięć różnych rzeczy. -->
     <Style Selector="ToggleButton.ikona">
-      <Setter Property="Margin" Value="0,0,6,0" />
-      <Setter Property="Padding" Value="10,6" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Width" Value="38" />
+      <Setter Property="Height" Value="38" />
+      <Setter Property="CornerRadius" Value="8" />
       <Setter Property="FontSize" Value="16" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource Pole}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
+    </Style>
+    <!-- Włączone poznaje się po obwódce w barwie wyróżnienia, nie po zamalowaniu:
+         zamalowane tło zjada czytelność znaku, który na nim stoi. -->
+    <Style Selector="ToggleButton.ikona:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+      <Setter Property="BorderThickness" Value="1.5" />
     </Style>
 
     <Style Selector="TextBlock.godzina">
@@ -1648,12 +1721,13 @@
         </Border>
       </Canvas>
 
-      <Panel IsVisible="{Binding Detail.IsOpen}" Background="#CC101010"
+      <Panel IsVisible="{Binding Detail.IsOpen}" Background="{DynamicResource Zaslona}"
              PointerPressed="TloSzczegolu">
       <!-- Kliknięcie w przyciemnione tło zamyka okno, kliknięcie w samo okno nie:
            zdarzenie zatrzymuje się na ramce, więc do tła nie dociera. -->
-      <Border MaxWidth="560" MaxHeight="620" Margin="8" Padding="20" CornerRadius="10"
-              Background="#FF1E1E1E" VerticalAlignment="Center"
+      <Border MaxWidth="560" MaxHeight="620" Margin="8" Padding="24" CornerRadius="14"
+              Background="{DynamicResource Karta}" VerticalAlignment="Center"
+              BorderThickness="1" BorderBrush="{DynamicResource Krawedz}"
               PointerPressed="ZatrzymajKlikniecie">
       <ScrollViewer Name="SzczegolPrzewijanie" DataContext="{Binding Detail}">
         <StackPanel x:DataType="vm:TaskDetailViewModel">
@@ -1663,7 +1737,10 @@
                  dotyczy tej jednej rzeczy, której nazwa stoi obok, a nie okna. -->
             <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
                       IsVisible="{Binding IsExisting}" Click="OdhaczZadanie" />
+            <!-- Znak wodny, bo puste pole bez podpisu jest samym prostokątem:
+                 nie widać po nim, że to jest miejsce na nazwę zadania. -->
             <TextBox Grid.Column="1" Text="{Binding Title}" FontSize="18"
+                     Watermark="Co jest do zrobienia?"
                      KeyDown="NazwaKlawisz" />
           </Grid>
 
@@ -1735,7 +1812,7 @@
           <StackPanel IsVisible="{Binding ShowReminder}">
           <TextBlock Classes="label" Text="Przypomnienie — kiedy chcesz o tym usłyszeć" />
           <Grid ColumnDefinitions="*,Auto">
-            <DatePicker Grid.Column="0" SelectedDate="{Binding ReminderDay}"
+            <DatePicker Classes="waska" Grid.Column="0" SelectedDate="{Binding ReminderDay}"
                         HorizontalAlignment="Stretch" />
             <TimePicker Classes="waska" Grid.Column="1" Margin="6,0,0,0" SelectedTime="{Binding ReminderTime}"
                         ClockIdentifier="24HourClock" />
