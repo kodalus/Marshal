@@ -191,15 +191,26 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<ProjectTreeRow> ProjectRows { get; } = [];
 
     /// <summary>
-    /// Wyjaśnienie odmowy na ekranie „Projekty" — na przykład czemu projekt nie chce się usunąć.
+    /// Wyjaśnienie odmowy — jeden pasek na całe okno.
     /// </summary>
     /// <remarks>
-    /// Napis na ekranie, nie okienko: odmowa jest tu odpowiedzią na kliknięcie, które
-    /// nie przyniosło skutku, a okienko wymaga jeszcze jednego kliknięcia, żeby wrócić
-    /// do tego samego miejsca.
+    /// <para>
+    /// Napis na ekranie, nie okienko: odmowa jest odpowiedzią na kliknięcie, które nie
+    /// przyniosło skutku, a okienko każe kliknąć jeszcze raz, żeby wrócić tam, gdzie
+    /// się było.
+    /// </para>
+    /// <para>
+    /// Jeden pasek, nie po jednym na ekran. Odmowy zdarzały się w miejscach, w których
+    /// nie było ich gdzie pokazać — „pięć slotów zajętych" miało swoją ramkę wyłącznie
+    /// na „Dzisiaj", więc wzięcie na dziś z „Kiedyś" po prostu nic nie robiło i nie
+    /// mówiło dlaczego.
+    /// </para>
     /// </remarks>
     [ObservableProperty]
-    public partial string ProjectsNotice { get; set; } = string.Empty;
+    public partial string Notice { get; set; } = string.Empty;
+
+    [RelayCommand]
+    private void DismissNotice() => Notice = string.Empty;
 
     /// <summary>„Dzisiaj" jest ekranem startowym — to on odpowiada na pytanie „co teraz".</summary>
     [ObservableProperty]
@@ -787,7 +798,43 @@ public sealed partial class MainViewModel : ObservableObject
         var wynik = await _focus.TryFocusAsync(task.Id);
 
         PendingFocus = wynik.Accepted ? null : task;
+
+        // Odmowa musi być słychać z każdego ekranu. Ramka z pytaniem „co schodzi"
+        // stoi tylko na „Dzisiaj", więc wzięcie na dziś z „Kiedyś" przy pełnej piątce
+        // nie robiło nic i nie mówiło dlaczego.
+        Notice = wynik.Accepted
+            ? string.Empty
+            : $"Pięć zadań na dziś już jest. Zdejmij coś na ekranie „Dzisiaj”, "
+                + $"żeby zmieścić „{task.Title}”.";
+
+        // Przeliczenie **całego** ekranu, nie samej piątki. Bez tego lista, z której
+        // zadanie właśnie wzięto, pokazywała je dalej w starym miejscu — wyglądało to
+        // tak, jakby kliknięcie nic nie zrobiło.
+        await ReloadAsync();
         await RefreshFocusAsync();
+    }
+
+    /// <summary>Oszacowanie i siła z menu podręcznego — bez otwierania szczegółu.</summary>
+    /// <remarks>
+    /// Bez tych dwóch pól zadanie nigdy nie pojawi się w „Teraz": ten ekran pyta
+    /// „ile mam czasu i sił", więc zadanie, które na to nie odpowiada, nie ma jak
+    /// zostać wybrane. Do dziś dawało się je wpisać wyłącznie przy przetwarzaniu
+    /// skrzynki albo w szczegółach, czyli nie tam, gdzie się o nich myśli.
+    /// </remarks>
+    public async Task SetEstimateAsync(TaskItem task, int? minutes)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        await _edit.SetEstimateAsync(task.Id, minutes, task.Energy);
+        await ReloadAsync();
+    }
+
+    public async Task SetEnergyAsync(TaskItem task, Energy energy)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        await _edit.SetEstimateAsync(task.Id, task.EstimatedMinutes, energy);
+        await ReloadAsync();
     }
 
     /// <summary>Przełożenie o dobę. Godzina zostaje — przesunięcie dnia jej nie dotyczy.</summary>
@@ -874,7 +921,7 @@ public sealed partial class MainViewModel : ObservableObject
             await _projectEdit.SetProjectColorAsync(row.Id, color);
         }
 
-        ProjectsNotice = string.Empty;
+        Notice = string.Empty;
         await ShowProjectsAsync();
     }
 
@@ -888,11 +935,11 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (row.IsArea)
         {
-            ProjectsNotice = "Obszaru nie usuwa się stąd — można go wyłączyć na ekranie „Obszary”.";
+            Notice = "Obszaru nie usuwa się stąd — można go wyłączyć na ekranie „Obszary”.";
             return;
         }
 
-        ProjectsNotice = await _projectEdit.DeleteProjectAsync(row.Id) ?? string.Empty;
+        Notice = await _projectEdit.DeleteProjectAsync(row.Id) ?? string.Empty;
         await ShowProjectsAsync();
     }
 

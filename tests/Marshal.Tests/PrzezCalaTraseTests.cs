@@ -109,6 +109,61 @@ public sealed class PrzezCalaTraseTests : IDisposable
             .Which.StartText.Should().Be("16:00");
     }
 
+    /// <summary>
+    /// Cała droga z „Kiedyś" do „Teraz": wzięcie na dziś i dopisanie oszacowania.
+    /// </summary>
+    /// <remarks>
+    /// Trasa rwała się w dwóch miejscach naraz, a każde z osobna miało przechodzący
+    /// test. Wzięcie na dziś przeliczało samą piątkę, więc lista „Kiedyś" pokazywała
+    /// zadanie dalej w starym miejscu — wyglądało to jak kliknięcie bez skutku.
+    /// A „Teraz" pomija zadania bez oszacowania, więc nawet wzięte na dziś nie miało
+    /// jak się tam pojawić, bo oszacowanie dawało się wpisać wyłącznie w szczegółach.
+    /// </remarks>
+    [Fact]
+    public async Task Zadanie_z_kiedys_da_sie_wziac_na_dzis_i_zobaczyc_w_teraz()
+    {
+        var main = Usluga<MainViewModel>();
+        var obszar = (await Usluga<IAreaRepository>().ActiveAsync())[0];
+
+        var zadania = Usluga<ITaskRepository>();
+        var hlc = Usluga<IHlcSource>();
+        var zegar = Usluga<IClock>();
+
+        var zadanie = TaskItem.Capture("Nauczyć się szyć", zegar.Now, hlc.Next());
+        zadanie.Postpone(obszar.Id, zegar.Today.AddDays(90), hlc.Next());
+        zadania.Add(zadanie);
+        await Usluga<IUnitOfWork>().SaveChangesAsync();
+
+        await main.ShowSomedayCommand.ExecuteAsync(null);
+        main.SomedayItems.Should().ContainSingle(t => t.Id == zadanie.Id);
+
+        await main.FocusTaskAsync(zadanie);
+
+        main.Notice.Should().BeEmpty("piątka jest pusta, więc nie ma czego odmawiać");
+        main.SomedayItems.Should().NotContain(
+            t => t.Id == zadanie.Id, "wzięte na dziś przestaje być „kiedyś”");
+        main.FocusItems.Should().ContainSingle(t => t.Id == zadanie.Id);
+
+        // Bez oszacowania „Teraz" go nie zobaczy — i to jest poprawne, bo ten ekran
+        // pyta „ile mam czasu". Dopisanie idzie tą samą drogą co z menu podręcznego.
+        var teraz = main.Now;
+        await teraz.LoadAsync();
+        teraz.Picks.Should().NotContain(w => w.Task.Id == zadanie.Id);
+
+        await main.SetEstimateAsync(zadanie, 15);
+
+        // Odczyt z bazy między zmianami: obie idą przez to samo wywołanie usługi,
+        // które ustawia oszacowanie i siłę naraz, więc druga musi widzieć pierwszą.
+        var swieze = await zadania.FindAsync(zadanie.Id);
+        await main.SetEnergyAsync(swieze!, Energy.Low);
+
+        (await zadania.FindAsync(zadanie.Id))!.EstimatedMinutes.Should().Be(
+            15, "dopisanie siły nie ma kasować oszacowania");
+
+        await teraz.LoadAsync();
+        teraz.Picks.Should().Contain(w => w.Task.Id == zadanie.Id);
+    }
+
     [Fact]
     public async Task Data_nadana_wrzutowi_nie_ginie_po_drodze()
     {
@@ -200,7 +255,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         await przetwarzanie.MakeNextCommand.ExecuteAsync(null);
 
-        var teraz = Usluga<NowViewModel>();
+        var teraz = main.Now;
         await teraz.LoadAsync();
 
         teraz.SelectedMinutes = MinutesChoice.All.First(m => m.Minutes >= 15);

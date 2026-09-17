@@ -136,6 +136,19 @@
   <Grid>
   <DockPanel Margin="12">
 
+    <!-- Odmowa, która nie miała gdzie się pokazać. Jeden pasek na całe okno, bo
+         kliknięcie bez skutku zdarza się na każdym ekranie, a ramka z wyjaśnieniem
+         stała tylko na jednym. -->
+    <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,10" CornerRadius="8"
+            Background="#2E8C6A40"
+            IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="rozumiem" Padding="10,4" Margin="10,0,0,0"
+                VerticalAlignment="Top" Command="{Binding DismissNoticeCommand}" />
+        <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      </DockPanel>
+    </Border>
+
     <!-- Przypomnienia, które odezwały się przy starcie. Nad wszystkim, bo po to były
          ustawione; z przyciskiem odprawienia, bo mają zniknąć po przeczytaniu, a nie
          zostać jako kolejna lista do obsłużenia. -->
@@ -1320,9 +1333,6 @@
     <DockPanel IsVisible="{Binding IsProjects}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" TextWrapping="Wrap"
                  Text="Kwadracik po lewej ustawia barwę. Barwa obszaru schodzi na jego projekty i zadania, projekt może ją nadpisać. Prawy przycisk usuwa pusty projekt." />
-      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" TextWrapping="Wrap"
-                 Text="{Binding ProjectsNotice}"
-                 IsVisible="{Binding ProjectsNotice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
       <ListBox ItemsSource="{Binding ProjectRows}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ProjectTreeRow">

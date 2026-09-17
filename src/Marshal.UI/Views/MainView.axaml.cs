@@ -472,6 +472,20 @@ public partial class MainView : UserControl
                 Galaz("Waga", [.. PriorityChoice.All.Select(w =>
                     Pozycja(w.Label, () => model.SetPriorityAsync(zadanie, w.Value)))]),
 
+                // Oszacowanie i siła są tu, bo bez nich zadanie nigdy nie wypłynie
+                // w „Teraz”: ten ekran pyta „ile mam czasu i sił”, a zadanie, które
+                // na to nie odpowiada, nie ma jak zostać wybrane. Do dziś dawało się
+                // je wpisać tylko przy przetwarzaniu skrzynki albo w szczegółach.
+                Galaz("Ile zajmie", [.. EstimateChoice.All.Select(m =>
+                    Pozycja(
+                        // „Bez znaczenia" jest odpowiedzią filtra, nie zadania: tu ta
+                        // sama wartość znaczy, że oszacowania **nie ma**.
+                        m.Value is null ? "bez oszacowania" : m.Label,
+                        () => model.SetEstimateAsync(zadanie, m.Value)))]),
+
+                Galaz("Ile sił", [.. EnergyChoice.All.Select(e =>
+                    Pozycja(e.Label, () => model.SetEnergyAsync(zadanie, e.Value)))]),
+
                 Galaz("Rytm", [.. RepeatChoice.All.Select(r =>
                     Pozycja(r.Label, () => model.SetRecurrenceAsync(zadanie, r.Kind)))]),
 
