@@ -11,6 +11,7 @@ using Marshal.Infrastructure.Notifications;
 using Marshal.Infrastructure.Repositories;
 using Marshal.Infrastructure.Review;
 using Marshal.Infrastructure.Sync;
+using Marshal.Infrastructure.Sync.Google;
 using Marshal.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -119,6 +120,16 @@ public static class DependencyInjection
         services.AddSingleton<AttachmentService>();
         services.AddSingleton<FilterService>();
         services.AddSingleton<BackupService>();
+
+        // Synchronizacja z Dyskiem. Składnica powstaje dopiero przy logowaniu, więc
+        // sama usługa niczego nie wymaga przy składaniu zależności — poświadczenia
+        // mogą jeszcze nie istnieć i to jest stan normalny, nie awaria.
+        services.AddSingleton(sp => new GoogleSyncService(
+            sp.GetRequiredService<MarshalDbContext>(),
+            sp.GetRequiredService<ISettings>(),
+            sp.GetRequiredService<IHlcSource>(),
+            sp.GetRequiredService<IDeviceIdentity>(),
+            databasePath));
         services.AddSingleton<InboxService>();
         services.AddSingleton<TagService>();
 

@@ -17,6 +17,10 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     public const string ThemeKey = "theme";
 
+    public const string GoogleClientIdKey = "google-client-id";
+
+    public const string GoogleClientSecretKey = "google-client-secret";
+
     /// <summary>
     /// Strefa domyślna, gdy nic nie zapisano (spec 3.4). Wpisana wprost, nie brana
     /// z systemu — żeby świeżo zainstalowana aplikacja liczyła dni tak samo na
@@ -29,6 +33,10 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     private TimeZoneInfo? _zone;
 
     private ThemeChoice? _theme;
+
+    private string? _googleId;
+
+    private string? _googleSecret;
 
     public TimeZoneInfo Zone
     {
@@ -51,6 +59,34 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
                     ? wybor
                     : ThemeChoice.System;
             }
+        }
+    }
+
+    public string? GoogleClientId
+    {
+        get { lock (_gate) { return _googleId ??= Read(GoogleClientIdKey) ?? string.Empty; } }
+    }
+
+    public string? GoogleClientSecret
+    {
+        get { lock (_gate) { return _googleSecret ??= Read(GoogleClientSecretKey) ?? string.Empty; } }
+    }
+
+    public void SetGoogle(string? clientId, string? clientSecret)
+    {
+        lock (_gate)
+        {
+            // Przycinane, bo kopiowanie z konsoli Google wciąga spację albo koniec
+            // wiersza, a wtedy logowanie odbija się komunikatem o złym kliencie —
+            // i nie ma po nim jak poznać, że chodziło o jeden znak.
+            var id = clientId?.Trim() ?? string.Empty;
+            var tajemnica = clientSecret?.Trim() ?? string.Empty;
+
+            Write(GoogleClientIdKey, id);
+            Write(GoogleClientSecretKey, tajemnica);
+
+            _googleId = id;
+            _googleSecret = tajemnica;
         }
     }
 

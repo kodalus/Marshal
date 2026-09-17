@@ -913,9 +913,32 @@
 
         <TextBlock Margin="0,18,0,0" TextWrapping="Wrap" Text="{Binding Status}" />
 
-        <TextBlock Classes="label" Margin="0,18,0,0" Text="Konto Google" />
+        <TextBlock Classes="label" Margin="0,18,0,0" Text="Konto Google — synchronizacja" />
         <TextBlock Classes="hint" TextWrapping="Wrap"
-                   Text="Jeszcze nie podpięte — poświadczenia zakłada się w konsoli Google, zob. docs/google-dysk.md. Do tego czasu synchronizacja i kalendarz Google są nieczynne, a iCal i kopia zapasowa działają bez żadnego konta." />
+                   Text="Poświadczenia zakłada się raz w konsoli Google; instrukcja jest w docs/google-dysk.md. Kanały iCal i kopia zapasowa działają bez tego." />
+
+        <TextBlock Classes="label" Margin="0,10,0,0" Text="Identyfikator klienta" />
+        <TextBox Text="{Binding GoogleClientId}"
+                 Watermark="…apps.googleusercontent.com" />
+
+        <TextBlock Classes="label" Margin="0,6,0,0" Text="Tajemnica klienta" />
+        <TextBox Text="{Binding GoogleClientSecret}" PasswordChar="•"
+                 Watermark="GOCSPX-…" />
+
+        <Button Classes="nav" Margin="0,10,0,0" Padding="14,10"
+                Command="{Binding SyncCommand}" IsEnabled="{Binding !IsSyncing}"
+                Content="Zapisz i zsynchronizuj" />
+
+        <!-- Ręcznie, nie w tle. Pierwsze przebiegi na żywym koncie mają mieć widoczny
+             wynik: synchronizacja uruchamiana po cichu przy starcie znaczy, że pierwszy
+             błąd zobaczysz jako brakujące zadania, a nie jako komunikat. -->
+        <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                   Text="Przy pierwszym razie otworzy się przeglądarka i poprosi o zgodę. Potem już nie — żeton zostaje na tym urządzeniu. Na Androidzie ta droga jeszcze nie działa, bo wymaga osobnych poświadczeń." />
+
+        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding SyncStatus}" />
+
+        <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
+                   Text="{Binding TokenFolder, StringFormat='Żeton logowania: {0} — skasuj ten katalog, żeby zalogować się od nowa.'}" />
 
       </StackPanel>
     </ScrollViewer>

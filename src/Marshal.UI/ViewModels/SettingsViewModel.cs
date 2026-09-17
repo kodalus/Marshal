@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Infrastructure.Backup;
+using Marshal.Infrastructure.Sync.Google;
 
 namespace Marshal.UI.ViewModels;
 
@@ -31,15 +32,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ISettings _settings;
     private readonly BackupService _backup;
     private readonly IClock _clock;
+    private readonly GoogleSyncService _dysk;
 
     /// <summary>Wstrzymuje zapis w chwili wypełniania pól wartościami z ustawień.</summary>
     private bool _wczytywanie;
 
-    public SettingsViewModel(ISettings settings, BackupService backup, IClock clock)
+    public SettingsViewModel(
+        ISettings settings, BackupService backup, IClock clock, GoogleSyncService dysk)
     {
         _settings = settings;
         _backup = backup;
         _clock = clock;
+        _dysk = dysk;
     }
 
     /// <summary>
@@ -56,8 +60,12 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         Theme = ThemeOption.All.First(t => t.Value == _settings.Theme);
         Zone = Zones.Contains(_settings.Zone.Id) ? _settings.Zone.Id : Zones[0];
+        GoogleClientId = _settings.GoogleClientId ?? string.Empty;
+        GoogleClientSecret = _settings.GoogleClientSecret ?? string.Empty;
 
         _wczytywanie = false;
+
+        OnPropertyChanged(nameof(TokenFolder));
 
         OnPropertyChanged(nameof(Now));
     }
@@ -92,6 +100,51 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Co z tym, co już jest w bazie. Podmiana całości wymaga świadomego kliknięcia.</summary>
     [ObservableProperty]
     public partial bool ReplaceOnImport { get; set; }
+
+    [ObservableProperty]
+    public partial string GoogleClientId { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string GoogleClientSecret { get; set; } = string.Empty;
+
+    /// <summary>Wynik ostatniej próby synchronizacji. Osobno od Status, bo dotyczy czego innego.</summary>
+    [ObservableProperty]
+    public partial string SyncStatus { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsSyncing { get; set; }
+
+    /// <summary>Gdzie ląduje żeton — żeby dało się go skasować i zalogować od nowa.</summary>
+    public string TokenFolder => _dysk.TokenFolder;
+
+    /// <summary>
+    /// Zapisanie poświadczeń i przebieg. Jedno polecenie, bo to jedna czynność:
+    /// poświadczenia bez sprawdzenia nie mówią nic, a sprawdzić da się je tylko przebiegiem.
+    /// </summary>
+    [RelayCommand]
+    private async Task SyncAsync()
+    {
+        _settings.SetGoogle(GoogleClientId, GoogleClientSecret);
+
+        IsSyncing = true;
+        SyncStatus = "Łączenie… przy pierwszym razie otworzy się przeglądarka.";
+
+        try
+        {
+            var wynik = await _dysk.SyncAsync();
+            SyncStatus = wynik.Message;
+        }
+        catch (Exception e)
+        {
+            // Polecenie wołane bez oczekiwania na wynik — wyjątek, którego tu nie
+            // złapiemy, nie ma dokąd trafić.
+            SyncStatus = e.Message;
+        }
+        finally
+        {
+            IsSyncing = false;
+        }
+    }
 
     public string Now => $"{_clock.Now:dd.MM.yyyy HH:mm} — dzisiaj to {_clock.Today:dd.MM.yyyy}";
 

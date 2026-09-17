@@ -91,25 +91,47 @@ Kalendarz przedszkola, zajęć czy szkoły zwykle udostępnia adres kończący s
 Taki kanał wystarczy wkleić — nie wymaga konta Google ani niczego z tej instrukcji.
 Odświeża się co godzinę.
 
-## Krok 5 — pierwsze logowanie
+## Krok 5 — gdzie wkleić poświadczenia
 
-Aplikacja otwiera przeglądarkę i czeka na powrót. Zgadzasz się raz; odświeżalny
-żeton ląduje w danych aplikacji i kolejne uruchomienia nie pytają.
+W aplikacji: **Ustawienia → Konto Google — synchronizacja**. Dwa pola, identyfikator
+klienta i tajemnica, potem **Zapisz i zsynchronizuj**.
 
-```csharp
-using var polaczenie = await GoogleDriveFactory.ConnectAsync(
-    identyfikatorKlienta,
-    tajemnicaKlienta,
-    Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Marshal", "google"));
+Nigdzie indziej. W szczególności **nie do repozytorium i nie do żadnego pliku obok
+kodu** — nie dlatego, że tajemnica klienta coś kryje (w aplikacji instalowanej
+u użytkownika nie jest tajemnicą, zob. krok 4), tylko dlatego, że cudze użycie
+obciąża Twój limit zapytań.
 
-var silnik = new SyncEngine(db, polaczenie.Transport, hlc, identyfikatorUrzadzenia);
-await silnik.SyncAsync();
-```
+Poświadczenia lądują w bazie tego urządzenia, w tabeli ustawień lokalnych, i **nie
+jadą przez synchronizację**. Poświadczenia do Dysku nie mają jechać przez Dysk;
+na drugim urządzeniu wkleja się je jeszcze raz.
+
+Przy pierwszym **Zapisz i zsynchronizuj** otworzy się przeglądarka i poprosi o zgodę.
+Zgadzasz się raz — odświeżalny żeton zostaje w danych aplikacji i kolejne przebiegi
+nie pytają. Ścieżkę do katalogu z żetonem widać pod przyciskiem; skasowanie go cofa
+do stanu sprzed logowania.
 
 Na Dysku pojawi się katalog `Marshal`, a w nim pliki `{urządzenie}.{porcja}.jsonl`.
 Można je otworzyć notatnikiem — to zwykły tekst, jeden wiersz na zapis.
+
+### Dlaczego ręcznie, a nie w tle
+
+Pierwsze przebiegi na żywym koncie mają być wywołane świadomie i mieć widoczny wynik.
+Synchronizacja uruchamiana po cichu przy starcie znaczy, że pierwszy błąd zobaczysz
+jako **brakujące zadania**, a nie jako komunikat — a przy synchronizacji to jest
+najgorszy możliwy sposób dowiadywania się o problemie. Automat dochodzi wtedy, gdy
+wiadomo, że droga działa.
+
+### Gdy coś nie zadziała
+
+Komunikat pod przyciskiem jest treścią błędu od Google, nie naszym „coś poszło nie tak".
+Trzy najczęstsze przy pierwszym podejściu:
+
+- **niezweryfikowana aplikacja** — Twojego adresu nie ma na liście użytkowników
+  testowych (krok 3, punkt 5);
+- **zły identyfikator klienta** — najczęściej spacja albo koniec wiersza wklejony
+  razem z tekstem; aplikacja przycina jedno i drugie, więc jeśli to nadal wychodzi,
+  poświadczenia są z innego projektu;
+- **odmowa dostępu** — poświadczenia są typu innego niż **Aplikacja komputerowa**.
 
 ## Czego jeszcze nie ma
 

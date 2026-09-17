@@ -42,7 +42,28 @@ public interface ISettings
 
     ThemeChoice Theme { get; }
 
+    /// <summary>Identyfikator klienta OAuth z konsoli Google. Pusty, dopóki nie podany.</summary>
+    string? GoogleClientId { get; }
+
+    /// <summary>
+    /// Tajemnica klienta OAuth.
+    /// </summary>
+    /// <remarks>
+    /// Leży w bazie jawnym tekstem i tak ma być. W aplikacji instalowanej u użytkownika
+    /// tajemnica klienta **nie jest tajemnicą** — da się ją wyjąć z pliku programu
+    /// i Google o tym wie, dlatego dla tego typu aplikacji nie traktuje jej jako
+    /// zabezpieczenia; chroni zgoda w przeglądarce, nie ona. Szyfrowanie jej tutaj
+    /// dawałoby poczucie ochrony, której nie ma, a klucz i tak leżałby obok.
+    ///
+    /// Co z tego wynika naprawdę: to ustawienie jest **lokalne i niesynchronizowane**.
+    /// Nie dlatego, że jest tajne, tylko dlatego, że dziennik zmian jest zwykłym tekstem
+    /// na Dysku — poświadczenia do Dysku nie mają jechać przez Dysk.
+    /// </remarks>
+    string? GoogleClientSecret { get; }
+
     void SetZone(string id);
 
     void SetTheme(ThemeChoice theme);
+
+    void SetGoogle(string? clientId, string? clientSecret);
 }
