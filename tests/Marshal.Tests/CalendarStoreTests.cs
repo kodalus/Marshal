@@ -108,6 +108,16 @@ public sealed class CalendarStoreTests : IDisposable
         _db.SaveChanges();
     }
 
+    /// <summary>
+    /// Dzisiaj według zegara testu.
+    /// </summary>
+    /// <remarks>
+    /// Przez interfejs, nie przez atrapę: <c>Today</c> jest domyślną składową
+    /// <see cref="IClock"/>, a takich nie widać przez typ, który interfejs realizuje.
+    /// Drugi raz w tym projekcie.
+    /// </remarks>
+    private DateOnly Dzis => ((IClock)_zegar).Today;
+
     private static FeedEvent Wydarzenie(string id, string tytul, string dzien, int od, int doGodz) =>
         new(id, tytul,
             new DateTimeOffset(DateOnly.Parse(dzien).ToDateTime(new TimeOnly(od, 0)), TimeSpan.FromHours(2)),
@@ -348,7 +358,7 @@ public sealed class CalendarStoreTests : IDisposable
         var dzisiejsze = model.Columns.Where(k => k.IsToday).ToList();
 
         dzisiejsze.Should().ContainSingle("dzisiaj jest jedno");
-        dzisiejsze[0].Date.Should().Be(_zegar.Today);
+        dzisiejsze[0].Date.Should().Be(Dzis);
 
         // Zegar testu stoi na 9:00, godzina ma 48 punktów.
         dzisiejsze[0].NowTop.Should().Be(9 * 48);
@@ -361,7 +371,7 @@ public sealed class CalendarStoreTests : IDisposable
         // a nie przez wyrzucenie bloku z siatki. Blok znikający bez zapisu wyglądałby
         // identycznie i wracałby przy następnym odświeżeniu.
         var zadanie = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
-        zadanie.Schedule(Guid.CreateVersion7(), _zegar.Today, _hlc.Next());
+        zadanie.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
         zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
         _db.Tasks.Add(zadanie);
         await _db.SaveChangesAsync();
