@@ -145,14 +145,92 @@ public partial class MainView : UserControl
 
     private bool _przeciagam;
 
+    /// <summary>Czy trwające przeciąganie zmienia długość, a nie porę.</summary>
+    private bool _rozciagam;
+
+    /// <summary>Kursory tworzone raz. Nowy przy każdym drgnięciu myszy to nowy zasób systemu.</summary>
+    private static readonly Cursor KursorReki = new(StandardCursorType.Hand);
+
+    private static readonly Cursor KursorKrawedzi = new(StandardCursorType.SizeNorthSouth);
+
+    /// <summary>Ile punktów od dolnej krawędzi bloku łapie za jego koniec.</summary>
+    /// <remarks>
+    /// Sześć, tyle samo co próg przeciągnięcia. Więcej znaczyłoby, że kwadransowy blok
+    /// jest w połowie krawędzią i nie da się go już przesunąć; mniej, że w krawędź
+    /// trzeba celować.
+    /// </remarks>
+    private const double StrefaKrawedzi = 6;
+
     private void BlokWcisniety(object? nadawca, PointerPressedEventArgs e)
     {
-        if (nadawca is Control blok && blok.Tag is SlotBox slot)
+        if (nadawca is not Control blok || blok.Tag is not SlotBox slot)
         {
-            _wciesniety = slot;
-            _skad = e.GetPosition(this);
-            _przeciagam = false;
+            return;
         }
+
+        // Tylko lewym przyciskiem. Prawy otwiera menu podręczne, a zapamiętany przy nim
+        // blok zostawał w ręku: po usunięciu zadania z menu puszczenie nie miało już
+        // dokąd trafić, więc wskaźnik do końca sesji zachowywał się tak, jakby wciąż
+        // coś ciągnął — i nie dało się z tym nic zrobić.
+        if (!e.GetCurrentPoint(blok).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        _wciesniety = slot;
+        _skad = e.GetPosition(this);
+        _przeciagam = false;
+
+        // Za dolną krawędź ciągnie się koniec, nie cały blok. Tylko przy zadaniach:
+        // długość wydarzenia z cudzego kalendarza zmienia się świadomą drogą.
+        _rozciagam = slot.TaskId is not null
+            && e.GetPosition(blok).Y >= blok.Bounds.Height - StrefaKrawedzi;
+    }
+
+    /// <summary>
+    /// Kształt wskaźnika nad blokiem: strzałka albo znak rozciągania przy krawędzi.
+    /// </summary>
+    /// <remarks>
+    /// Bez tego chwyt za koniec bloku jest wiedzą tajemną — nic na ekranie nie mówi,
+    /// że dolne sześć punktów robi co innego niż reszta.
+    /// </remarks>
+    private void BlokNajechany(object? nadawca, PointerEventArgs e)
+    {
+        if (nadawca is not Control blok || blok.Tag is not SlotBox slot)
+        {
+            return;
+        }
+
+        var przyKrawedzi = slot.TaskId is not null
+            && e.GetPosition(blok).Y >= blok.Bounds.Height - StrefaKrawedzi;
+
+        blok.Cursor = przyKrawedzi ? KursorKrawedzi : KursorReki;
+    }
+
+    /// <summary>
+    /// Koniec chwytu, niezależnie od tego, czy doszło puszczenie.
+    /// </summary>
+    /// <remarks>
+    /// Wołane także wtedy, gdy blok znika spod ręki — po usunięciu zadania z menu
+    /// podręcznego albo po przeliczeniu siatki. Bez tego zapamiętany blok zostawał
+    /// w polu i każdy następny ruch myszy wyglądał jak przeciąganie.
+    /// </remarks>
+    private void PuscBlok()
+    {
+        _wciesniety = null;
+        _przeciagam = false;
+        _rozciagam = false;
+        SchowajPodglad();
+    }
+
+    private void BlokPuscilWskaznik(object? nadawca, PointerCaptureLostEventArgs e)
+    {
+        if (nadawca is Control blok)
+        {
+            blok.Opacity = 1;
+        }
+
+        PuscBlok();
     }
 
     /// <summary>Dzień i wysokość pod wskaźnikiem, przeliczone na współrzędne siatki.</summary>
@@ -197,7 +275,20 @@ public partial class MainView : UserControl
         var pora = CalendarViewModel.Pora(wysokosc);
 
         tytul.Text = slot.Title;
-        kiedy.Text = $"{dzien:dd.MM} · {pora:HH}:{pora:mm}";
+
+        if (_rozciagam)
+        {
+            // Przy rozciąganiu liczy się koniec i długość, nie dzień: dzień się nie zmienia,
+            // a pokazanie go sugerowałoby, że blok gdzieś jedzie.
+            var poczatek = CalendarViewModel.Pora(slot.Top);
+            var minuty = Math.Max(5, (int)(pora.ToTimeSpan() - poczatek.ToTimeSpan()).TotalMinutes);
+
+            kiedy.Text = $"{poczatek:HH}:{poczatek:mm} – {pora:HH}:{pora:mm} · {minuty} min";
+        }
+        else
+        {
+            kiedy.Text = $"{dzien:dd.MM} · {pora:HH}:{pora:mm}";
+        }
 
         var gdzie = e.GetPosition(this);
         Canvas.SetLeft(podglad, gdzie.X + 14);
@@ -216,6 +307,10 @@ public partial class MainView : UserControl
 
     private void BlokRuszony(object? nadawca, PointerEventArgs e)
     {
+        // Kształt wskaźnika liczony przy każdym ruchu, także bez wciśnięcia: to jedyne
+        // miejsce, po którym widać, że dolna krawędź robi co innego niż reszta bloku.
+        BlokNajechany(nadawca, e);
+
         if (_wciesniety is not { } slot)
         {
             return;
@@ -263,19 +358,20 @@ public partial class MainView : UserControl
     /// </remarks>
     private void BlokPuszczony(object? nadawca, PointerReleasedEventArgs e)
     {
+        // Stan odczytany **przed** oddaniem wskaźnika. Oddanie zgłasza utratę
+        // przechwycenia, a ta kończy chwyt i zeruje te trzy pola — czytane po niej
+        // dałyby każde puszczenie jako kliknięcie i przeciąganie przestałoby działać.
+        var slot = _wciesniety;
+        var przeciagniete = _przeciagam;
+        var rozciagane = _rozciagam;
+
+        PuscBlok();
+
         if (nadawca is Control blok)
         {
             blok.Opacity = 1;
             e.Pointer.Capture(null);
         }
-
-        SchowajPodglad();
-
-        var slot = _wciesniety;
-        var przeciagniete = _przeciagam;
-
-        _wciesniety = null;
-        _przeciagam = false;
 
         // Puszczenie bez przejechania progu jest kliknięciem. Przycisk robił to za nas,
         // ale przy okazji zjadał wciśnięcie i przeciąganie nie miało jak się zacząć.
@@ -296,6 +392,12 @@ public partial class MainView : UserControl
 
         if (Cel(e) is not var (dzien, wysokosc) || _kalendarz is null)
         {
+            return;
+        }
+
+        if (rozciagane)
+        {
+            _ = Probuj("Kalendarz: rozciągnięcie", () => _kalendarz.ResizeAsync(slot, wysokosc));
             return;
         }
 
@@ -404,6 +506,10 @@ public partial class MainView : UserControl
         {
             return;
         }
+
+        // Cokolwiek trzymaliśmy w ręku, menu to kończy. Pozycja „Usuń" wyjmuje blok
+        // z siatki, więc puszczenie nie miałoby już dokąd trafić.
+        PuscBlok();
 
         if (Zadanie(zrodlo) is { } zadanie)
         {

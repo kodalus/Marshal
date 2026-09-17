@@ -132,6 +132,31 @@ public sealed class TaskEditService(
         return zadanie;
     }
 
+    /// <summary>
+    /// Sama długość, bez ruszania poziomu sił.
+    /// </summary>
+    /// <remarks>
+    /// Rozciągnięcie bloku na siatce zmienia dokładnie jedną rzecz. Przepuszczenie tego
+    /// przez <see cref="SetEstimateAsync"/> wysyłałoby do scalania także siłę, której
+    /// nikt nie dotykał — a scalanie działa per pole (9.4).
+    /// </remarks>
+    public async Task<TaskItem?> SetMinutesAsync(
+        Guid id, int minutes, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        {
+            return null;
+        }
+
+        if (zadanie.EstimatedMinutes != minutes)
+        {
+            zadanie.SetEstimate(minutes, zadanie.Energy, hlc.Next());
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        return zadanie;
+    }
+
     /// <summary>Waga — jedno pole, jedna zmiana (menu podręczne).</summary>
     public Task<TaskItem?> SetPriorityAsync(
         Guid id, Priority priority, CancellationToken ct = default) =>

@@ -755,6 +755,52 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
+    /// <summary>
+    /// Rozciągnięcie bloku za dolną krawędź: nowa długość zadania.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Długość jest w modelu oszacowaniem, nie godziną zakończenia — koniec wynika
+    /// z początku i długości. Rozciąganie zmienia więc oszacowanie, a nie drugą datę,
+    /// i to jest ta sama liczba, którą widać w szczegółach i po której dobiera „Teraz".
+    /// Przeciągnięcie krawędzi jest po prostu najszybszym sposobem, żeby ją podać.
+    /// </para>
+    /// <para>
+    /// Najmniej pięć minut: krok siatki. Pociągnięcie krawędzi ponad początek bloku
+    /// znaczy „chciałam skrócić" i kończy się najkrótszym blokiem, a nie długością
+    /// ujemną albo blokiem, który zniknął pod palcem.
+    /// </para>
+    /// </remarks>
+    public async Task ResizeAsync(SlotBox blok, double punkty)
+    {
+        ArgumentNullException.ThrowIfNull(blok);
+
+        if (blok.TaskId is not { } zadanie)
+        {
+            return;
+        }
+
+        var poczatek = Pora(blok.Top);
+        var koniec = Pora(punkty);
+        var minuty = (int)(koniec.ToTimeSpan() - poczatek.ToTimeSpan()).TotalMinutes;
+
+        try
+        {
+            await edit.SetMinutesAsync(zadanie, Math.Max(Krok, minuty));
+            await log.RecordAsync("Kalendarz: rozciągnięcie", $"{Math.Max(Krok, minuty)} min");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: rozciągnięcie", "nie udało się", ActivityLevel.Problem, e.Message);
+        }
+
+        await RefreshAsync();
+    }
+
     /// <summary>Zdjęcie ptaszka wprost z siatki — ten sam kwadracik, w drugą stronę.</summary>
     /// <remarks>
     /// Kwadracik był dotąd jednokierunkowy: zaznaczał i przestawał reagować. Wyglądało

@@ -839,6 +839,7 @@
                                   PointerPressed="BlokWcisniety"
                                   PointerMoved="BlokRuszony"
                                   PointerReleased="BlokPuszczony"
+                                  PointerCaptureLost="BlokPuscilWskaznik"
                                   Opacity="{Binding Opacity}"
                                   Background="{Binding Background}" CornerRadius="4" Padding="4,2">
                             <Grid ColumnDefinitions="Auto,*,Auto">

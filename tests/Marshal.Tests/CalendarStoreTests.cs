@@ -530,6 +530,66 @@ public sealed class CalendarStoreTests : IDisposable
             .Timed.Single().Entry.IsDone.Should().BeFalse();
     }
 
+    /// <summary>
+    /// Rozciągnięcie bloku za dolną krawędź zmienia długość zadania, nie jego porę.
+    /// </summary>
+    /// <remarks>
+    /// Długość jest w modelu oszacowaniem — koniec wynika z początku i długości, a nie
+    /// z drugiej daty. Rozciąganie podaje więc tę samą liczbę, którą widać w szczegółach
+    /// i po której dobiera „Teraz"; przeciągnięcie krawędzi jest tylko najszybszym
+    /// sposobem, żeby ją wpisać.
+    /// </remarks>
+    [Fact]
+    public async Task Rozciagniecie_bloku_zmienia_dlugosc_a_nie_pore()
+    {
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Spotkanie", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        zadanie.SetEstimate(30, Energy.Medium, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        var blok = model.Columns.SelectMany(k => k.Slots).Single(b => b.TaskId == zadanie.Id);
+
+        // Dolna krawędź ściągnięta na 11:20. Godzina zaczepienia zostaje, długość rośnie.
+        await model.ResizeAsync(blok, (11 * 48) + (20 * 48 / 60.0));
+
+        var po = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        po.DoTime.Should().Be(new TimeOnly(10, 0), "rozciąganie nie rusza pory zaczepienia");
+        po.EstimatedMinutes.Should().Be(80);
+        po.Energy.Should().Be(Energy.Medium, "zmieniamy jedno pole, nie dwa");
+    }
+
+    /// <summary>Pociągnięcie krawędzi ponad początek daje najkrótszy blok, nie ujemny.</summary>
+    [Fact]
+    public async Task Rozciagniecie_ponad_poczatek_daje_najkrotszy_blok()
+    {
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Spotkanie", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        zadanie.SetEstimate(60, Energy.Medium, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        var blok = model.Columns.SelectMany(k => k.Slots).Single(b => b.TaskId == zadanie.Id);
+
+        await model.ResizeAsync(blok, 8 * 48);
+
+        _db.Tasks.Single(t => t.Id == zadanie.Id).EstimatedMinutes.Should().Be(5);
+    }
+
     [Fact]
     public async Task Zadanie_bez_dnia_wykonania_nie_trafia_na_siatke()
     {
