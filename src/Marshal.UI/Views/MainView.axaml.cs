@@ -150,7 +150,10 @@ public partial class MainView : UserControl
 
     private void BlokRuszony(object? nadawca, PointerEventArgs e)
     {
-        if (_wciesniety is not { TaskId: not null } || _przeciagam)
+        var doRuszenia = _wciesniety is { TaskId: not null }
+            || _wciesniety is { SourceId: not null, ExternalId: not null };
+
+        if (!doRuszenia || _przeciagam)
         {
             return;
         }
@@ -205,7 +208,7 @@ public partial class MainView : UserControl
             return;
         }
 
-        if (slot is not { TaskId: { } zadanie } || _kalendarz is null)
+        if (_kalendarz is null || slot is null)
         {
             return;
         }
@@ -222,9 +225,15 @@ public partial class MainView : UserControl
 
         var wysokosc = e.GetPosition(_warstwaGodzin).Y;
 
-        _ = Probuj(
-            "Kalendarz: przełożenie",
-            () => _kalendarz.MoveAsync(zadanie, _kalendarz.Anchor.AddDays(numer), wysokosc));
+        var dzien = _kalendarz.Anchor.AddDays(numer);
+
+        // Zadanie idzie naszą drogą, wydarzenie — prosto do kalendarza, z którego
+        // pochodzi. To druga rzecz, nie ta sama z innym zapisem.
+        _ = slot.TaskId is { } zadanie
+            ? Probuj("Kalendarz: przełożenie", () => _kalendarz.MoveAsync(zadanie, dzien, wysokosc))
+            : Probuj(
+                "Kalendarz: przeniesienie wydarzenia",
+                () => _kalendarz.MoveEventAsync(slot, dzien, wysokosc));
     }
 
 

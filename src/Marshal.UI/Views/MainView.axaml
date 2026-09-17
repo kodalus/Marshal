@@ -609,6 +609,20 @@
         <TextBlock Classes="hint" Margin="2,2,0,0" Text="{Binding Summary}" />
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                    Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
+
+        <!-- Cofnięcie po przeniesieniu wydarzenia. Przy zapisie do cudzego kalendarza
+             nie jest wygodą, tylko jedyną odpowiedzią na omsknięcie ręki. -->
+        <Border Margin="0,8,0,0" Padding="10,8" CornerRadius="6" Background="#20808080"
+                IsVisible="{Binding CanUndo}">
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Center"
+                       TextWrapping="Wrap" Text="{Binding UndoText}" />
+            <Button Grid.Column="1" Classes="nav" Content="Cofnij"
+                    Command="{Binding UndoMoveCommand}" />
+            <Button Grid.Column="2" Classes="nav" Content="Zostaw"
+                    Command="{Binding ForgetUndoCommand}" />
+          </Grid>
+        </Border>
       </StackPanel>
 
       <ScrollViewer x:Name="SiatkaKalendarza" x:DataType="vm:CalendarViewModel"

@@ -443,6 +443,39 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Przeniesione_wydarzenie_da_sie_cofnac()
+    {
+        // Przeciągnięcie cudzego wydarzenia zapisuje się natychmiast w kalendarzu,
+        // z którego pochodzi — bez pytania. „Cofnij" nie jest tu wygodą, tylko jedyną
+        // odpowiedzią na omsknięcie ręki, więc ma odtwarzać **poprzednie** godziny.
+        var start = new DateTimeOffset(2026, 9, 17, 10, 0, 0, TimeSpan.FromHours(2));
+
+        await _sklad.UpsertAsync(_zrodlo.Id,
+            [new FeedEvent("w1", "Zebranie", start, start.AddHours(1), false, null, false)]);
+        await _sklad.SaveChangesAsync();
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        var blok = model.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Zebranie");
+
+        await model.MoveEventAsync(blok, new DateOnly(2026, 9, 18), 14 * 48);
+
+        _pisarz.Wyslane.Should().Contain(w => w.Co == "zmiana" && w.Id == "w1");
+        model.CanUndo.Should().BeTrue();
+
+        await model.UndoMoveCommand.ExecuteAsync(null);
+
+        model.CanUndo.Should().BeFalse();
+
+        // Dwie zmiany u źródła: przeniesienie i powrót. Ostatnia przywraca stan sprzed.
+        var wydarzenie = _db.CalendarEvents.Single(e => e.ExternalId == "w1");
+
+        wydarzenie.StartsAt.Should().Be(start);
+        wydarzenie.EndsAt.Should().Be(start.AddHours(1));
+    }
+
+    [Fact]
     public async Task Przeciagniecie_zmienia_dzien_i_godzine_a_nie_dlugosc()
     {
         var zadanie = TaskItem.Capture("Przesunąć", _zegar.Now, _hlc.Next());

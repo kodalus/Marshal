@@ -270,6 +270,122 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>
+    /// Przeciągnięcie wydarzenia z podłączonego kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// To jedyne miejsce w aplikacji, w którym ruch ręki zmienia coś **poza** Marshalem:
+    /// zapis idzie natychmiast do kalendarza Google, bez pytania. Stąd dwie rzeczy.
+    /// </para>
+    /// <para>
+    /// Długość zostaje taka, jaką widać na bloku — przeciągnięcie przesuwa, nie skraca.
+    /// </para>
+    /// <para>
+    /// Poprzednie godziny zostają zapamiętane i da się je przywrócić jednym kliknięciem.
+    /// Przy zapisie do cudzego kalendarza „cofnij" nie jest wygodą, tylko jedyną
+    /// odpowiedzią na omsknięcie ręki.
+    /// </para>
+    /// </remarks>
+    public async Task MoveEventAsync(SlotBox blok, DateOnly day, double punkty)
+    {
+        ArgumentNullException.ThrowIfNull(blok);
+
+        if (blok is not { SourceId: { } zrodlo, ExternalId: { } identyfikator })
+        {
+            return;
+        }
+
+        var strefa = clock.Now.Offset;
+        var start = new DateTimeOffset(day.ToDateTime(Kwadrans(punkty)), strefa);
+        var dlugosc = TimeSpan.FromHours(Math.Max(0.25, blok.Height / HourHeight));
+
+        try
+        {
+            var skad = Bylo(blok, strefa);
+
+            await calendar.SaveEventAsync(
+                zrodlo, identyfikator, new CalendarDraft(blok.Title, start, start + dlugosc));
+
+            Undo = new MovedEvent(zrodlo, identyfikator, blok.Title, skad, skad + dlugosc);
+            OnPropertyChanged(nameof(CanUndo));
+            OnPropertyChanged(nameof(UndoText));
+
+            await log.RecordAsync(
+                "Kalendarz: przeniesienie wydarzenia",
+                $"{blok.Title} na {day:yyyy-MM-dd} {start:HH}:{start:mm}");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: przeniesienie wydarzenia", blok.Title,
+                ActivityLevel.Problem, e.Message);
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>Skąd wydarzenie przyszło — z dnia i godziny widocznych na bloku.</summary>
+    private static DateTimeOffset Bylo(SlotBox blok, TimeSpan strefa)
+    {
+        var dzien = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+        var pora = TimeOnly.TryParse(blok.StartText, CultureInfo.InvariantCulture, out var g)
+            ? g
+            : TimeOnly.MinValue;
+
+        return new DateTimeOffset(dzien.ToDateTime(pora), strefa);
+    }
+
+    /// <summary>Ostatnie przeniesienie wydarzenia — do cofnięcia.</summary>
+    public sealed record MovedEvent(
+        Guid SourceId, string ExternalId, string Title, DateTimeOffset Start, DateTimeOffset End);
+
+    [ObservableProperty]
+    public partial MovedEvent? Undo { get; set; }
+
+    public bool CanUndo => Undo is not null;
+
+    public string UndoText => Undo is { } ruch
+        ? $"Przeniesiono „{ruch.Title}”. Cofnąć na {ruch.Start:dd.MM} {ruch.Start:HH}:{ruch.Start:mm}?"
+        : string.Empty;
+
+    [RelayCommand]
+    private async Task UndoMoveAsync()
+    {
+        if (Undo is not { } ruch)
+        {
+            return;
+        }
+
+        try
+        {
+            await calendar.SaveEventAsync(
+                ruch.SourceId, ruch.ExternalId,
+                new CalendarDraft(ruch.Title, ruch.Start, ruch.End));
+
+            await log.RecordAsync("Kalendarz: cofnięcie przeniesienia", ruch.Title);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+        }
+
+        ForgetUndo();
+        await RefreshAsync();
+    }
+
+    [RelayCommand]
+    private void ForgetUndo()
+    {
+        Undo = null;
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(UndoText));
+    }
+
+    /// <summary>
     /// Godzina z wysokości na siatce, zaokrąglona w dół do kwadransa.
     /// </summary>
     /// <remarks>
