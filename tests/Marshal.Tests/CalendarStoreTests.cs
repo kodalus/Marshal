@@ -381,6 +381,68 @@ public sealed class CalendarStoreTests : IDisposable
         dzien.Timed.Single(s => s.Entry.Title == "Z projektu").Entry.Color.Should().Be("#CF5757");
     }
 
+    /// <summary>
+    /// Przeciągnięcie odhaczonego bloku przesuwa go, a nie wskrzesza.
+    /// </summary>
+    /// <remarks>
+    /// Nadanie dnia szło przez przejście stanu (N8), więc ustawiało „zaplanowane"
+    /// i tym samym zdejmowało „wykonane" — ptaszek znikał po każdym przeciągnięciu.
+    /// Ruch po siatce poprawia zapis o przeszłości; cofnięcie decyzji ma być osobną,
+    /// widoczną czynnością.
+    /// </remarks>
+    [Fact]
+    public async Task Przeciagniecie_odhaczonego_zadania_zostawia_ptaszek()
+    {
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Zrobione", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        await _edycja.CompleteAsync(zadanie.Id);
+        await _edycja.RescheduleAsync(zadanie.Id, Dzis, new TimeOnly(15, 30));
+
+        var poPrzeciagnieciu = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        poPrzeciagnieciu.State.Should().Be(TaskState.Done);
+        poPrzeciagnieciu.DoTime.Should().Be(new TimeOnly(15, 30));
+
+        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+            .Single(b => b.Entry.TaskId == zadanie.Id).Entry.IsDone.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Zdjęcie ptaszka przywraca zadanie do żywych — z powrotem do zaplanowanych.
+    /// </summary>
+    /// <remarks>
+    /// Odhaczenie kosztuje jedno kliknięcie, więc omyłkowe zdarza się tak samo łatwo.
+    /// Do dziś cofnąć dało się je wyłącznie przez bazę, mimo że model to umiał.
+    /// </remarks>
+    [Fact]
+    public async Task Zdjecie_ptaszka_przywraca_zadanie_do_zaplanowanych()
+    {
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Pomyłka", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        await _edycja.CompleteAsync(zadanie.Id);
+        await _edycja.ReopenAsync(zadanie.Id);
+
+        var poZdjeciu = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        poZdjeciu.State.Should().Be(TaskState.Scheduled);
+        poZdjeciu.CompletedAt.Should().BeNull();
+
+        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+            .Single(b => b.Entry.TaskId == zadanie.Id).Entry.IsDone.Should().BeFalse();
+    }
+
     [Fact]
     public async Task Zadanie_bez_dnia_wykonania_nie_trafia_na_siatke()
     {

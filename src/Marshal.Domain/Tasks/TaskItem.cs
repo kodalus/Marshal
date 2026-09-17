@@ -524,6 +524,19 @@ public sealed class TaskItem : Entity
         Touch(stamp);
     }
 
+    /// <summary>
+    /// Zdjęcie ptaszka — zadanie znowu jest do zrobienia.
+    /// </summary>
+    /// <remarks>
+    /// Wraca tam, skąd przyszło: z dniem wykonania do zaplanowanych, bez dnia do
+    /// następnych akcji, bez obszaru do skrzynki. Stałe „następne" gubiłoby datę
+    /// w tym sensie, że przestawałaby cokolwiek znaczyć — zadanie miałoby dzień
+    /// i nie byłoby zaplanowane, czyli stan, którego N8 zabrania.
+    ///
+    /// Godzina zostaje. Przy odhaczeniu zadania bez godziny wpisuje się porę, o której
+    /// naprawdę się skończyło — i jest to jedyny zapis tego, że to się w ogóle działo.
+    /// Kasowanie go przy zdjęciu ptaszka usuwałoby fakt, żeby cofnąć decyzję.
+    /// </remarks>
     public void Reopen(Hlc stamp)
     {
         if (State != TaskState.Done)
@@ -531,8 +544,27 @@ public sealed class TaskItem : Entity
             throw new InvalidOperationException("Otworzyć na nowo można tylko zadanie wykonane.");
         }
 
-        State = AreaId is null ? TaskState.Inbox : TaskState.Next;
+        State = AreaId is null
+            ? TaskState.Inbox
+            : DoDate is null ? TaskState.Next : TaskState.Scheduled;
+
         CompletedAt = null;
+        Touch(stamp);
+    }
+
+    /// <summary>
+    /// Przesunięcie samego dnia wykonania, bez dotykania stanu.
+    /// </summary>
+    /// <remarks>
+    /// Dla zadania już odhaczonego. Zwykłe nadanie dnia idzie przez przejście stanu
+    /// (N8), więc przeciągnięcie wykonanego bloku po siatce **wskrzeszało go**:
+    /// ptaszek znikał, bo <c>Scheduled</c> nadpisywało <c>Done</c>. Przesunięcie bloku
+    /// jest poprawianiem zapisu o przeszłości, a nie cofaniem decyzji o wykonaniu —
+    /// od cofania jest zdjęcie ptaszka i ma być widoczne jako osobna czynność.
+    /// </remarks>
+    public void MoveDoDate(DateOnly? doDate, Hlc stamp)
+    {
+        DoDate = doDate;
         Touch(stamp);
     }
 

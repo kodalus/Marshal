@@ -689,6 +689,24 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
+    /// <summary>Zdjęcie ptaszka wprost z siatki — ten sam kwadracik, w drugą stronę.</summary>
+    /// <remarks>
+    /// Kwadracik był dotąd jednokierunkowy: zaznaczał i przestawał reagować. Wyglądało
+    /// to jak zepsuty przycisk, bo zaznaczone pole wyboru z natury obiecuje, że da się
+    /// je odznaczyć.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ReopenAsync(Guid? id)
+    {
+        if (id is not { } identyfikator)
+        {
+            return;
+        }
+
+        await edit.ReopenAsync(identyfikator);
+        await RefreshAsync();
+    }
+
     /// <summary>Otwarcie szczegółu zadania z siatki. Wydarzenia Google nie mają czego otwierać.</summary>
     /// <summary>Otwarty blok: zadanie idzie do nakładki szczegółu, wydarzenie na kartę obok.</summary>
     /// <remarks>

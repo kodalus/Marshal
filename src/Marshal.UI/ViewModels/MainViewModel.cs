@@ -945,6 +945,24 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Zdjęcie ptaszka — zadanie znowu jest do zrobienia.
+    /// </summary>
+    /// <remarks>
+    /// Odhaczenie kosztuje jedno kliknięcie, więc omyłkowe zdarza się tak samo łatwo
+    /// jak właściwe. Cofnięcie musi kosztować tyle samo; do dziś nie dało się go zrobić
+    /// z żadnego ekranu, mimo że model to umiał.
+    /// </remarks>
+    [RelayCommand]
+    public async Task ReopenTaskAsync(TaskItem? task)
+    {
+        if (task is not null)
+        {
+            await _edit.ReopenAsync(task.Id);
+            await ReloadAsync();
+        }
+    }
+
+    /// <summary>
     /// Odhaczenie z listy. Idzie przez szczegół, bo zadanie powtarzalne musi przy
     /// okazji zrodzić kolejne wystąpienie (8.4) — a z listy tego nie widać.
     /// </summary>

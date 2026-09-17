@@ -163,6 +163,44 @@ public class TaskItemTests
         zadanie.CompletedAt.Should().BeNull();
     }
 
+    /// <summary>
+    /// Zadanie z dniem wykonania wraca do zaplanowanych, nie do następnych.
+    /// </summary>
+    /// <remarks>
+    /// Stałe „następne" dawałoby zadanie z datą, które nie jest zaplanowane — stan,
+    /// którego N8 zabrania, i który znaczy, że data przestaje cokolwiek znaczyć.
+    /// </remarks>
+    [Fact]
+    public void Otwarcie_na_nowo_z_dniem_wraca_do_zaplanowanych()
+    {
+        var zadanie = Wrzut();
+        zadanie.Schedule(Obszar, new DateOnly(2026, 9, 17), Stamp(2000));
+        zadanie.Complete(Teraz, Stamp(3000));
+
+        zadanie.Reopen(Stamp(4000));
+
+        zadanie.State.Should().Be(TaskState.Scheduled);
+        zadanie.DoDate.Should().Be(new DateOnly(2026, 9, 17));
+        zadanie.CompletedAt.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Przesunięcie dnia nie rusza stanu — inaczej przeciągnięcie wskrzeszałoby zadanie.
+    /// </summary>
+    [Fact]
+    public void Przesuniecie_dnia_nie_zdejmuje_ptaszka()
+    {
+        var zadanie = Wrzut();
+        zadanie.Schedule(Obszar, new DateOnly(2026, 9, 17), Stamp(2000));
+        zadanie.Complete(Teraz, Stamp(3000));
+
+        zadanie.MoveDoDate(new DateOnly(2026, 9, 18), Stamp(4000));
+
+        zadanie.State.Should().Be(TaskState.Done);
+        zadanie.DoDate.Should().Be(new DateOnly(2026, 9, 18));
+        zadanie.CompletedAt.Should().Be(Teraz);
+    }
+
     [Fact]
     public void Otwarcie_na_nowo_niewykonanego_jest_odrzucane()
     {

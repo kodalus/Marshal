@@ -240,10 +240,32 @@ public sealed class TaskEditService(
     }
 
     /// <summary>
-    /// Nadanie i zdjęcie dnia wykonania przechodzi przez przejścia stanu, nie przez
-    /// samo pole: N8 wymaga, żeby zadanie <c>Scheduled</c> miało datę, a zadanie bez
-    /// daty nie było <c>Scheduled</c>.
+    /// Zdjęcie ptaszka — zadanie znowu jest do zrobienia.
     /// </summary>
+    /// <remarks>
+    /// Odhaczenie dało się dotąd cofnąć wyłącznie przez bazę: żaden ekran nie miał
+    /// takiej czynności, mimo że model ją umiał. Odhaczenie jest decyzją podejmowaną
+    /// jednym kliknięciem, więc omyłkowe zdarza się tak samo łatwo — i musi kosztować
+    /// tyle samo.
+    /// </remarks>
+    public async Task<TaskItem?> ReopenAsync(Guid id, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        {
+            return null;
+        }
+
+        if (zadanie.State != TaskState.Done)
+        {
+            return zadanie;
+        }
+
+        zadanie.Reopen(hlc.Next());
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return zadanie;
+    }
+
     /// <summary>Blok kończący się teraz, o długości równej oszacowaniu.</summary>
     private async Task ZapiszPoreWykonaniaAsync(TaskItem zadanie, CancellationToken ct)
     {
@@ -286,6 +308,17 @@ public sealed class TaskEditService(
     private async Task ApplyDoDateAsync(
         TaskItem zadanie, DateOnly? doDate, Guid? wybrany, CancellationToken ct)
     {
+        // Zadanie odhaczone dostaje sam dzień, bez przejścia stanu. Przejście ustawia
+        // „zaplanowane" i tym samym zdejmuje „wykonane" — więc przeciągnięcie
+        // wykonanego bloku po siatce wskrzeszało go, a zapis szczegółu odhaczonego
+        // zadania cofał odhaczenie. Ruch po siatce poprawia zapis o przeszłości;
+        // od cofnięcia decyzji jest zdjęcie ptaszka, osobną czynnością.
+        if (zadanie.State == TaskState.Done)
+        {
+            zadanie.MoveDoDate(doDate, hlc.Next());
+            return;
+        }
+
         var obszar = wybrany ?? zadanie.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
 
         if (obszar is not { } id)

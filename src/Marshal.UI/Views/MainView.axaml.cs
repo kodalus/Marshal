@@ -310,23 +310,34 @@ public partial class MainView : UserControl
 
 
     /// <summary>
-    /// Odhaczenie kwadracikiem na siatce.
+    /// Kwadracik na siatce — w obie strony.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Zdarzenie zatrzymujemy tutaj: bez tego wciśnięcie doszłoby do bloku pod spodem
     /// i zaczęłoby przeciąganie, a odhaczenie skończyłoby się przełożeniem zadania
     /// o kilka minut.
+    /// </para>
+    /// <para>
+    /// Zaznaczony kwadracik zdejmuje ptaszek. Do dziś nie robił nic, a pole wyboru,
+    /// którego nie da się odznaczyć, wygląda jak zepsute — i zostawiało omyłkowe
+    /// odhaczenie bez żadnej drogi odwrotu poza bazą.
+    /// </para>
     /// </remarks>
     private void OdhaczNaSiatce(object? nadawca, PointerPressedEventArgs e)
     {
         e.Handled = true;
 
-        if (nadawca is Control kwadracik
-            && kwadracik.Tag is SlotBox { TaskId: { } zadanie, IsDone: false }
-            && _kalendarz is not null)
+        if (nadawca is not Control kwadracik
+            || kwadracik.Tag is not SlotBox { TaskId: { } zadanie } blok
+            || _kalendarz is null)
         {
-            _ = Probuj("Kalendarz: odhaczenie", () => _kalendarz.CompleteCommand.ExecuteAsync(zadanie));
+            return;
         }
+
+        _ = blok.IsDone
+            ? Probuj("Kalendarz: zdjęcie ptaszka", () => _kalendarz.ReopenCommand.ExecuteAsync(zadanie))
+            : Probuj("Kalendarz: odhaczenie", () => _kalendarz.CompleteCommand.ExecuteAsync(zadanie));
     }
 
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
@@ -442,7 +453,13 @@ public partial class MainView : UserControl
             ItemsSource = new object[]
             {
                 Pozycja("Otwórz szczegół", () => model.OpenTaskAsync(zadanie)),
-                Pozycja("Odhacz", () => model.CompleteTaskAsync(zadanie)),
+
+                // Jedna pozycja, dwa kierunki — zależnie od tego, jak zadanie stoi.
+                // Obie naraz kazałyby czytać, która jest teraz właściwa.
+                zadanie.State == TaskState.Done
+                    ? Pozycja("Zdejmij ptaszek", () => model.ReopenTaskAsync(zadanie))
+                    : Pozycja("Odhacz", () => model.CompleteTaskAsync(zadanie)),
+
                 new Separator(),
 
                 Galaz("Ustaw dzień", [
