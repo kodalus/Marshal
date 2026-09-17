@@ -94,7 +94,12 @@ public sealed class ActivityLogTests : IDisposable
 
         await using var db = new MarshalDbContext(_opcje);
 
-        db.ActivityEntries.Count().Should().Be(500);
+        // Nie równo 500: sprzątanie rusza dopiero po przekroczeniu limitu o zapas,
+        // żeby kasowanie szło raz na sto wpisów, a nie przy każdym. Umowa brzmi
+        // „ograniczony i gubi najstarsze", a nie „zawsze dokładnie 500".
+        db.ActivityEntries.Count().Should().BeInRange(500, 600);
+        db.ActivityEntries.Any(w => w.Operation == "Wpis 0").Should().BeFalse();
+        db.ActivityEntries.Any(w => w.Operation == "Wpis 609").Should().BeTrue();
     }
 
     [Fact]
