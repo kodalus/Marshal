@@ -1,5 +1,4 @@
 using Marshal.Infrastructure;
-using Marshal.UI.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Marshal.UI;
@@ -48,15 +47,7 @@ public static class AppServices
                 databasePath ?? DependencyInjection.DefaultDatabasePath(),
                 deviceId);
 
-            services.AddSingleton<ClarifyViewModel>();
-            services.AddSingleton<TaskDetailViewModel>();
-            services.AddSingleton<ReviewViewModel>();
-            services.AddSingleton<NowViewModel>();
-            services.AddSingleton<CalendarViewModel>();
-            services.AddSingleton<NotesViewModel>();
-            services.AddSingleton<FiltersViewModel>();
-            services.AddSingleton<SettingsViewModel>();
-            services.AddSingleton<MainViewModel>();
+            services.AddMarshalViewModels();
 
             return _provider = services.BuildServiceProvider();
         }

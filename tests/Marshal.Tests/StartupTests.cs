@@ -2,6 +2,8 @@ using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Infrastructure;
 using Marshal.Infrastructure.Data;
+using Marshal.UI;
+using Marshal.UI.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -24,10 +26,15 @@ public sealed class StartupTests : IDisposable
 
     private string Sciezka => Path.Combine(_katalog, "marshal.db");
 
+    /// <summary>Dokładnie ten sam graf, który składa okno — usługi plus modele widoków.</summary>
     private ServiceProvider Zloz()
     {
         Directory.CreateDirectory(_katalog);
-        return new ServiceCollection().AddMarshal(Sciezka).BuildServiceProvider();
+
+        return new ServiceCollection()
+            .AddMarshal(Sciezka)
+            .AddMarshalViewModels()
+            .BuildServiceProvider();
     }
 
     [Fact]
@@ -45,7 +52,7 @@ public sealed class StartupTests : IDisposable
         // przy tym tabelę, której jeszcze nie ma. Objawem było białe tło i natychmiastowe
         // zamknięcie, na obu platformach.
         var kolekcja = new ServiceCollection();
-        kolekcja.AddMarshal(Sciezka);
+        kolekcja.AddMarshal(Sciezka).AddMarshalViewModels();
         Directory.CreateDirectory(_katalog);
 
         using var uslugi = kolekcja.BuildServiceProvider();
@@ -96,6 +103,21 @@ public sealed class StartupTests : IDisposable
         var db = uslugi.GetRequiredService<MarshalDbContext>();
         (await db.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         db.Areas.Should().NotBeEmpty("obszary początkowe zakłada PrepareAsync");
+    }
+
+    [Fact]
+    public async Task Okno_dostaje_model_widoku_i_wczytuje_pierwszy_ekran()
+    {
+        // Ostatni krok startu: to, co aplikacja robi po PrepareAsync. Gdyby któryś
+        // model widoku miał niezarejestrowaną zależność, objaw byłby ten sam co
+        // 17.09 — okno znika, nie mówiąc dlaczego.
+        using var uslugi = Zloz();
+        await DependencyInjection.PrepareAsync(uslugi);
+
+        var model = uslugi.GetRequiredService<MainViewModel>();
+
+        var pierwszyEkran = async () => await model.InitializeAsync();
+        await pierwszyEkran.Should().NotThrowAsync();
     }
 
     [Fact]

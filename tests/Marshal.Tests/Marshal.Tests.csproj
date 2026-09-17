@@ -12,5 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Marshal.Infrastructure\Marshal.Infrastructure.csproj" />
+    <!-- Modele widoków też są kodem, który musi dać się złożyć. Bez tego graf okna
+         sprawdzało dopiero uruchomienie aplikacji — zob. StartupTests. -->
+    <ProjectReference Include="..\..\src\Marshal.UI\Marshal.UI.csproj" />
   </ItemGroup>
 </Project>
