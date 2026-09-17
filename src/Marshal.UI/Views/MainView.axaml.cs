@@ -32,7 +32,11 @@ public partial class MainView : UserControl
     public MainView()
     {
         InitializeComponent();
-        DataContextChanged += (_, _) => WirePicker();
+        DataContextChanged += (_, _) =>
+        {
+            WirePicker();
+            OdsloniecieGotowego();
+        };
 
         // Klawisze łapane w drodze w dół: inaczej kontrolka pod kursorem zjada
         // zdarzenie, zanim okno zdąży cokolwiek z nim zrobić.
@@ -55,6 +59,22 @@ public partial class MainView : UserControl
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
+
+    /// <summary>
+    /// Zdjęcie zasłony startowej, gdy model widoku wreszcie jest.
+    /// </summary>
+    /// <remarks>
+    /// Bez kontekstu danych każde powiązanie „IsVisible" wraca do wartości domyślnej,
+    /// czyli widoczne — a to znaczy wszystkie ekrany naraz plus pusty formularz
+    /// zadania. Zasłona trwa dokładnie tyle, ile ta chwila.
+    /// </remarks>
+    private void OdsloniecieGotowego()
+    {
+        if (this.FindControl<Panel>("ZaslonaStartu") is { } zaslona)
+        {
+            zaslona.IsVisible = DataContext is null;
+        }
+    }
 
     private ScrollViewer? _siatka;
 

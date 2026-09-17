@@ -218,9 +218,17 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void DismissNotice() => Notice = string.Empty;
 
-    /// <summary>„Dzisiaj" jest ekranem startowym — to on odpowiada na pytanie „co teraz".</summary>
+    /// <summary>
+    /// Kalendarz jest ekranem startowym: pierwsze pytanie dnia brzmi „co dziś jest
+    /// umówione", a nie „co mam na liście".
+    /// </summary>
+    /// <remarks>
+    /// Wartość początkowa, a nie samo wywołanie w <c>InitializeAsync</c>. Okno rysuje
+    /// się, zanim wczytywanie dobiegnie końca, więc przy „Dzisiaj" na starcie widać
+    /// było mignięcie listy, po którym dopiero wchodził kalendarz.
+    /// </remarks>
     [ObservableProperty]
-    public partial Screen Current { get; set; } = Screen.Today;
+    public partial Screen Current { get; set; } = Screen.Calendar;
 
     /// <summary>
     /// Czy okno jest wąskie — czyli czy to telefon albo wąskie okno na pulpicie.
@@ -369,8 +377,8 @@ public sealed partial class MainViewModel : ObservableObject
         CollectReminders();
         await RefreshInboxAsync();
 
-        // Kalendarz jako ekran startowy: pierwsze pytanie dnia brzmi „co dziś jest
-        // umówione", a nie „co mam na liście".
+        // Wczytanie tego, co i tak jest już wybrane: ekranem startowym jest kalendarz
+        // (patrz Current), a wybór bez danych to pusta siatka.
         await ShowCalendarAsync();
     }
 

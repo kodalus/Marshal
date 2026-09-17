@@ -2123,5 +2123,30 @@
       </ScrollViewer>
       </Border>
       </Panel>
+
+      <!--
+        Zasłona na czas startu.
+
+        Okno powstaje i pokazuje się, zanim aplikacja ma bazę i model widoku —
+        i to jest w porządku, bo puste okno jest lepsze niż żadne przez trzy sekundy.
+        Gorsze jest to, co widać w międzyczasie: powiązanie bez kontekstu danych nie
+        daje ani prawdy, ani fałszu, więc każde „IsVisible" wraca do wartości domyślnej,
+        czyli **widoczne**. Przez tę chwilę na wierzchu leżą naraz wszystkie ekrany,
+        arkusz „Więcej" i okno szczegółu zadania — pusty formularz, którego nikt nie
+        otwierał.
+
+        Zasłona zdejmowana jest z kodu, a nie powiązaniem, właśnie dlatego, że
+        powiązanie bez kontekstu jest tu tym, co psuje.
+      -->
+      <Panel Name="ZaslonaStartu" Background="{DynamicResource Tlo}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+          <Image Source="/Assets/marshal.png" Width="52" Height="52"
+                 HorizontalAlignment="Center" />
+          <TextBlock Text="Marshal" FontSize="18" FontWeight="SemiBold"
+                     HorizontalAlignment="Center" />
+          <TextBlock Classes="hint" Text="Chwileczkę — otwieram bazę."
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Panel>
   </Grid>
 </UserControl>
