@@ -121,6 +121,17 @@ public sealed partial class CalendarViewModel(
 
     public bool HasProblem => !string.IsNullOrEmpty(Problem);
 
+    /// <summary>
+    /// Prośba o przewinięcie siatki, w punktach od północy.
+    /// </summary>
+    /// <remarks>
+    /// Model widoku nie sięga do okna, a przewijanie jest rzeczą okna: tu jest tylko
+    /// „dokąd", a „jak" zostaje po stronie widoku. Zdarzenie zamiast właściwości, bo
+    /// to jednorazowe polecenie, a nie stan — po przewinięciu ręką przez użytkownika
+    /// właściwość kłamałaby o tym, gdzie siatka faktycznie stoi.
+    /// </remarks>
+    public event Action<double>? ScrollRequested;
+
     public async Task LoadAsync()
     {
         if (Anchor == default)
@@ -129,6 +140,7 @@ public sealed partial class CalendarViewModel(
         }
 
         await RefreshAsync();
+        PrzewinDoTeraz();
     }
 
     [RelayCommand]
@@ -190,6 +202,7 @@ public sealed partial class CalendarViewModel(
     {
         GoToToday();
         await RefreshAsync();
+        PrzewinDoTeraz();
     }
 
     /// <summary>
@@ -231,6 +244,31 @@ public sealed partial class CalendarViewModel(
 
         OnPropertyChanged(nameof(ColumnWidth));
         await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Siatka otwiera się na bieżącej godzinie, nie o północy.
+    /// </summary>
+    /// <remarks>
+    /// Doba ma 1152 punkty wysokości, a ekran telefonu mieści z tego jakąś jedną
+    /// czwartą — więc widok od północy pokazuje godziny, w których się śpi, i każde
+    /// otwarcie kalendarza zaczyna się od przewijania. Godzina zapasu u góry, bo to,
+    /// co się właśnie skończyło, jest częścią odpowiedzi na pytanie „co teraz".
+    /// Przy dniach bez dzisiaj nie ma czego pokazywać: tam pozycja z poprzedniego
+    /// przewinięcia niesie więcej niż godzina z innego dnia.
+    /// </remarks>
+    private void PrzewinDoTeraz()
+    {
+        var dzis = clock.Today;
+
+        if (dzis < Anchor || dzis >= Anchor.AddDays(VisibleDays))
+        {
+            return;
+        }
+
+        var godzina = Math.Max(0, clock.Now.TimeOfDay.TotalHours - 1);
+
+        ScrollRequested?.Invoke(godzina * HourHeight);
     }
 
     private void GoToToday()

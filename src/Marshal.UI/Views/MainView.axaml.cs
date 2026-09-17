@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
@@ -35,6 +36,64 @@ public partial class MainView : UserControl
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 
+    private ScrollViewer? _siatka;
+
+    /// <summary>Przesunięcie, które czeka na zmierzenie siatki. Null, gdy nic nie czeka.</summary>
+    private double? _docelowe;
+
+    /// <summary>
+    /// Podpięcie przewijania siatki kalendarza pod prośby modelu widoku.
+    /// </summary>
+    /// <remarks>
+    /// Odpięcie przed podpięciem, bo podstawienie modelu potrafi się powtórzyć,
+    /// a druga subskrypcja przewijałaby siatkę dwa razy — przy trzeciej i czwartej
+    /// przestaje to być niewidoczne.
+    /// </remarks>
+    private void WireCalendar(MainViewModel model)
+    {
+        _siatka ??= this.FindControl<ScrollViewer>("SiatkaKalendarza");
+
+        model.Calendar.ScrollRequested -= NaProsbeOPrzewiniecie;
+        model.Calendar.ScrollRequested += NaProsbeOPrzewiniecie;
+
+        if (_siatka is not null)
+        {
+            _siatka.LayoutUpdated -= NaUkladzie;
+            _siatka.LayoutUpdated += NaUkladzie;
+        }
+    }
+
+    private void NaProsbeOPrzewiniecie(double punkty)
+    {
+        _docelowe = punkty;
+        Przewin();
+    }
+
+    private void NaUkladzie(object? nadawca, EventArgs e) => Przewin();
+
+    /// <summary>
+    /// Ustawienie przesunięcia, gdy jest już czym przesuwać.
+    /// </summary>
+    /// <remarks>
+    /// Prośba przychodzi po wczytaniu danych, a więc **przed** złożeniem układu:
+    /// ekran kalendarza bywa w tym momencie dopiero odsłaniany i siatka ma zerową
+    /// wysokość. Przesunięcie zostałoby wtedy przycięte do zera bez śladu, że
+    /// cokolwiek się nie udało. Dlatego prośba czeka na pierwszy układ, w którym
+    /// siatka ma już rozmiar, i dopiero wtedy jest realizowana — raz.
+    /// </remarks>
+    private void Przewin()
+    {
+        if (_docelowe is not { } cel || _siatka is null || _siatka.Extent.Height <= 0)
+        {
+            return;
+        }
+
+        var zapas = Math.Max(0, _siatka.Extent.Height - _siatka.Viewport.Height);
+
+        _siatka.Offset = new Vector(_siatka.Offset.X, Math.Clamp(cel, 0, zapas));
+        _docelowe = null;
+    }
+
     /// <summary>
     /// Wybór pliku kopii. Robi go okno, nie model widoku.
     /// </summary>
@@ -54,6 +113,8 @@ public partial class MainView : UserControl
         // Pierwsze rozstrzygnięcie układu: zdarzenie rozmiaru potrafi wypaść przed
         // podstawieniem modelu, a wtedy nie miałby go kto ustawić.
         model.IsNarrow = Bounds.Width > 0 && Bounds.Width < WidokWaski;
+
+        WireCalendar(model);
 
         model.Settings.SaveRequested = async nazwa =>
         {

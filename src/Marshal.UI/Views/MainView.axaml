@@ -528,7 +528,7 @@
                    Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
       </StackPanel>
 
-      <ScrollViewer x:DataType="vm:CalendarViewModel"
+      <ScrollViewer x:Name="SiatkaKalendarza" x:DataType="vm:CalendarViewModel"
                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
         <StackPanel Orientation="Horizontal">
 

@@ -9,6 +9,7 @@ using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Repositories;
 using Marshal.Infrastructure.Sync;
 using Marshal.Infrastructure.Time;
+using Marshal.UI.ViewModels;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -283,6 +284,40 @@ public sealed class CalendarStoreTests : IDisposable
 
         // Nagrobek, nie usunięcie — wybór kalendarzy się synchronizuje (spec 5.1).
         _db.CalendarSources.Count(z => z.Id == dodany.Id).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Siatka_otwiera_sie_na_biezacej_godzinie()
+    {
+        // Doba ma 1152 punkty, a ekran telefonu mieści z tego jakąś jedną czwartą:
+        // otwarcie o północy pokazuje godziny, w których się śpi, i za każdym razem
+        // zaczyna się od przewijania. Godzina zapasu u góry, stąd nie 9 * 48, a 8 * 48.
+        var model = new CalendarViewModel(_usluga, _zegar);
+
+        double? dokad = null;
+        model.ScrollRequested += punkty => dokad = punkty;
+
+        await model.LoadAsync();
+
+        dokad.Should().Be(8 * 48);
+    }
+
+    [Fact]
+    public async Task Dni_bez_dzisiaj_nie_sa_przewijane()
+    {
+        // Godzina z innego dnia nie jest odpowiedzią na nic, a skok kasowałby
+        // pozycję, którą użytkownik ustawił ręką przed chwilą.
+        var model = new CalendarViewModel(_usluga, _zegar);
+
+        await model.LoadAsync();
+
+        double? dokad = null;
+        model.ScrollRequested += punkty => dokad = punkty;
+
+        await model.NextCommand.ExecuteAsync(null);
+        await model.LoadAsync();
+
+        dokad.Should().BeNull();
     }
 
     [Fact]
