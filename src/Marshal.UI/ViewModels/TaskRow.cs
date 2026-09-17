@@ -19,4 +19,16 @@ public sealed record TaskRow(TaskItem Task, string Badges)
     public string Title => Task.Title;
 
     public bool HasBadges => Badges.Length > 0;
+
+    /// <summary>Odhaczone zostaje na liście — z ptaszkiem, nie przez zniknięcie.</summary>
+    /// <remarks>
+    /// Znikające zadanie sprawiało, że dzień wyglądał na coraz bardziej pusty w miarę
+    /// pracy — czyli dokładnie odwrotnie do tego, co się właśnie stało.
+    /// </remarks>
+    public bool IsDone => Task.State == TaskState.Done;
+
+    public string Mark => IsDone ? "✓" : string.Empty;
+
+    /// <summary>Zrobione przygaszone — jest, ale nie woła już o uwagę.</summary>
+    public double Opacity => IsDone ? 0.5 : 1.0;
 }

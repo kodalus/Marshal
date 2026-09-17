@@ -257,8 +257,16 @@
       <StackPanel MaxWidth="560" HorizontalAlignment="Center"
                   x:DataType="vm:ClarifyViewModel">
 
-        <TextBlock Classes="hint" HorizontalAlignment="Center"
-                   Text="{Binding Remaining, StringFormat='Do rozstrzygnięcia: {0}'}" />
+        <!-- Wyjście z przetwarzania. Do dziś nie było stąd żadnej drogi na ekrany:
+             pasek nawigacji jest w tym widoku schowany, żeby decyzja nie konkurowała
+             z resztą aplikacji — ale „nie konkuruje" nie znaczy „nie da się wyjść". -->
+        <Grid ColumnDefinitions="Auto,*">
+          <Button Grid.Column="0" Classes="nav" Content="◀ wyjdź"
+                  Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ShowCalendarCommand}" />
+          <TextBlock Grid.Column="1" Classes="hint" HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     Text="{Binding Remaining, StringFormat='Do rozstrzygnięcia: {0}'}" />
+        </Grid>
 
         <Border Margin="0,12,0,20" Padding="20" CornerRadius="8" Background="#20808080">
           <TextBlock Text="{Binding Current.Title}" FontSize="22" TextWrapping="Wrap" />
@@ -350,9 +358,14 @@
                 <Grid ColumnDefinitions="*,Auto" Margin="0,3">
                   <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
                              VerticalAlignment="Center" />
-                  <Button Grid.Column="1" Content="zdejmij" Padding="10,4"
-                          Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).UnfocusCommand}"
-                          CommandParameter="{Binding}" />
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                    <Button Content="zrobione" Padding="10,4"
+                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).CompleteTaskCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Content="zdejmij" Padding="10,4"
+                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).UnfocusCommand}"
+                            CommandParameter="{Binding}" />
+                  </StackPanel>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -450,17 +463,22 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TaskRow">
             <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
-              <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+              <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                          Opacity="{Binding Opacity}">
+                <TextBlock TextWrapping="Wrap">
+                  <Run Text="{Binding Mark}" />
+                  <Run Text="{Binding Title}" />
+                </TextBlock>
                 <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
                            IsVisible="{Binding HasBadges}" />
               </StackPanel>
               <Button Grid.Column="1" Content="na dziś" Padding="10,4" Margin="0,0,6,0"
+                      IsVisible="{Binding !IsDone}"
                       VerticalAlignment="Center"
                       Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).FocusCommand}"
                       CommandParameter="{Binding}" />
               <Button Grid.Column="2" Content="Zrobione" Padding="10,4"
-                      VerticalAlignment="Center"
+                      VerticalAlignment="Center" IsVisible="{Binding !IsDone}"
                       Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).CompleteCommand}"
                       CommandParameter="{Binding}" />
             </Grid>
@@ -627,9 +645,12 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:AllDayBox">
-                          <Button Classes="slot" Padding="4,2" Margin="0,0,4,0"
+                          <Button Classes="slot" Padding="6,2" Margin="0,0,4,0"
+                                  Height="24" VerticalContentAlignment="Center"
+                                  Background="#20808080"
                                   Click="OtworzCalodniowe" Tag="{Binding}">
                             <TextBlock Text="{Binding Title}" FontSize="11"
+                                       VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
                           </Button>
                         </DataTemplate>
@@ -1518,10 +1539,14 @@
            Ta sama sztuczka co przy przetwarzaniu: widoczność na jednym elemencie,
            podmiana kontekstu na drugim, bo DataContext ustawiony na elemencie
            obowiązuje też dla pozostałych powiązań na tym samym elemencie. -->
-      <Panel IsVisible="{Binding Detail.IsOpen}" Background="#CC101010">
+      <Panel IsVisible="{Binding Detail.IsOpen}" Background="#CC101010"
+             PointerPressed="TloSzczegolu">
+      <!-- Kliknięcie w przyciemnione tło zamyka okno, kliknięcie w samo okno nie:
+           zdarzenie zatrzymuje się na ramce, więc do tła nie dociera. -->
       <Border MaxWidth="560" MaxHeight="620" Margin="8" Padding="20" CornerRadius="10"
-              Background="#FF1E1E1E" VerticalAlignment="Center">
-      <ScrollViewer DataContext="{Binding Detail}">
+              Background="#FF1E1E1E" VerticalAlignment="Center"
+              PointerPressed="ZatrzymajKlikniecie">
+      <ScrollViewer Name="SzczegolPrzewijanie" DataContext="{Binding Detail}">
         <StackPanel x:DataType="vm:TaskDetailViewModel">
 
           <TextBox Text="{Binding Title}" FontSize="18" />

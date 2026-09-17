@@ -33,8 +33,21 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
 
+    /// <summary>
+    /// Sprawy na dziś — razem z tym, co już dziś odhaczone.
+    /// </summary>
+    /// <remarks>
+    /// Odhaczone zadanie **zostaje na liście**, tylko z ptaszkiem. Znikające sprawiało,
+    /// że dzień wyglądał na coraz bardziej pusty w miarę pracy, a zrobionego nie dało
+    /// się ani zobaczyć, ani cofnąć bez chodzenia po archiwum. Zostaje do końca dnia:
+    /// jutro liczy się już tylko to, co jutrzejsze.
+    /// </remarks>
     public async Task<IReadOnlyList<TaskItem>> TodayAsync(DateOnly today, CancellationToken ct = default) =>
-        await Otwarte()
+        await db.Tasks
+            .Where(t => !t.Deleted
+                     && t.State != TaskState.Trashed
+                     && t.State != TaskState.Inbox
+                     && (t.State != TaskState.Done || t.DoDate == today))
             .Where(t => (t.DoDate != null && t.DoDate <= today)
                      || (t.Deadline != null && t.Deadline <= today))
             .OrderBy(t => t.Deadline == null)

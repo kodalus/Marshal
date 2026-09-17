@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -26,6 +27,11 @@ public partial class MainView : UserControl
     {
         InitializeComponent();
         DataContextChanged += (_, _) => WirePicker();
+
+        // Klawisze i kółko łapane w drodze w dół: inaczej kontrolka pod kursorem
+        // zjada zdarzenie, zanim okno zdąży cokolwiek z nim zrobić.
+        AddHandler(KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
+        AddHandler(PointerWheelChangedEvent, PrzewinSzczegol, RoutingStrategies.Tunnel);
 
         // Układ dobierany z faktycznej szerokości, nie z platformy: obrót telefonu
         // i zwężenie okna to ta sama zmiana.
@@ -99,6 +105,80 @@ public partial class MainView : UserControl
             m.Close();
             return Task.CompletedTask;
         });
+
+    /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
+    private void TloSzczegolu(object? nadawca, PointerPressedEventArgs e) => _szczegol?.Close();
+
+    /// <summary>Zatrzymanie kliknięcia na ramce okna, żeby nie doszło do tła.</summary>
+    private void ZatrzymajKlikniecie(object? nadawca, PointerPressedEventArgs e) =>
+        e.Handled = true;
+
+    /// <summary>
+    /// Escape zamyka to, co jest otwarte na wierzchu.
+    /// </summary>
+    /// <remarks>
+    /// Kolejność od najbardziej wierzchniego: szczegół zadania, potem karta wydarzenia,
+    /// potem lista „Więcej". Zamykanie wszystkiego naraz zabierałoby okno, którego
+    /// nikt nie chciał zamykać.
+    /// </remarks>
+    private void NaKlawiszu(object? nadawca, KeyEventArgs e)
+    {
+        if (e.Key != Key.Escape || DataContext is not MainViewModel model)
+        {
+            return;
+        }
+
+        if (model.Detail.IsOpen)
+        {
+            model.Detail.Close();
+        }
+        else if (model.Calendar.HasOpened)
+        {
+            model.Calendar.CloseOpenedCommand.Execute(null);
+        }
+        else if (model.IsMoreOpen)
+        {
+            model.CloseMoreCommand.Execute(null);
+        }
+        else
+        {
+            return;
+        }
+
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Przewijanie okna szczegółu kółkiem, także nad polami daty i godziny.
+    /// </summary>
+    /// <remarks>
+    /// Pola daty i godziny zjadają obrót kółka na własne potrzeby, więc kursor nad nimi
+    /// zatrzymywał przewijanie całego okna — a są w środku listy, którą trzeba przewinąć.
+    /// Zdarzenie łapane w drodze **w dół**, zanim dojdzie do pola.
+    /// </remarks>
+    private void PrzewinSzczegol(object? nadawca, PointerWheelEventArgs e)
+    {
+        if (this.FindControl<ScrollViewer>("SzczegolPrzewijanie") is not { } widok)
+        {
+            return;
+        }
+
+        if (e.Source is Control zrodlo
+            && zrodlo.FindAncestorOfType<TimePicker>() is null
+            && zrodlo.FindAncestorOfType<DatePicker>() is null
+            && zrodlo.FindAncestorOfType<NumericUpDown>() is null)
+        {
+            return;
+        }
+
+        widok.Offset = widok.Offset.WithY(
+            Math.Clamp(
+                widok.Offset.Y - (e.Delta.Y * 50),
+                0,
+                Math.Max(0, widok.Extent.Height - widok.Viewport.Height)));
+
+        e.Handled = true;
+    }
 
     /// <summary>Dwuklik we wrzut otwiera jego szczegół.</summary>
     private void OtworzWrzut(object? nadawca, RoutedEventArgs e)

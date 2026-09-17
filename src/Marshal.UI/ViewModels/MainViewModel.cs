@@ -331,7 +331,10 @@ public sealed partial class MainViewModel : ObservableObject
     {
         CollectReminders();
         await RefreshInboxAsync();
-        await ShowTodayAsync();
+
+        // Kalendarz jako ekran startowy: pierwsze pytanie dnia brzmi „co dziś jest
+        // umówione", a nie „co mam na liście".
+        await ShowCalendarAsync();
     }
 
     /// <summary>
@@ -731,6 +734,17 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var item in items)
         {
             target.Add(item);
+        }
+    }
+
+    /// <summary>Odhaczenie zadania podanego wprost — piątka „Na dziś" niesie same zadania.</summary>
+    [RelayCommand]
+    private async Task CompleteTaskAsync(TaskItem? task)
+    {
+        if (task is not null)
+        {
+            await _edit.CompleteAsync(task.Id);
+            await ReloadAsync();
         }
     }
 
