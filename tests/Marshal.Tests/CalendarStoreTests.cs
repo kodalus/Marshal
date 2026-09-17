@@ -476,6 +476,46 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Odhaczenie_zapisuje_blok_konczacy_sie_teraz()
+    {
+        // Zadanie bez godziny znikało po odhaczeniu z kalendarza bez śladu, więc
+        // wieczorem nie było z czego odczytać, na co poszedł dzień. Blok zapisuje się
+        // wstecz: kończy się teraz, zaczyna tyle wcześniej, ile miało trwać.
+        _zegar.Now = new DateTimeOffset(2026, 9, 17, 14, 37, 0, TimeSpan.FromHours(2));
+
+        var zadanie = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
+        zadanie.SetEstimate(15, Energy.Unknown, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        await _db.SaveChangesAsync();
+
+        await _edycja.CompleteAsync(zadanie.Id);
+
+        var po = _db.Tasks.Single(z => z.Id == zadanie.Id);
+
+        // 14:37 w dół do pięciu minut to 14:35, minus kwadrans daje 14:20.
+        po.DoTime.Should().Be(new TimeOnly(14, 20));
+        po.State.Should().Be(TaskState.Done);
+    }
+
+    [Fact]
+    public async Task Odhaczenie_nie_rusza_godziny_wpisanej_wczesniej()
+    {
+        // Godzina wpisana wcześniej była decyzją, a nie zapisem tego, co się stało.
+        _zegar.Now = new DateTimeOffset(2026, 9, 17, 14, 37, 0, TimeSpan.FromHours(2));
+
+        var zadanie = TaskItem.Capture("Spotkanie", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        await _db.SaveChangesAsync();
+
+        await _edycja.CompleteAsync(zadanie.Id);
+
+        _db.Tasks.Single(z => z.Id == zadanie.Id).DoTime.Should().Be(new TimeOnly(9, 0));
+    }
+
+    [Fact]
     public async Task Przeciagniecie_zmienia_dzien_i_godzine_a_nie_dlugosc()
     {
         var zadanie = TaskItem.Capture("Przesunąć", _zegar.Now, _hlc.Next());

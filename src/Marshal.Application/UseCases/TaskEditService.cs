@@ -142,6 +142,16 @@ public sealed class TaskEditService(
             return null;
         }
 
+        // Odhaczenie zostawia ślad na siatce: blok kończy się **teraz**, a zaczyna
+        // tyle wcześniej, ile zadanie miało trwać. Zadanie bez godziny znikało dotąd
+        // z kalendarza bez śladu, więc wieczorem nie było z czego odczytać, na co
+        // poszedł dzień. Godziny wpisanej wcześniej nie ruszamy — to była decyzja,
+        // a nie zapis tego, co się stało.
+        if (zadanie.DoTime is null && zadanie.State != TaskState.Done)
+        {
+            await ZapiszPoreWykonaniaAsync(zadanie, ct);
+        }
+
         var nastepne = RecurrenceRunner.Complete(zadanie, clock.Now, hlc.Next);
 
         if (nastepne is not null)
@@ -158,6 +168,28 @@ public sealed class TaskEditService(
     /// samo pole: N8 wymaga, żeby zadanie <c>Scheduled</c> miało datę, a zadanie bez
     /// daty nie było <c>Scheduled</c>.
     /// </summary>
+    /// <summary>Blok kończący się teraz, o długości równej oszacowaniu.</summary>
+    private async Task ZapiszPoreWykonaniaAsync(TaskItem zadanie, CancellationToken ct)
+    {
+        var teraz = clock.Now;
+
+        // Do pięciu minut w dół: „skończone o 14:37" jest dokładniejsze, niż bywa prawda.
+        var koniec = new TimeOnly(teraz.Hour, teraz.Minute / 5 * 5);
+        var dlugosc = TimeSpan.FromMinutes(zadanie.EstimatedMinutes ?? DomyslneMinuty);
+
+        // Początek przycięty do północy: blok ma opisać dzisiaj, a nie sięgnąć wstecz
+        // na wczoraj przez zadanie oszacowane na trzy godziny i odhaczone o pierwszej.
+        var start = koniec.ToTimeSpan() > dlugosc
+            ? TimeOnly.FromTimeSpan(koniec.ToTimeSpan() - dlugosc)
+            : TimeOnly.MinValue;
+
+        await ApplyDoDateAsync(zadanie, clock.Today, zadanie.AreaId, ct);
+        zadanie.SetDoTime(start, hlc.Next());
+    }
+
+    /// <summary>Ile trwa zadanie bez oszacowania (spec 11).</summary>
+    private const int DomyslneMinuty = 30;
+
     /// <summary>
     /// Nadanie i zdjęcie dnia wykonania.
     /// </summary>

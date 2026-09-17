@@ -1495,6 +1495,30 @@
           <CheckBox Margin="8,0,0,0" VerticalAlignment="Center"
                     IsChecked="{Binding OnlyProblems}" Content="tylko problemy" />
         </WrapPanel>
+        <!-- Piątka na dziś nad siatką, nie wstawiana w siatkę z góry: wolny blok wybrany
+             przez aplikację byłby zgadywaniem, kiedy się na to zbierzesz. Ptaszek
+             zapisuje blok wstecz — kończący się teraz, o długości oszacowania. -->
+        <ItemsControl Margin="0,6,0,0"
+                      ItemsSource="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).FocusItems}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="tasks:TaskItem">
+              <Border Margin="0,0,6,6" Padding="8,4" CornerRadius="6" Background="#20808080">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <CheckBox MinWidth="0" Padding="0"
+                            Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CompleteTaskCommand}"
+                            CommandParameter="{Binding}" />
+                  <TextBlock Text="{Binding Title}" FontSize="12" VerticalAlignment="Center" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
         <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Text="{Binding Summary}" />
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                    Text="Zapis lokalny, nie wchodzi do synchronizacji ani do kopii. Trzymane jest ostatnie 500 wpisów." />
@@ -1595,7 +1619,14 @@
       <ScrollViewer Name="SzczegolPrzewijanie" DataContext="{Binding Detail}">
         <StackPanel x:DataType="vm:TaskDetailViewModel">
 
-          <TextBox Text="{Binding Title}" FontSize="18" KeyDown="NazwaKlawisz" />
+          <Grid ColumnDefinitions="Auto,*">
+            <!-- Ptaszek przy nazwie zamiast przycisku „Zrobione" na dole: odhaczenie
+                 dotyczy tej jednej rzeczy, której nazwa stoi obok, a nie okna. -->
+            <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
+                      IsVisible="{Binding IsExisting}" Click="OdhaczZadanie" />
+            <TextBox Grid.Column="1" Text="{Binding Title}" FontSize="18"
+                     KeyDown="NazwaKlawisz" />
+          </Grid>
 
           <!-- Nieudany zapis zamykał okno tak samo jak udany. -->
           <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Foreground="#D0553C"
@@ -1751,16 +1782,11 @@
                własny warunek wykonalności i własne pilnowanie jednoczesności, a jedno
                i drugie potrafi cicho odmówić — odmowa wygląda wtedy dokładnie jak
                martwy przycisk i nie zostawia śladu nigdzie. -->
-          <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,20,0,0">
-            <!-- Przy zakładaniu nie ma czego odhaczać, a przycisk stojący obok
-                 „Zapisz" był po prostu pułapką: jedno i drugie zamyka okno. -->
-            <Button Grid.Column="0" Content="Zrobione" Padding="14,8"
-                    IsVisible="{Binding IsExisting}" Click="OdhaczZadanie" />
-            <Button Grid.Column="2" Content="Zapisz" Padding="14,8"
-                    Click="ZapiszZadanie" />
-          </Grid>
-          <Button HorizontalAlignment="Stretch" Margin="0,8,0,0" Padding="14,8"
-                  Click="ZamknijZadanie" Content="Zamknij bez zapisywania" />
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,20,0,0"
+                      HorizontalAlignment="Right">
+            <Button Padding="14,8" Click="ZamknijZadanie" Content="Zamknij" />
+            <Button Padding="14,8" Click="ZapiszZadanie" Content="Zapisz" />
+          </StackPanel>
 
         </StackPanel>
       </ScrollViewer>

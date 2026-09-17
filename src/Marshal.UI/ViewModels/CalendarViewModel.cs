@@ -56,10 +56,16 @@ public sealed record SlotBox(
     /// dwudziestu — na krótkim bloku wystawało poza jego krawędź i zasłaniało sąsiada.
     /// Krótkie zadanie odhacza się z listy albo po otwarciu szczegółu.
     /// </remarks>
-    public bool ShowCheck => CanComplete && Height >= 26 && Width >= 60;
+    /// <remarks>
+    /// Próg był ustawiony na dwadzieścia sześć punktów i przez to pole znikało
+    /// z półgodzinnych zadań — czyli z większości. Zostaje tak długo, jak da się je
+    /// wpisać w blok; poniżej dwunastu punktów już się nie da i wtedy odhacza się
+    /// z listy albo z otwartego szczegółu.
+    /// </remarks>
+    public bool ShowCheck => CanComplete && Height >= 12 && Width >= 40;
 
-    /// <summary>Rozmiar pola do odhaczenia — mniejszy na niskich blokach.</summary>
-    public double CheckSize => Height >= 44 ? 18 : 14;
+    /// <summary>Rozmiar pola do odhaczenia — dopasowany do wysokości bloku.</summary>
+    public double CheckSize => Math.Clamp(Height - 4, 10, 18);
 
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
     private const string DomyslneWydarzenie = "#6C8FBF";
