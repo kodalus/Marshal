@@ -22,6 +22,35 @@ public sealed class ReminderServiceTests : IDisposable
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
+    /// <summary>Strefa testu — ta sama, w której liczone są chwile w asercjach.</summary>
+    private sealed class Strefa : ISettings
+    {
+        public TimeZoneInfo Zone { get; } = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
+
+        public string? ZoneProblem => null;
+
+        public ThemeChoice Theme => ThemeChoice.System;
+
+        public string? GoogleClientId => null;
+
+        public string? GoogleClientSecret => null;
+
+        public bool GoogleCalendarEnabled => false;
+
+        public Guid? MainCalendarId => null;
+
+        public void SetMainCalendar(Guid? calendarId) => throw new NotSupportedException();
+
+        public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
+
+        public void SetZone(string id) => throw new NotSupportedException();
+
+        public void SetTheme(ThemeChoice theme) => throw new NotSupportedException();
+
+        public void SetGoogle(string? clientId, string? clientSecret) =>
+            throw new NotSupportedException();
+    }
+
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
     private readonly Zegar _zegar = new();
@@ -46,6 +75,7 @@ public sealed class ReminderServiceTests : IDisposable
             new ReminderLog(_db),
             _powiadamiacz,
             new UnitOfWork(_db),
+            new Strefa(),
             _zegar);
     }
 
@@ -98,6 +128,85 @@ public sealed class ReminderServiceTests : IDisposable
         Dodaj("Zapłacić ratę", "2026-09-14T20:00:00");
 
         (await _usluga.RunAsync()).Should().Be(1);
+    }
+
+    /// <summary>
+    /// Zadanie z godziną odzywa się tyle razy, ile ma wyprzedzeń.
+    /// </summary>
+    /// <remarks>
+    /// Tak się o tym myśli: „przypomnij mi pół godziny przed wizytą", a nie „przypomnij
+    /// o 14:30". Przy przesunięciu zadania wyprzedzenia jadą razem z nim i nie trzeba
+    /// ich poprawiać po jednym.
+    /// </remarks>
+    [Fact]
+    public async Task Zadanie_z_godzina_odzywa_sie_z_kazdego_wyprzedzenia()
+    {
+        var zadanie = TaskItem.Capture("Wizyta", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(_obszar, new DateOnly(2026, 9, 16), _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        zadanie.SetReminderLeads([0, 15, 60], _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        // Kwadrans po dziewiątej: minęło wyprzedzenie godzinne, reszta jeszcze nie.
+        _zegar.Now = Chwila("2026-09-16T09:15:00");
+        (await _usluga.RunAsync()).Should().Be(1);
+
+        _zegar.Now = Chwila("2026-09-16T09:50:00");
+        (await _usluga.RunAsync()).Should().Be(1, "kwadrans przed, godzinne już było");
+
+        _zegar.Now = Chwila("2026-09-16T10:00:00");
+        (await _usluga.RunAsync()).Should().Be(1, "o czasie");
+
+        _zegar.Now = Chwila("2026-09-16T10:30:00");
+        (await _usluga.RunAsync()).Should().Be(0, "wszystkie trzy już się odezwały");
+    }
+
+    /// <summary>
+    /// Przesunięcie zadania przesuwa jego przypomnienia, bez dotykania wyprzedzeń.
+    /// </summary>
+    [Fact]
+    public async Task Przesuniete_zadanie_zabiera_wyprzedzenia_ze_soba()
+    {
+        var zadanie = TaskItem.Capture("Wizyta", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(_obszar, new DateOnly(2026, 9, 16), _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        zadanie.SetReminderLeads([30], _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        _zegar.Now = Chwila("2026-09-16T09:31:00");
+        (await _usluga.RunAsync()).Should().Be(1);
+
+        // Ta sama godzina, następny dzień: to inna chwila, więc odzywa się na nowo.
+        zadanie.MoveDoDate(new DateOnly(2026, 9, 17), _hlc.Next());
+        _db.SaveChanges();
+
+        _zegar.Now = Chwila("2026-09-17T09:31:00");
+        (await _usluga.RunAsync()).Should().Be(1);
+    }
+
+    /// <summary>
+    /// Wyprzedzenia sprzed więcej niż doby milczą; własna chwila przypomnienia nie.
+    /// </summary>
+    /// <remarks>
+    /// Wyprzedzeń bywa kilka na zadanie, więc tydzień zamkniętej aplikacji dałby ich
+    /// kilkadziesiąt naraz — lawinę do zamknięcia, nie przypomnienia. Przypomnienie
+    /// z własną chwilą jest jedno i ustawione ręcznie, więc odzywa się bez względu
+    /// na to, jak długo aplikacja była zamknięta.
+    /// </remarks>
+    [Fact]
+    public async Task Stare_wyprzedzenia_milcza_a_wlasna_chwila_nie()
+    {
+        var zWyprzedzeniem = TaskItem.Capture("Wizyta", _zegar.Now, _hlc.Next());
+        zWyprzedzeniem.Schedule(_obszar, new DateOnly(2026, 9, 10), _hlc.Next());
+        zWyprzedzeniem.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        zWyprzedzeniem.SetReminderLeads([0, 15, 60], _hlc.Next());
+        _db.Tasks.Add(zWyprzedzeniem);
+
+        Dodaj("Zapłacić ratę", "2026-09-14T20:00:00");
+
+        (await _usluga.RunAsync()).Should().Be(1, "tylko to z własną chwilą");
     }
 
     [Fact]

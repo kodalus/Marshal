@@ -27,6 +27,10 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.FocusMissCount).IsRequired();
         builder.Property(t => t.DoTime);
         builder.Property(t => t.SharedEventId).HasMaxLength(200);
+        builder.Property(t => t.ReminderLeadsCsv).HasMaxLength(200);
+
+        // Odczytana postać tekstu z kolumny, nie druga kopia tej samej rzeczy.
+        builder.Ignore(t => t.ReminderLeads);
 
         // Liczone z SharedCalendarId — zmapowane dałoby się ustawić niezależnie od niego.
         builder.Ignore(t => t.IsShared);

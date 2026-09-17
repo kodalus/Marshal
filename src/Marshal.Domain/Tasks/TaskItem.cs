@@ -237,6 +237,51 @@ public sealed class TaskItem : Entity
         Touch(stamp);
     }
 
+    /// <summary>
+    /// Wyprzedzenia przypomnień w minutach, zapisane jednym tekstem.
+    /// </summary>
+    /// <remarks>
+    /// Jedną kolumną, nie tabelą potomną. Wyprzedzenia to garść małych liczb, które
+    /// zmienia się zawsze wszystkie naraz — przy takim kształcie tabela dokłada złączenie
+    /// i osobne wiersze do scalania, a nie daje nic w zamian. Scalanie działa per pole
+    /// (9.4), więc zestaw zmieniony na telefonie zastępuje ten z komputera w całości,
+    /// i tak właśnie ma być: „przypomnij mi kwadrans i dobę wcześniej" jest jedną decyzją,
+    /// a nie dwiema. Ten sam zabieg co przy regule powtarzania.
+    /// </remarks>
+    public string? ReminderLeadsCsv { get; private set; }
+
+    /// <summary>
+    /// Ile minut przed godziną zadania ma się odezwać. Zero znaczy „o czasie".
+    /// </summary>
+    public IReadOnlyList<int> ReminderLeads =>
+        string.IsNullOrWhiteSpace(ReminderLeadsCsv)
+            ? []
+            : ReminderLeadsCsv
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(w => int.TryParse(w, out var minuty) ? minuty : -1)
+                .Where(m => m >= 0)
+                .Distinct()
+                .OrderBy(m => m)
+                .ToList();
+
+    /// <summary>
+    /// Ustawienie zestawu wyprzedzeń.
+    /// </summary>
+    /// <remarks>
+    /// Porządkowane i odsiewane z powtórzeń przy zapisie, nie przy odczycie: dwa razy
+    /// „kwadrans wcześniej" to jedno przypomnienie, a nie dwa, i lepiej, żeby wynikało
+    /// to z tego, co leży w bazie, niż z tego, kto akurat czyta.
+    /// </remarks>
+    public void SetReminderLeads(IEnumerable<int> minutes, Hlc stamp)
+    {
+        ArgumentNullException.ThrowIfNull(minutes);
+
+        var zestaw = minutes.Where(m => m >= 0).Distinct().OrderBy(m => m).ToList();
+
+        ReminderLeadsCsv = zestaw.Count == 0 ? null : string.Join(',', zestaw);
+        Touch(stamp);
+    }
+
     public void SetReminder(DateTimeOffset? at, Hlc stamp)
     {
         ReminderAt = at;

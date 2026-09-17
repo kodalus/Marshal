@@ -45,6 +45,16 @@ public interface ITaskRepository
     Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(DateOnly today, CancellationToken ct = default);
 
     /// <summary>Zadania otwarte z chwilą przypomnienia nie późniejszą niż podana.</summary>
+    /// <summary>
+    /// Zadania, które mają cokolwiek do przypomnienia — z godziną albo z chwilą.
+    /// </summary>
+    /// <remarks>
+    /// Chwile liczy się w pamięci, nie zapytaniem: wyprzedzenia leżą w bazie jednym
+    /// tekstem, a godzina zadania jest lokalna i wymaga strefy, której baza nie zna.
+    /// Zadań z przypomnieniem są dziesiątki, nie tysiące, więc koszt jest żaden.
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> WithRemindersAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<TaskItem>> DueRemindersAsync(DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>Zadania wybrane na dany dzień (spec 8.6).</summary>

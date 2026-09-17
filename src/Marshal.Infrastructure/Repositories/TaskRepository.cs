@@ -114,6 +114,11 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .OrderBy(t => t.DoDate)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<TaskItem>> WithRemindersAsync(CancellationToken ct = default) =>
+        await Otwarte()
+            .Where(t => t.ReminderAt != null || t.ReminderLeadsCsv != null)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<TaskItem>> DueRemindersAsync(
         DateTimeOffset now, CancellationToken ct = default) =>
         await Otwarte()
