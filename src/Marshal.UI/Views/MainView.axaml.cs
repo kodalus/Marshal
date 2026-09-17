@@ -1,92 +1,3 @@
-    /// <summary>
-    /// Menu wiersza struktury — to samo dla obszaru i dla projektu.
-    /// </summary>
-    /// <remarks>
-    /// Jedno menu na oba poziomy, bo czynności są te same: nazwa, barwa, założenie
-    /// czegoś pod spodem, usunięcie. Do dziś obszary i projekty mieszkały na dwóch
-    /// ekranach i każdy dawał co innego — tu barwę i usunięcie projektu, tam zakładanie
-    /// obszaru, a nazwę wyłącznie tam. Cztery osobne braki, jedna przyczyna.
-    ///
-    /// Powód odmowy sprawdzany przed pokazaniem menu: pozycja, która po kliknięciu nic
-    /// nie robi, uczy nieufności do całego menu.
-    /// </remarks>
-    private async Task PokazMenuProjektuAsync(MainViewModel model, Control zrodlo, ProjectTreeRow wiersz)
-    {
-        var przeszkoda = await model.WhyCannotDeleteRowAsync(wiersz);
-
-        var pozycje = new List<object>
-        {
-            Pozycja("Zmień nazwę…", () =>
-            {
-                PokazPoleNazwy(
-                    zrodlo, wiersz.Label, "Zapisz",
-                    nazwa => model.RenameRowAsync(wiersz, nazwa));
-
-                return Task.CompletedTask;
-            }),
-            Pozycja(wiersz.AddLabel, () =>
-            {
-                PokazPoleNazwy(
-                    zrodlo, string.Empty, "Załóż",
-                    nazwa => model.AddProjectAsync(wiersz, nazwa));
-
-                return Task.CompletedTask;
-            }),
-            Pozycja("Barwa…", () =>
-            {
-                PokazPalete(model, zrodlo, wiersz);
-                return Task.CompletedTask;
-            }),
-            new Separator(),
-            przeszkoda is null
-                ? Pozycja(wiersz.IsArea ? "Usuń obszar" : "Usuń projekt",
-                    () => model.DeleteRowAsync(wiersz))
-                : new MenuItem { Header = przeszkoda, IsEnabled = false },
-        };
-
-        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
-    }
-
-    /// <summary>
-    /// Małe okienko z jednym polem tekstowym przy wierszu.
-    /// </summary>
-    /// <remarks>
-    /// Pole wprost na liście byłoby czwartą rzeczą w wierszu, który już niesie nazwę,
-    /// kwadracik barwy i liczby — a nazwę zmienia się raz na parę miesięcy. Enter
-    /// zapisuje, bo po wpisaniu ręka i tak tam idzie.
-    /// </remarks>
-    private void PokazPoleNazwy(
-        Control zrodlo, string poczatkowa, string przycisk, Func<string, Task> praca)
-    {
-        var pole = new TextBox { Text = poczatkowa, Width = 260 };
-        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
-
-        void Zapisz()
-        {
-            var nazwa = pole.Text ?? string.Empty;
-            flyout.Hide();
-            _ = Probuj($"Struktura: {przycisk}", () => praca(nazwa));
-        }
-
-        pole.KeyDown += (_, args) =>
-        {
-            if (args.Key == Key.Enter)
-            {
-                args.Handled = true;
-                Zapisz();
-            }
-        };
-
-        var zapisz = new Button { Content = przycisk, Padding = new Thickness(14, 6) };
-        zapisz.Click += (_, _) => Zapisz();
-
-        flyout.Content = new StackPanel { Spacing = 8, Children = { pole, zapisz } };
-        flyout.ShowAt(zrodlo);
-
-        pole.Focus();
-        pole.SelectAll();
-    }
-
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -904,35 +815,92 @@ public partial class MainView : UserControl
     }
 
     /// <summary>
-    /// Menu wiersza „Projektów”: barwa i usunięcie.
+    /// Menu wiersza struktury — to samo dla obszaru i dla projektu.
     /// </summary>
     /// <remarks>
-    /// Powód odmowy sprawdzany **przed** pokazaniem menu, więc pozycja „Usuń” albo
-    /// działa, albo mówi napisem, czego brakuje. Pozycja, która po kliknięciu nic nie
-    /// robi, uczy nieufności do całego menu.
+    /// Jedno menu na oba poziomy, bo czynności są te same: nazwa, barwa, założenie
+    /// czegoś pod spodem, usunięcie. Do dziś obszary i projekty mieszkały na dwóch
+    /// ekranach i każdy dawał co innego — tu barwę i usunięcie projektu, tam zakładanie
+    /// obszaru, a nazwę wyłącznie tam. Cztery osobne braki, jedna przyczyna.
+    ///
+    /// Powód odmowy sprawdzany przed pokazaniem menu: pozycja, która po kliknięciu nic
+    /// nie robi, uczy nieufności do całego menu.
     /// </remarks>
     private async Task PokazMenuProjektuAsync(MainViewModel model, Control zrodlo, ProjectTreeRow wiersz)
     {
-        var przeszkoda = await model.WhyCannotDeleteAsync(wiersz);
+        var przeszkoda = await model.WhyCannotDeleteRowAsync(wiersz);
 
         var pozycje = new List<object>
         {
+            Pozycja("Zmień nazwę…", () =>
+            {
+                PokazPoleNazwy(
+                    zrodlo, wiersz.Label, "Zapisz",
+                    nazwa => model.RenameRowAsync(wiersz, nazwa));
+
+                return Task.CompletedTask;
+            }),
+            Pozycja(wiersz.AddLabel, () =>
+            {
+                PokazPoleNazwy(
+                    zrodlo, string.Empty, "Załóż",
+                    nazwa => model.AddProjectAsync(wiersz, nazwa));
+
+                return Task.CompletedTask;
+            }),
             Pozycja("Barwa…", () =>
             {
                 PokazPalete(model, zrodlo, wiersz);
                 return Task.CompletedTask;
             }),
+            new Separator(),
+            przeszkoda is null
+                ? Pozycja(wiersz.IsArea ? "Usuń obszar" : "Usuń projekt",
+                    () => model.DeleteRowAsync(wiersz))
+                : new MenuItem { Header = przeszkoda, IsEnabled = false },
         };
 
-        if (!wiersz.IsArea)
+        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Małe okienko z jednym polem tekstowym przy wierszu.
+    /// </summary>
+    /// <remarks>
+    /// Pole wprost na liście byłoby czwartą rzeczą w wierszu, który już niesie nazwę,
+    /// kwadracik barwy i liczby — a nazwę zmienia się raz na parę miesięcy. Enter
+    /// zapisuje, bo po wpisaniu ręka i tak tam idzie.
+    /// </remarks>
+    private void PokazPoleNazwy(
+        Control zrodlo, string poczatkowa, string przycisk, Func<string, Task> praca)
+    {
+        var pole = new TextBox { Text = poczatkowa, Width = 260 };
+        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        void Zapisz()
         {
-            pozycje.Add(new Separator());
-            pozycje.Add(przeszkoda is null
-                ? Pozycja("Usuń projekt", () => model.DeleteProjectAsync(wiersz))
-                : new MenuItem { Header = przeszkoda, IsEnabled = false });
+            var nazwa = pole.Text ?? string.Empty;
+            flyout.Hide();
+            _ = Probuj($"Struktura: {przycisk}", () => praca(nazwa));
         }
 
-        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
+        pole.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Enter)
+            {
+                args.Handled = true;
+                Zapisz();
+            }
+        };
+
+        var zapisz = new Button { Content = przycisk, Padding = new Thickness(14, 6) };
+        zapisz.Click += (_, _) => Zapisz();
+
+        flyout.Content = new StackPanel { Spacing = 8, Children = { pole, zapisz } };
+        flyout.ShowAt(zrodlo);
+
+        pole.Focus();
+        pole.SelectAll();
     }
 
     /// <summary>
