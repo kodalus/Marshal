@@ -23,9 +23,28 @@ public sealed class InAppNotifier : INotifier
     private readonly Lock _gate = new();
     private readonly List<Notification> _oczekujace = [];
 
+    /// <summary>
+    /// Wyjście na powiadomienia systemowe, podstawiane przez warstwę platformy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pole statyczne, i to jest świadome. Powiadomienie systemowe umie pokazać tylko
+    /// projekt platformy — pakiet, który to robi, jest desktopowy i nie może wejść do
+    /// warstwy współdzielonej z Androidem. Kontener powstaje wewnątrz aplikacji okna,
+    /// więc projekt platformy nie ma gdzie wstawić swojej wersji; haczyk ustawiany raz
+    /// przy starcie jest tańszy niż przeprowadzanie budowy kontenera przez wszystkie
+    /// trzy projekty po to, żeby podać jedną funkcję.
+    /// </para>
+    /// <para>
+    /// Puste znaczy „ta platforma nie umie" i nie jest błędem: pasek w oknie działa
+    /// dalej i jest prawdziwym przypomnieniem, gdy siedzisz przy komputerze.
+    /// </para>
+    /// </remarks>
+    public static Func<Notification, CancellationToken, Task>? Systemowe { get; set; }
+
     public event EventHandler<Notification>? Shown;
 
-    public Task ShowAsync(Notification notification, CancellationToken ct = default)
+    public async Task ShowAsync(Notification notification, CancellationToken ct = default)
     {
         lock (_gate)
         {
@@ -33,7 +52,23 @@ public sealed class InAppNotifier : INotifier
         }
 
         Shown?.Invoke(this, notification);
-        return Task.CompletedTask;
+
+        if (Systemowe is not { } systemowe)
+        {
+            return;
+        }
+
+        // Awaria powiadomienia systemowego nie ma zabierać ze sobą tego w oknie.
+        // Toast na Windowsie potrafi nie wyjść z powodów, na które nie mamy wpływu —
+        // brak skrótu w menu Start, wyłączone powiadomienia, tryb skupienia.
+        try
+        {
+            await systemowe(notification, ct);
+        }
+        catch (Exception) when (true)
+        {
+            // Zostaje pasek w oknie.
+        }
     }
 
     /// <summary>Odbiera i czyści to, co się uzbierało.</summary>

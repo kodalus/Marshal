@@ -14,6 +14,10 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+
+    <!-- Powiadomienia systemowe. Tylko tutaj, nie w warstwie okna: pakiet jest
+         desktopowy, a warstwa okna jest współdzielona z Androidem. -->
+    <PackageReference Include="DesktopNotifications.Avalonia" Version="1.*" />
     <PackageReference Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" Condition="'$(Configuration)' == 'Debug'" />
   </ItemGroup>
   <ItemGroup>
