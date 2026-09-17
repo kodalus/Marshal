@@ -120,7 +120,7 @@ public sealed partial class TaskDetailViewModel(
                 czesci.Add($"termin {termin:dd.MM}");
             }
 
-            if (ReminderDay is not null)
+            if (ReminderDay is not null || Leads.Any(w => w.IsChecked))
             {
                 czesci.Add("przypomnienie");
             }
@@ -170,6 +170,36 @@ public sealed partial class TaskDetailViewModel(
 
     [ObservableProperty]
     public partial TimeSpan? ReminderTime { get; set; }
+
+    /// <summary>
+    /// Wyprzedzenia zadania z godziną: ile przed nią ma się odezwać. Kilka naraz,
+    /// bo jedno rzadko wystarcza — dobę wcześniej, żeby się przygotować, i kwadrans
+    /// wcześniej, żeby wyjść.
+    /// </summary>
+    /// <remarks>
+    /// Lista trzyma gotowy zestaw **oraz** to, co zadanie ma zapisane, także spoza
+    /// zestawu. Dopisane ręcznie wskakuje na swoje miejsce w kolejności czasu, więc
+    /// nie ma dwóch sposobów na to samo wyprzedzenie.
+    /// </remarks>
+    public ObservableCollection<LeadChoice> Leads { get; } = [];
+
+    /// <summary>Zestaw pod ręką. Reszta dopisywana polem obok, bez zaśmiecania listy.</summary>
+    private static readonly int[] Gotowe = [0, 5, 15, 30, 60, 60 * 24];
+
+    /// <summary>Liczba dziesiętna z tego samego powodu co odstęp rytmu: NumericUpDown.</summary>
+    [ObservableProperty]
+    public partial decimal? CustomLead { get; set; } = 10;
+
+    [ObservableProperty]
+    public partial LeadUnitChoice? SelectedLeadUnit { get; set; } = LeadUnitChoice.All[0];
+
+    public IReadOnlyList<LeadUnitChoice> LeadUnits => LeadUnitChoice.All;
+
+    /// <summary>
+    /// Czy zadanie ma godzinę. Wyprzedzenia liczą się **od niej**, więc bez godziny
+    /// nie ma od czego — wtedy okno pokazuje przypomnienie z własnym dniem i porą.
+    /// </summary>
+    public bool HasTime => DoTime is not null;
 
     [ObservableProperty]
     public partial PriorityChoice? SelectedPriority { get; set; } = PriorityChoice.All[0];
@@ -339,6 +369,11 @@ public sealed partial class TaskDetailViewModel(
         SelectedPlacement = Placements.FirstOrDefault();
         LoadRule(null);
 
+        // Nowe zadanie z godziny na siatce ma domyślnie odezwać się o tej godzinie.
+        // Wpisanie czegoś w kalendarz i niedowiedzenie się o tym jest najczęstszym
+        // sposobem na przegapienie — a odznaczenie kosztuje jedno kliknięcie.
+        WczytajWyprzedzenia([0]);
+
         DoDate = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), clock.Now.Offset);
         DoTime = time.ToTimeSpan();
 
@@ -373,6 +408,7 @@ public sealed partial class TaskDetailViewModel(
         Deadline = ToOffset(task.Deadline);
         ReminderDay = task.ReminderAt is { } r ? ToOffset(DateOnly.FromDateTime(r.DateTime)) : null;
         ReminderTime = task.ReminderAt?.TimeOfDay;
+        WczytajWyprzedzenia(task.ReminderLeads);
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
         EstimatedMinutes = task.EstimatedMinutes;
         DoTime = task.DoTime?.ToTimeSpan();
@@ -399,6 +435,7 @@ public sealed partial class TaskDetailViewModel(
         OnPropertyChanged(nameof(IsExisting));
         ShowMore = Deadline is not null
             || ReminderDay is not null
+            || Leads.Any(w => w.IsChecked)
             || Rytm is not null
             || Waga != Priority.None;
 
@@ -514,7 +551,8 @@ public sealed partial class TaskDetailViewModel(
                 Minuty(),
                 Sila,
                 SelectedPlacement?.AreaId,
-                DoTime is { } pora ? TimeOnly.FromTimeSpan(pora) : null));
+                DoTime is { } pora ? TimeOnly.FromTimeSpan(pora) : null,
+                WybraneWyprzedzenia()));
 
             // Projekt osobnym wywołaniem, a nie kolejnym polem edycji: pole typu
             // Guid? nie umie odróżnić „zostaw jak jest" od „wyjmij z projektu",
@@ -600,6 +638,19 @@ public sealed partial class TaskDetailViewModel(
 
     partial void OnDoTimeChanged(TimeSpan? value)
     {
+        // Poza blokadami, bo lista wyprzedzeń pojawia się i znika razem z godziną,
+        // także przy wczytywaniu.
+        OnPropertyChanged(nameof(HasTime));
+
+        // Godzina wpisana zadaniu, które żadnego przypomnienia nie ma, włącza to
+        // o czasie. Zaplanowanie czegoś na konkretną porę i niedowiedzenie się o niej
+        // jest najczęstszym sposobem na przegapienie.
+        if (!_loading && value is not null && !Leads.Any(w => w.IsChecked))
+        {
+            Dopisz(0).IsChecked = true;
+            Refresh();
+        }
+
         if (_loading || _zgodne || value is not { } poczatek)
         {
             return;
@@ -701,10 +752,69 @@ public sealed partial class TaskDetailViewModel(
     private static DateOnly? ToDate(DateTimeOffset? value) =>
         value is { } v ? DateOnly.FromDateTime(v.Date) : null;
 
+    /// <summary>
+    /// Lista wyprzedzeń od nowa: gotowy zestaw plus to, co zadanie ma zapisane,
+    /// w kolejności czasu. Zaznaczone jest wyłącznie to, co zadanie naprawdę ma.
+    /// </summary>
+    private void WczytajWyprzedzenia(IReadOnlyList<int> wybrane)
+    {
+        Leads.Clear();
+
+        foreach (var minuty in Gotowe.Concat(wybrane).Distinct().OrderBy(m => m))
+        {
+            Leads.Add(new LeadChoice(minuty) { IsChecked = wybrane.Contains(minuty) });
+        }
+    }
+
+    /// <summary>Wyprzedzenie na liście — to, które już tam jest, albo świeżo wstawione.</summary>
+    private LeadChoice Dopisz(int minuty)
+    {
+        if (Leads.FirstOrDefault(w => w.Minutes == minuty) is { } juz)
+        {
+            return juz;
+        }
+
+        var pozycja = new LeadChoice(minuty);
+        Leads.Insert(Leads.Count(w => w.Minutes < minuty), pozycja);
+        return pozycja;
+    }
+
+    /// <summary>
+    /// Dopisanie własnego wyprzedzenia: liczba razy jednostka. Od razu zaznaczone —
+    /// nikt nie wpisuje „dwie godziny" po to, żeby zostawić to niewłączone.
+    /// </summary>
+    [RelayCommand]
+    private void AddLead()
+    {
+        if (CustomLead is not { } ile || SelectedLeadUnit is not { } jednostka)
+        {
+            return;
+        }
+
+        var minuty = (int)Math.Round(ile) * jednostka.Minutes;
+
+        if (minuty < 0)
+        {
+            return;
+        }
+
+        Dopisz(minuty).IsChecked = true;
+        Refresh();
+    }
+
+    /// <summary>
+    /// Wyprzedzenia do zapisu. Zadanie bez godziny zwraca <c>null</c> — czyli
+    /// „zostaw jak jest", a nie „wyczyść". Zabranie godziny na chwilę nie ma kasować
+    /// ustawionych przypomnień, bo po jej wpisaniu z powrotem nie byłoby ich skąd wziąć.
+    /// </summary>
+    private IReadOnlyList<int>? WybraneWyprzedzenia() =>
+        HasTime ? Leads.Where(w => w.IsChecked).Select(w => w.Minutes).ToList() : null;
+
     private void Refresh()
     {
         OnPropertyChanged(nameof(MoreSummary));
         OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(HasTime));
         OnPropertyChanged(nameof(IsRepeating));
         OnPropertyChanged(nameof(NeedsInterval));
         OnPropertyChanged(nameof(NeedsWeekdays));

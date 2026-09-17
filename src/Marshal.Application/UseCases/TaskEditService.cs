@@ -22,7 +22,13 @@ public sealed record TaskEdit(
     Guid? AreaId = null,
 
     /// <summary>Godzina rozpoczęcia. Bez niej zadanie idzie na pasek całodniowy.</summary>
-    TimeOnly? DoTime = null);
+    TimeOnly? DoTime = null,
+
+    /// <summary>
+    /// Wyprzedzenia liczone od godziny zadania, w minutach. Puste znaczy „zostaw te,
+    /// które są" — pusta lista znaczy „żadnych", i to są dwie różne rzeczy.
+    /// </summary>
+    IReadOnlyList<int>? ReminderLeads = null);
 
 /// <summary>
 /// Zmiana pól zadania z jednego miejsca (spec 11, ekran szczegółu).
@@ -93,6 +99,15 @@ public sealed class TaskEditService(
         if (edit.ReminderAt != zadanie.ReminderAt)
         {
             zadanie.SetReminder(edit.ReminderAt, hlc.Next());
+        }
+
+        // Porównanie po uporządkowaniu, bo zadanie trzyma je bez powtórzeń i rosnąco.
+        // Inaczej ta sama lista w innej kolejności wyglądałaby na zmianę i wygrywała
+        // scalanie z prawdziwą zmianą z drugiego urządzenia.
+        if (edit.ReminderLeads is { } wyprzedzenia
+            && !wyprzedzenia.Where(m => m >= 0).Distinct().Order().SequenceEqual(zadanie.ReminderLeads))
+        {
+            zadanie.SetReminderLeads(wyprzedzenia, hlc.Next());
         }
 
         if (edit.Priority != zadanie.Priority)

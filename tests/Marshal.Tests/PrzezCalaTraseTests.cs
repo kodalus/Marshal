@@ -510,6 +510,49 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Wyprzedzenia_z_okna_dojezdzaja_do_bazy()
+    {
+        // Kwadraciki w oknie, lista minut w bazie, chwile w przypomnieniach — trzy
+        // różne kształty tej samej rzeczy. Test idzie przez wszystkie trzy, bo każde
+        // przejście jest miejscem, w którym wyprzedzenie może cicho zniknąć.
+        var zadanie = await ZaplanowaneAsync("Wizyta u lekarza");
+
+        var szczegol = Usluga<TaskDetailViewModel>();
+        await szczegol.LoadAsync(zadanie);
+
+        szczegol.HasTime.Should().BeFalse("zadanie jeszcze nie ma godziny");
+
+        szczegol.DoTime = new TimeSpan(14, 0, 0);
+
+        szczegol.HasTime.Should().BeTrue();
+        szczegol.Leads.Single(w => w.Minutes == 0).IsChecked
+            .Should().BeTrue("wpisana godzina sama włącza przypomnienie o czasie");
+
+        szczegol.Leads.Single(w => w.Minutes == 30).IsChecked = true;
+
+        // Dowolnie: dwie godziny. Ma wskoczyć na listę na swoje miejsce w kolejności
+        // czasu i od razu zostać zaznaczone.
+        szczegol.CustomLead = 2;
+        szczegol.SelectedLeadUnit = LeadUnitChoice.All.Single(j => j.Label == "godzin");
+        szczegol.AddLeadCommand.Execute(null);
+
+        var dopisane = szczegol.Leads.Single(w => w.Minutes == 120);
+        dopisane.IsChecked.Should().BeTrue();
+        dopisane.Label.Should().Be("2 godz. wcześniej");
+        szczegol.Leads.Select(w => w.Minutes).Should().BeInAscendingOrder();
+
+        await szczegol.SaveAsync();
+
+        var zapisane = await Usluga<ITaskRepository>().FindAsync(zadanie.Id);
+        zapisane!.ReminderLeads.Should().Equal(0, 30, 120);
+
+        // Droga powrotna: okno otwarte drugi raz ma pokazać to samo.
+        szczegol.Load(zapisane);
+        szczegol.Leads.Where(w => w.IsChecked).Select(w => w.Minutes)
+            .Should().Equal(0, 30, 120, "wczytanie ma pokazać to samo, co się zapisało");
+    }
+
+    [Fact]
     public async Task Zapisany_filtr_wraca_z_bazy_z_tymi_samymi_warunkami()
     {
         // Warunki jadą do bazy jako JSON i wracają do **innego** modelu widoku niż ten,

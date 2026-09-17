@@ -1983,14 +1983,53 @@
 
           <StackPanel IsVisible="{Binding ShowReminder}">
           <TextBlock Classes="label" Text="Przypomnienie — kiedy chcesz o tym usłyszeć" />
-          <Grid ColumnDefinitions="*,Auto">
-            <DatePicker Classes="waska" Grid.Column="0" SelectedDate="{Binding ReminderDay}"
-                        HorizontalAlignment="Stretch" />
-            <TimePicker Classes="waska" Grid.Column="1" Margin="6,0,0,0" SelectedTime="{Binding ReminderTime}"
-                        ClockIdentifier="24HourClock" />
-          </Grid>
-          <TextBlock Classes="hint" Margin="2,4,0,0"
-                     Text="Bez godziny znaczy rano. Sama godzina bez dnia nie znaczy nic." />
+
+          <!-- Zadanie z godziną dostaje wyprzedzenia liczone od niej, a nie własne
+               chwile: tak się o tym myśli („pół godziny przed wizytą"), a przesunięcie
+               zadania zabiera je ze sobą, zamiast zostawiać przypomnienia przy starej
+               godzinie. Kilka naraz, bo jedno rzadko wystarcza. -->
+          <StackPanel IsVisible="{Binding HasTime}">
+            <ItemsControl ItemsSource="{Binding Leads}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:LeadChoice">
+                  <CheckBox Margin="0,0,14,0" IsChecked="{Binding IsChecked}"
+                            Content="{Binding Label}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Dowolnie: liczba, jednostka, „Dodaj". Wpisane wskakuje na listę
+                 na swoje miejsce w kolejności czasu i zostaje zaznaczone. -->
+            <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="0,8,0,0">
+              <NumericUpDown Grid.Column="0" Width="108" Value="{Binding CustomLead}"
+                             Minimum="1" Maximum="999" Increment="1" FormatString="0" />
+              <ComboBox Grid.Column="1" Margin="6,0,0,0" Width="108"
+                        ItemsSource="{Binding LeadUnits}" SelectedItem="{Binding SelectedLeadUnit}" />
+              <Button Grid.Column="2" Margin="6,0,0,0" Content="Dodaj"
+                      Command="{Binding AddLeadCommand}" />
+            </Grid>
+
+            <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                       Text="Liczone od godziny zadania — przesunięcie zadania przesuwa je razem z nim." />
+          </StackPanel>
+
+          <!-- Bez godziny nie ma od czego liczyć wyprzedzenia, więc przypomnienie
+               ma własny dzień i porę. -->
+          <StackPanel IsVisible="{Binding !HasTime}">
+            <Grid ColumnDefinitions="*,Auto">
+              <DatePicker Classes="waska" Grid.Column="0" SelectedDate="{Binding ReminderDay}"
+                          HorizontalAlignment="Stretch" />
+              <TimePicker Classes="waska" Grid.Column="1" Margin="6,0,0,0" SelectedTime="{Binding ReminderTime}"
+                          ClockIdentifier="24HourClock" />
+            </Grid>
+            <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                       Text="Bez godziny znaczy rano. Sama godzina bez dnia nie znaczy nic." />
+          </StackPanel>
           </StackPanel>
 
           <StackPanel IsVisible="{Binding ShowPriority}">
