@@ -790,8 +790,12 @@
                 <StackPanel Margin="0,0,2,0"
                             Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}">
 
-                  <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
-                             HorizontalAlignment="Center" Margin="0,0,0,4" />
+                  <Border CornerRadius="10" Padding="10,2" Margin="0,0,0,4"
+                          HorizontalAlignment="Center"
+                          Background="{Binding HeaderBackground}">
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
+                               Foreground="{Binding HeaderForeground}" />
+                  </Border>
 
                   <!-- Pasek całodniowy nad siatką, nie w niej: wydarzenie bez godziny
                        umieszczone o północy kłamałoby o porze. -->

@@ -173,6 +173,24 @@ public sealed record CalendarColumn(
     public bool HasAllDay => AllDay.Count > 0;
 
     public string AllDayText => string.Join("  ·  ", AllDay.Select(w => w.Title));
+
+    /// <summary>
+    /// Tło nazwy dnia. Dzisiejszy dzień w barwie wyróżnienia.
+    /// </summary>
+    /// <remarks>
+    /// Przy siedmiu jednakowych kolumnach odnalezienie dzisiejszej wymagało przeczytania
+    /// numerów i porównania ich z tym, co się pamięta — a kalendarz otwiera się po to,
+    /// żeby na to nie musieć. Kreska „teraz" tego nie załatwia: widać ją tylko wtedy,
+    /// gdy siatka jest przewinięta na bieżącą godzinę.
+    /// </remarks>
+    public IBrush HeaderBackground => IsToday
+        ? new SolidColorBrush(Color.Parse("#D89B3C"))
+        : Brushes.Transparent;
+
+    /// <summary>Napis na wyróżnionym tle. Ciemny, bo bursztyn jest jasny w obu motywach.</summary>
+    public IBrush HeaderForeground => IsToday
+        ? new SolidColorBrush(Color.Parse("#1B2029"))
+        : new SolidColorBrush(Color.Parse("#B0808080"));
 }
 
 /// <summary>
