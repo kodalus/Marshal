@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Marshal.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(MarshalDbContext))]
-    [Migration("20260917100000_Dziennik")]
-    partial class Dziennik
+    [Migration("20260917100000_DziennikDzialan")]
+    partial class DziennikDzialan
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

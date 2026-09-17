@@ -29,6 +29,9 @@ public enum Screen
     Areas,
     Archive,
     Review,
+
+    /// <summary>Co aplikacja zrobiła i co z tego wyszło (spec 12).</summary>
+    Journal,
 }
 
 public sealed partial class MainViewModel : ObservableObject
@@ -60,7 +63,8 @@ public sealed partial class MainViewModel : ObservableObject
         CalendarViewModel calendar,
         NotesViewModel notes,
         FiltersViewModel filters,
-        SettingsViewModel settings)
+        SettingsViewModel settings,
+        JournalViewModel journal)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -79,6 +83,7 @@ public sealed partial class MainViewModel : ObservableObject
         Notes = notes;
         Filters = filters;
         Settings = settings;
+        Journal = journal;
         Clarify.Emptied += async (_, _) => await ShowInboxAsync();
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
@@ -115,6 +120,8 @@ public sealed partial class MainViewModel : ObservableObject
     public FiltersViewModel Filters { get; }
 
     public SettingsViewModel Settings { get; }
+
+    public JournalViewModel Journal { get; }
 
     public ObservableCollection<TaskItem> InboxItems { get; } = [];
 
@@ -238,6 +245,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool IsNotes => Current == Screen.Notes;
 
+    public bool IsJournal => Current == Screen.Journal;
+
     public bool IsFilters => Current == Screen.Filters;
 
     public bool IsSettings => Current == Screen.Settings;
@@ -273,6 +282,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWaiting));
         OnPropertyChanged(nameof(IsCalendar));
         OnPropertyChanged(nameof(IsNotes));
+        OnPropertyChanged(nameof(IsJournal));
         OnPropertyChanged(nameof(IsFilters));
         OnPropertyChanged(nameof(IsSettings));
         OnPropertyChanged(nameof(IsReview));
@@ -350,6 +360,7 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Waiting => ShowWaitingAsync(),
             Screen.Calendar => Calendar.LoadAsync(),
             Screen.Notes => Notes.LoadAsync(),
+            Screen.Journal => Journal.LoadAsync(),
             Screen.Filters => Filters.RunCommand.ExecuteAsync(null),
             Screen.Areas => ShowAreasAsync(),
             _ => Task.CompletedTask,
@@ -533,6 +544,20 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Settings.Load();
         Current = Screen.Settings;
+    }
+
+    /// <summary>
+    /// Co się działo (spec 12).
+    /// </summary>
+    /// <remarks>
+    /// Osobny ekran, a nie kawałek Ustawień: zagląda się tu wtedy, gdy coś nie wyszło,
+    /// i wtedy nie chce się przewijać pola na sekrety Google, żeby dojść do odpowiedzi.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ShowJournalAsync()
+    {
+        Current = Screen.Journal;
+        await Journal.LoadAsync();
     }
 
     /// <summary>Własne widoki — konstruktor warunków i Ulubione (spec 11.5).</summary>

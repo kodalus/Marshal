@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Marshal.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class Dziennik : Migration
+    public partial class DziennikDzialan : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

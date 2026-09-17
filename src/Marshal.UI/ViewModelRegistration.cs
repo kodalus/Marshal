@@ -25,6 +25,7 @@ public static class ViewModelRegistration
         services.AddSingleton<NotesViewModel>();
         services.AddSingleton<FiltersViewModel>();
         services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<JournalViewModel>();
         services.AddSingleton<MainViewModel>();
 
         return services;

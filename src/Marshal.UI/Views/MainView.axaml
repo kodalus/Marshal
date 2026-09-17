@@ -122,6 +122,7 @@
       <Button Classes="nav" Command="{Binding ShowAreasCommand}" Content="Obszary" />
       <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
       <Button Classes="nav" Command="{Binding ShowSettingsCommand}" Content="Ustawienia" />
+      <Button Classes="nav" Command="{Binding ShowJournalCommand}" Content="Co się działo" />
     </WrapPanel>
 
     <!-- Pasek dolny (wąskie okno). Cztery ekrany dnia codziennego pod kciukiem plus
@@ -1256,6 +1257,44 @@
     </ScrollViewer>
     </Panel>
 
+    <!-- Co się działo (spec 12). „Nic się nie stało" i „zadziałało" wyglądają na
+         ekranie identycznie — ten ekran jest jedynym miejscem, gdzie się rozchodzą. -->
+    <Panel IsVisible="{Binding IsJournal}">
+    <DockPanel DataContext="{Binding Journal}">
+
+      <StackPanel DockPanel.Dock="Top" x:DataType="vm:JournalViewModel" Margin="0,0,0,10">
+        <WrapPanel>
+          <Button Classes="nav" Command="{Binding RefreshCommand}" Content="Odśwież" />
+          <Button Classes="nav" Command="{Binding ClearCommand}" Content="Wyczyść" />
+        </WrapPanel>
+        <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Text="{Binding Summary}" />
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="Zapis lokalny, nie wchodzi do synchronizacji ani do kopii. Trzymane jest ostatnie 500 wpisów." />
+      </StackPanel>
+
+      <ScrollViewer x:DataType="vm:JournalViewModel">
+        <ItemsControl ItemsSource="{Binding Rows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:JournalRow">
+              <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="6"
+                      Background="#0C808080" BorderThickness="3,0,0,0"
+                      BorderBrush="{Binding Mark}">
+                <StackPanel>
+                  <TextBlock Classes="hint" Text="{Binding When}" />
+                  <TextBlock Text="{Binding Operation}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Outcome}" TextWrapping="Wrap" />
+                  <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap"
+                             Text="{Binding Detail}" IsVisible="{Binding HasDetail}" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+    </DockPanel>
+    </Panel>
+
     <!-- Archiwum -->
     <DockPanel IsVisible="{Binding IsArchive}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
@@ -1294,6 +1333,7 @@
           <Button Classes="sheet" Content="Obszary" Command="{Binding ShowAreasCommand}" />
           <Button Classes="sheet" Content="Archiwum" Command="{Binding ShowArchiveCommand}" />
           <Button Classes="sheet" Content="Ustawienia" Command="{Binding ShowSettingsCommand}" />
+          <Button Classes="sheet" Content="Co się działo" Command="{Binding ShowJournalCommand}" />
           <Button Classes="sheet" Content="Zamknij" Margin="0,8,0,0"
                   Command="{Binding CloseMoreCommand}" />
         </StackPanel>
