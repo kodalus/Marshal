@@ -21,8 +21,10 @@ namespace Marshal.Infrastructure.Calendar;
 /// nigdy nie zadawała pytania.
 /// </para>
 /// <para>
-/// Bez poświadczeń albo bez zgody na kalendarz zwraca pusty wynik zamiast rzucać:
-/// brak podłączonego konta to stan normalny, a nie awaria kalendarza.
+/// Bez poświadczeń albo bez zgody na kalendarz **mówi dlaczego**, zamiast oddawać pusty
+/// wynik. Pusty wynik był tu błędem w projekcie: niepodłączone konto wyglądało wtedy
+/// dokładnie tak samo jak kalendarz bez wydarzeń — „odświeżone 1, wydarzeń 0" — czyli
+/// jedyna informacja, która mogła pomóc, ginęła w drodze do ekranu.
 /// </para>
 /// </remarks>
 public sealed class GoogleCalendarGateway(ISettings settings, string databasePath) : ICalendarFeed
@@ -36,26 +38,28 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     public async Task<FeedResult> FetchAsync(
         CalendarSource source, string? syncToken, CancellationToken ct = default)
     {
-        if (await PolaczAsync(ct) is not { } kanal)
-        {
-            return new FeedResult([], SyncToken: null, IsFull: false);
-        }
-
-        return await kanal.FetchAsync(source, syncToken, ct);
+        return await (await PolaczAsync(ct)).FetchAsync(source, syncToken, ct);
     }
 
-    private async Task<GoogleCalendarFeed?> PolaczAsync(CancellationToken ct)
+    private async Task<GoogleCalendarFeed> PolaczAsync(CancellationToken ct)
     {
         if (_kanal is not null)
         {
             return _kanal;
         }
 
-        if (!settings.GoogleCalendarEnabled
-            || string.IsNullOrWhiteSpace(settings.GoogleClientId)
+        if (string.IsNullOrWhiteSpace(settings.GoogleClientId)
             || string.IsNullOrWhiteSpace(settings.GoogleClientSecret))
         {
-            return null;
+            throw new InvalidOperationException(
+                "nie ma poświadczeń Google — wpisz je w Ustawieniach, sekcja Konto Google.");
+        }
+
+        if (!settings.GoogleCalendarEnabled)
+        {
+            throw new InvalidOperationException(
+                "zgoda obejmuje tylko Dysk. Zaznacz „Czytaj też mój kalendarz Google” "
+                + "i kliknij „Zapisz i zsynchronizuj”, żeby poprosić o dostęp do kalendarza.");
         }
 
         var poswiadczenie = await GoogleDriveFactory.AuthorizeAsync(

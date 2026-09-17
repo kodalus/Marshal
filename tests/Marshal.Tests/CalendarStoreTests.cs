@@ -285,6 +285,36 @@ public sealed class CalendarStoreTests : IDisposable
         _db.CalendarSources.Count(z => z.Id == dodany.Id).Should().Be(1);
     }
 
+    [Fact]
+    public async Task Ten_sam_kalendarz_dodany_dwa_razy_zostaje_jednym()
+    {
+        // Klikanie „Dodaj" w reakcji na to, że nic się nie pojawiło, jest odruchem —
+        // a duplikaty mnożą potem te same błędy w raporcie i zaciemniają ten jeden,
+        // który coś znaczy.
+        var pierwszy = await _usluga.AddAsync(
+            CalendarKind.Google, "primary", "Mój kalendarz");
+
+        var drugi = await _usluga.AddAsync(
+            CalendarKind.Google, "primary", "Mój kalendarz jeszcze raz");
+
+        drugi.Id.Should().Be(pierwszy.Id);
+        (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Nieudany_kanal_mowi_dlaczego_a_nie_tylko_ze()
+    {
+        // Sama liczba porażek wygląda tak samo przy braku zgody, złym adresie i padniętej
+        // sieci. Powód jest jedyną rzeczą, z której da się coś zrobić.
+        _kanal.Rzuca = true;
+
+        var raport = await _usluga.RefreshAsync(force: true);
+
+        raport.Failed.Should().Be(1);
+        raport.Problems.Should().ContainSingle()
+            .Which.Should().Contain("Przedszkole").And.Contain("kanał nie odpowiada");
+    }
+
     public void Dispose()
     {
         _db.Dispose();

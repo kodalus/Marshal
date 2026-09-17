@@ -5,7 +5,23 @@ using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.Calendar;
 
-public sealed record CalendarRefreshReport(int Sources, int Events, int Failed);
+/// <summary>
+/// Wynik odświeżania. **Z powodami**, nie samą liczbą porażek.
+/// </summary>
+/// <remarks>
+/// Sama liczba nie mówi nic: „nieudanych 6" wygląda tak samo, gdy nie ma zgody na
+/// kalendarz, gdy adres kanału jest zły i gdy padła sieć. Kalendarz zewnętrzny jest
+/// jedynym miejscem w aplikacji, gdzie **wszystkie** przyczyny są po cudzej stronie,
+/// więc powód jest tu jedyną rzeczą, z której da się cokolwiek zrobić.
+/// </remarks>
+public sealed record CalendarRefreshReport(
+    int Sources, int Events, int Failed, IReadOnlyList<string> Problems)
+{
+    public CalendarRefreshReport(int sources, int events, int failed)
+        : this(sources, events, failed, [])
+    {
+    }
+}
 
 /// <summary>
 /// Kalendarz: odświeżanie źródeł i składanie siatki (spec 10.1, 11).
@@ -27,6 +43,17 @@ public sealed class CalendarSyncService(
     public async Task<CalendarSource> AddAsync(
         CalendarKind kind, string externalId, string name, CancellationToken ct = default)
     {
+        // Ten sam kalendarz dwa razy to zawsze pomyłka — najczęściej klikanie „Dodaj"
+        // w reakcji na to, że nic się nie pojawiło. Duplikaty mnożą potem te same
+        // błędy w raporcie i zaciemniają jedyny, który coś znaczy.
+        var szukany = externalId?.Trim() ?? string.Empty;
+
+        if ((await store.SourcesAsync(ct)).FirstOrDefault(
+                z => z.Kind == kind && z.ExternalId == szukany) is { } juzJest)
+        {
+            return juzJest;
+        }
+
         var zrodlo = new CalendarSource(
             Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, externalId, name);
 
@@ -66,6 +93,7 @@ public sealed class CalendarSyncService(
         var odswiezone = 0;
         var wydarzen = 0;
         var nieudane = 0;
+        var powody = new List<string>();
 
         foreach (var zrodlo in await store.SourcesAsync(ct))
         {
@@ -78,6 +106,10 @@ public sealed class CalendarSyncService(
 
             if (feeds.FirstOrDefault(f => f.Kind == zrodlo.Kind) is not { } kanal)
             {
+                // Rodzaj bez podłączonego kanału. Do dziś było to ciche pominięcie
+                // i właśnie ono sprawiało, że kalendarz Google wyglądał na pusty.
+                nieudane++;
+                powody.Add($"{zrodlo.Name}: brak obsługi kalendarzy rodzaju {zrodlo.Kind}.");
                 continue;
             }
 
@@ -102,10 +134,11 @@ public sealed class CalendarSyncService(
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 nieudane++;
+                powody.Add($"{zrodlo.Name}: {e.Message}");
             }
         }
 
-        return new CalendarRefreshReport(odswiezone, wydarzen, nieudane);
+        return new CalendarRefreshReport(odswiezone, wydarzen, nieudane, powody);
     }
 
     /// <summary>

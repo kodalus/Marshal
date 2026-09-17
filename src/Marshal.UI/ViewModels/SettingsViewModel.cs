@@ -212,9 +212,23 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             var raport = await _kalendarze.RefreshAsync(force: true);
 
-            CalendarStatus = raport.Sources == 0 && raport.Failed == 0
-                ? "Nie ma podłączonego żadnego kalendarza."
-                : $"Odświeżone {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}.";
+            if (raport.Sources == 0 && raport.Failed == 0)
+            {
+                CalendarStatus = "Nie ma podłączonego żadnego kalendarza.";
+                return;
+            }
+
+            var podsumowanie =
+                $"Odświeżone {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}.";
+
+            // Powody, nie sama liczba. „Nieudanych 6" wygląda tak samo przy braku zgody,
+            // przy złym adresie kanału i przy padniętej sieci — a to trzy różne rzeczy
+            // do zrobienia. Powtórzone odsiewane, bo sześć kopii jednego zdania nie jest
+            // sześcioma informacjami.
+            CalendarStatus = raport.Problems.Count == 0
+                ? podsumowanie
+                : podsumowanie + Environment.NewLine
+                    + string.Join(Environment.NewLine, raport.Problems.Distinct());
         }
         catch (Exception e)
         {
