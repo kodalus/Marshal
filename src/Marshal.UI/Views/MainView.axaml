@@ -181,6 +181,15 @@
     <Style Selector="ListBox">
       <Setter Property="Background" Value="Transparent" />
     </Style>
+    <!-- Oprawa wiersza z zadaniem. Na „Dzisiaj" tytuł zadania i zdanie wyjaśniające
+         pod listą były tym samym napisem tej samej wielkości — po niczym nie dało się
+         poznać, co jest rzeczą do zrobienia, a co komentarzem aplikacji. -->
+    <Style Selector="Border.wiersz">
+      <Setter Property="Background" Value="{DynamicResource Pole}" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="10,7" />
+    </Style>
+
     <Style Selector="TextBlock.hint">
       <Setter Property="Opacity" Value="0.55" />
       <Setter Property="FontSize" Value="12" />
@@ -361,9 +370,19 @@
                a nie „chcę teraz obejrzeć tydzień". -->
           <Button Grid.Column="0" Classes="nav" Content="◀ wyjdź"
                   Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ShowInboxCommand}" />
-          <TextBlock Grid.Column="1" Classes="hint" HorizontalAlignment="Center"
-                     VerticalAlignment="Center"
-                     Text="{Binding Remaining, StringFormat='Do rozstrzygnięcia: {0}'}" />
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                      HorizontalAlignment="Center" VerticalAlignment="Center">
+            <!-- Przewijanie kolejki bez rozstrzygania. Wrzut, którego akurat nie da się
+                 rozstrzygnąć, blokował całą resztę i kończyło się zamknięciem ekranu. -->
+            <Button Classes="nav" Content="◀" Padding="10,4" Margin="0"
+                    Command="{Binding BackCommand}" IsVisible="{Binding CanMove}" />
+            <TextBlock Classes="hint" VerticalAlignment="Center"
+                       Text="{Binding Remaining, StringFormat='Do rozstrzygnięcia: {0}'}" />
+            <TextBlock Classes="hint" VerticalAlignment="Center" Text="{Binding Position}"
+                       IsVisible="{Binding CanMove}" />
+            <Button Classes="nav" Content="▶" Padding="10,4" Margin="0"
+                    Command="{Binding SkipCommand}" IsVisible="{Binding CanMove}" />
+          </StackPanel>
         </Grid>
 
         <Border Margin="0,12,0,20" Padding="20" CornerRadius="8" Background="#20808080">
@@ -412,9 +431,13 @@
         <Button Classes="branch" Command="{Binding DoNowCommand}"
                 Content="Zrobione teraz (krócej niż dwie minuty)" />
         <Button Classes="branch" Command="{Binding TodayCommand}" Content="Robię to dzisiaj" />
-        <Button Classes="branch" Command="{Binding MakeNextCommand}" Content="Następna akcja" />
+        <!-- Nazwa mówi, dokąd to trafia, a nie jak się nazywa w metodzie. „Następna
+             akcja" jest pojęciem z książki i nie niesie żadnej informacji komuś, kto
+             właśnie stoi przed wyborem. -->
+        <Button Classes="branch" Command="{Binding MakeNextCommand}"
+                Content="Na listę do zrobienia — bez konkretnego dnia" />
         <TextBlock Classes="hint" Margin="2,0,0,4" TextWrapping="Wrap"
-                   Text="„Robię to dzisiaj” trafia od razu do piątki na dziś. „Następna akcja” zostaje na liście i w „Teraz”, bez przypisania do dnia. „Zaplanuj” niżej stawia zadanie na konkretnym dniu kalendarza." />
+                   Text="Pierwsze trafia od razu do piątki na dziś. Drugie zostaje na liście „Następne” i wypływa w „Teraz”, gdy pasuje do czasu i sił. „Zaplanuj” niżej stawia zadanie na konkretnym dniu kalendarza." />
 
         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
           <TextBox Grid.Column="0" Text="{Binding WaitingForWho}" Watermark="Na kogo czekasz?" />
@@ -485,7 +508,11 @@
           <ItemsControl ItemsSource="{Binding FocusItems}" Margin="0,8,0,0">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="tasks:TaskItem">
-                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                <!-- Wiersz zadania w oprawie. Bez niej tytuł zadania i zdanie
+                     wyjaśniające pod listą były tym samym napisem tej samej wielkości
+                     i nie dało się poznać, w co można kliknąć. -->
+                <Border Classes="wiersz" Margin="0,3">
+                <Grid ColumnDefinitions="*,Auto">
                   <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
                              VerticalAlignment="Center" />
                   <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
@@ -497,6 +524,7 @@
                             CommandParameter="{Binding}" />
                   </StackPanel>
                 </Grid>
+                </Border>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
@@ -532,13 +560,15 @@
               <ItemsControl ItemsSource="{Binding FocusCandidates}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:TaskRow">
-                    <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                    <Border Classes="wiersz" Margin="0,3">
+                    <Grid ColumnDefinitions="*,Auto">
                       <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap"
                                  VerticalAlignment="Center" Opacity="0.8" />
                       <Button Grid.Column="1" Content="na dziś" Padding="10,4"
                               Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).FocusCommand}"
                               CommandParameter="{Binding}" />
                     </Grid>
+                    </Border>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
@@ -739,25 +769,18 @@
         </Border>
       </StackPanel>
 
-      <ScrollViewer x:Name="SiatkaKalendarza" x:DataType="vm:CalendarViewModel"
-                    HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+      <!-- Nagłówki dni zakotwiczone nad siatką, a nie w niej.
+           Wewnątrz przewijanej siatki uciekały do góry przy pierwszym obrocie kółka
+           i po kilku godzinach dnia nie było już wiadomo, na którą kolumnę się patrzy.
+           Osobny widok przewijany w poziomie razem z siatką: kolumny mogą być szersze
+           niż okno przy bardzo wąskim oknie, a nagłówek rozjechany z kolumną byłby
+           gorszy od nagłówka, który ucieka. -->
+      <ScrollViewer x:Name="NaglowkiDni" DockPanel.Dock="Top" x:DataType="vm:CalendarViewModel"
+                    HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
+                    Margin="0,0,0,4">
         <StackPanel Orientation="Horizontal">
-
-          <!-- Godziny raz, z lewej, żeby nie powtarzać ich przy każdej kolumnie. -->
-          <StackPanel Width="52">
-            <Border Height="46" />
-            <ItemsControl ItemsSource="{Binding HourLabels}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="x:String">
-                  <Border Height="48">
-                    <TextBlock Classes="hint" Text="{Binding}" VerticalAlignment="Top" />
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
-
-          <ItemsControl Name="KolumnyDni" ItemsSource="{Binding Columns}">
+          <Border Width="52" />
+          <ItemsControl ItemsSource="{Binding Columns}">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <StackPanel Orientation="Horizontal" />
@@ -765,7 +788,8 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:CalendarColumn">
-                <StackPanel Margin="0,0,2,0">
+                <StackPanel Margin="0,0,2,0"
+                            Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}">
 
                   <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
                              HorizontalAlignment="Center" Margin="0,0,0,4" />
@@ -795,6 +819,40 @@
                     </ItemsControl>
                   </Border>
                   <Border Height="24" IsVisible="{Binding !HasAllDay}" />
+
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+
+      <ScrollViewer x:Name="SiatkaKalendarza" x:DataType="vm:CalendarViewModel"
+                    HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+        <StackPanel Orientation="Horizontal">
+
+          <!-- Godziny raz, z lewej, żeby nie powtarzać ich przy każdej kolumnie. -->
+          <StackPanel Width="52">
+            <ItemsControl ItemsSource="{Binding HourLabels}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <Border Height="48">
+                    <TextBlock Classes="hint" Text="{Binding}" VerticalAlignment="Top" />
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <ItemsControl Name="KolumnyDni" ItemsSource="{Binding Columns}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:CalendarColumn">
+                <StackPanel Margin="0,0,2,0">
 
                   <!-- Rozmiar na liście, nie na płótnie pod nią. Płótno **nie mierzy się
                        swoją zawartością** — jego rozmiar własny to zero — więc lista

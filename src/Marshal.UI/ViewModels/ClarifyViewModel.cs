@@ -26,6 +26,18 @@ public sealed partial class ClarifyViewModel(
     /// <summary>Komunikat do pokazania po przejściu do następnego wrzutu.</summary>
     private string? _doPowiedzenia;
 
+    /// <summary>
+    /// Który wrzut z kolejki jest na wierzchu.
+    /// </summary>
+    /// <remarks>
+    /// Ekran pokazywał zawsze pierwszy i nie dawało się go pominąć bez rozstrzygnięcia.
+    /// To wygląda na dyscyplinę, ale nią nie jest: wrzut, którego akurat nie da się
+    /// rozstrzygnąć — bo trzeba do kogoś zadzwonić albo czegoś sprawdzić — blokował
+    /// całą resztę i kończyło się zamknięciem ekranu. Przewijanie nie psuje zasady
+    /// „jedna pozycja naraz": nadal widać jedną, tylko da się wybrać którą.
+    /// </remarks>
+    private int _numer;
+
     [ObservableProperty]
     public partial TaskItem? Current { get; set; }
 
@@ -61,6 +73,11 @@ public sealed partial class ClarifyViewModel(
 
     [ObservableProperty]
     public partial int Remaining { get; set; }
+
+    /// <summary>Który z ilu — żeby przewijanie kolejki nie było ruchem w ciemno.</summary>
+    public string Position => Remaining == 0 ? string.Empty : $"{_numer + 1} z {Remaining}";
+
+    public bool CanMove => Remaining > 1;
 
     /// <summary>
     /// Miejsce: obszar albo projekt w nim — to samo drzewko, co w szczegółach zadania.
@@ -111,11 +128,41 @@ public sealed partial class ClarifyViewModel(
         await NextAsync();
     }
 
-    private async Task NextAsync()
+    /// <summary>Następny wrzut w kolejce — bez rozstrzygania tego, co na wierzchu.</summary>
+    [RelayCommand]
+    private Task Skip() => PrzesunAsync(1);
+
+    /// <summary>Poprzedni wrzut.</summary>
+    [RelayCommand]
+    private Task Back() => PrzesunAsync(-1);
+
+    private async Task PrzesunAsync(int o)
+    {
+        var pending = await inbox.ListAsync();
+
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        _numer = ((_numer + o) % pending.Count + pending.Count) % pending.Count;
+        await NextAsync(zachowajNumer: true);
+    }
+
+    private async Task NextAsync(bool zachowajNumer = false)
     {
         var pending = await inbox.ListAsync();
         Remaining = pending.Count;
-        Current = pending.FirstOrDefault();
+
+        if (!zachowajNumer)
+        {
+            // Po rozstrzygnięciu zostajemy w tym samym miejscu kolejki: następny wrzut
+            // wchodzi pod ten sam numer. Skok na początek kazałby przewijać od nowa
+            // do miejsca, w którym się było.
+            _numer = pending.Count == 0 ? 0 : Math.Min(_numer, pending.Count - 1);
+        }
+
+        Current = pending.Count == 0 ? null : pending[_numer];
         Problem = null;
         WaitingForWho = string.Empty;
         ProjectOutcome = string.Empty;
@@ -125,6 +172,9 @@ public sealed partial class ClarifyViewModel(
         // do następnego, a ten bywa zupełnie inną robotą.
         EstimatedMinutes = null;
         SelectedEnergy = Energies[0];
+
+        OnPropertyChanged(nameof(Position));
+        OnPropertyChanged(nameof(CanMove));
 
         if (Current is null)
         {

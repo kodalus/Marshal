@@ -114,13 +114,26 @@ public sealed class TaskMirror(
         return null;
     }
 
-    /// <summary>Zdjęcie udostępnienia z jednego zadania.</summary>
+    /// <summary>
+    /// Zdjęcie udostępnienia — bez kasowania wydarzenia.
+    /// </summary>
+    /// <remarks>
+    /// „Przestaję to udostępniać" znaczy „przestaję tym zarządzać stąd", a nie
+    /// „odwołuję to". Wydarzenie stoi już w cudzym kalendarzu i ktoś na nim opiera
+    /// swój dzień; skasowanie go przy zrywaniu powiązania byłoby odwołaniem spotkania
+    /// bez uprzedzenia, w cudzym imieniu. Od odwoływania jest kosz — tam zadanie
+    /// przestaje istnieć po obu stronach i to jest zgodne z tym, co się właśnie
+    /// postanowiło.
+    /// </remarks>
     public async Task UnshareAsync(Guid taskId, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(taskId, ct) is { } zadanie)
+        if (await tasks.FindAsync(taskId, ct) is not { IsShared: true } zadanie)
         {
-            await RemoveAsync(zadanie, ct);
+            return;
         }
+
+        zadanie.Unshare(hlc.Next());
+        await unitOfWork.SaveChangesAsync(ct);
     }
 
     /// <summary>

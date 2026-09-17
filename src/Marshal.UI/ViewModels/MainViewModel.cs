@@ -54,6 +54,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly StructureEditService _szkielet;
     private readonly TaskMirror _odbicie;
     private readonly CalendarSyncService _kalendarze;
+    private readonly ReminderService _przypomnienia;
 
     public MainViewModel(
         InboxService inbox,
@@ -78,12 +79,14 @@ public sealed partial class MainViewModel : ObservableObject
         NoteService noteService,
         StructureEditService szkielet,
         TaskMirror odbicie,
-        CalendarSyncService kalendarze)
+        CalendarSyncService kalendarze,
+        ReminderService przypomnienia)
     {
         _inbox = inbox;
         _szkielet = szkielet;
         _odbicie = odbicie;
         _kalendarze = kalendarze;
+        _przypomnienia = przypomnienia;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -387,6 +390,24 @@ public sealed partial class MainViewModel : ObservableObject
     /// wczytane. Zbieranie ich do odebrania, zamiast pokazywania od razu, jest tym,
     /// co pozwala im przetrwać tę chwilę.
     /// </remarks>
+    /// <summary>
+    /// Sprawdzenie przypomnień. Wołane co minutę z okna.
+    /// </summary>
+    /// <remarks>
+    /// Do dziś przypomnienia sprawdzały się **wyłącznie przy starcie aplikacji**.
+    /// Przypomnienie ustawione na siedemnastą przy aplikacji otwartej od rana nie
+    /// odzywało się nigdy — a to jest dokładnie ten przypadek, dla którego ustawia się
+    /// przypomnienia. Sprawdzenie przy starcie zostaje, bo łapie to, co wypadło przy
+    /// zamkniętej aplikacji; minutnik dokłada resztę.
+    /// </remarks>
+    public async Task CheckRemindersAsync()
+    {
+        if (await _przypomnienia.RunAsync() > 0)
+        {
+            CollectReminders();
+        }
+    }
+
     private void CollectReminders()
     {
         foreach (var przypomnienie in _notifier.Drain())

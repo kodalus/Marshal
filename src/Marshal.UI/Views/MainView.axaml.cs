@@ -72,6 +72,7 @@ public partial class MainView : UserControl
     private void WireCalendar(MainViewModel model)
     {
         _siatka ??= this.FindControl<ScrollViewer>("SiatkaKalendarza");
+        _naglowki ??= this.FindControl<ScrollViewer>("NaglowkiDni");
         _kalendarz = model.Calendar;
         _szczegol = model.Detail;
 
@@ -82,6 +83,12 @@ public partial class MainView : UserControl
         {
             _siatka.LayoutUpdated -= NaUkladzie;
             _siatka.LayoutUpdated += NaUkladzie;
+
+            // Nagłówki jadą w poziomie za siatką. Pionowo stoją — o to właśnie chodzi,
+            // bo inaczej uciekały do góry przy pierwszym obrocie kółka i po kilku
+            // godzinach dnia nie było wiadomo, na którą kolumnę się patrzy.
+            _siatka.ScrollChanged -= NaPrzewinieciuSiatki;
+            _siatka.ScrollChanged += NaPrzewinieciuSiatki;
             _siatka.SizeChanged -= NaZmianieSzerokosci;
             _siatka.SizeChanged += NaZmianieSzerokosci;
 
@@ -1054,12 +1061,33 @@ public partial class MainView : UserControl
     /// </remarks>
     private DispatcherTimer? _minutnik;
 
+    /// <summary>Pasek z nazwami dni. Stoi nad siatką i jedzie z nią tylko w poziomie.</summary>
+    private ScrollViewer? _naglowki;
+
     private void WireClock(MainViewModel model)
     {
         _minutnik ??= new DispatcherTimer(
-            TimeSpan.FromMinutes(1), DispatcherPriority.Background, (_, _) => model.Calendar.Tick());
+            TimeSpan.FromMinutes(1),
+            DispatcherPriority.Background,
+            (_, _) =>
+            {
+                model.Calendar.Tick();
+
+                // Przypomnienia razem z kreską „teraz": jedno i drugie jest odpowiedzią
+                // na upływ czasu, a drugi minutnik na tę samą minutę byłby drugim
+                // miejscem do zatrzymania i do zapomnienia o zatrzymaniu.
+                _ = Probuj("Przypomnienia: sprawdzenie", model.CheckRemindersAsync);
+            });
 
         _minutnik.Start();
+    }
+
+    private void NaPrzewinieciuSiatki(object? nadawca, ScrollChangedEventArgs e)
+    {
+        if (_siatka is not null && _naglowki is not null)
+        {
+            _naglowki.Offset = new Vector(_siatka.Offset.X, 0);
+        }
     }
 
     private void Szerokosc(double calosc)
