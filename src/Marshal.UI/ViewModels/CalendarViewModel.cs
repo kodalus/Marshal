@@ -211,6 +211,24 @@ public sealed partial class CalendarViewModel(
     /// </summary>
     public event Action<Guid>? TaskRequested;
 
+    /// <summary>Kliknięcie w pustą siatkę: nowe zadanie na tym dniu i o tej godzinie.</summary>
+    public event Action<DateOnly, TimeOnly>? NewTaskRequested;
+
+    /// <summary>
+    /// Zgłoszenie z widoku: klik w puste miejsce kolumny, na wysokości <paramref name="punkty"/>.
+    /// </summary>
+    /// <remarks>
+    /// Godzina zaokrąglana w dół do kwadransa. Minuta wzięta co do punktu byłaby
+    /// udawaną precyzją: trafienie w 14:07 nie znaczy, że ktoś planuje na 14:07.
+    /// </remarks>
+    public void NewAt(DateOnly day, double punkty)
+    {
+        var minuty = Math.Clamp(punkty / HourHeight * 60, 0, 24 * 60 - 15);
+        var kwadranse = (int)(minuty / 15) * 15;
+
+        NewTaskRequested?.Invoke(day, new TimeOnly(kwadranse / 60, kwadranse % 60));
+    }
+
     public async Task LoadAsync()
     {
         if (Anchor == default)

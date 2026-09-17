@@ -105,6 +105,8 @@ public sealed partial class MainViewModel : ObservableObject
         Settings.Imported += async (_, _) => await ReloadAsync();
 
         // Kliknięcie w blok na siatce otwiera tę samą nakładkę, co kliknięcie na liście.
+        Calendar.NewTaskRequested += async (dzien, pora) => await Detail.NewAsync(dzien, pora);
+
         Calendar.TaskRequested += async id =>
         {
             if (await _tasks.FindAsync(id) is { } zadanie)

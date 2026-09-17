@@ -621,7 +621,9 @@
                          w pustce i nie widać, o której się zaczyna. Linie są
                          osobną warstwą, nie tłem bloków, bo mają być widoczne
                          również tam, gdzie nic nie zaplanowano. -->
-                    <ItemsControl ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
+                    <ItemsControl Name="Godziny" Tag="{Binding Date}"
+                                  PointerPressed="NowaRzeczNaSiatce"
+                                  ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
                                   Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
                                   Background="#0C808080">
                       <ItemsControl.ItemTemplate>

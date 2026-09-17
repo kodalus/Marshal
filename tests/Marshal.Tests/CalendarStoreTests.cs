@@ -443,6 +443,31 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public void Klikniecie_w_puste_miejsce_zaokragla_godzine_do_kwadransa()
+    {
+        // Minuta wzięta co do punktu byłaby udawaną precyzją: trafienie w 14:07
+        // nie znaczy, że ktoś planuje na 14:07.
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+
+        (DateOnly Dzien, TimeOnly Pora)? poproszono = null;
+        model.NewTaskRequested += (dzien, pora) => poproszono = (dzien, pora);
+
+        // 14 godzin i 7 minut w punktach: 14 * 48 + 7 * 0,8.
+        model.NewAt(new DateOnly(2026, 9, 17), (14 * 48) + 5.6);
+
+        poproszono.Should().NotBeNull();
+        poproszono!.Value.Dzien.Should().Be(new DateOnly(2026, 9, 17));
+        poproszono.Value.Pora.Should().Be(new TimeOnly(14, 0));
+
+        model.NewAt(new DateOnly(2026, 9, 17), (14 * 48) + 24);
+        poproszono!.Value.Pora.Should().Be(new TimeOnly(14, 30));
+
+        // Koniec doby nie przekręca się na następny dzień.
+        model.NewAt(new DateOnly(2026, 9, 17), 24 * 48);
+        poproszono!.Value.Pora.Should().Be(new TimeOnly(23, 45));
+    }
+
+    [Fact]
     public void Klikniete_wydarzenie_mowi_czym_jest_zamiast_milczec()
     {
         // Wydarzenia z cudzego kalendarza nie da się tu zmienić i to jest zamierzone.

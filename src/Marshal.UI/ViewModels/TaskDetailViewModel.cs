@@ -19,7 +19,8 @@ namespace Marshal.UI.ViewModels;
 /// cztery dotyczą tej samej decyzji: kiedy to ma się zdarzyć.
 /// </remarks>
 public sealed partial class TaskDetailViewModel(
-    TaskEditService edit, IClock clock, IAreaRepository areas) : ObservableObject
+    TaskEditService edit, IClock clock, IAreaRepository areas, InboxService inbox)
+    : ObservableObject
 {
     private Guid _id;
     private bool _loading;
@@ -190,6 +191,50 @@ public sealed partial class TaskDetailViewModel(
         Load(task);
     }
 
+    /// <summary>
+    /// Nowe zadanie na wskazany dzień i godzinę — stąd otwiera je kliknięcie w pustą
+    /// siatkę kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie powstaje dopiero przy zapisie, nie przy otwarciu okna. Utworzone
+    /// z góry zostawiałoby po zamknięciu bez zapisu pusty wpis w skrzynce — czyli
+    /// karę za rozmyślenie się.
+    /// </remarks>
+    public async Task NewAsync(DateOnly day, TimeOnly time)
+    {
+        var czynne = await areas.ActiveAsync();
+
+        Areas.Clear();
+        foreach (var obszar in czynne)
+        {
+            Areas.Add(obszar);
+        }
+
+        _loading = true;
+        _id = Guid.Empty;
+        Problem = null;
+        OnPropertyChanged(nameof(HasProblem));
+
+        Title = string.Empty;
+        Note = string.Empty;
+        Deadline = null;
+        ReminderDay = null;
+        ReminderTime = null;
+        SelectedPriority = Priorities[0];
+        SelectedEnergyLevel = Energies[0];
+        EstimatedMinutes = null;
+        SelectedArea = Areas.FirstOrDefault();
+        LoadRule(null);
+
+        DoDate = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), clock.Now.Offset);
+        DoTime = time.ToTimeSpan();
+        EndTime = time.ToTimeSpan() + TimeSpan.FromMinutes(DomyslneMinuty);
+
+        _loading = false;
+        Refresh();
+        IsOpen = true;
+    }
+
     public void Load(TaskItem task)
     {
         ArgumentNullException.ThrowIfNull(task);
@@ -262,6 +307,18 @@ public sealed partial class TaskDetailViewModel(
 
         try
         {
+            if (_id == Guid.Empty)
+            {
+                if (string.IsNullOrWhiteSpace(Title))
+                {
+                    Problem = "Nowe zadanie potrzebuje nazwy.";
+                    OnPropertyChanged(nameof(HasProblem));
+                    return;
+                }
+
+                _id = await inbox.CaptureAsync(Title);
+            }
+
             await edit.ApplyAsync(_id, new TaskEdit(
                 Title,
                 string.IsNullOrWhiteSpace(Note) ? null : Note,

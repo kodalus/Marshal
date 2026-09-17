@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -72,6 +73,25 @@ public partial class MainView : UserControl
     }
 
     private CalendarViewModel? _kalendarz;
+
+    /// <summary>
+    /// Kliknięcie w pustą siatkę zakłada nową rzecz na tej godzinie.
+    /// </summary>
+    /// <remarks>
+    /// Obsługiwane na warstwie linii godzin, nie na blokach: bloki są przyciskami
+    /// i zjadają kliknięcie same, więc klik w zajęte miejsce nie trafia tutaj i nie
+    /// zakłada niczego pod spodem. Dzień bierze się ze znacznika ustawionego w XAML-u,
+    /// bo warstwa linii nie zna kolumny, na której leży.
+    /// </remarks>
+    private void NowaRzeczNaSiatce(object? nadawca, PointerPressedEventArgs e)
+    {
+        if (nadawca is not Control warstwa || warstwa.Tag is not DateOnly dzien)
+        {
+            return;
+        }
+
+        _kalendarz?.NewAt(dzien, e.GetPosition(warstwa).Y);
+    }
 
     /// <summary>Szerokość kolumny godzin z lewej. Odpowiednik szerokości w XAML-u.</summary>
     private const double SlupekGodzin = 52;
