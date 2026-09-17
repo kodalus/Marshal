@@ -42,6 +42,7 @@
          przycisku wyłączona: barwę bloku niesie ramka w środku, a domyślne tło
          motywu zamalowałoby kolor kalendarza przy najechaniu. -->
     <Style Selector="Button.slot">
+      <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
@@ -649,7 +650,7 @@
                         <DataTemplate x:DataType="vm:SlotBox">
                           <Button Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
                                   Command="{Binding $parent[DockPanel].((vm:CalendarViewModel)DataContext).OpenTaskCommand}"
-                                  CommandParameter="{Binding TaskId}">
+                                  CommandParameter="{Binding}">
                           <Border Opacity="{Binding Opacity}"
                                   Background="{Binding Background}" CornerRadius="4" Padding="4,2"
                                   HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
@@ -703,6 +704,30 @@
         </StackPanel>
       </ScrollViewer>
     </DockPanel>
+
+    <!-- Kliknięte wydarzenie z cudzego kalendarza. Zmienić się go stąd nie da (spec 10.2),
+         ale „nie da się zmienić" to nie to samo co „kliknięcie nic nie robi" — drugie
+         wygląda jak zepsuty przycisk. -->
+    <Panel DataContext="{Binding Calendar}" IsVisible="{Binding HasOpened}"
+           Background="#CC101010">
+      <Border x:DataType="vm:CalendarViewModel" MaxWidth="420" Margin="12" Padding="20"
+              CornerRadius="10" Background="#FF1E1E1E" VerticalAlignment="Center">
+        <StackPanel Spacing="8">
+          <TextBlock Text="{Binding Opened.Title}" FontSize="18" TextWrapping="Wrap" />
+          <TextBlock Classes="hint" Text="{Binding Opened.DayText}" />
+          <TextBlock>
+            <Run Text="{Binding Opened.StartText}" />
+            <Run Text="–" />
+            <Run Text="{Binding Opened.EndText}" />
+          </TextBlock>
+          <TextBlock Classes="hint" TextWrapping="Wrap" Margin="0,8,0,0"
+                     Text="Wydarzenie z podłączonego kalendarza. Marshal go tylko czyta — zmiany rób tam, gdzie powstało." />
+          <Button Classes="nav" HorizontalAlignment="Right" Margin="0,8,0,0"
+                  Command="{Binding CloseOpenedCommand}" Content="Zamknij" />
+        </StackPanel>
+      </Border>
+    </Panel>
+
     </Panel>
 
     <!-- Notatki: lista, edytor i podgląd obok siebie -->

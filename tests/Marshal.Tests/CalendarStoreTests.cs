@@ -350,6 +350,27 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public void Klikniete_wydarzenie_mowi_czym_jest_zamiast_milczec()
+    {
+        // Wydarzenia z cudzego kalendarza nie da się tu zmienić i to jest zamierzone.
+        // Ale przycisk, który po kliknięciu nie robi nic, wygląda jak zepsuty — a nie
+        // jak granica, która ma powód.
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+
+        var wydarzenie = new SlotBox(
+            "Zebranie", 0, 48, 0, 200, IsTask: false, Color: null,
+            "10:00", "11:00", TaskId: null, "17.09.2026");
+
+        model.OpenTaskCommand.Execute(wydarzenie);
+
+        model.HasOpened.Should().BeTrue();
+        model.Opened!.Title.Should().Be("Zebranie");
+
+        model.CloseOpenedCommand.Execute(null);
+        model.HasOpened.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Godziny_licza_sie_ze_strefy_wydarzenia_a_nie_z_dzisiejszej()
     {
         // Sedno usterki: przesunięcie brane było **na teraz** i kładzione na każde

@@ -5,7 +5,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- **Nie włączać z powrotem.** W trybie niezmiennym .NET nie ma bazy stref
+         czasowych: na Windowsie każde FindSystemTimeZoneById poza „UTC" rzuca,
+         więc „Europe/Warsaw" nie istnieje, aplikacja cofa się do czasu uniwersalnego
+         i **wszystkie** godziny są o dwie za wcześnie — kalendarz, kreska bieżącej
+         godziny, zapisane zadania. Na Linuksie strefy czyta się z katalogu systemowego
+         niezależnie od tego trybu, więc CI przechodziło i usterki nie było widać przez
+         cały czas jej trwania. Kalendarz bez stref czasowych nie jest kalendarzem.
+         Pilnuje tego GlobalizacjaTests. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
     <AvaloniaVersion>11.*</AvaloniaVersion>
     <EfCoreVersion>10.0.11</EfCoreVersion>
     <GoogleApisVersion>1.76.0</GoogleApisVersion>

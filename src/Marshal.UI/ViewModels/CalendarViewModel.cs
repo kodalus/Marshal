@@ -27,7 +27,8 @@ public sealed record SlotBox(
     string? Color,
     string StartText,
     string EndText,
-    Guid? TaskId)
+    Guid? TaskId,
+    string DayText)
 {
     /// <summary>Odhaczyć da się zadanie, nie cudze wydarzenie z kalendarza.</summary>
     /// <remarks>
@@ -420,14 +421,40 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Otwarcie szczegółu zadania z siatki. Wydarzenia Google nie mają czego otwierać.</summary>
+    /// <summary>Otwarty blok: zadanie idzie do nakładki szczegółu, wydarzenie na kartę obok.</summary>
+    /// <remarks>
+    /// Wydarzenia Google nie da się tu zmienić — zapis do cudzego kalendarza jest
+    /// świadomie odłożony (spec 10.2). Ale „nie da się zmienić" to nie to samo co
+    /// „kliknięcie nic nie robi": drugie wygląda jak zepsuty przycisk. Karta mówi,
+    /// co to jest i skąd pochodzi.
+    /// </remarks>
     [RelayCommand]
-    private void OpenTask(Guid? id)
+    private void OpenTask(SlotBox? blok)
     {
-        if (id is { } identyfikator)
+        if (blok is null)
+        {
+            return;
+        }
+
+        if (blok.TaskId is { } identyfikator)
         {
             TaskRequested?.Invoke(identyfikator);
+            return;
         }
+
+        Opened = blok;
     }
+
+    /// <summary>Otwarte wydarzenie. Puste, gdy karta jest zamknięta.</summary>
+    [ObservableProperty]
+    public partial SlotBox? Opened { get; set; }
+
+    public bool HasOpened => Opened is not null;
+
+    partial void OnOpenedChanged(SlotBox? value) => OnPropertyChanged(nameof(HasOpened));
+
+    [RelayCommand]
+    private void CloseOpened() => Opened = null;
 
     /// <summary>
     /// Przesunięcie kreski bieżącej godziny. Woła je okno co minutę.
@@ -462,6 +489,7 @@ public sealed partial class CalendarViewModel(
             // północ na krawędzi, a pokazać trzeba to, co jest umówione.
             slot.Entry.Start.ToString("HH:mm"),
             slot.Entry.End.ToString("HH:mm"),
-            slot.Entry.TaskId);
+            slot.Entry.TaskId,
+            slot.Entry.Start.ToString("dd.MM.yyyy"));
     }
 }
