@@ -26,6 +26,13 @@ public static class AppServices
     public static IServiceProvider Provider =>
         _provider ?? throw new InvalidOperationException("Zależności nie zostały jeszcze złożone.");
 
+    /// <param name="databasePath">
+    /// Ścieżka bazy. **Brana pod uwagę wyłącznie przy pierwszym wywołaniu** — drugie
+    /// oddaje to, co już złożone, i ten argument pomija. Inaczej byłby to wybór między
+    /// dwoma kontekstami nad dwoma plikami a po cichu zignorowanym żądaniem; drugie
+    /// jest złe, ale pierwsze jest gorsze.
+    /// </param>
+    /// <param name="deviceId">Jak wyżej. Wymuszany tylko w testach.</param>
     public static IServiceProvider Build(string? databasePath = null, string? deviceId = null)
     {
         lock (Gate)
