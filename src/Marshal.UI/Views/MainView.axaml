@@ -8,6 +8,7 @@
              xmlns:rev="using:Marshal.Application.Review"
              xmlns:sys="using:System"
              xmlns:dn="using:Marshal.Domain.Notes"
+             xmlns:dc="using:Marshal.Domain.Calendar"
              xmlns:df="using:Marshal.Domain.Filters"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
@@ -925,6 +926,15 @@
         <TextBox Text="{Binding GoogleClientSecret}" PasswordChar="•"
                  Watermark="GOCSPX-…" />
 
+        <CheckBox Margin="0,10,0,0" IsChecked="{Binding GoogleCalendar}"
+                  Content="Czytaj też mój kalendarz Google" />
+        <!-- Osobno i domyślnie wyłączone, bo te dwa uprawnienia różnią się ceną:
+             drive.file nie jest wrażliwe i pozwala opublikować aplikację bez
+             weryfikacji, calendar.readonly jest wrażliwe i publikacji już nie pozwoli.
+             Wciągnięcie kalendarza do jednej zgody zabierałoby tę decyzję bez pytania. -->
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="Uprawnienie do kalendarza jest przez Google uznane za wrażliwe: z nim aplikacji nie da się opublikować bez przeglądu, więc trzeba zostać w trybie testowym i logować się raz w tygodniu. Sama synchronizacja takiej ceny nie ma. Po zmianie tego pola zgoda jest pytana od nowa." />
+
         <WrapPanel Margin="0,10,0,0">
           <Button Classes="nav" Margin="0,0,8,6" Padding="14,10"
                   Command="{Binding SyncCommand}" IsEnabled="{Binding !IsSyncing}"
@@ -947,6 +957,56 @@
 
         <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
                    Text="{Binding TokenFolder, StringFormat='Żeton logowania: {0} — skasuj ten katalog, żeby zalogować się od nowa.'}" />
+
+        <TextBlock Classes="label" Margin="0,22,0,0" Text="Kalendarze" />
+        <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !HasCalendars}"
+                   Text="Nie ma podłączonego żadnego. Dopóki go nie ma, siatka godzinowa pokazuje same zadania." />
+
+        <ItemsControl ItemsSource="{Binding Calendars}" Margin="0,4,0,0">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="dc:CalendarSource">
+              <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                  <TextBlock Classes="hint" Text="{Binding ExternalId}" TextWrapping="Wrap" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center"
+                           Margin="0,0,10,0" Text="{Binding Kind}" />
+                <Button Grid.Column="2" Content="Odłącz" Padding="10,4" VerticalAlignment="Center"
+                        Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).RemoveCalendarCommand}"
+                        CommandParameter="{Binding}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Classes="label" Margin="0,12,0,0" Text="Dodaj kalendarz Google" />
+        <Grid ColumnDefinitions="*,*,Auto">
+          <TextBox Grid.Column="0" Margin="0,0,6,0" Text="{Binding NewGoogleCalendarId}"
+                   Watermark="primary" />
+          <TextBox Grid.Column="1" Margin="0,0,6,0" Text="{Binding NewGoogleCalendarName}"
+                   Watermark="Nazwa" />
+          <Button Grid.Column="2" Content="Dodaj" Padding="12,8"
+                  Command="{Binding AddGoogleCalendarCommand}" />
+        </Grid>
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="„primary” to Twój główny kalendarz. Inne dodaje się wklejając ich identyfikator z ustawień kalendarza Google. Wymaga zaznaczonego pola wyżej i ponownej zgody." />
+
+        <TextBlock Classes="label" Margin="0,12,0,0" Text="Dodaj kanał iCal" />
+        <Grid ColumnDefinitions="*,*,Auto">
+          <TextBox Grid.Column="0" Margin="0,0,6,0" Text="{Binding NewIcalUrl}"
+                   Watermark="https://…/kalendarz.ics" />
+          <TextBox Grid.Column="1" Margin="0,0,6,0" Text="{Binding NewIcalName}"
+                   Watermark="Nazwa" />
+          <Button Grid.Column="2" Content="Dodaj" Padding="12,8"
+                  Command="{Binding AddIcalCommand}" />
+        </Grid>
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="Kanał .ics nie wymaga konta Google ani niczego z instrukcji — wystarczy adres." />
+
+        <Button Classes="nav" Margin="0,12,0,0" Padding="14,10"
+                Command="{Binding RefreshCalendarsCommand}" Content="Odśwież kalendarze teraz" />
+        <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding CalendarStatus}" />
 
       </StackPanel>
     </ScrollViewer>

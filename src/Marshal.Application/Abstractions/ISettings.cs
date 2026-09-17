@@ -61,6 +61,21 @@ public interface ISettings
     /// </remarks>
     string? GoogleClientSecret { get; }
 
+    /// <summary>
+    /// Czy przy logowaniu prosić także o odczyt kalendarza Google.
+    /// </summary>
+    /// <remarks>
+    /// Osobno i domyślnie wyłączone, bo te dwa uprawnienia **różnią się ceną**.
+    /// <c>drive.file</c> nie jest wrażliwe, więc aplikację z samą synchronizacją da się
+    /// opublikować bez weryfikacji i żeton nie wygasa. <c>calendar.readonly</c> jest
+    /// wrażliwe: z nim publikacja wymagałaby przeglądu Google, czyli w praktyce trzeba
+    /// zostać w trybie testowym i logować się raz w tygodniu. Wciągnięcie kalendarza
+    /// na siłę do jednej zgody zabierałoby tę decyzję bez pytania.
+    /// </remarks>
+    bool GoogleCalendarEnabled { get; }
+
+    void SetGoogleCalendarEnabled(bool enabled);
+
     void SetZone(string id);
 
     void SetTheme(ThemeChoice theme);

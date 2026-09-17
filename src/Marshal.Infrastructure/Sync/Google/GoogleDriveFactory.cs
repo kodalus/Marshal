@@ -1,4 +1,5 @@
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Calendar.v3;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
 using Google.Apis.Util.Store;
@@ -33,6 +34,40 @@ public static class GoogleDriveFactory
     /// </remarks>
     private static readonly string Scope = DriveService.Scope.DriveFile;
 
+    /// <summary>Odczyt kalendarza. **Uprawnienie wrażliwe** — zob. ISettings.GoogleCalendarEnabled.</summary>
+    public const string CalendarScope = CalendarService.Scope.CalendarReadonly;
+
+    /// <summary>
+    /// Zgoda z kalendarzem i bez niego zapisywana jest **pod osobnym kluczem**.
+    /// </summary>
+    /// <remarks>
+    /// Biblioteka Google sprawdza, czy zapisany żeton istnieje, a nie czy obejmuje
+    /// żądane uprawnienia. Przy wspólnym kluczu włączenie kalendarza oddawałoby stary
+    /// żeton bez uprawnienia do kalendarza, a odmowa przychodziłaby dopiero z API,
+    /// jako 403 przy pobieraniu wydarzeń — czyli w miejscu, w którym nie widać,
+    /// że chodzi o zgodę. Osobny klucz wymusza świeżą zgodę i nie unieważnia starej.
+    /// </remarks>
+    private static string UserKey(bool withCalendar) =>
+        withCalendar ? "marshal-kalendarz" : "marshal";
+
+    /// <summary>Zgoda użytkownika. Wspólna droga dla Dysku i kalendarza.</summary>
+    public static Task<UserCredential> AuthorizeAsync(
+        string clientId,
+        string clientSecret,
+        string tokenFolder,
+        bool withCalendar,
+        CancellationToken ct = default)
+    {
+        string[] zakresy = withCalendar ? [Scope, CalendarScope] : [Scope];
+
+        return GoogleWebAuthorizationBroker.AuthorizeAsync(
+            new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
+            zakresy,
+            UserKey(withCalendar),
+            ct,
+            new FileDataStore(tokenFolder, fullPath: true));
+    }
+
     /// <param name="clientId">Z poświadczeń OAuth typu „aplikacja na komputer".</param>
     /// <param name="tokenFolder">
     /// Katalog na odświeżalny żeton. Trafia tam tajemnica konta, więc musi leżeć
@@ -42,14 +77,11 @@ public static class GoogleDriveFactory
         string clientId,
         string clientSecret,
         string tokenFolder,
+        bool withCalendar = false,
         CancellationToken ct = default)
     {
-        var poswiadczenie = await GoogleWebAuthorizationBroker.AuthorizeAsync(
-            new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
-            [Scope],
-            "marshal",
-            ct,
-            new FileDataStore(tokenFolder, fullPath: true));
+        var poswiadczenie = await AuthorizeAsync(
+            clientId, clientSecret, tokenFolder, withCalendar, ct);
 
         var service = new DriveService(new BaseClientService.Initializer
         {

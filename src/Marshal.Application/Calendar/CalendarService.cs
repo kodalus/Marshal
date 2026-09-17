@@ -14,8 +14,40 @@ public sealed class CalendarSyncService(
     ICalendarStore store,
     ITaskRepository tasks,
     IEnumerable<ICalendarFeed> feeds,
-    IClock clock)
+    IClock clock,
+    IHlcSource hlc)
 {
+    public Task<IReadOnlyList<CalendarSource>> SourcesAsync(CancellationToken ct = default) =>
+        store.SourcesAsync(ct);
+
+    /// <summary>
+    /// Podłączenie kalendarza. Do etapu 10 nie było **żadnej** drogi, żeby to zrobić:
+    /// odświeżanie przechodziło po źródłach, których nikt nie umiał dodać.
+    /// </summary>
+    public async Task<CalendarSource> AddAsync(
+        CalendarKind kind, string externalId, string name, CancellationToken ct = default)
+    {
+        var zrodlo = new CalendarSource(
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, externalId, name);
+
+        store.AddSource(zrodlo);
+        await store.SaveChangesAsync(ct);
+
+        return zrodlo;
+    }
+
+    /// <summary>Odłączenie. Nagrobek, nie usunięcie — wybór kalendarzy się synchronizuje.</summary>
+    public async Task RemoveAsync(Guid id, CancellationToken ct = default)
+    {
+        if ((await store.SourcesAsync(ct)).FirstOrDefault(z => z.Id == id) is not { } zrodlo)
+        {
+            return;
+        }
+
+        zrodlo.MarkDeleted(hlc.Next());
+        await store.SaveChangesAsync(ct);
+    }
+
     /// <summary>Co ile odświeżać kanały (spec 10.1).</summary>
     public static readonly TimeSpan RefreshInterval = TimeSpan.FromHours(1);
 

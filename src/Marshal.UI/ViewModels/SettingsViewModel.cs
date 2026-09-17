@@ -2,6 +2,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Infrastructure.Backup;
+using System.Collections.ObjectModel;
+using Marshal.Application.Calendar;
+using Marshal.Domain.Calendar;
 using Marshal.Infrastructure.Sync.Google;
 
 namespace Marshal.UI.ViewModels;
@@ -33,17 +36,23 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly BackupService _backup;
     private readonly IClock _clock;
     private readonly GoogleSyncService _dysk;
+    private readonly CalendarSyncService _kalendarze;
 
     /// <summary>Wstrzymuje zapis w chwili wypełniania pól wartościami z ustawień.</summary>
     private bool _wczytywanie;
 
     public SettingsViewModel(
-        ISettings settings, BackupService backup, IClock clock, GoogleSyncService dysk)
+        ISettings settings,
+        BackupService backup,
+        IClock clock,
+        GoogleSyncService dysk,
+        CalendarSyncService kalendarze)
     {
         _settings = settings;
         _backup = backup;
         _clock = clock;
         _dysk = dysk;
+        _kalendarze = kalendarze;
     }
 
     /// <summary>
@@ -62,6 +71,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         Zone = Zones.Contains(_settings.Zone.Id) ? _settings.Zone.Id : Zones[0];
         GoogleClientId = _settings.GoogleClientId ?? string.Empty;
         GoogleClientSecret = _settings.GoogleClientSecret ?? string.Empty;
+        GoogleCalendar = _settings.GoogleCalendarEnabled;
 
         _wczytywanie = false;
 
@@ -117,6 +127,125 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool IsSyncing { get; set; }
+
+    /// <summary>
+    /// Czy prosić także o odczyt kalendarza. Osobno, bo to uprawnienie ma inną cenę —
+    /// zob. <see cref="ISettings.GoogleCalendarEnabled"/>.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool GoogleCalendar { get; set; }
+
+    public ObservableCollection<CalendarSource> Calendars { get; } = [];
+
+    public bool HasCalendars => Calendars.Count > 0;
+
+    /// <summary>„primary" to główny kalendarz konta; inne wkleja się po identyfikatorze.</summary>
+    [ObservableProperty]
+    public partial string NewGoogleCalendarId { get; set; } = "primary";
+
+    [ObservableProperty]
+    public partial string NewGoogleCalendarName { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string NewIcalUrl { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string NewIcalName { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string CalendarStatus { get; set; } = string.Empty;
+
+    [RelayCommand]
+    private async Task AddGoogleCalendarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewGoogleCalendarId))
+        {
+            return;
+        }
+
+        var nazwa = string.IsNullOrWhiteSpace(NewGoogleCalendarName)
+            ? "Kalendarz Google"
+            : NewGoogleCalendarName;
+
+        await DodajAsync(CalendarKind.Google, NewGoogleCalendarId, nazwa);
+        NewGoogleCalendarName = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task AddIcalAsync()
+    {
+        if (string.IsNullOrWhiteSpace(NewIcalUrl))
+        {
+            return;
+        }
+
+        var nazwa = string.IsNullOrWhiteSpace(NewIcalName) ? "Kanał iCal" : NewIcalName;
+
+        await DodajAsync(CalendarKind.Ical, NewIcalUrl, nazwa);
+        NewIcalUrl = string.Empty;
+        NewIcalName = string.Empty;
+    }
+
+    [RelayCommand]
+    private async Task RemoveCalendarAsync(CalendarSource? source)
+    {
+        if (source is null)
+        {
+            return;
+        }
+
+        await _kalendarze.RemoveAsync(source.Id);
+        await ReloadCalendarsAsync();
+    }
+
+    /// <summary>
+    /// Odświeżenie na żądanie, z wymuszeniem. Bez wymuszenia kanał odpytany w ciągu
+    /// ostatniej godziny zostałby pominięty — a przy sprawdzaniu, czy konfiguracja
+    /// w ogóle działa, „pominięte" wygląda identycznie jak „nic nie ma".
+    /// </summary>
+    [RelayCommand]
+    private async Task RefreshCalendarsAsync()
+    {
+        CalendarStatus = "Pobieranie…";
+
+        try
+        {
+            var raport = await _kalendarze.RefreshAsync(force: true);
+
+            CalendarStatus = raport.Sources == 0 && raport.Failed == 0
+                ? "Nie ma podłączonego żadnego kalendarza."
+                : $"Odświeżone {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}.";
+        }
+        catch (Exception e)
+        {
+            CalendarStatus = e.Message;
+        }
+    }
+
+    private async Task DodajAsync(CalendarKind kind, string externalId, string name)
+    {
+        try
+        {
+            await _kalendarze.AddAsync(kind, externalId, name);
+            await ReloadCalendarsAsync();
+            await RefreshCalendarsAsync();
+        }
+        catch (Exception e)
+        {
+            CalendarStatus = e.Message;
+        }
+    }
+
+    private async Task ReloadCalendarsAsync()
+    {
+        Calendars.Clear();
+        foreach (var zrodlo in await _kalendarze.SourcesAsync())
+        {
+            Calendars.Add(zrodlo);
+        }
+
+        OnPropertyChanged(nameof(HasCalendars));
+    }
 
     /// <summary>Gdzie ląduje żeton — żeby dało się go skasować i zalogować od nowa.</summary>
     public string TokenFolder => _dysk.TokenFolder;
@@ -211,6 +340,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private async Task SyncAsync()
     {
         _settings.SetGoogle(GoogleClientId, GoogleClientSecret);
+        _settings.SetGoogleCalendarEnabled(GoogleCalendar);
 
         // Nasłuch na porcie pętli zwrotnej czeka na powrót z przeglądarki. Gdy Google
         // odrzuci zgodę — bo konta nie ma na liście testowej albo aplikacja nie jest

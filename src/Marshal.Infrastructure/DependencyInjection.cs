@@ -93,9 +93,16 @@ public static class DependencyInjection
         services.AddSingleton<CalendarSyncService>();
 
         // Kanał iCal działa bez żadnych poświadczeń, więc jest podłączony od razu.
-        // Kalendarz Google dochodzi dopiero po zalogowaniu — zob. GoogleDriveFactory.
         services.AddSingleton<HttpClient>();
         services.AddSingleton<ICalendarFeed, IcalFeed>();
+
+        // Kalendarz Google **też** jest podłączony od razu, tyle że loguje się dopiero
+        // przy pierwszym pobraniu. Wcześniej nie był zarejestrowany wcale: odświeżanie
+        // przechodziło po źródłach, nie znajdowało kanału dla rodzaju Google i pomijało
+        // je po cichu — włączenie API w konsoli niczego nie zmieniało, bo aplikacja
+        // nigdy nie zadawała pytania.
+        services.AddSingleton<ICalendarFeed>(sp =>
+            new GoogleCalendarGateway(sp.GetRequiredService<ISettings>(), databasePath));
 
         services.AddSingleton<IReviewQueries, ReviewQueries>();
         services.AddSingleton<IReviewSessionRepository, ReviewSessionRepository>();

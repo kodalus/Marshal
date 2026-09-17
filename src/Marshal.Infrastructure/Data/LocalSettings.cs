@@ -21,6 +21,8 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     public const string GoogleClientSecretKey = "google-client-secret";
 
+    public const string GoogleCalendarKey = "google-calendar";
+
     /// <summary>
     /// Strefa domyślna, gdy nic nie zapisano (spec 3.4). Wpisana wprost, nie brana
     /// z systemu — żeby świeżo zainstalowana aplikacja liczyła dni tak samo na
@@ -37,6 +39,8 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     private string? _googleId;
 
     private string? _googleSecret;
+
+    private bool? _googleCalendar;
 
     public TimeZoneInfo Zone
     {
@@ -70,6 +74,20 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     public string? GoogleClientSecret
     {
         get { lock (_gate) { return _googleSecret ??= Read(GoogleClientSecretKey) ?? string.Empty; } }
+    }
+
+    public bool GoogleCalendarEnabled
+    {
+        get { lock (_gate) { return _googleCalendar ??= Read(GoogleCalendarKey) == "1"; } }
+    }
+
+    public void SetGoogleCalendarEnabled(bool enabled)
+    {
+        lock (_gate)
+        {
+            Write(GoogleCalendarKey, enabled ? "1" : "0");
+            _googleCalendar = enabled;
+        }
     }
 
     public void SetGoogle(string? clientId, string? clientSecret)

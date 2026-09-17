@@ -124,12 +124,24 @@ Mimo to nie wkładaj jej do repozytorium: nie dlatego, że coś kryje, tylko dla
 Jeśli chcesz widzieć wydarzenia z Google Calendar na siatce godzinowej:
 
 1. **Biblioteka** → `Google Calendar API` → **Włącz**.
-2. Do ekranu zgody **nie dodawaj** nic ręcznie. Aplikacja prosi dodatkowo o
-   `.../auth/calendar.readonly`.
+2. W aplikacji: **Ustawienia → Konto Google** → zaznacz **„Czytaj też mój kalendarz
+   Google"** i kliknij **Zapisz i zsynchronizuj**. Bez tego pola aplikacja o kalendarz
+   **nie prosi wcale** — samo włączenie API w konsoli niczego nie daje.
+3. Dalej w **Ustawieniach**, sekcja **Kalendarze**: **Dodaj kalendarz Google**
+   z identyfikatorem `primary` (Twój główny) albo z identyfikatorem wklejonym
+   z ustawień konkretnego kalendarza Google.
 
-`calendar.readonly` **jest** uprawnieniem wrażliwym — inaczej niż `drive.file`. Przy
-aplikacji w trybie testowym z Twoim adresem na liście działa bez przeszkód; przegląd
-Google byłby potrzebny dopiero przy udostępnianiu jej innym ludziom.
+Zgoda z kalendarzem jest zapisywana osobno od zgody na sam Dysk, więc po zaznaczeniu
+tego pola przeglądarka otworzy się jeszcze raz — i to jest poprawne, a nie usterka.
+
+`calendar.readonly` **jest** uprawnieniem wrażliwym — inaczej niż `drive.file`. Ma to
+konkretną cenę: aplikacji z tym uprawnieniem **nie da się opublikować bez przeglądu**
+Google, więc trzeba zostać w trybie testowym, a tam żeton wygasa co siedem dni.
+Dlatego kalendarz jest osobnym polem wyboru, a nie częścią logowania — decyzja
+„wygoda kalendarza za cotygodniowe logowanie" jest Twoja, nie aplikacji.
+
+Jeśli chodzi o kalendarze przedszkola albo zajęć, kanał `.ics` daje to samo na siatce
+godzinowej i nie kosztuje nic.
 
 Aplikacja **tylko czyta** kalendarz. Zapis jest świadomie odłożony (spec 10.2): błąd
 w dwustronnej synchronizacji potrafi skasować prawdziwe wydarzenia i jest to jedyne
