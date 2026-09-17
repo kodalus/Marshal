@@ -71,7 +71,7 @@ public sealed partial class MainViewModel : ObservableObject
         SettingsViewModel settings,
         JournalViewModel journal,
         IActivityLog dziennik,
-        NoteService notes)
+        NoteService noteService)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -83,7 +83,7 @@ public sealed partial class MainViewModel : ObservableObject
         _queries = queries;
         _notifier = notifier;
         _dziennik = dziennik;
-        _notes = notes;
+        _notes = noteService;
         Clarify = clarify;
         Detail = detail;
         Review = review;
