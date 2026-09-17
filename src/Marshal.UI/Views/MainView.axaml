@@ -574,10 +574,26 @@
                        zero na zero i obcinała wszystko. Całodniowe rysowały się dalej,
                        bo idą zwykłym paskiem nad siatką; godzinowe znikały bez śladu. -->
                   <Panel>
+
+                    <!-- Siatka pod blokami: po jednej linii na godzinę i pionowa
+                         krecha na prawej krawędzi kolumny. Bez niej blok wisi
+                         w pustce i nie widać, o której się zaczyna. Linie są
+                         osobną warstwą, nie tłem bloków, bo mają być widoczne
+                         również tam, gdzie nic nie zaplanowano. -->
+                    <ItemsControl ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
+                                  Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
+                                  Background="#0C808080">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <Border Height="48" BorderThickness="0,1,1,0" BorderBrush="#22808080" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
                     <ItemsControl ItemsSource="{Binding Slots}"
                                   Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).GridHeight}"
                                   Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
-                                  Background="#0C808080">
+                                  Background="Transparent">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <Canvas />
@@ -593,7 +609,7 @@
                         <DataTemplate x:DataType="vm:SlotBox">
                           <Border Width="{Binding Width}" Height="{Binding Height}"
                                   Opacity="{Binding Opacity}"
-                                  Background="#556C8FBF" CornerRadius="4" Padding="4,2">
+                                  Background="{Binding Background}" CornerRadius="4" Padding="4,2">
                             <TextBlock Text="{Binding Title}" FontSize="11"
                                        TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
                           </Border>

@@ -30,7 +30,7 @@ namespace Marshal.Infrastructure.Calendar;
 /// </para>
 /// </remarks>
 /// <summary>Kalendarz z konta, do wyboru na ekranie.</summary>
-public sealed record GoogleCalendarInfo(string Id, string Name);
+public sealed record GoogleCalendarInfo(string Id, string Name, string? Color);
 
 public sealed class GoogleCalendarGateway(ISettings settings, string databasePath) : ICalendarFeed
 {
@@ -79,7 +79,11 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
             .Where(k => !string.IsNullOrWhiteSpace(k.Id))
             .Select(k => new GoogleCalendarInfo(
                 k.Id,
-                string.IsNullOrWhiteSpace(k.Summary) ? k.Id : k.Summary))
+                string.IsNullOrWhiteSpace(k.Summary) ? k.Id : k.Summary,
+
+                // Barwa prosto z konta: kalendarze rozpoznaje się po kolorze, który
+                // się w Google ustawiło, a nie po kolorze, który wylosuje aplikacja.
+                k.BackgroundColor))
             .OrderBy(k => k.Name, StringComparer.CurrentCulture)
             .ToArray();
     }

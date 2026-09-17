@@ -286,6 +286,26 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Wydarzenie_dostaje_barwe_swojego_kalendarza()
+    {
+        // Barwa siedzi na kalendarzu, a rysuje się wydarzenie — i to jest jedyna
+        // rzecz, po której przy jedenastu podłączonych kalendarzach widać, do
+        // którego z nich coś należy. Droga wiedzie przez cztery warstwy, więc
+        // urwana po cichu w dowolnej z nich wygląda jak „wszystko jest szare".
+        var kolorowy = await _usluga.AddAsync(
+            CalendarKind.Ical, "https://example.test/praca.ics", "Praca", "#8E24AA");
+
+        await _sklad.UpsertAsync(
+            kolorowy.Id, [Wydarzenie("p1", "Spotkanie", "2026-09-16", 10, 11)]);
+        await _sklad.SaveChangesAsync();
+
+        var dni = await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1);
+
+        dni[0].Timed.Should().ContainSingle(s => s.Entry.Title == "Spotkanie")
+            .Which.Entry.Color.Should().Be("#8E24AA");
+    }
+
+    [Fact]
     public async Task Ten_sam_kalendarz_dodany_dwa_razy_zostaje_jednym()
     {
         // Klikanie „Dodaj" w reakcji na to, że nic się nie pojawiło, jest odruchem —

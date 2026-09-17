@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
@@ -15,10 +16,39 @@ namespace Marshal.UI.ViewModels;
 /// na dzień, czy na tydzień.
 /// </remarks>
 public sealed record SlotBox(
-    string Title, double Top, double Height, double Left, double Width, bool IsTask)
+    string Title, double Top, double Height, double Left, double Width, bool IsTask, string? Color)
 {
+    /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
+    private const string DomyslneWydarzenie = "#6C8FBF";
+
+    private const string DomyslneZadanie = "#909090";
+
     /// <summary>Zadanie półprzezroczyste: umowa z kimś i zamiar wobec siebie to nie to samo.</summary>
     public double Opacity => IsTask ? 0.55 : 1.0;
+
+    /// <summary>
+    /// Barwa kalendarza albo zadania, przyciemniona przezroczystością.
+    /// </summary>
+    /// <remarks>
+    /// Barwy z Google to jasne pastele, a okno bywa ciemne — położone wprost dawałyby
+    /// jasny prostokąt z jasnym napisem. Ta sama barwa z przezroczystością zachowuje
+    /// odcień, po którym poznaje się kalendarz, i zostawia tekst czytelnym w obu motywach.
+    /// Liczenie tutaj, a nie konwerterem: konwerter to trzecie miejsce do zajrzenia
+    /// przy czytaniu jednego wiersza XAML-a.
+    /// </remarks>
+    public IBrush Background
+    {
+        get
+        {
+            var zrodlo = string.IsNullOrWhiteSpace(Color)
+                ? IsTask ? DomyslneZadanie : DomyslneWydarzenie
+                : Color;
+
+            return Avalonia.Media.Color.TryParse(zrodlo, out var barwa)
+                ? new SolidColorBrush(Avalonia.Media.Color.FromArgb(0x66, barwa.R, barwa.G, barwa.B))
+                : new SolidColorBrush(Avalonia.Media.Color.Parse(DomyslneWydarzenie));
+        }
+    }
 }
 
 /// <summary>Jeden dzień siatki gotowy do narysowania.</summary>
@@ -223,6 +253,7 @@ public sealed partial class CalendarViewModel(
             slot.Entry.Hours * HourHeight,
             slot.Column * szerokosc,
             szerokosc - 2,
-            slot.Entry.Kind == AgendaKind.Task);
+            slot.Entry.Kind == AgendaKind.Task,
+            slot.Entry.Color);
     }
 }

@@ -194,7 +194,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        await DodajAsync(CalendarKind.Google, kalendarz.Id, kalendarz.Name);
+        await DodajAsync(CalendarKind.Google, kalendarz.Id, kalendarz.Name, kalendarz.Color);
     }
 
     [ObservableProperty]
@@ -271,11 +271,11 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private async Task DodajAsync(CalendarKind kind, string externalId, string name)
+    private async Task DodajAsync(CalendarKind kind, string externalId, string name, string? color = null)
     {
         try
         {
-            await _kalendarze.AddAsync(kind, externalId, name);
+            await _kalendarze.AddAsync(kind, externalId, name, color);
             await ReloadCalendarsAsync();
             await RefreshCalendarsAsync();
         }

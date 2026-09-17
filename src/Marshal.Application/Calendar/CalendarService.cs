@@ -45,7 +45,11 @@ public sealed class CalendarSyncService(
     /// odświeżanie przechodziło po źródłach, których nikt nie umiał dodać.
     /// </summary>
     public async Task<CalendarSource> AddAsync(
-        CalendarKind kind, string externalId, string name, CancellationToken ct = default)
+        CalendarKind kind,
+        string externalId,
+        string name,
+        string? color = null,
+        CancellationToken ct = default)
     {
         // Ten sam kalendarz dwa razy to zawsze pomyłka — najczęściej klikanie „Dodaj"
         // w reakcji na to, że nic się nie pojawiło. Duplikaty mnożą potem te same
@@ -59,7 +63,7 @@ public sealed class CalendarSyncService(
         }
 
         var zrodlo = new CalendarSource(
-            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, szukany, name);
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, szukany, name, color);
 
         store.AddSource(zrodlo);
         await store.SaveChangesAsync(ct);
@@ -162,6 +166,10 @@ public sealed class CalendarSyncService(
 
         var wpisy = new List<AgendaEntry>();
 
+        // Barwa jest cechą kalendarza, nie wydarzenia: przy jedenastu podłączonych
+        // kalendarzach to jedyna rzecz, po której widać, do którego z nich coś należy.
+        var barwy = (await store.SourcesAsync(ct)).ToDictionary(z => z.Id, z => z.Color);
+
         foreach (var wydarzenie in await store.EventsAsync(poczatek, koniec, ct))
         {
             wpisy.Add(new AgendaEntry(
@@ -170,7 +178,7 @@ public sealed class CalendarSyncService(
                 wydarzenie.EndsAt.ToOffset(strefa),
                 wydarzenie.IsAllDay,
                 AgendaKind.Event,
-                Color: null,
+                barwy.GetValueOrDefault(wydarzenie.SourceId),
                 TaskId: null));
         }
 
