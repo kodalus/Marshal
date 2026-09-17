@@ -79,16 +79,40 @@ public sealed class TaskQueryTests : IDisposable
     }
 
     [Fact]
-    public async Task Dzisiaj_pomija_skrzynke_kosz_i_wykonane()
+    public async Task Dzisiaj_pomija_skrzynke_i_kosz()
     {
         var wrzut = TaskItem.Capture("w skrzynce", new Zegar().Now, Stamp());
         _db.Tasks.Add(wrzut);
 
         Dodaj("wyrzucone", t => { t.Schedule(_obszar, Dzis, Stamp()); t.Trash(Stamp()); });
-        Dodaj("zrobione", t => { t.Schedule(_obszar, Dzis, Stamp()); t.Complete(new Zegar().Now, Stamp()); });
         _db.SaveChanges();
 
         (await _zadania.TodayAsync(Dzis)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Dzisiaj_zostawia_to_co_dzis_odhaczone()
+    {
+        // Zmiana zamierzona. Odhaczone zadanie znikało z listy, więc dzień wyglądał na
+        // coraz bardziej pusty w miarę pracy — dokładnie odwrotnie do tego, co się
+        // właśnie stało. Zostaje z ptaszkiem, ale tylko na swoim dniu: jutro liczy się
+        // już wyłącznie to, co jutrzejsze.
+        Dodaj("zrobione dziś", t =>
+        {
+            t.Schedule(_obszar, Dzis, Stamp());
+            t.Complete(new Zegar().Now, Stamp());
+        });
+
+        Dodaj("zrobione wczoraj", t =>
+        {
+            t.Schedule(_obszar, Dzis.AddDays(-1), Stamp());
+            t.Complete(new Zegar().Now, Stamp());
+        });
+
+        _db.SaveChanges();
+
+        (await _zadania.TodayAsync(Dzis)).Should().ContainSingle()
+            .Which.Title.Should().Be("zrobione dziś");
     }
 
     [Fact]
