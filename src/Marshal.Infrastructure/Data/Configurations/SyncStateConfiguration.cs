@@ -33,7 +33,10 @@ public sealed class ReminderShownConfiguration : IEntityTypeConfiguration<Remind
     public void Configure(EntityTypeBuilder<ReminderShown> builder)
     {
         builder.ToTable("ReminderShown");
-        builder.HasKey(r => r.TaskId);
+
+        // Klucz z dwóch pól: jeden wiersz na pokazaną chwilę, nie na zadanie. Przy
+        // kilku wyprzedzeniach wiersz na zadanie pamiętał tylko ostatnie.
+        builder.HasKey(r => new { r.TaskId, r.ReminderAt });
 
         builder.Property(r => r.ReminderAt).IsRequired();
         builder.Property(r => r.ShownAt).IsRequired();

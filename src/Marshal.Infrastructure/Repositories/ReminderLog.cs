@@ -7,34 +7,31 @@ namespace Marshal.Infrastructure.Repositories;
 
 public sealed class ReminderLog(MarshalDbContext db) : IReminderLog
 {
+    /// <summary>
+    /// Czy ta konkretna chwila już się odezwała.
+    /// </summary>
+    /// <remarks>
+    /// Para zadanie-chwila, nie samo zadanie. Zadanie z trzema wyprzedzeniami ma trzy
+    /// chwile i każda odzywa się raz; przesunięcie zadania daje nowe chwile, więc
+    /// odzywa się na nowo — i to jest właściwe, bo to jest inna pora niż poprzednio.
+    /// </remarks>
     public async Task<bool> WasShownAsync(
-        Guid taskId, DateTimeOffset reminderAt, CancellationToken ct = default)
-    {
-        var wpis = await Find(taskId, ct);
-
-        // Porównanie z zapisaną chwilą, nie samo istnienie wpisu: przesunięcie
-        // przypomnienia ma je odblokować. Bez tego „przypomnij mi jednak o godzinę
-        // później" milczałoby, bo o tym zadaniu już raz było.
-        return wpis is not null && wpis.ReminderAt == reminderAt;
-    }
+        Guid taskId, DateTimeOffset reminderAt, CancellationToken ct = default) =>
+        db.ChangeTracker.Entries<ReminderShown>()
+            .Select(e => e.Entity)
+            .Any(r => r.TaskId == taskId && r.ReminderAt == reminderAt)
+        || await db.ReminderShown.AsNoTracking()
+            .AnyAsync(r => r.TaskId == taskId && r.ReminderAt == reminderAt, ct);
 
     public void Record(Guid taskId, DateTimeOffset reminderAt, DateTimeOffset shownAt)
     {
-        var istniejacy = db.ChangeTracker.Entries<ReminderShown>()
-                .Select(e => e.Entity)
-                .FirstOrDefault(r => r.TaskId == taskId)
-            ?? db.ReminderShown.FirstOrDefault(r => r.TaskId == taskId);
+        var juzJest = db.ChangeTracker.Entries<ReminderShown>()
+            .Select(e => e.Entity)
+            .Any(r => r.TaskId == taskId && r.ReminderAt == reminderAt);
 
-        if (istniejacy is null)
+        if (!juzJest)
         {
             db.ReminderShown.Add(new ReminderShown(taskId, reminderAt, shownAt));
         }
-        else
-        {
-            istniejacy.Update(reminderAt, shownAt);
-        }
     }
-
-    private Task<ReminderShown?> Find(Guid taskId, CancellationToken ct) =>
-        db.ReminderShown.AsNoTracking().FirstOrDefaultAsync(r => r.TaskId == taskId, ct);
 }

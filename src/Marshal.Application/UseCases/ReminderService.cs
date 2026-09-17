@@ -51,23 +51,28 @@ public sealed class ReminderService(
         var strefa = settings.Zone;
         var pokazane = 0;
 
-        foreach (var zadanie in await tasks.WithRemindersAsync(ct))
+        // Wszystkie chwile zebrane i uporządkowane **razem**, nie zadanie po zadaniu.
+        // Gdy uzbierało się kilka zaległych, kolejność ma być taka, w jakiej miały się
+        // odezwać — a nie taka, w jakiej zadania wyszły z bazy.
+        var doPokazania = (await tasks.WithRemindersAsync(ct))
+            .SelectMany(z => Chwile(z, strefa).Select(c => (Zadanie: z, c.Chwila, c.ZWyprzedzenia)))
+            .Where(w => w.Chwila <= teraz)
+            .Where(w => !w.ZWyprzedzenia || teraz - w.Chwila <= Przeterminowanie)
+            .OrderBy(w => w.Chwila)
+            .ToList();
+
+        foreach (var (zadanie, chwila, _) in doPokazania)
         {
-            foreach (var (chwila, zWyprzedzenia) in Chwile(zadanie, strefa))
+            if (await log.WasShownAsync(zadanie.Id, chwila, ct))
             {
-                if (chwila > teraz
-                    || (zWyprzedzenia && teraz - chwila > Przeterminowanie)
-                    || await log.WasShownAsync(zadanie.Id, chwila, ct))
-                {
-                    continue;
-                }
-
-                await notifier.ShowAsync(
-                    new Notification(zadanie.Id, zadanie.Title, Podpis(zadanie, chwila, strefa)), ct);
-
-                log.Record(zadanie.Id, chwila, teraz);
-                pokazane++;
+                continue;
             }
+
+            await notifier.ShowAsync(
+                new Notification(zadanie.Id, zadanie.Title, Podpis(zadanie, chwila, strefa)), ct);
+
+            log.Record(zadanie.Id, chwila, teraz);
+            pokazane++;
         }
 
         if (pokazane > 0)

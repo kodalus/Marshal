@@ -1,7 +1,7 @@
 namespace Marshal.Domain.Sync;
 
 /// <summary>
-/// Że **to urządzenie** pokazało już to przypomnienie.
+/// Że **to urządzenie** pokazało już to jedno przypomnienie.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -32,16 +32,19 @@ public sealed class ReminderShown
     public Guid TaskId { get; private set; }
 
     /// <summary>
-    /// Na którą chwilę było ustawione. Przesunięcie przypomnienia ma je odblokować
-    /// ponownie — bez tego pola „przypomnij mi jednak o godzinę później" nie zadziałałoby.
+    /// Na którą chwilę było ustawione.
     /// </summary>
+    /// <remarks>
+    /// Razem z zadaniem tworzy klucz: jeden wiersz na **chwilę**, nie na zadanie.
+    /// Wiersz na zadanie wystarczał, dopóki przypomnienie było jedno; przy kilku
+    /// wyprzedzeniach pamiętał wyłącznie ostatnie i wszystkie wcześniejsze robiły się
+    /// znowu niepokazane — zadanie z trzema przypomnieniami odzywało się w kółko.
+    ///
+    /// Przy okazji rozwiązuje to przesunięcie przypomnienia: nowa chwila to nowy wiersz,
+    /// więc „przypomnij mi jednak o godzinę później" odzywa się, choć o tym zadaniu
+    /// już raz było.
+    /// </remarks>
     public DateTimeOffset ReminderAt { get; private set; }
 
     public DateTimeOffset ShownAt { get; private set; }
-
-    public void Update(DateTimeOffset reminderAt, DateTimeOffset shownAt)
-    {
-        ReminderAt = reminderAt;
-        ShownAt = shownAt;
-    }
 }
