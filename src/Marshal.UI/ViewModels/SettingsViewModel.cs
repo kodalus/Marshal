@@ -65,6 +65,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         _wczytywanie = false;
 
+        // Wejście na ekran zawsze zastaje przycisk czynny. Gdyby poprzednia próba
+        // utknęła mimo wszystko, wyjście i powrót ma wystarczyć zamiast restartu.
+        IsSyncing = false;
+
         OnPropertyChanged(nameof(TokenFolder));
 
         OnPropertyChanged(nameof(Now));
@@ -118,6 +122,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string TokenFolder => _dysk.TokenFolder;
 
     /// <summary>
+    /// Ile czekamy na powrót z przeglądarki, zanim uznamy, że nie wróci.
+    /// </summary>
+    /// <remarks>
+    /// Zgoda w przeglądarce potrafi trwać: logowanie, drugi składnik, wybór konta.
+    /// Pięć minut mieści to z zapasem i jednocześnie **kończy** czekanie, gdy powrotu
+    /// nie będzie — a nie będzie go zawsze, gdy Google odrzuci zgodę, bo wtedy
+    /// przeglądarka zostaje na stronie błędu i nie woła nas wcale.
+    /// </remarks>
+    private static readonly TimeSpan CzasNaZgode = TimeSpan.FromMinutes(5);
+
+    private CancellationTokenSource? _przerwanie;
+
+    /// <summary>
     /// Zapisanie poświadczeń i przebieg. Jedno polecenie, bo to jedna czynność:
     /// poświadczenia bez sprawdzenia nie mówią nic, a sprawdzić da się je tylko przebiegiem.
     /// </summary>
@@ -126,13 +143,26 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         _settings.SetGoogle(GoogleClientId, GoogleClientSecret);
 
+        // Nasłuch na porcie pętli zwrotnej czeka na powrót z przeglądarki. Gdy Google
+        // odrzuci zgodę — bo konta nie ma na liście testowej albo aplikacja nie jest
+        // opublikowana — przeglądarka zostaje na stronie błędu i **nie wraca nigdy**.
+        // Bez ograniczenia czasu i bez przerwania czekanie trwa do zamknięcia
+        // aplikacji, a przycisk zostaje martwy: nie da się nawet poprawić poświadczeń.
+        _przerwanie?.Dispose();
+        _przerwanie = new CancellationTokenSource(CzasNaZgode);
+
         IsSyncing = true;
         SyncStatus = "Łączenie… przy pierwszym razie otworzy się przeglądarka.";
 
         try
         {
-            var wynik = await _dysk.SyncAsync();
+            var wynik = await _dysk.SyncAsync(_przerwanie.Token);
             SyncStatus = wynik.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            SyncStatus = "Przerwane — zgoda w przeglądarce nie wróciła. "
+                + "Jeśli Google pokazał stronę z błędem, popraw ustawienia w konsoli i spróbuj jeszcze raz.";
         }
         catch (Exception e)
         {
@@ -146,74 +176,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    public string Now => $"{_clock.Now:dd.MM.yyyy HH:mm} — dzisiaj to {_clock.Today:dd.MM.yyyy}";
-
+    /// <summary>Przerwanie czekania na zgodę. Bez tego jedynym wyjściem jest restart.</summary>
     [RelayCommand]
-    private async Task ExportAsync()
-    {
-        if (SaveRequested is null)
-        {
-            return;
-        }
-
-        var nazwa = $"marshal-{_clock.Today:yyyy-MM-dd}.json";
-
-        try
-        {
-            await using var strumien = await SaveRequested(nazwa);
-
-            if (strumien is null)
-            {
-                return;
-            }
-
-            await _backup.ExportAsync(strumien);
-            Status = $"Zapisane do {nazwa}.";
-        }
-        catch (Exception e)
-        {
-            // Łapane szeroko **celowo**. Polecenie wołane jest bez oczekiwania na wynik,
-            // więc wyjątek, którego tu nie złapiemy, nie ma dokąd trafić: przycisk
-            // wygląda na kliknięty, pliku nie ma i nikt się o tym nie dowie. Przy kopii
-            // zapasowej cicha porażka jest gorsza niż brak kopii, bo zostawia
-            // przekonanie, że kopia jest. Treść wyjątku, nie „coś poszło nie tak".
-            Status = $"Nie udało się zapisać: {e.Message}";
-        }
-    }
-
-    [RelayCommand]
-    private async Task ImportAsync()
-    {
-        if (OpenRequested is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await using var strumien = await OpenRequested();
-
-            if (strumien is null)
-            {
-                return;
-            }
-
-            var tryb = ReplaceOnImport ? ImportMode.Replace : ImportMode.Merge;
-            var raport = await _backup.ImportAsync(strumien, tryb);
-
-            Status = raport.Applied == 0
-                ? $"Wczytane {raport.Read} wpisów — wszystkie starsze niż to, co już jest."
-                : $"Wczytane {raport.Read} wpisów, nałożone {raport.Applied}.";
-
-            Imported?.Invoke(this, EventArgs.Empty);
-        }
-        catch (Exception e)
-        {
-            // Jak wyżej. Wgranie jest w transakcji, więc baza została w stanie sprzed
-            // próby — komunikat jest jedyną rzeczą, której brakuje.
-            Status = $"Nie udało się wczytać: {e.Message}";
-        }
-    }
+    private void CancelSync() => _przerwanie?.Cancel();
 
     /// <summary>Wgranie kopii zmienia wszystko, więc ekran pod spodem musi się przeliczyć.</summary>
     public event EventHandler? Imported;

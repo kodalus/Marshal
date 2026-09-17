@@ -70,16 +70,12 @@ public sealed class GoogleSyncService(
 
                 return await PrzebiegAsync(ct);
             }
-            catch (Exception ponownie)
+            catch (Exception ponownie) when (ponownie is not OperationCanceledException)
             {
                 return new SyncOutcome(false, ponownie.Message);
             }
         }
-        catch (OperationCanceledException)
-        {
-            return new SyncOutcome(false, "Przerwane.");
-        }
-        catch (Exception e)
+        catch (Exception e) when (e is not OperationCanceledException)
         {
             // Treść wyjątku, nie „nie udało się". Przy pierwszym logowaniu prawie każdy
             // błąd jest do naprawienia w konsoli Google — zły identyfikator, adres
