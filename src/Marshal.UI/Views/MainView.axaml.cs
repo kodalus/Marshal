@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using System.Windows.Input;
 using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
@@ -35,6 +36,7 @@ public partial class MainView : UserControl
         // zjada zdarzenie, zanim okno zdąży cokolwiek z nim zrobić.
         AddHandler(KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
         AddHandler(PointerWheelChangedEvent, PrzewinSzczegol, RoutingStrategies.Tunnel);
+        AddHandler(ContextRequestedEvent, NaMenu, RoutingStrategies.Bubble);
 
         // Układ dobierany z faktycznej szerokości, nie z platformy: obrót telefonu
         // i zwężenie okna to ta sama zmiana.
@@ -390,6 +392,101 @@ public partial class MainView : UserControl
                 Math.Max(0, widok.Extent.Height - widok.Viewport.Height)));
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Menu podręczne pod prawym przyciskiem — na listach i na blokach kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Jedno menu na całą aplikację, składane w kodzie, a nie po jednym w każdym
+    /// szablonie wiersza. Wiersze różnią się typem — zadanie, wiersz listy, pozycja
+    /// oczekiwanych, wybór z „Teraz", blok na siatce — a czynności są te same;
+    /// pięć kopii tego samego menu rozjechałoby się przy pierwszej zmianie.
+    /// </para>
+    /// <para>
+    /// W menu są **tylko rzeczy, które działają**. Pozycja, która nic nie robi, uczy
+    /// nieufności do całego menu — a nieufne menu przestaje być skrótem.
+    /// </para>
+    /// </remarks>
+    private void NaMenu(object? nadawca, ContextRequestedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model || e.Source is not Control zrodlo)
+        {
+            return;
+        }
+
+        if (Zadanie(zrodlo) is { } zadanie)
+        {
+            PokazMenu(model, zrodlo, zadanie);
+            e.Handled = true;
+            return;
+        }
+
+        // Blok na siatce niesie sam identyfikator, nie całe zadanie — trzeba je dobrać.
+        if (Blok(zrodlo) is { TaskId: { } identyfikator })
+        {
+            e.Handled = true;
+
+            _ = Probuj("Menu: otwarcie", async () =>
+            {
+                if (await model.FindTaskAsync(identyfikator) is { } zBazy)
+                {
+                    PokazMenu(model, zrodlo, zBazy);
+                }
+            });
+        }
+    }
+
+    /// <summary>Blok siatki spod wskaźnika.</summary>
+    private static SlotBox? Blok(Control zrodlo) =>
+        zrodlo.GetSelfAndVisualAncestors()
+            .OfType<Control>()
+            .Select(k => k.DataContext)
+            .OfType<SlotBox>()
+            .FirstOrDefault();
+
+    private static void PokazMenu(MainViewModel model, Control zrodlo, TaskItem zadanie)
+    {
+        var menu = new MenuFlyout
+        {
+            ItemsSource = new[]
+            {
+                Pozycja("Otwórz szczegół", model.OpenTaskCommand, zadanie),
+                Pozycja("Odhacz", model.CompleteTaskCommand, zadanie),
+                Pozycja("Weź na dziś", model.FocusTaskCommand, zadanie),
+                Pozycja("Przełóż na jutro", model.PostponeTaskCommand, zadanie),
+                Pozycja("Do kosza", model.TrashTaskCommand, zadanie),
+            },
+        };
+
+        menu.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    private static MenuItem Pozycja(string napis, ICommand polecenie, TaskItem zadanie) =>
+        new() { Header = napis, Command = polecenie, CommandParameter = zadanie };
+
+    /// <summary>Zadanie spod wskaźnika — niezależnie od tego, czym jest wiersz.</summary>
+    private static TaskItem? Zadanie(Control zrodlo)
+    {
+        foreach (var przodek in zrodlo.GetSelfAndVisualAncestors().OfType<Control>())
+        {
+            var znalezione = przodek.DataContext switch
+            {
+                TaskItem wprost => wprost,
+                TaskRow wiersz => wiersz.Task,
+                WaitingItem czekajace => czekajace.Task,
+                NowPick wybor => wybor.Task,
+                _ => null,
+            };
+
+            if (znalezione is not null)
+            {
+                return znalezione;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

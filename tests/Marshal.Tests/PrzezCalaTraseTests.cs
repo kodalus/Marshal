@@ -179,6 +179,37 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Czynnosci_menu_podrecznego_robia_to_co_obiecuja()
+    {
+        // W menu mają być **tylko rzeczy, które działają**: pozycja, która nic nie robi,
+        // uczy nieufności do całego menu, a nieufne menu przestaje być skrótem.
+        var main = Usluga<MainViewModel>();
+        var dzis = Usluga<IClock>().Today;
+
+        var jutro = await ZaplanowaneAsync("Przełożyć");
+        await main.PostponeTaskCommand.ExecuteAsync(jutro);
+
+        (await Usluga<ITaskRepository>().FindAsync(jutro.Id))!
+            .DoDate.Should().Be(dzis.AddDays(1));
+
+        var kosz = await ZaplanowaneAsync("Wyrzucić");
+        await main.TrashTaskCommand.ExecuteAsync(kosz);
+
+        (await Usluga<ITaskRepository>().FindAsync(kosz.Id))!
+            .State.Should().Be(TaskState.Trashed);
+
+        var piatka = await ZaplanowaneAsync("Na dziś");
+        await main.FocusTaskCommand.ExecuteAsync(piatka);
+
+        main.FocusItems.Should().Contain(z => z.Id == piatka.Id);
+
+        var szczegol = await ZaplanowaneAsync("Otworzyć");
+        await main.OpenTaskCommand.ExecuteAsync(szczegol);
+
+        Usluga<TaskDetailViewModel>().IsOpen.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Rytm_ustawiony_na_ekranie_rodzi_nastepne_zadanie()
     {
         // Trasa: lista wyboru w oknie → reguła → JSON w bazie → odczyt → następnik.

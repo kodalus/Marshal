@@ -737,6 +737,61 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Czynności menu podręcznego. Każda bierze samo zadanie, bo wiersze list różnią się
+    /// typem, a menu ma być jedno dla wszystkich.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenTaskAsync(TaskItem? task)
+    {
+        if (task is not null)
+        {
+            await Detail.LoadAsync(task);
+        }
+    }
+
+    [RelayCommand]
+    private async Task FocusTaskAsync(TaskItem? task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        var wynik = await _focus.TryFocusAsync(task.Id);
+
+        PendingFocus = wynik.Accepted ? null : task;
+        await RefreshFocusAsync();
+    }
+
+    /// <summary>Przełożenie o dobę. Godzina zostaje — przesunięcie dnia jej nie dotyczy.</summary>
+    [RelayCommand]
+    private async Task PostponeTaskAsync(TaskItem? task)
+    {
+        if (task is null)
+        {
+            return;
+        }
+
+        var skad = task.DoDate ?? Today();
+
+        await _edit.RescheduleAsync(task.Id, skad.AddDays(1), task.DoTime);
+        await ReloadAsync();
+    }
+
+    [RelayCommand]
+    private async Task TrashTaskAsync(TaskItem? task)
+    {
+        if (task is not null)
+        {
+            await _inbox.TrashAsync(task.Id);
+            await ReloadAsync();
+        }
+    }
+
+    /// <summary>Zadanie po identyfikatorze — dla bloków siatki, które niosą sam identyfikator.</summary>
+    public Task<TaskItem?> FindTaskAsync(Guid id) => _tasks.FindAsync(id);
+
     /// <summary>Odhaczenie zadania podanego wprost — piątka „Na dziś" niesie same zadania.</summary>
     [RelayCommand]
     private async Task CompleteTaskAsync(TaskItem? task)
