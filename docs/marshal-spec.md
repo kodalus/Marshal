@@ -1277,7 +1277,35 @@ Token odświeżania w `DPAPI` (Windows) i `EncryptedSharedPreferences` (Android)
 | **Archiwum** | `Done` i `Trashed`, szukanie, przywracanie |
 | **Ustawienia** | Konto Google, kalendarze, kopia (12), motyw, strefa (3.4) |
 
-Wszystko poza „Kalendarzem" i „Notatkami" musi być w pełni obsługiwalne z klawiatury.
+Wszystko poza „Kalendarzem" i „Notatkami" musi być w pełni obsługiwalne z klawiatury. Układ nawigacji — zob. 11.0.
+
+### 11.0 Nawigacja
+
+**Dwa układy, jedna nawigacja.** Szeroko — wszystkie ekrany naraz w jednym albo dwóch
+rzędach, bo tam mieszczą się i są najkrótszą drogą do każdego z nich. Wąsko — cztery
+pod kciukiem na pasku dolnym, reszta pod przyciskiem „Więcej”.
+
+Piętnaście przycisków zawiniętych w pięć rzędów zjada na telefonie **trzecią część
+ekranu, zanim pojawi się jakakolwiek treść**. To nie jest jeden układ do poprawienia:
+te same przyciski na pulpicie są dobrym rozwiązaniem, a na telefonie złym, więc muszą
+być dwa.
+
+Czwórka na pasku: **Dzisiaj** (ekran startowy), **Teraz** (odpowiada na pytanie, co
+robić), **Skrzynka** (jako jedyna rośnie sama, więc jako jedyna ma licznik),
+**Kalendarz** (jako jedyny ma godzinę). Reszta to ekrany, do których siada się
+świadomie — przegląd, obszary, archiwum — a nie zagląda między jednym a drugim.
+
+O układzie rozstrzyga **faktyczna szerokość okna**, nie platforma: obrót telefonu
+i zwężenie okna na pulpicie to ta sama zmiana, a wąskie okno na pulpicie ma ten sam
+problem co telefon.
+
+**Wrzut na dole, nad paskiem.** Na telefonie to jest miejsce, w którym stoi kciuk
+i nad którym otwiera się klawiatura; pole do pisania na górze ekranu każe sięgać przez
+całą jego wysokość. Przy zasadzie 1.3 — wrzut bez tarcia — to nie jest drobiazg.
+
+Pole wrzutu zostaje **widoczne**, a nie schowane pod przyciskiem: przycisk otwierający
+pole to jedno dotknięcie więcej przed każdą myślą, a myśl nieprzyjęta w sekundę wraca
+do głowy zamiast do skrzynki.
 
 ### 11.1 Zasady wyświetlania
 
