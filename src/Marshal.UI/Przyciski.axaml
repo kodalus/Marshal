@@ -1,0 +1,87 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Przyciski i pola dla całej aplikacji.
+
+    Domyślny przycisk Fluenta jest szarym prostokątem o ostrych rogach, jednakowym
+    dla „Zapisz" i dla „Anuluj" — czyli po wyglądzie nie da się poznać, który
+    z nich coś robi. Tutaj są trzy rodzaje i każdy mówi co innego:
+
+      zwykły       — powierzchnia z włosową krawędzią, tyle co trzeba
+      .glowny      — wypełniony akcentem: jeden na ekran, ten, po który się sięga
+      .cichy       — sam napis, bez oprawy: wyjście, zamknięcie, odwołanie
+
+    Najechanie zapala krawędź akcentem, wciśnięcie przygasza tło. Dwa stany widać,
+    a nie domyśla się ich.
+  -->
+
+  <Style Selector="Button">
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="14,9" />
+    <Setter Property="Background" Value="{DynamicResource Pole}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+
+  <!-- Stany rysuje szablon, nie sam przycisk: Fluent nadpisuje tło prezentera
+       treści, więc ustawienie ich na przycisku nie miałoby żadnego skutku. -->
+  <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource PoleJasne}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+  </Style>
+  <Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+  </Style>
+
+  <Style Selector="Button.glowny">
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource AkcentTekst}" />
+  </Style>
+  <Style Selector="Button.glowny /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Akcent}" />
+    <Setter Property="Foreground" Value="{DynamicResource AkcentTekst}" />
+  </Style>
+  <Style Selector="Button.glowny:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AkcentJasny}" />
+    <Setter Property="Foreground" Value="{DynamicResource AkcentTekst}" />
+  </Style>
+  <Style Selector="Button.glowny:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Akcent}" />
+    <Setter Property="Foreground" Value="{DynamicResource AkcentTekst}" />
+    <Setter Property="Opacity" Value="0.8" />
+  </Style>
+
+  <Style Selector="Button.cichy">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Button.cichy /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.cichy:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Pole}" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- Pola do wpisywania: wypełnienie zamiast ramki. Okno szczegółu ma czternaście
+       kontrolek jedna pod drugą i czternaście pełnych ramek robi z niego ścianę
+       prostokątów, po której oko nie ma się gdzie zaczepić. -->
+  <Style Selector="TextBox, ComboBox, NumericUpDown, DatePicker, TimePicker, CalendarDatePicker, AutoCompleteBox">
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
+    <Setter Property="Background" Value="{DynamicResource Pole}" />
+  </Style>
+
+  <!-- Wpisywane pole zapala się akcentem, gdy jest w nim kursor: przy czternastu
+       polach to jedyna rzecz, która mówi, gdzie się właśnie pisze. -->
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+    <Setter Property="BorderThickness" Value="1.5" />
+  </Style>
+
+</Styles>

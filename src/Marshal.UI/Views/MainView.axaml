@@ -13,53 +13,8 @@
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
 
-  <!--
-    Barwy w jednym miejscu, osobno dla obu motywów.
-    Do dziś karta szczegółu miała wpisane na sztywno #FF1E1E1E, a przyciemnienie tła
-    #CC101010 — czyli w motywie jasnym, który aplikacja umie ustawić, okno szczegółu
-    było czarnym prostokątem. Reszta pliku używa szarości z przezroczystością
-    (#20808080), bo ta wygląda znośnie w obu; ale powierzchnia karty musi być
-    nieprzezroczysta, więc nie da się jej tak zapisać i musi mieć dwie wersje.
-  -->
-  <UserControl.Resources>
-    <ResourceDictionary>
-      <ResourceDictionary.ThemeDictionaries>
-        <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="Karta" Color="#FFFFFFFF" />
-          <SolidColorBrush x:Key="Krawedz" Color="#22000000" />
-          <SolidColorBrush x:Key="Pole" Color="#0A000000" />
-          <SolidColorBrush x:Key="Zaslona" Color="#66000000" />
-        </ResourceDictionary>
-        <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="Karta" Color="#FF23272E" />
-          <SolidColorBrush x:Key="Krawedz" Color="#26FFFFFF" />
-          <SolidColorBrush x:Key="Pole" Color="#12FFFFFF" />
-          <SolidColorBrush x:Key="Zaslona" Color="#99000000" />
-        </ResourceDictionary>
-      </ResourceDictionary.ThemeDictionaries>
-
-      <!-- Bursztyn z ikony aplikacji. Jedna barwa wyróżnienia na całe okno: dwie
-           znaczą, że żadna nie znaczy nic. Ta sama w obu motywach, bo jest czytelna
-           i na jasnym, i na ciemnym. -->
-      <SolidColorBrush x:Key="Akcent" Color="#D89B3C" />
-    </ResourceDictionary>
-  </UserControl.Resources>
 
   <UserControl.Styles>
-    <!--
-      Pola do wpisywania: wypełnienie zamiast ramki.
-      Okno szczegółu miało czternaście kontrolek, każdą w pełnej ramce, jedna pod
-      drugą — i to jest ten „ściana prostokątów", od którego oko nie ma się gdzie
-      zaczepić. Delikatne wypełnienie z włosową krawędzią pokazuje, gdzie się pisze,
-      nie rysując przy tym czternastu równorzędnych pudełek.
-    -->
-    <Style Selector="TextBox, ComboBox, NumericUpDown, DatePicker, TimePicker, CalendarDatePicker">
-      <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
-      <Setter Property="Background" Value="{DynamicResource Pole}" />
-    </Style>
-
     <!-- Pole daty ma własną szerokość najmniejszą, liczoną na trzy panele. W wierszu
          przypomnienia stało obok pola godziny i wypychało je poza krawędź karty —
          widać to było jako „hourminute" wciśnięte w sam róg. -->
@@ -89,6 +44,14 @@
     </Style>
     <Style Selector="Button.boczny:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Pole}" />
+    </Style>
+    <!-- Ekran, na którym się właśnie jest. Pasek ma trzynaście jednakowych napisów
+         i bez tego jedyną odpowiedzią na pytanie „gdzie ja jestem" była treść obok. -->
+    <Style Selector="Button.boczny.wybrany">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.boczny.wybrany /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
     </Style>
     <!-- Godziny na bloku kalendarza: mniejsze od tytułu, bo są odpowiedzią na drugie
          pytanie, nie na pierwsze. -->
@@ -176,6 +139,8 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="Padding" Value="4,12" />
       <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
       <Setter Property="FontSize" Value="13" />
     </Style>
     <Style Selector="Button.sheet">
@@ -224,13 +189,26 @@
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Margin" Value="0,10,0,3" />
     </Style>
+    <!-- Dzisiejsza kolumna kalendarza. Przy siedmiu jednakowych nagłówkach
+         znalezienie dzisiejszego wymagało przeczytania numerów i porównania ich
+         z tym, co się pamięta — a kalendarz otwiera się właśnie po to, żeby nie
+         musieć. Błękit, nie fiolet: fiolet mówi „wybrane", a dzisiaj nikt nie
+         wybrał. -->
+    <Style Selector="Border.dzis">
+      <Setter Property="Background" Value="{DynamicResource Blekit}" />
+    </Style>
+    <Style Selector="Border.dzis > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource AkcentTekst}" />
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+
     <Style Selector="ToggleButton.day">
       <Setter Property="MinWidth" Value="44" />
       <Setter Property="Padding" Value="8,6" />
     </Style>
   </UserControl.Styles>
 
-  <Grid>
+  <Grid Background="{DynamicResource Tlo}">
   <DockPanel Margin="12">
 
     <!-- Nawigacja z boku, nie u góry.
@@ -248,7 +226,11 @@
          sześć. Przy oknie węższym niż mniej więcej tysiąc punktów siatka i tak zacznie
          się przewijać w bok — dlatego węższego paska nie da się tu wymienić na
          wygodniejszy, tylko na mniej ciasny. -->
-    <Border DockPanel.Dock="Left" Width="186" Margin="0,0,12,0" Padding="0,0,8,0"
+    <!-- Pasek wychodzi poza wewnętrzny margines okna, żeby dotykał jego krawędzi.
+         Oprawa nawigacji odcięta z trzech stron paskiem tła wygląda jak kolejna
+         karta z treścią, a nie jak bok aplikacji. -->
+    <Border DockPanel.Dock="Left" Width="186" Margin="-12,-12,12,-12" Padding="12,12,8,12"
+            Background="{DynamicResource TloBoczne}"
             BorderThickness="0,0,1,0" BorderBrush="{DynamicResource Krawedz}"
             IsVisible="{Binding ShowWideNav}">
       <DockPanel>
@@ -265,28 +247,29 @@
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel>
-            <Button Classes="boczny" Command="{Binding ShowTodayCommand}" Content="Dzisiaj" />
-          <Button Classes="boczny" Command="{Binding ShowNowCommand}" Content="Teraz" />
-          <Button Classes="boczny" Command="{Binding ShowInboxCommand}">
+            <Button Classes="boczny" Command="{Binding ShowTodayCommand}" Classes.wybrany="{Binding IsToday}" Content="Dzisiaj" />
+          <Button Classes="boczny" Command="{Binding ShowNowCommand}" Classes.wybrany="{Binding IsNow}" Content="Teraz" />
+          <Button Classes="boczny" Classes.wybrany="{Binding IsInbox}"
+                  Command="{Binding ShowInboxCommand}">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <TextBlock Text="Skrzynka" />
-              <Border Background="#40808080" CornerRadius="9" Padding="7,1"
+              <Border Background="{DynamicResource Odznaka}" CornerRadius="9" Padding="7,1"
                       IsVisible="{Binding HasInbox}">
                 <TextBlock Text="{Binding InboxCount}" FontSize="12" />
               </Border>
             </StackPanel>
           </Button>
-          <Button Classes="boczny" Command="{Binding ShowNextCommand}" Content="Następne" />
-          <Button Classes="boczny" Command="{Binding ShowProjectsCommand}" Content="Obszary i projekty" />
-          <Button Classes="boczny" Command="{Binding ShowSomedayCommand}" Content="Kiedyś" />
-          <Button Classes="boczny" Command="{Binding ShowWaitingCommand}" Content="Oczekiwane" />
-          <Button Classes="boczny" Command="{Binding ShowReviewCommand}" Content="Przegląd" />
-          <Button Classes="boczny" Command="{Binding ShowCalendarCommand}" Content="Kalendarz" />
-          <Button Classes="boczny" Command="{Binding ShowNotesCommand}" Content="Notatki" />
-          <Button Classes="boczny" Command="{Binding ShowFiltersCommand}" Content="Filtry" />
-          <Button Classes="boczny" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
-          <Button Classes="boczny" Command="{Binding ShowSettingsCommand}" Content="Ustawienia" />
-          <Button Classes="boczny" Command="{Binding ShowJournalCommand}" Content="Co się działo" />
+          <Button Classes="boczny" Command="{Binding ShowNextCommand}" Classes.wybrany="{Binding IsNext}" Content="Następne" />
+          <Button Classes="boczny" Command="{Binding ShowProjectsCommand}" Classes.wybrany="{Binding IsProjects}" Content="Obszary i projekty" />
+          <Button Classes="boczny" Command="{Binding ShowSomedayCommand}" Classes.wybrany="{Binding IsSomeday}" Content="Kiedyś" />
+          <Button Classes="boczny" Command="{Binding ShowWaitingCommand}" Classes.wybrany="{Binding IsWaiting}" Content="Oczekiwane" />
+          <Button Classes="boczny" Command="{Binding ShowReviewCommand}" Classes.wybrany="{Binding IsReview}" Content="Przegląd" />
+          <Button Classes="boczny" Command="{Binding ShowCalendarCommand}" Classes.wybrany="{Binding IsCalendar}" Content="Kalendarz" />
+          <Button Classes="boczny" Command="{Binding ShowNotesCommand}" Classes.wybrany="{Binding IsNotes}" Content="Notatki" />
+          <Button Classes="boczny" Command="{Binding ShowFiltersCommand}" Classes.wybrany="{Binding IsFilters}" Content="Filtry" />
+          <Button Classes="boczny" Command="{Binding ShowArchiveCommand}" Classes.wybrany="{Binding IsArchive}" Content="Archiwum" />
+          <Button Classes="boczny" Command="{Binding ShowSettingsCommand}" Classes.wybrany="{Binding IsSettings}" Content="Ustawienia" />
+          <Button Classes="boczny" Command="{Binding ShowJournalCommand}" Classes.wybrany="{Binding IsJournal}" Content="Co się działo" />
           </StackPanel>
         </ScrollViewer>
       </DockPanel>
@@ -297,7 +280,7 @@
          kliknięcie bez skutku zdarza się na każdym ekranie, a ramka z wyjaśnieniem
          stała tylko na jednym. -->
     <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,10" CornerRadius="8"
-            Background="#2E8C6A40"
+            Background="{DynamicResource TloOstrzezenia}"
             IsVisible="{Binding Notice, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
       <DockPanel>
         <Button DockPanel.Dock="Right" Content="rozumiem" Padding="10,4" Margin="10,0,0,0"
@@ -310,7 +293,7 @@
          ustawione; z przyciskiem odprawienia, bo mają zniknąć po przeczytaniu, a nie
          zostać jako kolejna lista do obsłużenia. -->
     <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,10" CornerRadius="8"
-            Background="#2E9C7A40" IsVisible="{Binding HasReminders}">
+            Background="{DynamicResource AkcentTlo}" IsVisible="{Binding HasReminders}">
       <DockPanel>
         <Button DockPanel.Dock="Right" Content="Zakończ" Padding="10,4" Margin="10,0,0,0"
                 VerticalAlignment="Top"
@@ -335,7 +318,7 @@
          które rośnie samo, a Kalendarz jest jedyną rzeczą z godziną. Reszta to ekrany,
          do których siada się świadomie, a nie zagląda między jednym a drugim. -->
     <Border DockPanel.Dock="Bottom" IsVisible="{Binding ShowBottomNav}"
-            Margin="-12,8,-12,-12" Padding="4,0,4,2" Background="#22808080">
+            Margin="-12,8,-12,-12" Padding="4,0,4,2" Background="{DynamicResource Krawedz}">
       <Grid ColumnDefinitions="*,*,*,*,*">
         <Button Grid.Column="0" Classes="tab" Content="Dzisiaj"
                 Command="{Binding ShowTodayCommand}" />
@@ -345,7 +328,7 @@
           <StackPanel Orientation="Horizontal" Spacing="5">
             <TextBlock Text="Skrzynka" VerticalAlignment="Center" />
             <!-- Liczba tylko wtedy, gdy jest niezerowa, i bez czerwieni (spec 11.1). -->
-            <Border Background="#40808080" CornerRadius="9" Padding="6,1"
+            <Border Background="{DynamicResource Odznaka}" CornerRadius="9" Padding="6,1"
                     IsVisible="{Binding HasInbox}">
               <TextBlock Text="{Binding InboxCount}" FontSize="11" />
             </Border>
@@ -382,6 +365,7 @@
     <DockPanel IsVisible="{Binding IsInbox}">
       <Button DockPanel.Dock="Bottom" Margin="0,12,0,0"
               HorizontalAlignment="Stretch" Padding="14,12"
+              Classes="glowny"
               Command="{Binding ShowClarifyCommand}"
               IsEnabled="{Binding HasInbox}"
               Content="Przetwórz skrzynkę" />
@@ -433,7 +417,7 @@
           </StackPanel>
         </Grid>
 
-        <Border Margin="0,12,0,20" Padding="20" CornerRadius="8" Background="#20808080">
+        <Border Margin="0,12,0,20" Padding="20" CornerRadius="8" Background="{DynamicResource Panel}">
           <TextBlock Text="{Binding Current.Title}" FontSize="22" TextWrapping="Wrap" />
         </Border>
 
@@ -508,7 +492,7 @@
         <TextBlock Classes="hint" Margin="2,4,0,0"
                    Text="Projekt nazywa się wynikiem, nie czynnością." />
 
-        <TextBlock Text="{Binding Problem}" Foreground="#E06C75" Margin="0,16,0,0"
+        <TextBlock Text="{Binding Problem}" Foreground="{DynamicResource Ostrzezenie}" Margin="0,16,0,0"
                    TextWrapping="Wrap" IsVisible="{Binding HasProblem}" />
       </StackPanel>
     </ScrollViewer>
@@ -546,7 +530,7 @@
            dzień wykonania może mieć dwadzieścia zadań, a to jest te pięć, na które
            się piszesz. -->
       <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,12" CornerRadius="8"
-              Background="#18808080">
+              Background="{DynamicResource Panel}">
         <StackPanel>
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Grid.Column="0" Text="Na dziś" FontWeight="SemiBold" />
@@ -579,7 +563,7 @@
 
           <!-- Szósty nie wchodzi, dopóki coś nie zejdzie. Limit działa bez oporu,
                bo dotyczy jednego dnia i zeruje się co dobę (8.6). -->
-          <Border Margin="0,8,0,0" Padding="12,10" CornerRadius="6" Background="#20808080"
+          <Border Margin="0,8,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource Panel}"
                   IsVisible="{Binding HasPendingFocus}">
             <StackPanel Spacing="6">
               <TextBlock TextWrapping="Wrap">
@@ -632,7 +616,7 @@
            to nie jest sprawa na dziś, a codzienne przypominanie zamieniłoby ją w szum. -->
       <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
 
-        <Border Padding="12,10" CornerRadius="8" Background="#18808080"
+        <Border Padding="12,10" CornerRadius="8" Background="{DynamicResource Panel}"
                 IsVisible="{Binding HasNudges}">
           <StackPanel>
             <TextBlock Text="Do ponaglenia" FontWeight="SemiBold" Margin="0,0,0,4" />
@@ -653,7 +637,7 @@
           </StackPanel>
         </Border>
 
-        <Border Margin="0,8,0,0" Padding="12,10" CornerRadius="8" Background="#18808080"
+        <Border Margin="0,8,0,0" Padding="12,10" CornerRadius="8" Background="{DynamicResource Panel}"
                 IsVisible="{Binding HasBlocked}">
           <StackPanel>
             <TextBlock Text="Projekty bez następnej akcji" FontWeight="SemiBold" Margin="0,0,0,4" />
@@ -740,7 +724,7 @@
 
         <!-- Pusty ekran z komunikatem „nic nie pasuje" byłby prawdą bezużyteczną.
              Zamiast niego mikrozadanie, które samo się rozwiązuje w miarę używania. -->
-        <Border Margin="0,14,0,0" Padding="14,12" CornerRadius="8" Background="#20808080"
+        <Border Margin="0,14,0,0" Padding="14,12" CornerRadius="8" Background="{DynamicResource Panel}"
                 IsVisible="{Binding SuggestEstimating}">
           <TextBlock Text="{Binding EstimatePrompt}" TextWrapping="Wrap" />
         </Border>
@@ -752,7 +736,7 @@
                       DoubleTapped="OtworzZListy">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="uc:NowPick">
-              <Border Margin="0,0,0,8" Padding="14,12" CornerRadius="8" Background="#18808080">
+              <Border Margin="0,0,0,8" Padding="14,12" CornerRadius="8" Background="{DynamicResource Panel}">
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel Grid.Column="0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Task.Title}" TextWrapping="Wrap" FontSize="15" />
@@ -804,7 +788,7 @@
 
         <!-- Cofnięcie po przeniesieniu wydarzenia. Przy zapisie do cudzego kalendarza
              nie jest wygodą, tylko jedyną odpowiedzią na omsknięcie ręki. -->
-        <Border Margin="0,8,0,0" Padding="10,8" CornerRadius="6" Background="#20808080"
+        <Border Margin="0,8,0,0" Padding="10,8" CornerRadius="6" Background="{DynamicResource Panel}"
                 IsVisible="{Binding CanUndo}">
           <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Center"
@@ -841,14 +825,13 @@
 
                   <Border CornerRadius="10" Padding="10,2" Margin="0,0,0,4"
                           HorizontalAlignment="Center"
-                          Background="{Binding HeaderBackground}">
-                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold"
-                               Foreground="{Binding HeaderForeground}" />
+                          Classes.dzis="{Binding IsToday}">
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Opacity="0.7" />
                   </Border>
 
                   <!-- Pasek całodniowy nad siatką, nie w niej: wydarzenie bez godziny
                        umieszczone o północy kłamałoby o porze. -->
-                  <Border Height="24" CornerRadius="4" Background="#18808080"
+                  <Border Height="24" CornerRadius="4" Background="{DynamicResource Panel}"
                           IsVisible="{Binding HasAllDay}">
                     <ItemsControl ItemsSource="{Binding AllDay}">
                       <ItemsControl.ItemsPanel>
@@ -860,7 +843,7 @@
                         <DataTemplate x:DataType="vm:AllDayBox">
                           <Button Classes="slot" Padding="6,2" Margin="0,0,4,0"
                                   Height="24" VerticalContentAlignment="Center"
-                                  Background="#20808080"
+                                  Background="{DynamicResource Panel}"
                                   Click="OtworzCalodniowe" Tag="{Binding}">
                             <TextBlock Text="{Binding Label}" FontSize="11"
                                        VerticalAlignment="Center"
@@ -923,10 +906,10 @@
                                   PointerPressed="NowaRzeczNaSiatce"
                                   ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
                                   Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
-                                  Background="#0C808080">
+                                  Background="{DynamicResource PoleSlabe}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
-                          <Border Height="48" BorderThickness="0,1,1,0" BorderBrush="#22808080" />
+                          <Border Height="48" BorderThickness="0,1,1,0" BorderBrush="{DynamicResource Krawedz}" />
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -1016,7 +999,7 @@
                          w jedynym momencie, w którym cokolwiek znaczy. -->
                     <Canvas IsVisible="{Binding IsToday}">
                       <Border Canvas.Top="{Binding NowTop}" Canvas.Left="0" Height="2"
-                              Background="#D0553C"
+                              Background="{DynamicResource Ostrzezenie}"
                               Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}" />
                     </Canvas>
 
@@ -1035,9 +1018,9 @@
          zadania: należy do czegoś innego i ma inne pola. Odhaczyć i przeciągnąć da się je
          wprost na siatce. -->
     <Panel DataContext="{Binding Calendar}" IsVisible="{Binding HasOpened}"
-           Background="#CC101010">
+           Background="{DynamicResource Zaslona}">
       <Border x:DataType="vm:CalendarViewModel" MaxWidth="480" Margin="12" Padding="20"
-              CornerRadius="10" Background="#FF1E1E1E" VerticalAlignment="Center">
+              CornerRadius="10" Background="{DynamicResource Karta}" VerticalAlignment="Center">
         <StackPanel Spacing="8">
 
           <TextBox Text="{Binding OpenedTitle}" FontSize="18"
@@ -1055,7 +1038,7 @@
                         HorizontalAlignment="Stretch" />
           </Grid>
 
-          <TextBlock Classes="hint" TextWrapping="Wrap" Foreground="#D0553C"
+          <TextBlock Classes="hint" TextWrapping="Wrap" Foreground="{DynamicResource Ostrzezenie}"
                      Text="{Binding OpenedProblem}" IsVisible="{Binding HasOpenedProblem}" />
 
           <StackPanel IsVisible="{Binding CanEditOpened}">
@@ -1071,7 +1054,7 @@
                      Text="Ten kanał jest tylko do odczytu — zmiany rób tam, gdzie wydarzenie powstało." />
 
           <WrapPanel Margin="0,8,0,0" HorizontalAlignment="Right">
-            <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
+            <Button Classes="nav glowny" IsVisible="{Binding CanEditOpened}"
                     Command="{Binding SaveOpenedCommand}" Content="Zapisz" />
             <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
                     Command="{Binding DeleteOpenedCommand}" Content="Skasuj" />
@@ -1139,7 +1122,7 @@
             <TextBox Text="{Binding Title}" FontSize="18" />
             <WrapPanel Margin="0,8,0,0">
               <CheckBox IsChecked="{Binding IsPinned}" Content="Przypięta" Margin="0,0,14,0" />
-              <Button Classes="nav" Command="{Binding SaveCommand}" Content="Zapisz" />
+              <Button Classes="nav glowny" Command="{Binding SaveCommand}" Content="Zapisz" />
               <Button Classes="nav" Command="{Binding CloseCommand}" Content="Zamknij" />
               <Button Classes="nav" Command="{Binding DeleteCommand}" Content="Usuń" />
             </WrapPanel>
@@ -1166,7 +1149,7 @@
                       <TextBlock Grid.Column="1" Text="•" Margin="0,0,6,0"
                                  IsVisible="{Binding IsListItem}" />
                       <Border Grid.Column="1" Width="3" Margin="0,0,8,0"
-                              Background="#40808080" IsVisible="{Binding IsQuote}" />
+                              Background="{DynamicResource Odznaka}" IsVisible="{Binding IsQuote}" />
                       <ItemsControl Grid.Column="2" ItemsSource="{Binding Spans}">
                         <ItemsControl.ItemsPanel>
                           <ItemsPanelTemplate>
@@ -1232,7 +1215,7 @@
             ColumnDefinitions="*,Auto,Auto" Margin="0,10,0,0">
         <TextBox Grid.Column="0" Text="{Binding Name}"
                  Watermark="Nazwa widoku, np. „Kwadrans przed wyjściem”" />
-        <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10" Content="Zapisz"
+        <Button Classes="glowny" Grid.Column="1" Margin="6,0,0,0" Padding="14,10" Content="Zapisz"
                 Command="{Binding SaveCommand}" IsEnabled="{Binding CanSave}" />
         <Button Grid.Column="2" Margin="6,0,0,0" Padding="14,10" Content="Wyczyść"
                 Command="{Binding ResetCommand}" />
@@ -1381,7 +1364,7 @@
         <!-- Strefa nie do rozpoznania przesuwa wszystkie godziny naraz i wygląda
              przez to jak źle pobrane dane. Ostrzeżenie zamiast ciszy. -->
         <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
-                   Foreground="#D0553C"
+                   Foreground="{DynamicResource Ostrzezenie}"
                    Text="{Binding ZoneProblem}" IsVisible="{Binding HasZoneProblem}" />
 
         <TextBlock Classes="label" Margin="0,18,0,0" Text="Kopia zapasowa" />
@@ -1586,7 +1569,7 @@
             <KeyBinding Gesture="Enter" Command="{Binding AddAreaCommand}" />
           </TextBox.KeyBindings>
         </TextBox>
-        <Button Grid.Column="1" Margin="8,0,0,0" Padding="14,10"
+        <Button Classes="glowny" Grid.Column="1" Margin="8,0,0,0" Padding="14,10"
                 Command="{Binding AddAreaCommand}" Content="Dodaj obszar" />
       </Grid>
 
@@ -1603,7 +1586,7 @@
                       Margin="0,0,10,0"
                       VerticalAlignment="Center" Cursor="Hand"
                       Background="{Binding Swatch}"
-                      BorderThickness="1" BorderBrush="#40808080"
+                      BorderThickness="1" BorderBrush="{DynamicResource Odznaka}"
                       PointerPressed="NaBarwie" />
 
               <StackPanel Grid.Column="2" VerticalAlignment="Center">
@@ -1644,7 +1627,7 @@
 
           <!-- Krok zerowy: sam tekst, bez żadnej akcji. Jest po to, żeby reszta
                przeglądu działa się po jego przeczytaniu, a nie żeby coś z nim zrobić. -->
-          <Border Margin="0,16,0,0" Padding="18" CornerRadius="8" Background="#18808080"
+          <Border Margin="0,16,0,0" Padding="18" CornerRadius="8" Background="{DynamicResource Panel}"
                   IsVisible="{Binding IsPinnedStep}">
             <StackPanel Spacing="10">
               <TextBlock TextWrapping="Wrap"
@@ -1701,7 +1684,7 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <Button HorizontalAlignment="Stretch" Margin="0,12,0,0" Padding="14,10"
+            <Button Classes="glowny" HorizontalAlignment="Stretch" Margin="0,12,0,0" Padding="14,10"
                     Command="{Binding ProcessInboxCommand}" IsEnabled="{Binding HasItems}"
                     Content="Przetwórz skrzynkę" />
             <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
@@ -1714,7 +1697,7 @@
                         IsVisible="{Binding HasChecklist}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="rev:ReviewItem">
-                <Border Margin="0,0,0,8" Padding="14,10" CornerRadius="8" Background="#18808080">
+                <Border Margin="0,0,0,8" Padding="14,10" CornerRadius="8" Background="{DynamicResource Panel}">
                   <Grid ColumnDefinitions="*,Auto">
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
@@ -1748,7 +1731,7 @@
 
         <!-- Zakończenie bez podsumowania „wykonano 2 z 5" i bez oceny. -->
         <Border IsVisible="{Binding IsFinished}" Margin="0,40,0,0" Padding="24"
-                CornerRadius="10" Background="#18808080">
+                CornerRadius="10" Background="{DynamicResource Panel}">
           <StackPanel Spacing="10">
             <TextBlock Text="Przegląd zamknięty." FontSize="20" HorizontalAlignment="Center" />
             <TextBlock Classes="hint" TextWrapping="Wrap" TextAlignment="Center"
@@ -1784,7 +1767,7 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="tasks:TaskItem">
-              <Border Margin="0,0,6,6" Padding="8,4" CornerRadius="6" Background="#20808080">
+              <Border Margin="0,0,6,6" Padding="8,4" CornerRadius="6" Background="{DynamicResource Panel}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <CheckBox MinWidth="0" Padding="0"
                             Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CompleteTaskCommand}"
@@ -1806,7 +1789,7 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:JournalRow">
               <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="6"
-                      Background="#0C808080" BorderThickness="3,0,0,0"
+                      Background="{DynamicResource PoleSlabe}" BorderThickness="3,0,0,0"
                       BorderBrush="{Binding Mark}">
                 <StackPanel>
                   <TextBlock Classes="hint" Text="{Binding When}" />
@@ -1846,9 +1829,9 @@
       <!-- „Więcej": reszta ekranów. Nakładka, nie kolejny ekran — wybranie czegoś
            ma być jednym gestem, a nie wejściem w listę i wyjściem z niej.
            Widoczność i podmiana kontekstu na osobnych elementach, jak wszędzie. -->
-      <Panel IsVisible="{Binding IsMoreOpen}" Background="#CC101010">
+      <Panel IsVisible="{Binding IsMoreOpen}" Background="{DynamicResource Zaslona}">
       <Border VerticalAlignment="Bottom" Padding="12" CornerRadius="12,12,0,0"
-              Background="#FF1E1E1E">
+              Background="{DynamicResource Karta}">
       <ScrollViewer MaxHeight="440">
         <StackPanel>
           <Button Classes="sheet" Content="Następne" Command="{Binding ShowNextCommand}" />
@@ -1881,7 +1864,7 @@
            tego punktu, w którym złapała ją ręka. -->
       <Canvas Name="WarstwaPodgladu" IsHitTestVisible="False">
         <Border Name="Podglad" IsVisible="False" CornerRadius="4" Padding="4,2"
-                BorderBrush="#A0FFFFFF" BorderThickness="1" Opacity="0.9">
+                BorderBrush="{DynamicResource Akcent}" BorderThickness="1" Opacity="0.9">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Grid.Column="0" Name="PodgladTytul" FontSize="11"
                        TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
@@ -1917,7 +1900,7 @@
           </Grid>
 
           <!-- Nieudany zapis zamykał okno tak samo jak udany. -->
-          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Foreground="#D0553C"
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Foreground="{DynamicResource Ostrzezenie}"
                      Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
 
           <TextBlock Classes="label" Text="Notatka" />
@@ -2054,7 +2037,7 @@
           </StackPanel>
           </StackPanel>
 
-          <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="#18808080"
+          <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="{DynamicResource Panel}"
                   IsVisible="{Binding ShowRepeat}">
             <StackPanel>
 
@@ -2103,7 +2086,7 @@
 
               <!-- Rytm zdaniem, nie formularzem. Sześć pól da się wypełnić źle i nie
                    zauważyć; zdanie da się przeczytać i od razu wiedzieć, czy o to chodziło. -->
-              <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="6" Background="#20808080">
+              <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource Panel}">
                 <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontStyle="Italic" />
               </Border>
 
@@ -2116,8 +2099,8 @@
                martwy przycisk i nie zostawia śladu nigdzie. -->
           <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,20,0,0"
                       HorizontalAlignment="Right">
-            <Button Padding="14,8" Click="ZamknijZadanie" Content="Zamknij" />
-            <Button Padding="14,8" Click="ZapiszZadanie" Content="Zapisz" />
+            <Button Classes="cichy" Padding="14,8" Click="ZamknijZadanie" Content="Zamknij" />
+            <Button Classes="glowny" Padding="14,8" Click="ZapiszZadanie" Content="Zapisz" />
           </StackPanel>
 
         </StackPanel>

@@ -1,0 +1,80 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!--
+    Barwy całej aplikacji w jednym miejscu.
+
+    Granat, błękit i fiolet zamiast szarości. Szarość z przezroczystością (#20808080)
+    wyglądała znośnie w obu motywach i to była jej jedyna zaleta: nic nie znaczyła,
+    niczego nie porządkowała i na każdym ekranie dawała ten sam mglisty prostokąt.
+    Granatowe tło z dwoma barwami wyróżnienia mówi, gdzie się jest i co jest ważne.
+
+    Nazwy mówią o roli, nie o barwie — „Karta", a nie „ciemnogranatowy". Dzięki temu
+    zmiana tonacji jest zmianą w tym pliku, a nie w dwustu miejscach; tak samo jak
+    motyw jasny, którego aplikacja nie przestaje umieć.
+  -->
+  <ResourceDictionary.ThemeDictionaries>
+
+    <ResourceDictionary x:Key="Dark">
+      <!-- Tło okna i pasek boczny: pasek głębszy, bo jest oprawą, a nie treścią. -->
+      <SolidColorBrush x:Key="Tlo" Color="#FF121729" />
+      <SolidColorBrush x:Key="TloBoczne" Color="#FF0D1220" />
+
+      <!-- Powierzchnie, od najwyższej do najniższej. Karta musi być nieprzezroczysta,
+           bo leży na przyciemnionym tle i prześwitywałaby. -->
+      <SolidColorBrush x:Key="Karta" Color="#FF1B2236" />
+      <SolidColorBrush x:Key="Panel" Color="#FF1A2134" />
+      <SolidColorBrush x:Key="Pole" Color="#FF222B45" />
+      <SolidColorBrush x:Key="PoleSlabe" Color="#FF161D2E" />
+      <SolidColorBrush x:Key="PoleJasne" Color="#FF2A3555" />
+
+      <SolidColorBrush x:Key="Krawedz" Color="#3389A0FF" />
+      <SolidColorBrush x:Key="Zaslona" Color="#CC070A13" />
+      <SolidColorBrush x:Key="Odznaka" Color="#FF2E3A5C" />
+
+      <!-- Dwie barwy wyróżnienia i każda ma swoje zdanie: fiolet mówi „to jest
+           wybrane" (ekran na pasku, wciśnięty przycisk), błękit „to jest dzisiaj".
+           Wspólna barwa na jedno i drugie znaczyłaby, że dzisiejszy dzień wygląda
+           na wybrany także wtedy, gdy się patrzy na zupełnie inny tydzień. -->
+      <SolidColorBrush x:Key="Akcent" Color="#FF7C6CF5" />
+      <SolidColorBrush x:Key="AkcentJasny" Color="#FF9184F7" />
+      <SolidColorBrush x:Key="AkcentTlo" Color="#387C6CF5" />
+      <SolidColorBrush x:Key="AkcentTekst" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="Blekit" Color="#FF54A0FF" />
+      <SolidColorBrush x:Key="BlekitTlo" Color="#3854A0FF" />
+
+      <!-- To, na co trzeba spojrzeć: kreska „teraz" na siatce, odmowa, błąd zapisu.
+           Ciepła, bo jako jedyna nie ginie wśród granatu, błękitu i fioletu.
+           Łososiowa, nie czerwona: „przesunięte 4 razy" ma być informacją,
+           a nie wyrzutem (spec 11.1). -->
+      <SolidColorBrush x:Key="Ostrzezenie" Color="#FFE9917A" />
+      <SolidColorBrush x:Key="TloOstrzezenia" Color="#30E9917A" />
+    </ResourceDictionary>
+
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="Tlo" Color="#FFF4F6FC" />
+      <SolidColorBrush x:Key="TloBoczne" Color="#FFEAEDF9" />
+
+      <SolidColorBrush x:Key="Karta" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="Panel" Color="#FFF0F2FB" />
+      <SolidColorBrush x:Key="Pole" Color="#FFECEFFA" />
+      <SolidColorBrush x:Key="PoleSlabe" Color="#FFF6F7FD" />
+      <SolidColorBrush x:Key="PoleJasne" Color="#FFE2E7F7" />
+
+      <SolidColorBrush x:Key="Krawedz" Color="#2A2E3A6B" />
+      <SolidColorBrush x:Key="Zaslona" Color="#66161B2E" />
+      <SolidColorBrush x:Key="Odznaka" Color="#FFD9DEF3" />
+
+      <SolidColorBrush x:Key="Akcent" Color="#FF5B4BD8" />
+      <SolidColorBrush x:Key="AkcentJasny" Color="#FF6E5FE2" />
+      <SolidColorBrush x:Key="AkcentTlo" Color="#265B4BD8" />
+      <SolidColorBrush x:Key="AkcentTekst" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="Blekit" Color="#FF2F7FE0" />
+      <SolidColorBrush x:Key="BlekitTlo" Color="#262F7FE0" />
+
+      <SolidColorBrush x:Key="Ostrzezenie" Color="#FFB1452A" />
+      <SolidColorBrush x:Key="TloOstrzezenia" Color="#22B1452A" />
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

@@ -19,10 +19,70 @@
     </TrayIcons>
   </TrayIcon.Icons>
 
+  <!-- Barwy aplikacji. Osobny plik, bo nazwy ról („Karta", „Akcent") są używane
+       w całym oknie i zmiana tonacji ma być zmianą w jednym miejscu. -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Marshal.UI/Motyw.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
   <Application.Styles>
-    <FluentTheme />
+    <!--
+      Motyw przestrojony na granat, a nie sam Fluent z domyślną szarością.
+
+      Sama podmiana teł w oknie nie wystarczyłaby: lista rozwijana, kalendarzyk
+      w polu daty, menu podręczne i suwaki rysują się z własnych barw motywu.
+      Zostawione domyślne dawały szare prostokąty wyskakujące na granatowym tle —
+      czyli dokładnie to, co widać w aplikacji „przemalowanej z wierzchu".
+
+      Barwy podstawowe (Base) zostają jasne, bo niosą tekst. Powierzchniowe
+      (Chrome, List, Alt) idą w granat, a akcent w fiolet.
+    -->
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark"
+                               Accent="#7C6CF5"
+                               RegionColor="#121729"
+                               AltHigh="#0B0F1C" AltLow="#0B0F1C" AltMedium="#0B0F1C"
+                               AltMediumHigh="#0B0F1C" AltMediumLow="#0B0F1C"
+                               BaseHigh="#FFFFFF" BaseLow="#2E3752" BaseMedium="#9AA2C4"
+                               BaseMediumHigh="#B9C0DC" BaseMediumLow="#666E90"
+                               ChromeAltLow="#1A2134"
+                               ChromeBlackHigh="#000000" ChromeBlackLow="#000000"
+                               ChromeBlackMedium="#000000" ChromeBlackMediumLow="#000000"
+                               ChromeDisabledHigh="#2A3149" ChromeDisabledLow="#7C86A8"
+                               ChromeGray="#8A93B4" ChromeHigh="#8A93B4"
+                               ChromeLow="#141A2B" ChromeMedium="#1A2133"
+                               ChromeMediumLow="#222B45" ChromeWhite="#FFFFFF"
+                               ListLow="#222B45" ListMedium="#2A3555"
+                               ErrorText="#E9917A" />
+        <ColorPaletteResources x:Key="Light"
+                               Accent="#5B4BD8"
+                               RegionColor="#F4F6FC"
+                               AltHigh="#FFFFFF" AltLow="#FFFFFF" AltMedium="#FFFFFF"
+                               AltMediumHigh="#FFFFFF" AltMediumLow="#FFFFFF"
+                               BaseHigh="#151A2B" BaseLow="#C3C9E0" BaseMedium="#5C6486"
+                               BaseMediumHigh="#414A6B" BaseMediumLow="#7D85A4"
+                               ChromeAltLow="#5C6486"
+                               ChromeBlackHigh="#000000" ChromeBlackLow="#000000"
+                               ChromeBlackMedium="#000000" ChromeBlackMediumLow="#000000"
+                               ChromeDisabledHigh="#DDE1F0" ChromeDisabledLow="#8F97B4"
+                               ChromeGray="#6B7394" ChromeHigh="#C3C9E0"
+                               ChromeLow="#EDEFF9" ChromeMedium="#E4E8F6"
+                               ChromeMediumLow="#ECEFFA" ChromeWhite="#FFFFFF"
+                               ListLow="#E4E8F6" ListMedium="#D7DCF0"
+                               ErrorText="#B1452A" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+
     <!-- Wybieraczka barw mieszka w osobnym pakiecie i niesie własny motyw.
          Bez tego wiersza kontrolka istnieje, ale nie ma się czym narysować. -->
     <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+
+    <!-- Przyciski i pola. Po wybieraczce, żeby wygrywały z jej własnym motywem. -->
+    <StyleInclude Source="avares://Marshal.UI/Przyciski.axaml" />
   </Application.Styles>
 </Application>

@@ -15,7 +15,7 @@ namespace Marshal.UI.ViewModels;
 /// </remarks>
 public sealed record ProjectTreeRow(ProjectRow Row, AreaBalance? Balance = null)
 {
-    private const string Brak = "#40808080";
+    private const string Brak = "#4A5580";
 
     public Guid Id => Row.Id;
 
