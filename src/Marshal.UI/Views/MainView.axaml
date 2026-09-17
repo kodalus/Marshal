@@ -756,10 +756,6 @@
 
           <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
             <TextBox Text="{Binding Title}" FontSize="18" />
-
-          <!-- Nieudany zapis zamykał okno tak samo jak udany. -->
-          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Foreground="#D0553C"
-                     Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
             <WrapPanel Margin="0,8,0,0">
               <CheckBox IsChecked="{Binding IsPinned}" Content="Przypięta" Margin="0,0,14,0" />
               <Button Classes="nav" Command="{Binding SaveCommand}" Content="Zapisz" />
@@ -1437,6 +1433,10 @@
         <StackPanel x:DataType="vm:TaskDetailViewModel">
 
           <TextBox Text="{Binding Title}" FontSize="18" />
+
+          <!-- Nieudany zapis zamykał okno tak samo jak udany. -->
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap" Foreground="#D0553C"
+                     Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
 
           <TextBlock Classes="label" Text="Notatka" />
           <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="60"
