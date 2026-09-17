@@ -786,12 +786,15 @@
                                    ptaszek dopisany do tytułu był napisem, a nie stanem,
                                    i nie dawał się kliknąć. -->
                               <Panel Grid.Column="0" Width="{Binding CheckSize}"
-                                     IsVisible="{Binding ShowCheck}">
+                                     Margin="0,0,3,0"
+                                     IsVisible="{Binding ShowMarkColumn}">
                                 <TextBlock Classes="ptaszek" Text="✓"
                                            IsVisible="{Binding IsDone}"
                                            FontSize="{Binding CheckSize}"
-                                           VerticalAlignment="Top" />
+                                           VerticalAlignment="Top"
+                                           HorizontalAlignment="Left" />
                                 <CheckBox Classes="odhacz" VerticalAlignment="Top"
+                                          IsVisible="{Binding ShowCheck}"
                                           IsChecked="{Binding IsDone, Mode=OneWay}"
                                           IsEnabled="{Binding !IsDone}"
                                           RenderTransform="{Binding CheckScale}"

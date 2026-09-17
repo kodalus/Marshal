@@ -65,8 +65,18 @@ public sealed record SlotBox(
     /// </remarks>
     public bool ShowCheck => CanComplete && Height >= 12 && Width >= 40;
 
+    /// <summary>
+    /// Czy zostawić z lewej miejsce na znacznik.
+    /// </summary>
+    /// <remarks>
+    /// Odhaczone zadanie pokazuje ptaszek **zawsze**, także na bloku zbyt niskim na
+    /// pole wyboru: ptaszek jest samym napisem i mieści się tam, gdzie kontrolka już
+    /// nie. Inaczej najkrótsze zadania traciły jedyny ślad tego, że są zrobione.
+    /// </remarks>
+    public bool ShowMarkColumn => ShowCheck || IsDone;
+
     /// <summary>Rozmiar pola do odhaczenia — dopasowany do wysokości bloku.</summary>
-    public double CheckSize => Math.Clamp(Height - 4, 10, 18);
+    public double CheckSize => Math.Clamp(Height - 6, 10, 16);
 
     /// <summary>
     /// Pomniejszenie pola wyboru do rozmiaru bloku.
@@ -77,7 +87,18 @@ public sealed record SlotBox(
     /// i wychodziło poza bloczek. Skala zmienia to, co widać, a nie tylko miejsce,
     /// które pole dostaje.
     /// </remarks>
-    public ITransform CheckScale => new ScaleTransform(CheckSize / 20, CheckSize / 20);
+    public ITransform CheckScale => new ScaleTransform(CheckSize / Fluent, CheckSize / Fluent);
+
+    /// <summary>
+    /// Ile miejsca zajmuje pole wyboru, zanim je pomniejszymy.
+    /// </summary>
+    /// <remarks>
+    /// Trzydzieści dwa, nie dwadzieścia. Dwadzieścia to sam kwadracik, ale kontrolka
+    /// ma wokół niego własne odstępy i najmniejszą wysokość — liczone od kwadracika
+    /// pomniejszenie wychodziło o połowę za małe i pole nadal nie mieściło się
+    /// w bloku. Miarą musi być to, co naprawdę zajmuje miejsce.
+    /// </remarks>
+    private const double Fluent = 32;
 
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
     private const string DomyslneWydarzenie = "#6C8FBF";
