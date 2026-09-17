@@ -565,70 +565,69 @@ public partial class MainView : UserControl
         var projekty = await model.ActiveProjectsAsync();
         var kalendarze = await model.WritableCalendarsAsync();
 
-        var menu = new MenuFlyout
-        {
-            ItemsSource = new object[]
-            {
-                Pozycja("Otwórz szczegół", () => model.OpenTaskAsync(zadanie)),
+        // Wyrażenie kolekcji, nie `new object[] { … }`: rozwinięcie `..` jest częścią
+        // tego pierwszego, a w inicjalizatorze tablicy dwie kropki znaczą zakres.
+        object[] pozycje =
+        [
+            Pozycja("Otwórz szczegół", () => model.OpenTaskAsync(zadanie)),
 
-                // Jedna pozycja, dwa kierunki — zależnie od tego, jak zadanie stoi.
-                // Obie naraz kazałyby czytać, która jest teraz właściwa.
-                zadanie.State == TaskState.Done
-                    ? Pozycja("Zdejmij ptaszek", () => model.ReopenTaskAsync(zadanie))
-                    : Pozycja("Odhacz", () => model.CompleteTaskAsync(zadanie)),
+            // Jedna pozycja, dwa kierunki — zależnie od tego, jak zadanie stoi.
+            // Obie naraz kazałyby czytać, która jest teraz właściwa.
+            zadanie.State == TaskState.Done
+                ? Pozycja("Zdejmij ptaszek", () => model.ReopenTaskAsync(zadanie))
+                : Pozycja("Odhacz", () => model.CompleteTaskAsync(zadanie)),
 
-                new Separator(),
+            new Separator(),
 
-                Galaz("Ustaw dzień", [
-                    Pozycja("Dziś", () => model.SetDateAsync(zadanie, dzis)),
-                    Pozycja("Jutro", () => model.SetDateAsync(zadanie, dzis.AddDays(1))),
-                    Pozycja("Za tydzień", () => model.SetDateAsync(zadanie, dzis.AddDays(7))),
-                    Pozycja("Bez dnia", () => model.SetDateAsync(zadanie, null)),
-                ]),
+            Galaz("Ustaw dzień", [
+                Pozycja("Dziś", () => model.SetDateAsync(zadanie, dzis)),
+                Pozycja("Jutro", () => model.SetDateAsync(zadanie, dzis.AddDays(1))),
+                Pozycja("Za tydzień", () => model.SetDateAsync(zadanie, dzis.AddDays(7))),
+                Pozycja("Bez dnia", () => model.SetDateAsync(zadanie, null)),
+            ]),
 
-                Galaz("Waga", [.. PriorityChoice.All.Select(w =>
-                    Pozycja(w.Label, () => model.SetPriorityAsync(zadanie, w.Value)))]),
+            Galaz("Waga", [.. PriorityChoice.All.Select(w =>
+                Pozycja(w.Label, () => model.SetPriorityAsync(zadanie, w.Value)))]),
 
-                // Oszacowanie i siła są tu, bo bez nich zadanie nigdy nie wypłynie
-                // w „Teraz”: ten ekran pyta „ile mam czasu i sił”, a zadanie, które
-                // na to nie odpowiada, nie ma jak zostać wybrane. Do dziś dawało się
-                // je wpisać tylko przy przetwarzaniu skrzynki albo w szczegółach.
-                Galaz("Ile zajmie", [.. EstimateChoice.All.Select(m =>
-                    Pozycja(
-                        // „Bez znaczenia" jest odpowiedzią filtra, nie zadania: tu ta
-                        // sama wartość znaczy, że oszacowania **nie ma**.
-                        m.Value is null ? "bez oszacowania" : m.Label,
-                        () => model.SetEstimateAsync(zadanie, m.Value)))]),
+            // Oszacowanie i siła są tu, bo bez nich zadanie nigdy nie wypłynie
+            // w „Teraz”: ten ekran pyta „ile mam czasu i sił”, a zadanie, które
+            // na to nie odpowiada, nie ma jak zostać wybrane. Do dziś dawało się
+            // je wpisać tylko przy przetwarzaniu skrzynki albo w szczegółach.
+            Galaz("Ile zajmie", [.. EstimateChoice.All.Select(m =>
+                Pozycja(
+                    // „Bez znaczenia" jest odpowiedzią filtra, nie zadania: tu ta
+                    // sama wartość znaczy, że oszacowania **nie ma**.
+                    m.Value is null ? "bez oszacowania" : m.Label,
+                    () => model.SetEstimateAsync(zadanie, m.Value)))]),
 
-                Galaz("Ile sił", [.. EnergyChoice.All.Select(e =>
-                    Pozycja(e.Label, () => model.SetEnergyAsync(zadanie, e.Value)))]),
+            Galaz("Ile sił", [.. EnergyChoice.All.Select(e =>
+                Pozycja(e.Label, () => model.SetEnergyAsync(zadanie, e.Value)))]),
 
-                Galaz("Rytm", [.. RepeatChoice.All.Select(r =>
-                    Pozycja(r.Label, () => model.SetRecurrenceAsync(zadanie, r.Kind)))]),
+            Galaz("Rytm", [.. RepeatChoice.All.Select(r =>
+                Pozycja(r.Label, () => model.SetRecurrenceAsync(zadanie, r.Kind)))]),
 
-                Galaz("Projekt", [
-                    Pozycja("Bez projektu", () => model.SetProjectAsync(zadanie, null)),
-                    .. projekty.Select(p =>
-                        Pozycja(p.Outcome, () => model.SetProjectAsync(zadanie, p.Id))),
-                ]),
+            Galaz("Projekt", [
+                Pozycja("Bez projektu", () => model.SetProjectAsync(zadanie, null)),
+                .. projekty.Select(p =>
+                    Pozycja(p.Outcome, () => model.SetProjectAsync(zadanie, p.Id))),
+            ]),
 
-                new Separator(),
+            new Separator(),
 
-                // Udostępnianie pojedynczego zadania, nie całego obszaru: obszar
-                // rodzinny mieści i „odebrać dziecko”, i „kupić prezent”, a widzieć
-                // je mają różne osoby. Gałąź pokazuje się tylko wtedy, gdy jest dokąd
-                // udostępniać — pozycja bez skutku uczy nieufności do całego menu.
-                .. Udostepnianie(model, zadanie, kalendarze),
+            // Udostępnianie pojedynczego zadania, nie całego obszaru: obszar
+            // rodzinny mieści i „odebrać dziecko”, i „kupić prezent”, a widzieć
+            // je mają różne osoby. Gałąź pokazuje się tylko wtedy, gdy jest dokąd
+            // udostępniać — pozycja bez skutku uczy nieufności do całego menu.
+            .. Udostepnianie(model, zadanie, kalendarze),
 
-                Pozycja("Weź na dziś", () => model.FocusTaskAsync(zadanie)),
-                Pozycja("Pokaż w kalendarzu", () => model.ShowInCalendarAsync(zadanie)),
-                Pozycja("Zamień na notatkę", () => model.ToNoteAsync(zadanie)),
-                new Separator(),
-                Pozycja("Usuń", () => model.TrashTaskAsync(zadanie)),
-            },
-        };
+            Pozycja("Weź na dziś", () => model.FocusTaskAsync(zadanie)),
+            Pozycja("Pokaż w kalendarzu", () => model.ShowInCalendarAsync(zadanie)),
+            Pozycja("Zamień na notatkę", () => model.ToNoteAsync(zadanie)),
+            new Separator(),
+            Pozycja("Usuń", () => model.TrashTaskAsync(zadanie)),
+        ];
 
-        menu.ShowAt(zrodlo, showAtPointer: true);
+        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
     }
 
     /// <summary>Wiersz tabeli równowagi spod wskaźnika.</summary>
