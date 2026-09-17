@@ -46,12 +46,17 @@ internal static class Program
 
             menedzer.Initialize().GetAwaiter().GetResult();
 
+            // Drugi parametr to chwila wygaśnięcia i jest wymagany. Puste znaczy
+            // „niech zostanie w centrum powiadomień" — przypomnienie, które znika samo
+            // po minucie, jest bezużyteczne dokładnie wtedy, gdy się go nie widziało.
             InAppNotifier.Systemowe = (przypomnienie, _) =>
-                menedzer.ShowNotification(new Notification
-                {
-                    Title = przypomnienie.Title,
-                    Body = przypomnienie.Body ?? string.Empty,
-                });
+                menedzer.ShowNotification(
+                    new Notification
+                    {
+                        Title = przypomnienie.Title,
+                        Body = przypomnienie.Body ?? string.Empty,
+                    },
+                    expirationTime: null);
         }
         catch (Exception)
         {
