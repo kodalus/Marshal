@@ -1,11 +1,6 @@
 using FluentAssertions;
 using Marshal.Application.Abstractions;
-using Marshal.Application.Calendar;
-using Marshal.Application.Repositories;
-using Marshal.Application.Review;
-using Marshal.Application.UseCases;
 using Marshal.Infrastructure;
-using Marshal.Infrastructure.Backup;
 using Marshal.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,35 +30,54 @@ public sealed class StartupTests : IDisposable
         return new ServiceCollection().AddMarshal(Sciezka).BuildServiceProvider();
     }
 
-    /// <summary>Wszystko, co okno wyciąga z kontenera, zanim baza w ogóle istnieje.</summary>
-    private static readonly Type[] Uslugi =
-    [
-        typeof(IClock), typeof(ISettings), typeof(IDeviceIdentity), typeof(IHlcSource),
-        typeof(ITaskRepository), typeof(IProjectRepository), typeof(IAreaRepository),
-        typeof(ITagRepository), typeof(INoteRepository), typeof(IAttachmentRepository),
-        typeof(ISavedFilterRepository), typeof(IUnitOfWork), typeof(IReviewQueries),
-        typeof(IReviewSessionRepository), typeof(ICalendarStore), typeof(ICalendarFeed),
-        typeof(CalendarSyncService), typeof(ReviewService), typeof(TaskEditService),
-        typeof(FocusService), typeof(NowService), typeof(DayRolloverService),
-        typeof(ReminderService), typeof(NoteService), typeof(AttachmentService),
-        typeof(InboxService), typeof(TagService), typeof(FilterService),
-        typeof(BackupService),
-    ];
-
     [Fact]
     public void Zlozenie_zaleznosci_nie_siega_do_bazy()
     {
-        // Sedno awarii z 17.09: okno rozwiązuje cały graf, **zanim** PrepareAsync
-        // założy bazę. Fabryka zegara logicznego czytała przy tym tabelę LocalSettings,
-        // której jeszcze nie ma — wyjątek leciał z konstruktora okna, więc widać było
-        // białe tło i natychmiastowe zamknięcie. Fabryka nie ma prawa robić wejścia-wyjścia.
-        using var uslugi = Zloz();
+        // Dwie rzeczy naraz, obie odpowiedzialne za awarię z 17.09.
+        //
+        // Po pierwsze: **wszystko, co zarejestrowane, musi dać się utworzyć**. Rejestracja
+        // jest obietnicą kontenera; usługa zarejestrowana, której brakuje zależności,
+        // to mina, która wybucha przy pierwszym sięgnięciu. Tak było z AttachmentService,
+        // bo IFileTransport nie został zarejestrowany wcale.
+        //
+        // Po drugie: **żadna fabryka nie ma prawa robić wejścia-wyjścia**. Okno rozwiązuje
+        // cały graf, zanim PrepareAsync założy bazę; fabryka zegara logicznego czytała
+        // przy tym tabelę, której jeszcze nie ma. Objawem było białe tło i natychmiastowe
+        // zamknięcie, na obu platformach.
+        var kolekcja = new ServiceCollection();
+        kolekcja.AddMarshal(Sciezka);
+        Directory.CreateDirectory(_katalog);
 
-        foreach (var typ in Uslugi)
+        using var uslugi = kolekcja.BuildServiceProvider();
+
+        // Po naszych typach, nie po wszystkich: rejestracje wewnętrzne EF Core bywają
+        // zakresowe i nie są tym, co ten test pilnuje.
+        var nasze = kolekcja
+            .Select(r => r.ServiceType)
+            .Where(t => t.Assembly.GetName().Name?.StartsWith("Marshal.", StringComparison.Ordinal) == true)
+            .Where(t => !t.IsGenericTypeDefinition)
+            .Distinct()
+            .ToList();
+
+        nasze.Should().HaveCountGreaterThan(20, "test miał objąć cały graf, nie jego resztkę");
+
+        // Wszystkie naraz, nie do pierwszego napotkanego: jedna awaria na przebieg
+        // znaczyłaby jeden błąd na przebieg budowania.
+        var pekniete = new List<string>();
+
+        foreach (var typ in nasze)
         {
-            var wziecie = () => uslugi.GetRequiredService(typ);
-            wziecie.Should().NotThrow($"„{typ.Name}” jest rozwiązywany przed migracją");
+            try
+            {
+                uslugi.GetRequiredService(typ);
+            }
+            catch (Exception e)
+            {
+                pekniete.Add($"{typ.Name}: {e.Message}");
+            }
         }
+
+        pekniete.Should().BeEmpty();
 
         File.Exists(Sciezka).Should().BeFalse("składanie zależności nie ma prawa dotknąć bazy");
     }

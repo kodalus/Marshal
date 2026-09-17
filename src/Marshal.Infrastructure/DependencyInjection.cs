@@ -2,6 +2,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Application.Review;
+using Marshal.Application.Sync;
 using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Backup;
 using Marshal.Infrastructure.Calendar;
@@ -105,6 +106,16 @@ public static class DependencyInjection
         services.AddSingleton<DayRolloverService>();
         services.AddSingleton<ReminderService>();
         services.AddSingleton<NoteService>();
+        // Treść załączników leży obok bazy, w katalogu adresowanym skrótem. Na Dysk
+        // pojedzie dopiero razem z synchronizacją (spec 9.2) — do tego czasu składnica
+        // lokalna jest nie prowizorką, tylko poprawnym stanem: wpis i plik są
+        // rozdzielone z założenia, a droga pliku jest wymienna.
+        //
+        // Brak tej rejestracji był drugim błędem startu: AttachmentService jest
+        // zarejestrowany, więc kontener obiecuje, że da się go utworzyć — a nie dało się.
+        services.AddSingleton<IFileTransport>(
+            _ => new LocalFolderFileTransport(Path.GetDirectoryName(databasePath)!));
+
         services.AddSingleton<AttachmentService>();
         services.AddSingleton<FilterService>();
         services.AddSingleton<BackupService>();
