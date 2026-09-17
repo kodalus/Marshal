@@ -1,6 +1,6 @@
+using System.Runtime.Versioning;
 using Android.App;
 using Android.Content;
-using Android.OS;
 using Marshal.Infrastructure.Notifications;
 
 // Nazwa własna, bo „Notification" znaczy tu dwie różne rzeczy: naszą i androidową.
@@ -63,11 +63,9 @@ internal static class Powiadomienia
 
             // Od Androida 13 na powiadomienia trzeba zgody, o którą pyta się raz.
             // Wcześniejsze wydania dają ją z instalacją.
-            if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu
-                && okno.CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications)
-                    != global::Android.Content.PM.Permission.Granted)
+            if (OperatingSystem.IsAndroidVersionAtLeast(33))
             {
-                okno.RequestPermissions([global::Android.Manifest.Permission.PostNotifications], 1);
+                ZapytajOZgode(okno);
             }
 
             InAppNotifier.Systemowe = (przypomnienie, _) =>
@@ -82,6 +80,23 @@ internal static class Powiadomienia
         {
             // Bez powiadomień systemowych. Pasek w oknie zostaje i działa jak dotąd.
             InAppNotifier.StanSystemowych = $"{e.GetType().Name}: {e.Message}";
+        }
+    }
+
+    /// <summary>Prośba o zgodę na powiadomienia — Android 13 i nowsze.</summary>
+    /// <remarks>
+    /// Osobna metoda z adnotacją wydania, a nie warunek wpisany w miejscu użycia.
+    /// Analizator zgodności platform czyta wyłącznie <c>OperatingSystem.IsAndroid…</c>
+    /// i te adnotacje; porównanie <c>Build.VERSION.SdkInt</c> jest dla niego zwykłą
+    /// liczbą, więc wołanie młodszego API zgłaszał jako błąd mimo poprawnego warunku.
+    /// </remarks>
+    [SupportedOSPlatform("android33.0")]
+    private static void ZapytajOZgode(Activity okno)
+    {
+        if (okno.CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications)
+            != global::Android.Content.PM.Permission.Granted)
+        {
+            okno.RequestPermissions([global::Android.Manifest.Permission.PostNotifications], 1);
         }
     }
 
