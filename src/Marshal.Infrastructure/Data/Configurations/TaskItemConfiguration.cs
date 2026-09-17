@@ -30,6 +30,10 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
 
         // Liczone z SharedCalendarId — zmapowane dałoby się ustawić niezależnie od niego.
         builder.Ignore(t => t.IsShared);
+
+        // Po udostępnionych zadaniach chodzi się przy każdym odświeżeniu siatki, żeby
+        // wiedzieć, których wydarzeń nie rysować drugi raz.
+        builder.HasIndex(t => t.SharedCalendarId);
         builder.HasIndex(t => t.ReminderAt);
 
         // Wybór na dziś odpytywany jest przy każdym otwarciu „Dzisiaj" i przy każdym
