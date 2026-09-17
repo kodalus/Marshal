@@ -327,7 +327,11 @@ public sealed partial class TaskDetailViewModel(
 
         DoDate = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), clock.Now.Offset);
         DoTime = time.ToTimeSpan();
-        EndTime = time.ToTimeSpan() + TimeSpan.FromMinutes(DomyslneMinuty);
+
+        // Bez końca i bez długości: pół godziny to sposób **rysowania** bloku bez
+        // oszacowania, a nie oszacowanie. Wpisane tu z góry zapisałoby się jako
+        // decyzja, której nikt nie podjął.
+        EndTime = null;
 
         _loading = false;
         ShowMore = false;
@@ -362,8 +366,13 @@ public sealed partial class TaskDetailViewModel(
 
         // Koniec z początku i długości — nie ma go w modelu, bo byłby drugą prawdą
         // o tej samej rzeczy.
-        EndTime = task.DoTime is { } poczatek
-            ? poczatek.ToTimeSpan() + TimeSpan.FromMinutes(task.EstimatedMinutes ?? DomyslneMinuty)
+        // Koniec **tylko** z prawdziwej długości. Doliczany z domyślnych trzydziestu
+        // minut wyglądał jak wpisana wartość i przy pierwszym dotknięciu pola wracał
+        // do bazy jako oszacowanie, którego nikt nie podał — zadanie na piętnaście
+        // minut robiło się trzydziestominutowe samo z siebie. Aplikacja nie ma prawa
+        // zmyślać długości: brak oszacowania to brak, a nie „pewnie pół godziny".
+        EndTime = task.DoTime is { } poczatek && task.EstimatedMinutes is { } dlugosc
+            ? poczatek.ToTimeSpan() + TimeSpan.FromMinutes(dlugosc)
             : null;
         SelectedEnergyLevel = Energies.First(e => e.Value == task.Energy);
         LoadRule(task.Recurrence);
@@ -570,9 +579,14 @@ public sealed partial class TaskDetailViewModel(
             return;
         }
 
+        // Przy pustej długości koniec zostaje pusty — patrz wyżej.
+        if (EstimatedMinutes is not { } minuty)
+        {
+            return;
+        }
+
         _zgodne = true;
-        EndTime = poczatek + TimeSpan.FromMinutes(
-            (double)(EstimatedMinutes ?? DomyslneMinuty));
+        EndTime = poczatek + TimeSpan.FromMinutes((double)minuty);
         _zgodne = false;
     }
 

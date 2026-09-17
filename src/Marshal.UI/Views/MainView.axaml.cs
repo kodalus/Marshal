@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
-using System.Windows.Input;
 using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform.Storage;
@@ -418,8 +417,9 @@ public partial class MainView : UserControl
 
         if (Zadanie(zrodlo) is { } zadanie)
         {
-            PokazMenu(model, zrodlo, zadanie);
             e.Handled = true;
+            _ = Probuj("Menu: otwarcie", () => PokazMenuAsync(model, zrodlo, zadanie));
+
             return;
         }
 
@@ -432,7 +432,7 @@ public partial class MainView : UserControl
             {
                 if (await model.FindTaskAsync(identyfikator) is { } zBazy)
                 {
-                    PokazMenu(model, zrodlo, zBazy);
+                    await PokazMenuAsync(model, zrodlo, zBazy);
                 }
             });
         }
@@ -446,25 +446,61 @@ public partial class MainView : UserControl
             .OfType<SlotBox>()
             .FirstOrDefault();
 
-    private static void PokazMenu(MainViewModel model, Control zrodlo, TaskItem zadanie)
+    private async Task PokazMenuAsync(MainViewModel model, Control zrodlo, TaskItem zadanie)
     {
+        var dzis = model.Dzisiaj;
+        var projekty = await model.ActiveProjectsAsync();
+
         var menu = new MenuFlyout
         {
-            ItemsSource = new[]
+            ItemsSource = new object[]
             {
-                Pozycja("Otwórz szczegół", model.OpenTaskCommand, zadanie),
-                Pozycja("Odhacz", model.CompleteTaskCommand, zadanie),
-                Pozycja("Weź na dziś", model.FocusTaskCommand, zadanie),
-                Pozycja("Przełóż na jutro", model.PostponeTaskCommand, zadanie),
-                Pozycja("Do kosza", model.TrashTaskCommand, zadanie),
+                Pozycja("Otwórz szczegół", () => model.OpenTaskAsync(zadanie)),
+                Pozycja("Odhacz", () => model.CompleteTaskAsync(zadanie)),
+                new Separator(),
+
+                Galaz("Ustaw dzień", [
+                    Pozycja("Dziś", () => model.SetDateAsync(zadanie, dzis)),
+                    Pozycja("Jutro", () => model.SetDateAsync(zadanie, dzis.AddDays(1))),
+                    Pozycja("Za tydzień", () => model.SetDateAsync(zadanie, dzis.AddDays(7))),
+                    Pozycja("Bez dnia", () => model.SetDateAsync(zadanie, null)),
+                ]),
+
+                Galaz("Waga", [.. PriorityChoice.All.Select(w =>
+                    Pozycja(w.Label, () => model.SetPriorityAsync(zadanie, w.Value)))]),
+
+                Galaz("Rytm", [.. RepeatChoice.All.Select(r =>
+                    Pozycja(r.Label, () => model.SetRecurrenceAsync(zadanie, r.Kind)))]),
+
+                Galaz("Projekt", [
+                    Pozycja("Bez projektu", () => model.SetProjectAsync(zadanie, null)),
+                    .. projekty.Select(p =>
+                        Pozycja(p.Outcome, () => model.SetProjectAsync(zadanie, p.Id))),
+                ]),
+
+                new Separator(),
+                Pozycja("Weź na dziś", () => model.FocusTaskAsync(zadanie)),
+                Pozycja("Pokaż w kalendarzu", () => model.ShowInCalendarAsync(zadanie)),
+                Pozycja("Zamień na notatkę", () => model.ToNoteAsync(zadanie)),
+                new Separator(),
+                Pozycja("Usuń", () => model.TrashTaskAsync(zadanie)),
             },
         };
 
         menu.ShowAt(zrodlo, showAtPointer: true);
     }
 
-    private static MenuItem Pozycja(string napis, ICommand polecenie, TaskItem zadanie) =>
-        new() { Header = napis, Command = polecenie, CommandParameter = zadanie };
+    /// <summary>Pozycja menu. Woła metodę wprost — wyjątek ma dokąd trafić.</summary>
+    private MenuItem Pozycja(string napis, Func<Task> praca)
+    {
+        var pozycja = new MenuItem { Header = napis };
+        pozycja.Click += (_, _) => _ = Probuj($"Menu: {napis}", praca);
+
+        return pozycja;
+    }
+
+    private static MenuItem Galaz(string napis, IReadOnlyList<MenuItem> pozycje) =>
+        new() { Header = napis, ItemsSource = pozycje };
 
     /// <summary>Zadanie spod wskaźnika — niezależnie od tego, czym jest wiersz.</summary>
     private static TaskItem? Zadanie(Control zrodlo)

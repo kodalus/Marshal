@@ -7,6 +7,8 @@ using Marshal.Application.Repositories;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Projects;
+using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Notifications;
 
@@ -47,6 +49,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly IReviewQueries _queries;
     private readonly InAppNotifier _notifier;
     private readonly IActivityLog _dziennik;
+    private readonly NoteService _notes;
 
     public MainViewModel(
         InboxService inbox,
@@ -67,7 +70,8 @@ public sealed partial class MainViewModel : ObservableObject
         FiltersViewModel filters,
         SettingsViewModel settings,
         JournalViewModel journal,
-        IActivityLog dziennik)
+        IActivityLog dziennik,
+        NoteService notes)
     {
         _inbox = inbox;
         _tasks = tasks;
@@ -79,6 +83,7 @@ public sealed partial class MainViewModel : ObservableObject
         _queries = queries;
         _notifier = notifier;
         _dziennik = dziennik;
+        _notes = notes;
         Clarify = clarify;
         Detail = detail;
         Review = review;
@@ -714,6 +719,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     private DateOnly Today() => _clock.Today;
 
+    /// <summary>Dzisiaj w strefie z ustawień — dla menu, które samo zegara nie ma.</summary>
+    public DateOnly Dzisiaj => _clock.Today;
+
     private async Task Fill(ObservableCollection<TaskRow> target, Task<IReadOnlyList<TaskItem>> source)
     {
         var items = await source;
@@ -788,6 +796,75 @@ public sealed partial class MainViewModel : ObservableObject
             await ReloadAsync();
         }
     }
+
+    /// <summary>
+    /// Czynności menu podręcznego, wołane wprost z okna.
+    /// </summary>
+    /// <remarks>
+    /// Metody, nie polecenia: menu składa się w kodzie okna, a każda pozycja niesie
+    /// własny argument — rodzaj rytmu, wagę, projekt. Polecenie przyjmuje jeden
+    /// parametr, więc byłoby ich tyle, ile pozycji, i każde z własną obsługą pustki.
+    /// </remarks>
+    public async Task SetDateAsync(TaskItem task, DateOnly? day)
+    {
+        if (day is { } dzien)
+        {
+            await _edit.RescheduleAsync(task.Id, dzien, task.DoTime);
+        }
+        else
+        {
+            await _edit.ApplyAsync(task.Id, Bez(task));
+        }
+
+        await ReloadAsync();
+    }
+
+    /// <summary>Ten sam zestaw pól, tylko bez dnia wykonania — reszta ma zostać.</summary>
+    private static TaskEdit Bez(TaskItem task) =>
+        new(task.Title, task.Note, null, task.Deadline, task.ReminderAt, task.Recurrence,
+            task.Priority, task.EstimatedMinutes, task.Energy, task.AreaId, null);
+
+    public async Task SetPriorityAsync(TaskItem task, Priority priority)
+    {
+        await _edit.SetPriorityAsync(task.Id, priority);
+        await ReloadAsync();
+    }
+
+    public async Task SetRecurrenceAsync(TaskItem task, RecurrenceKind? kind)
+    {
+        await _edit.SetRecurrenceAsync(task.Id, kind);
+        await ReloadAsync();
+    }
+
+    public async Task SetProjectAsync(TaskItem task, Guid? projectId)
+    {
+        await _edit.SetProjectAsync(task.Id, projectId);
+        await ReloadAsync();
+    }
+
+    public async Task ToNoteAsync(TaskItem task)
+    {
+        await _notes.ConvertToNoteAsync(task.Id);
+        await ReloadAsync();
+    }
+
+    /// <summary>Pokazanie zadania na siatce — kalendarz przeskakuje na jego dzień.</summary>
+    public async Task ShowInCalendarAsync(TaskItem task)
+    {
+        if (task.DoDate is { } dzien)
+        {
+            Calendar.Anchor = dzien;
+        }
+
+        await ShowCalendarAsync();
+    }
+
+    /// <summary>Projekty do wyboru w menu. Same czynne — zamkniętego nie ma po co proponować.</summary>
+    public async Task<IReadOnlyList<Project>> ActiveProjectsAsync() =>
+        (await _projects.AllAsync())
+            .Where(p => !p.Deleted && p.State == ProjectState.Active)
+            .OrderBy(p => p.Outcome, StringComparer.CurrentCulture)
+            .ToList();
 
     /// <summary>Zadanie po identyfikatorze — dla bloków siatki, które niosą sam identyfikator.</summary>
     public Task<TaskItem?> FindTaskAsync(Guid id) => _tasks.FindAsync(id);

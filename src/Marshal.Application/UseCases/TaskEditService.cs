@@ -132,6 +132,57 @@ public sealed class TaskEditService(
         return zadanie;
     }
 
+    /// <summary>Waga — jedno pole, jedna zmiana (menu podręczne).</summary>
+    public Task<TaskItem?> SetPriorityAsync(
+        Guid id, Priority priority, CancellationToken ct = default) =>
+        ZmienAsync(id, z => z.SetPriority(priority, hlc.Next()), ct);
+
+    /// <summary>Rytm z menu: same rodzaje, bez zaczepienia i pominięć — te mają swój ekran.</summary>
+    public Task<TaskItem?> SetRecurrenceAsync(
+        Guid id, RecurrenceKind? kind, CancellationToken ct = default) =>
+        ZmienAsync(
+            id,
+            z => z.SetRecurrence(
+                kind is { } rodzaj ? new RecurrenceRule(rodzaj) : null, hlc.Next()),
+            ct);
+
+    /// <summary>Przeniesienie do projektu albo wyjęcie z niego.</summary>
+    public async Task<TaskItem?> SetProjectAsync(
+        Guid id, Guid? projectId, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        {
+            return null;
+        }
+
+        var obszar = zadanie.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
+
+        if (obszar is not { } identyfikator)
+        {
+            throw new InvalidOperationException(
+                "Nie ma żadnego czynnego obszaru, a zadanie w projekcie musi do któregoś należeć.");
+        }
+
+        zadanie.MoveTo(identyfikator, projectId, hlc.Next());
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return zadanie;
+    }
+
+    private async Task<TaskItem?> ZmienAsync(
+        Guid id, Action<TaskItem> zmiana, CancellationToken ct)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        {
+            return null;
+        }
+
+        zmiana(zadanie);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return zadanie;
+    }
+
     /// <summary>
     /// Przełożenie zadania na inny dzień i godzinę — jednym ruchem, bez reszty pól.
     /// </summary>
