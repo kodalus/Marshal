@@ -750,7 +750,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// typem, a menu ma być jedno dla wszystkich.
     /// </summary>
     [RelayCommand]
-    private async Task OpenTaskAsync(TaskItem? task)
+    public async Task OpenTaskAsync(TaskItem? task)
     {
         if (task is not null)
         {
@@ -759,7 +759,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task FocusTaskAsync(TaskItem? task)
+    public async Task FocusTaskAsync(TaskItem? task)
     {
         if (task is null)
         {
@@ -788,7 +788,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task TrashTaskAsync(TaskItem? task)
+    public async Task TrashTaskAsync(TaskItem? task)
     {
         if (task is not null)
         {
@@ -871,7 +871,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Odhaczenie zadania podanego wprost — piątka „Na dziś" niesie same zadania.</summary>
     [RelayCommand]
-    private async Task CompleteTaskAsync(TaskItem? task)
+    public async Task CompleteTaskAsync(TaskItem? task)
     {
         if (task is not null)
         {
