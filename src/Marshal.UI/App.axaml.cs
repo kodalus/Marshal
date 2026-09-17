@@ -3,6 +3,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Marshal.Application.Abstractions;
+using Marshal.Domain.Diagnostics;
 using Marshal.UI.ViewModels;
 using Marshal.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,6 +73,9 @@ public partial class App : Avalonia.Application
                 }
 
                 await viewModel.InitializeAsync();
+
+                await services.GetRequiredService<IActivityLog>()
+                    .RecordAsync("Start", "baza gotowa, okno złożone");
             }
             catch (Exception ex)
             {
@@ -80,6 +84,12 @@ public partial class App : Avalonia.Application
                 // bez kabla. Awaria startu ma być widoczna na ekranie, bo tylko wtedy
                 // da się ją zgłosić.
                 System.Diagnostics.Debug.WriteLine(ex);
+
+                // Do dziennika też, o ile baza w ogóle stoi — a przy awarii startu
+                // bardzo często nie stoi, więc ekran awarii zostaje jedyną drogą
+                // i dlatego nie zależy ani od bazy, ani od powiązań.
+                await services.GetRequiredService<IActivityLog>().RecordAsync(
+                    "Start", "nie udało się", ActivityLevel.Problem, ex.ToString());
 
                 var awaria = StartupFailure.Build(ex);
 

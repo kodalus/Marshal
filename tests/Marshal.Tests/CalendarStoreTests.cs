@@ -3,6 +3,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Calendar;
 using Marshal.Infrastructure.Data;
@@ -47,6 +48,28 @@ public sealed class CalendarStoreTests : IDisposable
                 ? throw new HttpRequestException("kanał nie odpowiada")
                 : Task.FromResult(Next);
         }
+    }
+
+    /// <summary>Dziennik, który tylko zapamiętuje — żeby dało się sprawdzić, co by zapisał.</summary>
+    private sealed class Notes : IActivityLog
+    {
+        public List<(string Operation, string Outcome, ActivityLevel Level)> Wpisy { get; } = [];
+
+        public int Dropped => 0;
+
+        public Task RecordAsync(
+            string operation, string outcome, ActivityLevel level = ActivityLevel.Ok,
+            string? detail = null, CancellationToken ct = default)
+        {
+            Wpisy.Add((operation, outcome, level));
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ActivityEntry>> RecentAsync(
+            int count = 200, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ActivityEntry>>([]);
+
+        public Task ClearAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
@@ -292,7 +315,7 @@ public sealed class CalendarStoreTests : IDisposable
         // Doba ma 1152 punkty, a ekran telefonu mieści z tego jakąś jedną czwartą:
         // otwarcie o północy pokazuje godziny, w których się śpi, i za każdym razem
         // zaczyna się od przewijania. Godzina zapasu u góry, stąd nie 9 * 48, a 8 * 48.
-        var model = new CalendarViewModel(_usluga, _zegar);
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes());
 
         double? dokad = null;
         model.ScrollRequested += punkty => dokad = punkty;
@@ -307,7 +330,7 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Godzina z innego dnia nie jest odpowiedzią na nic, a skok kasowałby
         // pozycję, którą użytkownik ustawił ręką przed chwilą.
-        var model = new CalendarViewModel(_usluga, _zegar);
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes());
 
         await model.LoadAsync();
 
@@ -318,6 +341,27 @@ public sealed class CalendarStoreTests : IDisposable
         await model.LoadAsync();
 
         dokad.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Pusta_siatka_przy_pelnej_bazie_trafia_do_dziennika()
+    {
+        // Ten dokładnie przypadek zżarł jedną rundę: 949 wydarzeń w bazie, osiem na
+        // siatce, zero narysowanych — i trzy różne możliwe przyczyny wyglądające
+        // identycznie. Wpis zapisuje się **tylko** wtedy, bo przy każdym przerysowaniu
+        // zalałby dziennik tym, co i tak widać na ekranie.
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("d1", "Dawno temu", "2026-01-05", 10, 11)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        var notes = new Notes();
+        var model = new CalendarViewModel(_usluga, _zegar, notes);
+
+        await model.LoadAsync();
+
+        notes.Wpisy.Should().Contain(w =>
+            w.Operation == "Kalendarz: siatka" && w.Level == ActivityLevel.Problem);
     }
 
     [Fact]

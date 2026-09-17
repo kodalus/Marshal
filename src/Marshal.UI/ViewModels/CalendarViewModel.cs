@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
+using Marshal.Domain.Diagnostics;
 
 namespace Marshal.UI.ViewModels;
 
@@ -67,7 +68,7 @@ public sealed record CalendarColumn(
 /// Kalendarz godzinowy: dzień, trzy dni, tydzień (spec 11).
 /// </summary>
 public sealed partial class CalendarViewModel(
-    CalendarSyncService calendar, IClock clock) : ObservableObject
+    CalendarSyncService calendar, IClock clock, IActivityLog log) : ObservableObject
 {
     /// <summary>Wysokość godziny w punktach.</summary>
     /// <remarks>
@@ -163,6 +164,18 @@ public sealed partial class CalendarViewModel(
 
         Summary = $"W bazie {wBazie}, na tych dniach {naSiatce}.";
 
+        // Zapisujemy tylko przypadek podejrzany: wydarzenia są, a siatka pusta.
+        // Wpis przy każdym przerysowaniu zalałby dziennik tym, co widać na ekranie,
+        // i utopiłby w tym rzeczy, których nie widać nigdzie indziej.
+        if (naSiatce == 0 && wBazie > 0)
+        {
+            await log.RecordAsync(
+                "Kalendarz: siatka",
+                $"w bazie {wBazie}, na siatce 0",
+                ActivityLevel.Problem,
+                $"Zakres {Range}. Wydarzenia są, ale żadne nie wypada na pokazywanych dniach.");
+        }
+
         OnPropertyChanged(nameof(Range));
     }
 
@@ -178,6 +191,12 @@ public sealed partial class CalendarViewModel(
         Problem = raport.Failed > 0
             ? $"Nie udało się odświeżyć {raport.Failed} z {raport.Failed + raport.Sources} kalendarzy."
             : null;
+
+        await log.RecordAsync(
+            "Kalendarz: pobranie",
+            $"odświeżonych {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}",
+            raport.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
+            string.Join(Environment.NewLine, raport.Problems.Distinct()));
 
         OnPropertyChanged(nameof(HasProblem));
         await RefreshAsync();

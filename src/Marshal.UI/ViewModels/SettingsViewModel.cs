@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using Marshal.Application.Calendar;
 using Marshal.Infrastructure.Calendar;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Diagnostics;
 using Marshal.Infrastructure.Sync.Google;
 
 namespace Marshal.UI.ViewModels;
@@ -39,6 +40,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly GoogleSyncService _dysk;
     private readonly CalendarSyncService _kalendarze;
     private readonly GoogleCalendarGateway _google;
+    private readonly IActivityLog _dziennik;
 
     /// <summary>Wstrzymuje zapis w chwili wypełniania pól wartościami z ustawień.</summary>
     private bool _wczytywanie;
@@ -49,7 +51,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         IClock clock,
         GoogleSyncService dysk,
         CalendarSyncService kalendarze,
-        GoogleCalendarGateway google)
+        GoogleCalendarGateway google,
+        IActivityLog dziennik)
     {
         _settings = settings;
         _backup = backup;
@@ -57,6 +60,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _dysk = dysk;
         _kalendarze = kalendarze;
         _google = google;
+        _dziennik = dziennik;
     }
 
     /// <summary>
@@ -179,10 +183,15 @@ public sealed partial class SettingsViewModel : ObservableObject
             CalendarStatus = lista.Count == 0
                 ? "Konto nie ma żadnych kalendarzy."
                 : $"Znalezione: {lista.Count}. Wybierz, które podłączyć.";
+
+            await _dziennik.RecordAsync(
+                "Kalendarze Google: lista", $"znalezionych {lista.Count}");
         }
         catch (Exception e)
         {
             CalendarStatus = e.Message;
+            await _dziennik.RecordAsync(
+                "Kalendarze Google: lista", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -264,10 +273,18 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ? podsumowanie
                 : podsumowanie + Environment.NewLine
                     + string.Join(Environment.NewLine, raport.Problems.Distinct());
+
+            await _dziennik.RecordAsync(
+                "Kalendarz: pobranie",
+                podsumowanie,
+                raport.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
+                string.Join(Environment.NewLine, raport.Problems.Distinct()));
         }
         catch (Exception e)
         {
             CalendarStatus = e.Message;
+            await _dziennik.RecordAsync(
+                "Kalendarz: pobranie", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -276,12 +293,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         try
         {
             await _kalendarze.AddAsync(kind, externalId, name, color);
+            await _dziennik.RecordAsync("Kalendarz: podłączenie", $"{name} ({kind})");
             await ReloadCalendarsAsync();
             await RefreshCalendarsAsync();
         }
         catch (Exception e)
         {
             CalendarStatus = e.Message;
+            await _dziennik.RecordAsync(
+                "Kalendarz: podłączenie", $"{name} ({kind}) — nie udało się",
+                ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -322,6 +343,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             await _backup.ExportAsync(strumien);
             Status = $"Zapisane do {nazwa}.";
+            await _dziennik.RecordAsync("Kopia: zapis", nazwa);
         }
         catch (Exception e)
         {
@@ -331,6 +353,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             // zapasowej cicha porażka jest gorsza niż brak kopii, bo zostawia
             // przekonanie, że kopia jest. Treść wyjątku, nie „coś poszło nie tak".
             Status = $"Nie udało się zapisać: {e.Message}";
+            await _dziennik.RecordAsync(
+                "Kopia: zapis", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -358,6 +382,10 @@ public sealed partial class SettingsViewModel : ObservableObject
                 ? $"Wczytane {raport.Read} wpisów — wszystkie starsze niż to, co już jest."
                 : $"Wczytane {raport.Read} wpisów, nałożone {raport.Applied}.";
 
+            await _dziennik.RecordAsync(
+                "Kopia: wczytanie",
+                $"przeczytane {raport.Read}, nałożone {raport.Applied}, pominięte {raport.Skipped}");
+
             Imported?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception e)
@@ -365,6 +393,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             // Jak wyżej. Wgranie jest w transakcji, więc baza została w stanie sprzed
             // próby — komunikat jest jedyną rzeczą, której brakuje.
             Status = $"Nie udało się wczytać: {e.Message}";
+            await _dziennik.RecordAsync(
+                "Kopia: wczytanie", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -406,17 +436,29 @@ public sealed partial class SettingsViewModel : ObservableObject
         {
             var wynik = await _dysk.SyncAsync(_przerwanie.Token);
             SyncStatus = wynik.Message;
+
+            await _dziennik.RecordAsync(
+                "Synchronizacja",
+                $"wysłane {wynik.Sent}, nałożone {wynik.Applied}",
+                wynik.Ok ? ActivityLevel.Ok : ActivityLevel.Problem,
+                wynik.Message);
         }
         catch (OperationCanceledException)
         {
             SyncStatus = "Przerwane — zgoda w przeglądarce nie wróciła. "
                 + "Jeśli Google pokazał stronę z błędem, popraw ustawienia w konsoli i spróbuj jeszcze raz.";
+
+            await _dziennik.RecordAsync(
+                "Synchronizacja", "przerwane po czasie oczekiwania na zgodę",
+                ActivityLevel.Problem);
         }
         catch (Exception e)
         {
             // Polecenie wołane bez oczekiwania na wynik — wyjątek, którego tu nie
             // złapiemy, nie ma dokąd trafić.
             SyncStatus = e.Message;
+            await _dziennik.RecordAsync(
+                "Synchronizacja", "nie udało się", ActivityLevel.Problem, e.Message);
         }
         finally
         {
