@@ -4,6 +4,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Infrastructure.Backup;
 using System.Collections.ObjectModel;
 using Marshal.Application.Calendar;
+using Marshal.Infrastructure.Calendar;
 using Marshal.Domain.Calendar;
 using Marshal.Infrastructure.Sync.Google;
 
@@ -37,6 +38,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IClock _clock;
     private readonly GoogleSyncService _dysk;
     private readonly CalendarSyncService _kalendarze;
+    private readonly GoogleCalendarGateway _google;
 
     /// <summary>Wstrzymuje zapis w chwili wypełniania pól wartościami z ustawień.</summary>
     private bool _wczytywanie;
@@ -46,13 +48,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         BackupService backup,
         IClock clock,
         GoogleSyncService dysk,
-        CalendarSyncService kalendarze)
+        CalendarSyncService kalendarze,
+        GoogleCalendarGateway google)
     {
         _settings = settings;
         _backup = backup;
         _clock = clock;
         _dysk = dysk;
         _kalendarze = kalendarze;
+        _google = google;
     }
 
     /// <summary>
@@ -72,6 +76,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         GoogleClientId = _settings.GoogleClientId ?? string.Empty;
         GoogleClientSecret = _settings.GoogleClientSecret ?? string.Empty;
         GoogleCalendar = _settings.GoogleCalendarEnabled;
+        AvailableGoogleCalendars.Clear();
+        OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
 
         _wczytywanie = false;
 
@@ -139,12 +145,57 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public bool HasCalendars => Calendars.Count > 0;
 
-    /// <summary>„primary" to główny kalendarz konta; inne wkleja się po identyfikatorze.</summary>
-    [ObservableProperty]
-    public partial string NewGoogleCalendarId { get; set; } = "primary";
+    /// <summary>
+    /// Kalendarze pobrane z konta, do wyboru jednym kliknięciem.
+    /// </summary>
+    /// <remarks>
+    /// Pierwsza wersja tego ekranu kazała wpisywać identyfikator ręcznie. Skończyło się
+    /// pięcioma kalendarzami dodanymi po nazwie i pięcioma błędami 404 z rzędu — bo
+    /// „Praca" jest nazwą, a Google chce czegoś w rodzaju abc@group.calendar.google.com.
+    /// Kazać człowiekowi szukać identyfikatora w ustawieniach Google było błędem
+    /// ekranu, nie użytkownika: aplikacja jest zalogowana i może zapytać sama.
+    /// </remarks>
+    public ObservableCollection<GoogleCalendarInfo> AvailableGoogleCalendars { get; } = [];
 
-    [ObservableProperty]
-    public partial string NewGoogleCalendarName { get; set; } = string.Empty;
+    public bool HasAvailableGoogleCalendars => AvailableGoogleCalendars.Count > 0;
+
+    [RelayCommand]
+    private async Task LoadGoogleCalendarsAsync()
+    {
+        CalendarStatus = "Pobieranie listy kalendarzy…";
+
+        try
+        {
+            var lista = await _google.ListAsync();
+
+            AvailableGoogleCalendars.Clear();
+            foreach (var kalendarz in lista)
+            {
+                AvailableGoogleCalendars.Add(kalendarz);
+            }
+
+            OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
+
+            CalendarStatus = lista.Count == 0
+                ? "Konto nie ma żadnych kalendarzy."
+                : $"Znalezione: {lista.Count}. Wybierz, które podłączyć.";
+        }
+        catch (Exception e)
+        {
+            CalendarStatus = e.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddGoogleCalendarAsync(GoogleCalendarInfo? kalendarz)
+    {
+        if (kalendarz is null)
+        {
+            return;
+        }
+
+        await DodajAsync(CalendarKind.Google, kalendarz.Id, kalendarz.Name);
+    }
 
     [ObservableProperty]
     public partial string NewIcalUrl { get; set; } = string.Empty;
@@ -154,22 +205,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial string CalendarStatus { get; set; } = string.Empty;
-
-    [RelayCommand]
-    private async Task AddGoogleCalendarAsync()
-    {
-        if (string.IsNullOrWhiteSpace(NewGoogleCalendarId))
-        {
-            return;
-        }
-
-        var nazwa = string.IsNullOrWhiteSpace(NewGoogleCalendarName)
-            ? "Kalendarz Google"
-            : NewGoogleCalendarName;
-
-        await DodajAsync(CalendarKind.Google, NewGoogleCalendarId, nazwa);
-        NewGoogleCalendarName = string.Empty;
-    }
 
     [RelayCommand]
     private async Task AddIcalAsync()

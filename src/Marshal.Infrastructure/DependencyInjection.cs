@@ -101,8 +101,13 @@ public static class DependencyInjection
         // przechodziło po źródłach, nie znajdowało kanału dla rodzaju Google i pomijało
         // je po cichu — włączenie API w konsoli niczego nie zmieniało, bo aplikacja
         // nigdy nie zadawała pytania.
-        services.AddSingleton<ICalendarFeed>(sp =>
+        // Jeden obiekt, dwie role: kanał dla odświeżania i spis kalendarzy dla ekranu
+        // ustawień. Dwa osobne znaczyłyby dwa logowania i dwa stany połączenia.
+        services.AddSingleton(sp =>
             new GoogleCalendarGateway(sp.GetRequiredService<ISettings>(), databasePath));
+
+        services.AddSingleton<ICalendarFeed>(
+            sp => sp.GetRequiredService<GoogleCalendarGateway>());
 
         services.AddSingleton<IReviewQueries, ReviewQueries>();
         services.AddSingleton<IReviewSessionRepository, ReviewSessionRepository>();

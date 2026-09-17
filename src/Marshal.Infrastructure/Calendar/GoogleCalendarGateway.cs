@@ -1,3 +1,5 @@
+using Google;
+using System.Net;
 using Google.Apis.Calendar.v3;
 using Google.Apis.Services;
 using Marshal.Application.Abstractions;
@@ -27,6 +29,9 @@ namespace Marshal.Infrastructure.Calendar;
 /// jedyna informacja, która mogła pomóc, ginęła w drodze do ekranu.
 /// </para>
 /// </remarks>
+/// <summary>Kalendarz z konta, do wyboru na ekranie.</summary>
+public sealed record GoogleCalendarInfo(string Id, string Name);
+
 public sealed class GoogleCalendarGateway(ISettings settings, string databasePath) : ICalendarFeed
 {
     private GoogleCalendarFeed? _kanal;
@@ -38,7 +43,45 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     public async Task<FeedResult> FetchAsync(
         CalendarSource source, string? syncToken, CancellationToken ct = default)
     {
-        return await (await PolaczAsync(ct)).FetchAsync(source, syncToken, ct);
+        ArgumentNullException.ThrowIfNull(source);
+
+        try
+        {
+            return await (await PolaczAsync(ct)).FetchAsync(source, syncToken, ct);
+        }
+        catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.NotFound)
+        {
+            // Google odpowiada 404 na **nazwę** kalendarza, bo chce identyfikatora:
+            // „primary" albo czegoś w rodzaju abc@group.calendar.google.com. Gołe
+            // „NotFound" nie mówi tego wcale, a to najczęstsza pomyłka przy ręcznym
+            // wpisywaniu — stąd przycisk pobierający listę z konta.
+            throw new InvalidOperationException(
+                $"Google nie zna kalendarza „{source.ExternalId}”. To wygląda na nazwę, "
+                + "a potrzebny jest identyfikator — użyj przycisku „Pobierz moje kalendarze”.");
+        }
+    }
+
+    /// <summary>
+    /// Kalendarze widoczne na koncie.
+    /// </summary>
+    /// <remarks>
+    /// Istnieje po to, żeby nikt nie musiał przepisywać identyfikatorów z ustawień
+    /// Google. Pierwsza wersja ekranu kazała je wpisywać ręcznie i skończyło się
+    /// pięcioma kalendarzami dodanymi po nazwie — czyli pięcioma błędami 404 z rzędu.
+    /// </remarks>
+    public async Task<IReadOnlyList<GoogleCalendarInfo>> ListAsync(CancellationToken ct = default)
+    {
+        await PolaczAsync(ct);
+
+        var odpowiedz = await _usluga!.CalendarList.List().ExecuteAsync(ct);
+
+        return (odpowiedz.Items ?? [])
+            .Where(k => !string.IsNullOrWhiteSpace(k.Id))
+            .Select(k => new GoogleCalendarInfo(
+                k.Id,
+                string.IsNullOrWhiteSpace(k.Summary) ? k.Id : k.Summary))
+            .OrderBy(k => k.Name, StringComparer.CurrentCulture)
+            .ToArray();
     }
 
     private async Task<GoogleCalendarFeed> PolaczAsync(CancellationToken ct)

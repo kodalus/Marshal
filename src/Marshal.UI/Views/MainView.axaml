@@ -9,6 +9,7 @@
              xmlns:sys="using:System"
              xmlns:dn="using:Marshal.Domain.Notes"
              xmlns:dc="using:Marshal.Domain.Calendar"
+             xmlns:cal="using:Marshal.Infrastructure.Calendar"
              xmlns:df="using:Marshal.Domain.Filters"
              x:Class="Marshal.UI.Views.MainView"
              x:DataType="vm:MainViewModel">
@@ -981,16 +982,31 @@
         </ItemsControl>
 
         <TextBlock Classes="label" Margin="0,12,0,0" Text="Dodaj kalendarz Google" />
-        <Grid ColumnDefinitions="*,*,Auto">
-          <TextBox Grid.Column="0" Margin="0,0,6,0" Text="{Binding NewGoogleCalendarId}"
-                   Watermark="primary" />
-          <TextBox Grid.Column="1" Margin="0,0,6,0" Text="{Binding NewGoogleCalendarName}"
-                   Watermark="Nazwa" />
-          <Button Grid.Column="2" Content="Dodaj" Padding="12,8"
-                  Command="{Binding AddGoogleCalendarCommand}" />
-        </Grid>
+        <Button Classes="nav" Padding="14,10"
+                Command="{Binding LoadGoogleCalendarsCommand}"
+                Content="Pobierz moje kalendarze" />
+        <!-- Lista z konta, nie pole na identyfikator. Wpisywanie ręczne kończy się
+             kalendarzami dodanymi po nazwie i błędem 404 przy każdym odświeżeniu:
+             „Praca" jest nazwą, a Google chce abc@group.calendar.google.com. -->
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
-                   Text="„primary” to Twój główny kalendarz. Inne dodaje się wklejając ich identyfikator z ustawień kalendarza Google. Wymaga zaznaczonego pola wyżej i ponownej zgody." />
+                   Text="Wymaga zaznaczonego pola wyżej i zgody obejmującej kalendarz." />
+
+        <ItemsControl ItemsSource="{Binding AvailableGoogleCalendars}" Margin="0,6,0,0"
+                      IsVisible="{Binding HasAvailableGoogleCalendars}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="cal:GoogleCalendarInfo">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                  <TextBlock Classes="hint" Text="{Binding Id}" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Podłącz" Padding="10,4" VerticalAlignment="Center"
+                        Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).AddGoogleCalendarCommand}"
+                        CommandParameter="{Binding}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <TextBlock Classes="label" Margin="0,12,0,0" Text="Dodaj kanał iCal" />
         <Grid ColumnDefinitions="*,*,Auto">
