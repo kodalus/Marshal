@@ -210,6 +210,51 @@ public sealed class PrzezCalaTraseTests : IDisposable
         main.FocusCandidates.Should().Contain(w => w.Task.Id == zadanie.Id);
     }
 
+    /// <summary>
+    /// Obszar da się założyć, przemianować i usunąć — ale tylko pusty.
+    /// </summary>
+    /// <remarks>
+    /// Podział odpowiedzialności jest rzeczą osobistą i zmienia się w życiu. Zasiana
+    /// dziesiątka jest punktem wyjścia, a nie zestawem, w który trzeba się wcisnąć.
+    /// Usunięcie obszaru z zawartością nie ma dobrej odpowiedzi: każde zadanie musi
+    /// należeć do obszaru (N11), więc skasowanie zostawiłoby sieroty.
+    /// </remarks>
+    [Fact]
+    public async Task Obszar_da_sie_zalozyc_przemianowac_i_usunac_gdy_pusty()
+    {
+        var main = Usluga<MainViewModel>();
+
+        main.NewAreaName = "Rodzina";
+        await main.AddAreaCommand.ExecuteAsync(null);
+
+        main.NewAreaName.Should().BeEmpty("pole ma się opróżnić po dodaniu");
+        var dodany = main.BalanceRows.Should().ContainSingle(w => w.Name == "Rodzina").Which;
+
+        await main.RenameAreaAsync(dodany.AreaId, "Rodzina i dom");
+        main.BalanceRows.Should().ContainSingle(w => w.Name == "Rodzina i dom");
+
+        // Z zadaniem w środku usunięcie ma odmówić i powiedzieć dlaczego.
+        var zadania = Usluga<ITaskRepository>();
+        var hlc = Usluga<IHlcSource>();
+        var zegar = Usluga<IClock>();
+
+        var zadanie = TaskItem.Capture("Zakupy", zegar.Now, hlc.Next());
+        zadanie.MakeNext(dodany.AreaId, hlc.Next());
+        zadania.Add(zadanie);
+        await Usluga<IUnitOfWork>().SaveChangesAsync();
+
+        await main.DeleteAreaAsync(dodany.AreaId);
+        main.Notice.Should().Contain("zadania");
+        main.BalanceRows.Should().ContainSingle(w => w.AreaId == dodany.AreaId);
+
+        // Po opróżnieniu — usuwa się i znika z tabeli.
+        await main.TrashTaskAsync(zadanie);
+        await main.DeleteAreaAsync(dodany.AreaId);
+
+        main.Notice.Should().BeEmpty();
+        main.BalanceRows.Should().NotContain(w => w.AreaId == dodany.AreaId);
+    }
+
     [Fact]
     public async Task Data_nadana_wrzutowi_nie_ginie_po_drodze()
     {

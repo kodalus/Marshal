@@ -413,6 +413,14 @@ public partial class MainView : UserControl
             return;
         }
 
+        if (Obszar(zrodlo) is { } obszar)
+        {
+            e.Handled = true;
+            _ = Probuj("Menu: obszar", () => PokazMenuObszaruAsync(model, zrodlo, obszar));
+
+            return;
+        }
+
         if (Wiersz(zrodlo) is { } wiersz)
         {
             e.Handled = true;
@@ -506,6 +514,80 @@ public partial class MainView : UserControl
         };
 
         menu.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    /// <summary>Wiersz tabeli równowagi spod wskaźnika.</summary>
+    private static AreaBalance? Obszar(Control zrodlo) =>
+        zrodlo.GetSelfAndVisualAncestors()
+            .OfType<Control>()
+            .Select(k => k.DataContext)
+            .OfType<AreaBalance>()
+            .FirstOrDefault();
+
+    /// <summary>
+    /// Menu obszaru: nazwa i usunięcie.
+    /// </summary>
+    /// <remarks>
+    /// Powód odmowy sprawdzany przed pokazaniem menu, tak samo jak przy projekcie:
+    /// pozycja, która po kliknięciu nic nie robi, uczy nieufności do całego menu.
+    /// </remarks>
+    private async Task PokazMenuObszaruAsync(MainViewModel model, Control zrodlo, AreaBalance obszar)
+    {
+        var przeszkoda = await model.WhyCannotDeleteAreaAsync(obszar.AreaId);
+
+        var pozycje = new List<object>
+        {
+            Pozycja("Zmień nazwę…", () =>
+            {
+                PokazZmianeNazwy(model, zrodlo, obszar);
+                return Task.CompletedTask;
+            }),
+            new Separator(),
+            przeszkoda is null
+                ? Pozycja("Usuń obszar", () => model.DeleteAreaAsync(obszar.AreaId))
+                : new MenuItem { Header = przeszkoda, IsEnabled = false },
+        };
+
+        new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Zmiana nazwy obszaru w małym okienku przy wierszu.
+    /// </summary>
+    /// <remarks>
+    /// Pole wprost na liście byłoby czwartą rzeczą w wierszu, który już niesie nazwę
+    /// i dwie liczby — a nazwę zmienia się raz na parę miesięcy. Enter zapisuje,
+    /// bo po wpisaniu nazwy ręka i tak tam idzie.
+    /// </remarks>
+    private void PokazZmianeNazwy(MainViewModel model, Control zrodlo, AreaBalance obszar)
+    {
+        var pole = new TextBox { Text = obszar.Name, Width = 240 };
+        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        void Zapisz()
+        {
+            var nazwa = pole.Text ?? string.Empty;
+            flyout.Hide();
+            _ = Probuj("Obszar: nazwa", () => model.RenameAreaAsync(obszar.AreaId, nazwa));
+        }
+
+        pole.KeyDown += (_, args) =>
+        {
+            if (args.Key == Key.Enter)
+            {
+                args.Handled = true;
+                Zapisz();
+            }
+        };
+
+        var zapisz = new Button { Content = "Zapisz", Padding = new Thickness(14, 6) };
+        zapisz.Click += (_, _) => Zapisz();
+
+        flyout.Content = new StackPanel { Spacing = 8, Children = { pole, zapisz } };
+        flyout.ShowAt(zrodlo);
+
+        pole.Focus();
+        pole.SelectAll();
     }
 
     /// <summary>Wiersz ekranu „Projekty” spod wskaźnika.</summary>

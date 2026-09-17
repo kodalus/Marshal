@@ -49,7 +49,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly InAppNotifier _notifier;
     private readonly IActivityLog _dziennik;
     private readonly NoteService _notes;
-    private readonly ProjectEditService _projectEdit;
+    private readonly StructureEditService _szkielet;
 
     public MainViewModel(
         InboxService inbox,
@@ -72,10 +72,10 @@ public sealed partial class MainViewModel : ObservableObject
         JournalViewModel journal,
         IActivityLog dziennik,
         NoteService noteService,
-        ProjectEditService projectEdit)
+        StructureEditService szkielet)
     {
         _inbox = inbox;
-        _projectEdit = projectEdit;
+        _szkielet = szkielet;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -934,6 +934,56 @@ public sealed partial class MainViewModel : ObservableObject
         await ReloadAsync();
     }
 
+    /// <summary>Nazwa zakładanego obszaru — pole na ekranie „Obszary".</summary>
+    [ObservableProperty]
+    public partial string NewAreaName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Nowy obszar.
+    /// </summary>
+    /// <remarks>
+    /// Obszarów nie dawało się dotąd ani założyć, ani usunąć — była tylko dziesiątka
+    /// zasiana przy pierwszym uruchomieniu. Podział odpowiedzialności jest rzeczą
+    /// osobistą i zmienia się w życiu; lista, której nie da się ruszyć, zmusza do
+    /// wciskania własnego życia w cudzy podział.
+    /// </remarks>
+    [RelayCommand]
+    public async Task AddAreaAsync()
+    {
+        var nazwa = NewAreaName.Trim();
+
+        if (nazwa.Length == 0)
+        {
+            return;
+        }
+
+        await _szkielet.AddAreaAsync(nazwa);
+        NewAreaName = string.Empty;
+        Notice = string.Empty;
+        await ShowAreasAsync();
+    }
+
+    public async Task RenameAreaAsync(Guid areaId, string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        await _szkielet.RenameAreaAsync(areaId, name.Trim());
+        await ShowAreasAsync();
+    }
+
+    public async Task DeleteAreaAsync(Guid areaId)
+    {
+        Notice = await _szkielet.DeleteAreaAsync(areaId) ?? string.Empty;
+        await ShowAreasAsync();
+    }
+
+    /// <summary>Czy ten obszar da się usunąć — menu ma nie proponować rzeczy bez skutku.</summary>
+    public Task<string?> WhyCannotDeleteAreaAsync(Guid areaId) =>
+        _szkielet.WhyCannotDeleteAreaAsync(areaId);
+
     /// <summary>Barwa wiersza z ekranu „Projekty" — obszaru albo projektu.</summary>
     public async Task SetRowColorAsync(ProjectTreeRow row, string? color)
     {
@@ -941,11 +991,11 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (row.IsArea)
         {
-            await _projectEdit.SetAreaColorAsync(row.Id, color);
+            await _szkielet.SetAreaColorAsync(row.Id, color);
         }
         else
         {
-            await _projectEdit.SetProjectColorAsync(row.Id, color);
+            await _szkielet.SetProjectColorAsync(row.Id, color);
         }
 
         Notice = string.Empty;
@@ -966,7 +1016,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        Notice = await _projectEdit.DeleteProjectAsync(row.Id) ?? string.Empty;
+        Notice = await _szkielet.DeleteProjectAsync(row.Id) ?? string.Empty;
         await ShowProjectsAsync();
     }
 
@@ -977,7 +1027,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         return row.IsArea
             ? "Obszaru nie usuwa się stąd."
-            : await _projectEdit.WhyCannotDeleteAsync(row.Id);
+            : await _szkielet.WhyCannotDeleteAsync(row.Id);
     }
 
     public async Task ToNoteAsync(TaskItem task)

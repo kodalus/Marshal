@@ -1450,7 +1450,21 @@
       <!-- Barwy mają jedno miejsce, a nie dwa: na „Projektach" widać obszar razem z tym,
            co pod nim wisi, więc od razu widać, co dany kolor zabarwi. -->
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" TextWrapping="Wrap"
-                 Text="Barwę obszaru ustawia się na ekranie „Projekty” — kwadracikiem przy jego nazwie. Schodzi stamtąd na projekty i zadania." />
+                 Text="Barwę obszaru ustawia się na ekranie „Projekty” — kwadracikiem przy jego nazwie. Schodzi stamtąd na projekty i zadania. Prawy przycisk na wierszu zmienia nazwę albo usuwa pusty obszar." />
+
+      <!-- Zakładanie obszaru. Podział odpowiedzialności jest rzeczą osobistą i zmienia
+           się w życiu; zasiana dziesiątka jest punktem wyjścia, a nie zestawem, w który
+           trzeba się wcisnąć. -->
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+        <TextBox Grid.Column="0" Text="{Binding NewAreaName}"
+                 Watermark="Nowy obszar — na przykład „Rodzina”">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding AddAreaCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+        <Button Grid.Column="1" Margin="8,0,0,0" Padding="14,10"
+                Command="{Binding AddAreaCommand}" Content="Dodaj" />
+      </Grid>
       <ListBox ItemsSource="{Binding BalanceRows}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="rev:AreaBalance">
