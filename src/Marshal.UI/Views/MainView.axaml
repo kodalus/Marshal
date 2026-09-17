@@ -1331,7 +1331,7 @@
               <!-- Kwadracik barwy jest przyciskiem: barwę ustawia się tam, gdzie się ją
                    widzi. Osobny ekran ustawień kolorów znaczyłby, że po każdej zmianie
                    trzeba wrócić tutaj, żeby sprawdzić, co z tego wyszło. -->
-              <Border Name="Barwa" Width="14" Height="14" CornerRadius="3"
+              <Border Width="14" Height="14" CornerRadius="3"
                       VerticalAlignment="Center" Cursor="Hand"
                       Background="{Binding Swatch}"
                       BorderThickness="1" BorderBrush="#40808080"
@@ -1348,8 +1348,12 @@
 
     <!-- Obszary: tabela równowagi (8.5) plus progi -->
     <DockPanel IsVisible="{Binding IsAreas}">
-      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" TextWrapping="Wrap"
                  Text="Równowaga nie znaczy równy rozkład. Trzy miesiące w jednym obszarze bywają prawidłową decyzją — tabela ma pokazać, że zapadła." />
+      <!-- Barwy mają jedno miejsce, a nie dwa: na „Projektach" widać obszar razem z tym,
+           co pod nim wisi, więc od razu widać, co dany kolor zabarwi. -->
+      <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8" TextWrapping="Wrap"
+                 Text="Barwę obszaru ustawia się na ekranie „Projekty” — kwadracikiem przy jego nazwie. Schodzi stamtąd na projekty i zadania." />
       <ListBox ItemsSource="{Binding BalanceRows}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="rev:AreaBalance">
