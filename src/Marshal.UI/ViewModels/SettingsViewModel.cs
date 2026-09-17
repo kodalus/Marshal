@@ -117,10 +117,13 @@ public sealed partial class SettingsViewModel : ObservableObject
             await _backup.ExportAsync(strumien);
             Status = $"Zapisane do {nazwa}.";
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        catch (Exception e)
         {
-            // Treść wyjątku, nie „coś poszło nie tak": przy kopii zapasowej cicha
-            // porażka jest gorsza niż brak kopii, bo zostawia przekonanie, że jest.
+            // Łapane szeroko **celowo**. Polecenie wołane jest bez oczekiwania na wynik,
+            // więc wyjątek, którego tu nie złapiemy, nie ma dokąd trafić: przycisk
+            // wygląda na kliknięty, pliku nie ma i nikt się o tym nie dowie. Przy kopii
+            // zapasowej cicha porażka jest gorsza niż brak kopii, bo zostawia
+            // przekonanie, że kopia jest. Treść wyjątku, nie „coś poszło nie tak".
             Status = $"Nie udało się zapisać: {e.Message}";
         }
     }
@@ -151,10 +154,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
             Imported?.Invoke(this, EventArgs.Empty);
         }
-        catch (Exception e) when (e is IOException or InvalidDataException
-                                  or System.Text.Json.JsonException)
+        catch (Exception e)
         {
-            Status = $"To nie wygląda na kopię Marshala: {e.Message}";
+            // Jak wyżej. Wgranie jest w transakcji, więc baza została w stanie sprzed
+            // próby — komunikat jest jedyną rzeczą, której brakuje.
+            Status = $"Nie udało się wczytać: {e.Message}";
         }
     }
 

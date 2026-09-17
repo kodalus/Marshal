@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Marshal.Application;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
@@ -36,6 +37,8 @@ public sealed partial class FiltersViewModel : ObservableObject
 
     /// <summary>Wstrzymuje przeliczanie na czas wypełniania pól z zapisanego widoku.</summary>
     private bool _wczytywanie;
+
+    private readonly LatestOnly _kolejka = new();
 
     public FiltersViewModel(
         FilterService filters,
@@ -113,6 +116,12 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// <summary>Identyfikator otwartego Ulubionego albo pusty, gdy filtr jest doraźny.</summary>
     [ObservableProperty]
     public partial Guid OpenId { get; set; }
+
+    /// <summary>Jedno zdanie, gdy jest co powiedzieć. Pusty przez większość czasu.</summary>
+    [ObservableProperty]
+    public partial string Status { get; set; } = string.Empty;
+
+    public bool HasStatus => Status.Length > 0;
 
     public bool HasResults => Results.Count > 0;
 
@@ -211,14 +220,14 @@ public sealed partial class FiltersViewModel : ObservableObject
         return new FilterQuery(warunki);
     }
 
+    /// <summary>
+    /// Przeliczenie wyników. Jeden przebieg naraz — zob. <see cref="LatestOnly"/>.
+    /// </summary>
     [RelayCommand]
-    private async Task RunAsync()
-    {
-        if (_wczytywanie)
-        {
-            return;
-        }
+    private Task RunAsync() => _wczytywanie ? Task.CompletedTask : _kolejka.RunAsync(WykonajAsync);
 
+    private async Task WykonajAsync()
+    {
         var dzis = _clock.Today;
 
         Results.Clear();
@@ -236,10 +245,23 @@ public sealed partial class FiltersViewModel : ObservableObject
     [RelayCommand]
     private async Task OpenAsync(SavedFilter? filter)
     {
-        if (filter?.Query is not { } zapytanie)
+        if (filter is null)
         {
             return;
         }
+
+        if (filter.Query is not { } zapytanie)
+        {
+            // Widok zapisany w wersji, której ta nie rozumie. Zostaje w Ulubionych
+            // z nazwą — ale kliknięcie musi powiedzieć, dlaczego nic się nie stało,
+            // inaczej ekran wygląda na zepsuty.
+            Status = $"„{filter.Name}" zapisano w postaci, której ta wersja nie czyta. Ułóż go na nowo.";
+            OnPropertyChanged(nameof(HasStatus));
+            return;
+        }
+
+        Status = string.Empty;
+        OnPropertyChanged(nameof(HasStatus));
 
         _wczytywanie = true;
 

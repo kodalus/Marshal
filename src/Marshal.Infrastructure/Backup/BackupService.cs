@@ -63,29 +63,63 @@ public sealed class BackupService(MarshalDbContext db, IHlcSource hlc, IClock cl
         // wskrzeszając na drugim urządzeniu rzeczy skasowane po zrobieniu kopii.
         using var zakres = SyncScope.Begin();
 
-        if (mode == ImportMode.Replace)
-        {
-            await ClearAsync(ct);
-        }
+        // Wszystko albo nic. Podmiana całości czyści tabele **przed** wgraniem, więc
+        // bez transakcji błąd w połowie zostawiłby bazę pustą i nieodtworzoną —
+        // odtwarzanie kopii jest ostatnią rzeczą, która ma prawo kasować dane.
+        await using var transakcja = await db.Database.BeginTransactionAsync(ct);
 
-        var applier = new ChangeApplier(db, hlc);
-        var nalozone = 0;
-
-        foreach (var wiersz in plik.Lines)
+        try
         {
-            if (applier.Apply(wiersz))
+            if (mode == ImportMode.Replace)
             {
-                nalozone++;
+                // Pusty plik przy podmianie to prawie na pewno pomyłka, a podmiana
+                // jest jedyną operacją w aplikacji, która kasuje dane naprawdę.
+                // Kto chce zacząć od zera, odinstalowuje aplikację.
+                if (plik.Lines.Count == 0)
+                {
+                    throw new InvalidDataException(
+                        "Kopia nie zawiera żadnych wpisów — podmiana wyczyściłaby bazę i nie wgrała nic.");
+                }
+
+                await ClearAsync(ct);
             }
+
+            var applier = new ChangeApplier(db, hlc);
+            var nalozone = 0;
+
+            foreach (var wiersz in plik.Lines)
+            {
+                if (applier.Apply(wiersz))
+                {
+                    nalozone++;
+                }
+            }
+
+            // Nierozpoznane tabele — plik z innej wersji albo z innej aplikacji —
+            // scalanie pomija po cichu i słusznie. Przy podmianie to samo pominięcie
+            // znaczy bazę wyczyszczoną i nieodtworzoną, więc tu musi być błędem.
+            if (mode == ImportMode.Replace && nalozone == 0)
+            {
+                throw new InvalidDataException(
+                    $"Z {plik.Lines.Count} wpisów nie dało się wczytać żadnego — to nie wygląda na kopię Marshala.");
+            }
+
+            // Scalanie podnosi zegar lokalny ponad znaczniki z pliku — tak samo jak
+            // przy synchronizacji, i z tego samego powodu (spec 9.6).
+            LastHlcStore.Stage(db, hlc.Last);
+
+            await db.SaveChangesAsync(ct);
+            await transakcja.CommitAsync(ct);
+
+            return new ImportReport(plik.Lines.Count, nalozone, plik.Lines.Count - nalozone);
         }
-
-        // Scalanie podnosi zegar lokalny ponad znaczniki z pliku — tak samo jak
-        // przy synchronizacji, i z tego samego powodu (spec 9.6).
-        LastHlcStore.Stage(db, hlc.Last);
-
-        await db.SaveChangesAsync(ct);
-
-        return new ImportReport(plik.Lines.Count, nalozone, plik.Lines.Count - nalozone);
+        catch
+        {
+            // Wycofanie cofa bazę, ale nie śledzenie zmian: zostałyby w nim obiekty,
+            // których w bazie już nie ma, i następny zapis próbowałby je dodać.
+            db.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     /// <summary>
@@ -128,8 +162,16 @@ public sealed class BackupService(MarshalDbContext db, IHlcSource hlc, IClock cl
                 foreach (var grupa in wlasciwosci
                     .Select(p => (
                         Pole: p.Name,
-                        Hlc: znaczniki.GetValueOrDefault((encja.Id, p.Name), domyslny),
+                        Hlc: znaczniki.GetValueOrDefault((encja.Id, p.Name)),
                         Wartosc: Encode(wpis, p.Name)))
+
+                    // Pole bez znacznika i bez wartości nigdy nie było ustawione —
+                    // dziennik pomija puste przy zakładaniu rekordu. Wypisane w kopii
+                    // byłoby jawnym „wyczyść to", opatrzonym znacznikiem całej encji,
+                    // i potrafiłoby skasować wartość nadaną w międzyczasie na drugim
+                    // urządzeniu. Brak wiedzy o polu nie jest wiedzą, że jest puste.
+                    .Where(x => x.Hlc is not null || x.Wartosc is not null)
+                    .Select(x => (x.Pole, Hlc: x.Hlc ?? domyslny, x.Wartosc))
                     .GroupBy(x => x.Hlc)
                     .OrderBy(g => g.Key, StringComparer.Ordinal))
                 {

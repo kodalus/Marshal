@@ -32,7 +32,7 @@ public sealed class SavedFilter : Entity
         Name = Normalize(name);
         DefinitionJson = query.ToJson();
         _query = query;
-        _parsed = true;
+        _queryFor = DefinitionJson;
     }
 
     public static SavedFilter Create(string name, FilterQuery query, DateTimeOffset now, Hlc stamp)
@@ -61,17 +61,24 @@ public sealed class SavedFilter : Entity
     /// Warunki albo <c>null</c>, gdy zapis okazał się nieczytelny.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Zapis nieczytelny nie kasuje widoku. Nazwa zostaje widoczna, więc wiadomo, co
     /// przepadło i co ułożyć na nowo — w odróżnieniu od pozycji, która znika bez słowa.
+    /// </para>
+    /// <para>
+    /// Odczyt zapamiętany pod tekstem, z którego powstał — z tego samego powodu co
+    /// przy regule powtarzania (zob. <see cref="Tasks.TaskItem.Recurrence"/>): scalanie
+    /// i wgranie kopii wpisują wartość wprost, omijając <see cref="SetQuery"/>.
+    /// </para>
     /// </remarks>
     public FilterQuery? Query
     {
         get
         {
-            if (!_parsed)
+            if (_queryFor != DefinitionJson)
             {
                 _query = FilterQuery.FromJson(DefinitionJson);
-                _parsed = true;
+                _queryFor = DefinitionJson;
             }
 
             return _query;
@@ -80,7 +87,8 @@ public sealed class SavedFilter : Entity
 
     private FilterQuery? _query;
 
-    private bool _parsed;
+    /// <summary>Tekst, dla którego <see cref="_query"/> jest aktualne.</summary>
+    private string? _queryFor;
 
     public void Rename(string name, Hlc stamp)
     {
@@ -99,7 +107,7 @@ public sealed class SavedFilter : Entity
 
         DefinitionJson = query.ToJson();
         _query = query;
-        _parsed = true;
+        _queryFor = DefinitionJson;
         Touch(stamp);
     }
 

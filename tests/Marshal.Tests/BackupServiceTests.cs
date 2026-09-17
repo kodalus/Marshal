@@ -274,5 +274,109 @@ public sealed class BackupServiceTests : IDisposable
         await wgranie.Should().ThrowAsync<Exception>();
     }
 
+    [Fact]
+    public async Task Pole_nigdy_nieustawione_nie_jedzie_w_kopii_jako_wyczyszczenie()
+    {
+        // Dziennik pomija puste pola przy zakładaniu rekordu, więc nie mają znacznika.
+        // Gdyby kopia wypisywała je mimo to, byłyby jawnym „wyczyść to" ze znacznikiem
+        // całej encji — i skasowałyby wartość nadaną w międzyczasie gdzie indziej.
+        var obszar = Obszar(_biurko, "Dom");
+        var zadanie = Zadanie(_biurko, "kupić mleko", obszar);
+
+        var plik = await EksportAsync(_biurko.Kopia);
+
+        // Drugie urządzenie nadaje termin — czyli coś, czego oryginał nigdy nie miał.
+        using var telefon = new Baza("telefon", _zegar).Otworz();
+        await telefon.Kopia.ImportAsync(Plik(plik), ImportMode.Merge);
+
+        _zegar.Now = _zegar.Now.AddHours(1);
+        var uNich = telefon.Db.Tasks.Single(z => z.Id == zadanie.Id);
+        uNich.SetDeadline(new DateOnly(2026, 10, 1), telefon.Hlc.Next());
+        await telefon.Db.SaveChangesAsync();
+
+        // Ta sama, stara kopia wgrana jeszcze raz nie ma prawa go zdjąć.
+        await telefon.Kopia.ImportAsync(Plik(plik), ImportMode.Merge);
+
+        telefon.Db.Tasks.Single(z => z.Id == zadanie.Id)
+            .Deadline.Should().Be(new DateOnly(2026, 10, 1));
+    }
+
+    [Fact]
+    public async Task Uszkodzona_wartosc_pomija_pole_a_nie_wywraca_wgrywania()
+    {
+        var obszar = Obszar(_biurko, "Dom");
+        Zadanie(_biurko, "kupić mleko", obszar);
+
+        var tekst = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia));
+
+        // Liczba przesunięć przestawiona na tekst, którego nie da się wczytać w liczbę.
+        var zepsuty = tekst.Replace("\"RollCount\": 0", "\"RollCount\": \"nie liczba\"");
+        zepsuty.Should().NotBe(tekst, "podmiana miała trafić w plik");
+
+        using var telefon = new Baza("telefon", _zegar).Otworz();
+        var raport = await telefon.Kopia.ImportAsync(
+            Plik(Encoding.UTF8.GetBytes(zepsuty)), ImportMode.Merge);
+
+        // Reszta rekordu wchodzi. Jedna zła wartość nie może blokować wszystkiego,
+        // co przyszło po niej.
+        raport.Applied.Should().BeGreaterThan(0);
+        telefon.Db.Tasks.Single().Title.Should().Be("kupić mleko");
+    }
+
+    [Fact]
+    public async Task Nieudane_wgranie_z_podmiana_zostawia_baze_taka_jak_byla()
+    {
+        // Podmiana czyści tabele przed wgraniem. Bez transakcji błąd w połowie
+        // zostawiłby bazę pustą i nieodtworzoną.
+        Zadanie(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+
+        var plik = await EksportAsync(_biurko.Kopia);
+
+        // Tytuł wyzerowany: plik jest poprawnym JSON-em i wgrywa się bez szemrania,
+        // a wywraca się dopiero na zapisie, bo kolumna jest wymagana.
+        var tekst = Encoding.UTF8.GetString(plik).Replace("\"to ma zostać\"", "null");
+        tekst.Should().NotBe(Encoding.UTF8.GetString(plik), "podmiana miała trafić w plik");
+
+        var wgranie = async () => await _biurko.Kopia.ImportAsync(
+            Plik(Encoding.UTF8.GetBytes(tekst)), ImportMode.Replace);
+
+        await wgranie.Should().ThrowAsync<Exception>();
+
+        _biurko.Db.Tasks.Should().ContainSingle().Which.Title.Should().Be("to ma zostać");
+    }
+
+    [Fact]
+    public async Task Podmiana_z_pliku_bez_wpisow_jest_odrzucana()
+    {
+        Zadanie(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+
+        var pusty = Encoding.UTF8.GetBytes(
+            """{"wersja":1,"utworzono":"2026-09-17T09:00:00+02:00","urzadzenie":"skads","wiersze":[]}""");
+
+        var wgranie = async () => await _biurko.Kopia.ImportAsync(Plik(pusty), ImportMode.Replace);
+        await wgranie.Should().ThrowAsync<InvalidDataException>();
+
+        _biurko.Db.Tasks.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Podmiana_z_pliku_o_nieznanych_tabelach_jest_odrzucana()
+    {
+        // Pominięcie nieznanej tabeli jest przy scalaniu słuszne, ale przy podmianie
+        // znaczyłoby bazę wyczyszczoną i nieodtworzoną — po cichu.
+        Zadanie(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+
+        var tekst = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia))
+            .Replace("\"e\": \"", "\"e\": \"Obce");
+
+        var wgranie = async () => await _biurko.Kopia.ImportAsync(
+            Plik(Encoding.UTF8.GetBytes(tekst)), ImportMode.Replace);
+
+        await wgranie.Should().ThrowAsync<InvalidDataException>();
+
+        _biurko.Db.ChangeTracker.Clear();
+        _biurko.Db.Tasks.Should().ContainSingle().Which.Title.Should().Be("to ma zostać");
+    }
+
     public void Dispose() => _biurko.Dispose();
 }

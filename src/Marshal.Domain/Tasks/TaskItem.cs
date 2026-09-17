@@ -168,14 +168,25 @@ public sealed class TaskItem : Entity
     /// puszczone dwa razy nie zrobi dwóch kopii. Bez tego <see cref="OnMissed.Accumulate"/>
     /// produkowałby po jednej pozycji na każde uruchomienie.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// Odczyt zapamiętany **pod tekstem, z którego powstał**, a nie pod flagą „już
+    /// rozłożone". Flaga kłamie, gdy <see cref="RecurrenceJson"/> zmieni się z boku:
+    /// scalanie (spec 9.4) i wgranie kopii (12) wpisują wartość wprost do właściwości,
+    /// omijając <see cref="SetRecurrence"/>. Przy pojedynczym kontekście bazy zadanie
+    /// zostaje śledzone przez całe życie aplikacji, więc stara reguła wisiałaby
+    /// w pamięci do ponownego uruchomienia — a przejście dnia rodziłoby wystąpienia
+    /// w rytmie, który już nie obowiązuje.
+    /// </para>
+    /// </remarks>
     public RecurrenceRule? Recurrence
     {
         get
         {
-            if (!_recurrenceParsed)
+            if (_recurrenceFor != RecurrenceJson)
             {
                 _recurrence = RecurrenceRule.FromJson(RecurrenceJson);
-                _recurrenceParsed = true;
+                _recurrenceFor = RecurrenceJson;
             }
 
             return _recurrence;
@@ -199,7 +210,8 @@ public sealed class TaskItem : Entity
 
     private RecurrenceRule? _recurrence;
 
-    private bool _recurrenceParsed;
+    /// <summary>Tekst, dla którego <see cref="_recurrence"/> jest aktualne.</summary>
+    private string? _recurrenceFor;
 
     public void Rename(string title, Hlc stamp)
     {
@@ -286,7 +298,7 @@ public sealed class TaskItem : Entity
     {
         RecurrenceJson = rule?.ToJson();
         _recurrence = rule;
-        _recurrenceParsed = true;
+        _recurrenceFor = RecurrenceJson;
         Touch(stamp);
     }
 

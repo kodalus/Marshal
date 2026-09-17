@@ -78,7 +78,23 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
                 continue;
             }
 
-            wpis.Property(pole).CurrentValue = Decode(wartosc, wlasciwosc);
+            try
+            {
+                wpis.Property(pole).CurrentValue = Decode(wartosc, wlasciwosc);
+            }
+            catch (Exception e) when (e is JsonException or NotSupportedException
+                                      or InvalidCastException or FormatException
+                                      or ArgumentException)
+            {
+                // Wartość, której nie da się wczytać w typ kolumny: plik ucięty,
+                // uszkodzony albo z wersji, która trzymała to pole inaczej. Pomijamy
+                // **samo pole**, a nie cały wiersz i nie cały przebieg — tak samo jak
+                // przy nieczytelnej linii (zob. ChangeLine.TryParse). Przerwanie
+                // znaczyłoby, że jedna zła wartość blokuje wszystko, co przyszło po niej,
+                // a przy wgrywaniu kopii — że odtwarzanie wywraca się w połowie.
+                continue;
+            }
+
             Stamp(wiersz.Entity, id, pole, wiersz.Hlc);
             cokolwiek = true;
         }

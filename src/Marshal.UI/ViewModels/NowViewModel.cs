@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Marshal.Application;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Tasks;
 
@@ -45,6 +46,9 @@ public sealed record EnergyChoice(Energy Value, string Label)
 /// </remarks>
 public sealed partial class NowViewModel(NowService now, TaskEditService edit) : ObservableObject
 {
+    /// <summary>Czas i energia przełącza się obok siebie, a kontekst bazy jest jeden.</summary>
+    private readonly LatestOnly _kolejka = new();
+
     [ObservableProperty]
     public partial MinutesChoice SelectedMinutes { get; set; } = MinutesChoice.All[1];
 
@@ -86,7 +90,9 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
     }
 
     [RelayCommand]
-    private async Task RefreshAsync()
+    private Task RefreshAsync() => _kolejka.RunAsync(OdswiezAsync);
+
+    private async Task OdswiezAsync()
     {
         Unestimated = await now.UnestimatedCountAsync();
 

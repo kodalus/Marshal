@@ -788,6 +788,9 @@
           <TextBlock Classes="label" Text="Szukany tekst" />
           <TextBox Text="{Binding Text}" Watermark="W tytule albo w notatce zadania" />
 
+          <TextBlock Classes="hint" Margin="2,10,0,0" TextWrapping="Wrap"
+                     Text="{Binding Status}" IsVisible="{Binding HasStatus}" />
+
           <TextBlock Classes="label" Margin="0,18,0,0" Text="Wyniki" />
           <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding Empty}"
                      IsVisible="{Binding !HasResults}" />

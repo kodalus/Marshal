@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Marshal.Application;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Notes;
 using Marshal.Infrastructure.Notes;
@@ -18,6 +19,9 @@ namespace Marshal.UI.ViewModels;
 public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
 {
     private Guid _openId;
+
+    /// <summary>Szukanie rusza na każdy znak, a kontekst bazy jest jeden — zob. LatestOnly.</summary>
+    private readonly LatestOnly _kolejka = new();
 
     [ObservableProperty]
     public partial string Query { get; set; } = string.Empty;
@@ -50,7 +54,9 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
     public async Task LoadAsync() => await SearchAsync();
 
     [RelayCommand]
-    private async Task SearchAsync()
+    private Task SearchAsync() => _kolejka.RunAsync(SzukajAsync);
+
+    private async Task SzukajAsync()
     {
         Items.Clear();
         foreach (var notatka in await notes.SearchAsync(Query))
