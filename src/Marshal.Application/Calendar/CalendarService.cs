@@ -55,7 +55,7 @@ public sealed class CalendarSyncService(
         }
 
         var zrodlo = new CalendarSource(
-            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, externalId, name);
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, szukany, name);
 
         store.AddSource(zrodlo);
         await store.SaveChangesAsync(ct);
