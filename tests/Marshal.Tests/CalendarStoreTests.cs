@@ -551,6 +551,9 @@ public sealed class CalendarStoreTests : IDisposable
         var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
         await model.LoadAsync();
 
+        // Jawnie trzy dni: widokiem domyślnym jest tydzień, a ten test mówi o dzieleniu
+        // szerokości, nie o tym, ile dni pokazujemy na starcie.
+        await model.ShowThreeDaysCommand.ExecuteAsync(null);
         model.SetAvailableWidth(900);
 
         model.ColumnWidth.Should().Be(300, "trzy dni z dziewięciuset punktów");
