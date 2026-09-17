@@ -169,6 +169,16 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Pięć slotów wyboru na dziś (spec 8.6).</summary>
     public ObservableCollection<TaskItem> FocusItems { get; } = [];
 
+    /// <summary>
+    /// Piątka na dziś, której nie ma jeszcze na siatce.
+    /// </summary>
+    /// <remarks>
+    /// Pasek nad kalendarzem ma przypominać o tym, czego **nie widać** poniżej.
+    /// Zadanie z godziną ma już swój blok, więc powtórzone w pasku byłoby drugą kopią
+    /// tej samej rzeczy — i to tą, która zabiera miejsce nad siatką.
+    /// </remarks>
+    public ObservableCollection<TaskItem> FocusOffGrid { get; } = [];
+
     /// <summary>Kandydaci do wyboru na dziś: „Następne" i zaplanowane na dziś lub wcześniej.</summary>
     public ObservableCollection<TaskRow> FocusCandidates { get; } = [];
 
@@ -436,9 +446,18 @@ public sealed partial class MainViewModel : ObservableObject
         var dzis = Today();
 
         FocusItems.Clear();
+        FocusOffGrid.Clear();
+
         foreach (var zadanie in await _focus.TodayAsync())
         {
             FocusItems.Add(zadanie);
+
+            // Bez godziny nie ma bloku na siatce, więc pasek nad kalendarzem jest
+            // jedynym miejscem, gdzie to zadanie w ogóle widać.
+            if (zadanie.DoTime is null && zadanie.State != TaskState.Done)
+            {
+                FocusOffGrid.Add(zadanie);
+            }
         }
 
         var wybrane = FocusItems.Select(t => t.Id).ToHashSet();

@@ -579,7 +579,8 @@
       </StackPanel>
 
       <ScrollViewer DataContext="{Binding Now}">
-        <ItemsControl ItemsSource="{Binding Picks}" x:DataType="vm:NowViewModel">
+        <ItemsControl ItemsSource="{Binding Picks}" x:DataType="vm:NowViewModel"
+                      DoubleTapped="OtworzZListy">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="uc:NowPick">
               <Border Margin="0,0,0,8" Padding="14,12" CornerRadius="8" Background="#18808080">
@@ -906,7 +907,7 @@
           <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                      TextWrapping="Wrap" Text="{Binding Empty}"
                      IsVisible="{Binding !HasItems}" />
-          <ListBox ItemsSource="{Binding Items}">
+          <ListBox ItemsSource="{Binding Items}" DoubleTapped="OtworzNotatke">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="dn:Note">
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
@@ -1530,7 +1531,7 @@
              przez aplikację byłby zgadywaniem, kiedy się na to zbierzesz. Ptaszek
              zapisuje blok wstecz — kończący się teraz, o długości oszacowania. -->
         <ItemsControl Margin="0,6,0,0"
-                      ItemsSource="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).FocusItems}">
+                      ItemsSource="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).FocusOffGrid}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <WrapPanel />

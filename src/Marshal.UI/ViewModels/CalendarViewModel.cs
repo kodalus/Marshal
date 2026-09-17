@@ -220,7 +220,14 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public double ColumnWidth => _doDyspozycji <= 0
         ? VisibleDays switch { 1 => 520, 3 => 240, _ => 130 }
-        : Math.Max(NajwezszaKolumna, _doDyspozycji / VisibleDays);
+
+        // Minus odstęp między kolumnami. Bez tego siedem kolumn zajmowało czternaście
+        // punktów więcej, niż okno miało — i pojawiał się poziomy pasek przewijania
+        // na rzecz, która o włos się nie mieści.
+        : Math.Max(NajwezszaKolumna, (_doDyspozycji / VisibleDays) - OdstepKolumny);
+
+    /// <summary>Odstęp między kolumnami dnia. Musi zgadzać się z marginesem w oknie.</summary>
+    private const double OdstepKolumny = 2;
 
     /// <summary>
     /// Nowa szerokość od okna. Przelicza siatkę, o ile zmiana cokolwiek znaczy.

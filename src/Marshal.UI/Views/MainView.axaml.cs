@@ -9,6 +9,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Notes;
 using Marshal.Domain.Tasks;
 using Marshal.UI.ViewModels;
 
@@ -31,10 +32,13 @@ public partial class MainView : UserControl
         InitializeComponent();
         DataContextChanged += (_, _) => WirePicker();
 
-        // Klawisze i kółko łapane w drodze w dół: inaczej kontrolka pod kursorem
-        // zjada zdarzenie, zanim okno zdąży cokolwiek z nim zrobić.
+        // Klawisze łapane w drodze w dół: inaczej kontrolka pod kursorem zjada
+        // zdarzenie, zanim okno zdąży cokolwiek z nim zrobić.
+        //
+        // Kółka **nie** łapiemy. Przekierowanie go do okna szczegółu odbierało obrót
+        // rozwiniętej liście godzin, czyli psuło wybieranie godziny — a zamknięte pole
+        // daty ani godziny kółka nie zjada, więc przewijanie okna działa samo.
         AddHandler(KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
-        AddHandler(PointerWheelChangedEvent, PrzewinSzczegol, RoutingStrategies.Tunnel);
         AddHandler(ContextRequestedEvent, NaMenu, RoutingStrategies.Bubble);
 
         // Układ dobierany z faktycznej szerokości, nie z platformy: obrót telefonu
@@ -368,52 +372,6 @@ public partial class MainView : UserControl
     }
 
     /// <summary>
-    /// Przewijanie okna szczegółu kółkiem, także nad polami daty i godziny.
-    /// </summary>
-    /// <remarks>
-    /// Pola daty i godziny zjadają obrót kółka na własne potrzeby, więc kursor nad nimi
-    /// zatrzymywał przewijanie całego okna — a są w środku listy, którą trzeba przewinąć.
-    /// Zdarzenie łapane w drodze **w dół**, zanim dojdzie do pola.
-    /// </remarks>
-    private void PrzewinSzczegol(object? nadawca, PointerWheelEventArgs e)
-    {
-        if (this.FindControl<ScrollViewer>("SzczegolPrzewijanie") is not { } widok)
-        {
-            return;
-        }
-
-        if (e.Source is not Control zrodlo)
-        {
-            return;
-        }
-
-        // Rozwinięta lista godzin albo dni przewija **siebie**. Poprzednia poprawka
-        // odbierała jej kółko i oddawała je oknu, więc wybieranie godziny przestało
-        // działać — naprawa jednego przewijania zepsuła drugie.
-        if (zrodlo.FindAncestorOfType<TimePickerPresenter>() is not null
-            || zrodlo.FindAncestorOfType<DatePickerPresenter>() is not null
-            || zrodlo.FindAncestorOfType<Popup>() is not null)
-        {
-            return;
-        }
-
-        if (zrodlo.FindAncestorOfType<TimePicker>() is null
-            && zrodlo.FindAncestorOfType<DatePicker>() is null
-            && zrodlo.FindAncestorOfType<NumericUpDown>() is null)
-        {
-            return;
-        }
-
-        widok.Offset = widok.Offset.WithY(
-            Math.Clamp(
-                widok.Offset.Y - (e.Delta.Y * 50),
-                0,
-                Math.Max(0, widok.Extent.Height - widok.Viewport.Height)));
-
-        e.Handled = true;
-    }
-
-    /// <summary>
     /// Menu podręczne pod prawym przyciskiem — na listach i na blokach kalendarza.
     /// </summary>
     /// <remarks>
@@ -556,23 +514,37 @@ public partial class MainView : UserControl
     /// </remarks>
     private void OtworzZListy(object? nadawca, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel model || nadawca is not ListBox lista)
+        if (DataContext is not MainViewModel model)
         {
             return;
         }
 
-        var zadanie = lista.SelectedItem switch
+        // Z zaznaczenia listy, a gdy go nie ma — z wiersza pod wskaźnikiem. Ekran
+        // „Teraz" nie jest listą do zaznaczania, tylko odpowiedzią na pytanie, więc
+        // jego wiersze nie mają zaznaczenia w ogóle.
+        var zadanie = (nadawca as ListBox)?.SelectedItem switch
         {
             TaskItem wprost => wprost,
             TaskRow wiersz => wiersz.Task,
             WaitingItem czekajace => czekajace.Task,
             NowPick wybor => wybor.Task,
-            _ => null,
+            _ => e.Source is Control zrodlo ? Zadanie(zrodlo) : null,
         };
 
         if (zadanie is not null)
         {
             _ = Probuj("Lista: otwarcie zadania", () => model.Detail.LoadAsync(zadanie));
+        }
+    }
+
+    /// <summary>Dwuklik na notatce otwiera ją do czytania i poprawiania.</summary>
+    private void OtworzNotatke(object? nadawca, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model
+            && nadawca is ListBox lista
+            && lista.SelectedItem is Note notatka)
+        {
+            model.Notes.OpenCommand.Execute(notatka);
         }
     }
 
