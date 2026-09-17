@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+  <!--
+    Przedrostek „android:" jest tu konieczny. Bez niego „windowActionBar" i „windowNoTitle"
+    są atrybutami AppCompatu, a motyw dziedziczy po motywie systemowym — atrybuty nie
+    pasują do rodzica, więc nie robią nic i pasek tytułu zostaje. Widać go było jako
+    napis „Marshal" zabierający górę ekranu, mimo nazwy motywu „NoActionBar".
+
+    Tło okna nie jest już wymuszane na jasne. Wymuszone dawało biały błysk przy każdym
+    starcie, także wtedy, gdy aplikacja i system chodzą w trybie ciemnym; motyw DayNight
+    dobiera je sam i wtedy jest zgodne z tym, co za chwilę narysuje Avalonia.
+  -->
   <style name="MyTheme.NoActionBar" parent="@android:style/Theme.DeviceDefault.DayNight">
-    <item name="windowActionBar">false</item>
-    <item name="windowNoTitle">true</item>
-    <item name="android:windowBackground">@android:color/background_light</item>
+    <item name="android:windowActionBar">false</item>
+    <item name="android:windowNoTitle">true</item>
   </style>
 </resources>

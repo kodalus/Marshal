@@ -7,10 +7,30 @@ namespace Marshal.UI.Views;
 
 public partial class MainView : UserControl
 {
+    /// <summary>
+    /// Szerokość, poniżej której nawigacja schodzi na dół.
+    /// </summary>
+    /// <remarks>
+    /// Telefon w pionie to około 360–430 jednostek, więc próg mógłby być niższy —
+    /// ale wąskie okno na pulpicie ma ten sam problem co telefon, a nie ma powodu,
+    /// żeby rozstrzygało o tym urządzenie zamiast miejsca, które faktycznie jest.
+    /// </remarks>
+    private const double WidokWaski = 720;
+
     public MainView()
     {
         InitializeComponent();
         DataContextChanged += (_, _) => WirePicker();
+
+        // Układ dobierany z faktycznej szerokości, nie z platformy: obrót telefonu
+        // i zwężenie okna to ta sama zmiana.
+        SizeChanged += (_, e) =>
+        {
+            if (DataContext is MainViewModel model)
+            {
+                model.IsNarrow = e.NewSize.Width < WidokWaski;
+            }
+        };
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
@@ -30,6 +50,10 @@ public partial class MainView : UserControl
         {
             return;
         }
+
+        // Pierwsze rozstrzygnięcie układu: zdarzenie rozmiaru potrafi wypaść przed
+        // podstawieniem modelu, a wtedy nie miałby go kto ustawić.
+        model.IsNarrow = Bounds.Width > 0 && Bounds.Width < WidokWaski;
 
         model.Settings.SaveRequested = async nazwa =>
         {

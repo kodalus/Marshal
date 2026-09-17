@@ -156,6 +156,36 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial Screen Current { get; set; } = Screen.Today;
 
+    /// <summary>
+    /// Czy okno jest wąskie — czyli czy to telefon albo wąskie okno na pulpicie.
+    /// </summary>
+    /// <remarks>
+    /// Piętnaście przycisków nawigacji zawiniętych w pięć rzędów zjada na telefonie
+    /// trzecią część ekranu, **zanim pojawi się cokolwiek treści**. Na pulpicie te same
+    /// przyciski mieszczą się w jednym rzędzie i są najszybszą drogą do każdego ekranu.
+    /// To nie jest jeden układ do poprawienia, tylko dwa różne układy do tej samej
+    /// nawigacji: szeroko — wszystko naraz, wąsko — cztery pod kciukiem i reszta
+    /// pod „Więcej".
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsNarrow { get; set; }
+
+    /// <summary>Rozwinięta lista pozostałych ekranów. Tylko przy wąskim oknie.</summary>
+    [ObservableProperty]
+    public partial bool IsMoreOpen { get; set; }
+
+    /// <summary>Nawigacja szeroka: wszystkie ekrany naraz.</summary>
+    public bool ShowWideNav => !IsClarify && !IsNarrow;
+
+    /// <summary>Pasek dolny: cztery pod kciukiem i „Więcej".</summary>
+    public bool ShowBottomNav => !IsClarify && IsNarrow;
+
+    /// <summary>
+    /// Wrzut jest dostępny z każdego ekranu poza przetwarzaniem: myśl przychodzi wtedy,
+    /// kiedy przychodzi, a nie wtedy, gdy akurat jesteś w skrzynce (spec 1.3).
+    /// </summary>
+    public bool ShowCapture => !IsClarify;
+
     [ObservableProperty]
     public partial int InboxCount { get; set; }
 
@@ -216,6 +246,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     public bool HasNudges => Nudges.Count > 0;
 
+    /// <summary>
+    /// Czy jest cokolwiek na dziś. Pusta lista ma powiedzieć, że jest pusto — nie
+    /// zostawić prostokąta, po którym nie wiadomo, czy to brak zadań, czy brak wczytania.
+    /// </summary>
+    public bool HasToday => TodayItems.Count > 0;
+
     public bool HasBlocked => BlockedProjects.Count > 0;
 
     public bool IsAreas => Current == Screen.Areas;
@@ -242,7 +278,28 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsReview));
         OnPropertyChanged(nameof(IsAreas));
         OnPropertyChanged(nameof(IsArchive));
+
+        // Wybranie czegokolwiek zamyka „Więcej". Lista, która zostaje otwarta nad
+        // wybranym ekranem, wymaga drugiego gestu na zamknięcie i uczy, że nawigacja
+        // to dwa kroki zamiast jednego.
+        IsMoreOpen = false;
+
+        OnPropertyChanged(nameof(ShowWideNav));
+        OnPropertyChanged(nameof(ShowBottomNav));
+        OnPropertyChanged(nameof(ShowCapture));
     }
+
+    partial void OnIsNarrowChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowWideNav));
+        OnPropertyChanged(nameof(ShowBottomNav));
+    }
+
+    [RelayCommand]
+    private void ToggleMore() => IsMoreOpen = !IsMoreOpen;
+
+    [RelayCommand]
+    private void CloseMore() => IsMoreOpen = false;
 
     public async Task InitializeAsync()
     {
@@ -516,6 +573,7 @@ public sealed partial class MainViewModel : ObservableObject
         Current = Screen.Today;
         var dzis = Today();
         await Fill(TodayItems, _tasks.TodayAsync(dzis));
+        OnPropertyChanged(nameof(HasToday));
         await RefreshFocusAsync();
 
         // Ponaglenia (N3) i projekty zablokowane (N1) idą na „Dzisiaj", bo są sprawami

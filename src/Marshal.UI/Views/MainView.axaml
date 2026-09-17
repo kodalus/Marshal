@@ -17,15 +17,39 @@
       <Setter Property="Margin" Value="0,0,8,0" />
       <Setter Property="Padding" Value="14,8" />
     </Style>
+    <!-- Pasek dolny: pole dotyku na całą szerokość kolumny i wysokość, w którą trafia
+         kciuk. Przycisk wielkości napisu jest na telefonie celem, nie przyciskiem. -->
+    <Style Selector="Button.tab">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="Padding" Value="4,12" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="FontSize" Value="13" />
+    </Style>
+    <Style Selector="Button.sheet">
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="Padding" Value="16,12" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
     <Style Selector="Button.branch">
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Left" />
       <Setter Property="Padding" Value="14,10" />
       <Setter Property="Margin" Value="0,0,0,6" />
     </Style>
+    <!-- Pusta lista nie ma rysować płyty. Domyślne tło listy przy braku pozycji daje
+         szary prostokąt na pół ekranu, po którym nie widać, czy jest pusto, czy się
+         nie wczytało. Dotyczy wszystkich list, nie tylko tej jednej. -->
+    <Style Selector="ListBox">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
     <Style Selector="TextBlock.hint">
       <Setter Property="Opacity" Value="0.55" />
       <Setter Property="FontSize" Value="12" />
+      <!-- Zawijanie w stylu, nie przy każdym użyciu. Na telefonie każde podpowiedziane
+           zdanie bez tego urywa się w połowie, a jest ich w tym pliku trzydzieści. -->
+      <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <!-- Etykiety stanu bez czerwieni i bez wykrzykników: „przesunięte 4 razy" jest
          informacją, a ta sama liczba na czerwono jest wyrzutem (spec 11.1, N12–N15). -->
@@ -46,7 +70,7 @@
   </UserControl.Styles>
 
   <Grid>
-  <DockPanel Margin="16">
+  <DockPanel Margin="12">
 
     <!-- Przypomnienia, które odezwały się przy starcie. Nad wszystkim, bo po to były
          ustawione; z przyciskiem odprawienia, bo mają zniknąć po przeczytaniu, a nie
@@ -70,23 +94,9 @@
       </DockPanel>
     </Border>
 
-    <!-- Wrzut jest dostępny z każdego ekranu poza przetwarzaniem: myśl przychodzi
-         wtedy, kiedy przychodzi, a nie wtedy, gdy akurat jesteś w skrzynce. -->
-    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12"
-                IsVisible="{Binding !IsClarify}">
-      <TextBox Text="{Binding CaptureText}"
-               Watermark="Wrzuć myśl i naciśnij Enter"
-               FontSize="16"
-               AcceptsReturn="False">
-        <TextBox.KeyBindings>
-          <KeyBinding Gesture="Enter" Command="{Binding CaptureCommand}" />
-        </TextBox.KeyBindings>
-      </TextBox>
-      <TextBlock Classes="hint" Margin="2,4,0,0"
-                 Text="Bez pól, bez decyzji — obszar i reszta dochodzą przy przetwarzaniu." />
-    </StackPanel>
-
-    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,16" IsVisible="{Binding !IsClarify}">
+    <!-- Nawigacja szeroka: wszystkie ekrany naraz. Na pulpicie mieszczą się w rzędzie
+         albo dwóch i są najkrótszą drogą do każdego z nich. -->
+    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,16" IsVisible="{Binding ShowWideNav}">
       <Button Classes="nav" Command="{Binding ShowTodayCommand}" Content="Dzisiaj" />
       <Button Classes="nav" Command="{Binding ShowNowCommand}" Content="Teraz" />
       <Button Classes="nav" Command="{Binding ShowInboxCommand}">
@@ -111,6 +121,52 @@
       <Button Classes="nav" Command="{Binding ShowArchiveCommand}" Content="Archiwum" />
       <Button Classes="nav" Command="{Binding ShowSettingsCommand}" Content="Ustawienia" />
     </WrapPanel>
+
+    <!-- Pasek dolny (wąskie okno). Cztery ekrany dnia codziennego pod kciukiem plus
+         „Więcej" na resztę. Wybór czwórki nie jest dowolny: Dzisiaj jest ekranem
+         startowym, Teraz odpowiada na „co robić", Skrzynka jest jedynym miejscem,
+         które rośnie samo, a Kalendarz jest jedyną rzeczą z godziną. Reszta to ekrany,
+         do których siada się świadomie, a nie zagląda między jednym a drugim. -->
+    <Border DockPanel.Dock="Bottom" IsVisible="{Binding ShowBottomNav}"
+            Margin="-12,8,-12,-12" Padding="4,0,4,2" Background="#22808080">
+      <Grid ColumnDefinitions="*,*,*,*,*">
+        <Button Grid.Column="0" Classes="tab" Content="Dzisiaj"
+                Command="{Binding ShowTodayCommand}" />
+        <Button Grid.Column="1" Classes="tab" Content="Teraz"
+                Command="{Binding ShowNowCommand}" />
+        <Button Grid.Column="2" Classes="tab" Command="{Binding ShowInboxCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="5">
+            <TextBlock Text="Skrzynka" VerticalAlignment="Center" />
+            <!-- Liczba tylko wtedy, gdy jest niezerowa, i bez czerwieni (spec 11.1). -->
+            <Border Background="#40808080" CornerRadius="9" Padding="6,1"
+                    IsVisible="{Binding HasInbox}">
+              <TextBlock Text="{Binding InboxCount}" FontSize="11" />
+            </Border>
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3" Classes="tab" Content="Kalendarz"
+                Command="{Binding ShowCalendarCommand}" />
+        <Button Grid.Column="4" Classes="tab" Content="Więcej"
+                Command="{Binding ToggleMoreCommand}" />
+      </Grid>
+    </Border>
+
+    <!-- Wrzut na dole, nad paskiem. Na telefonie to jest miejsce, w którym stoi kciuk
+         i nad którym otwiera się klawiatura; na górze ekranu pole do pisania każe
+         sięgać przez cały ekran. Na pulpicie różnicy nie ma, więc jeden układ. -->
+    <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0"
+                IsVisible="{Binding ShowCapture}">
+      <TextBox Text="{Binding CaptureText}"
+               Watermark="Wrzuć myśl i naciśnij Enter"
+               FontSize="16"
+               AcceptsReturn="False">
+        <TextBox.KeyBindings>
+          <KeyBinding Gesture="Enter" Command="{Binding CaptureCommand}" />
+        </TextBox.KeyBindings>
+      </TextBox>
+      <TextBlock Classes="hint" Margin="2,4,0,0" IsVisible="{Binding ShowWideNav}"
+                 Text="Bez pól, bez decyzji — obszar i reszta dochodzą przy przetwarzaniu." />
+    </StackPanel>
 
     <!-- Ekrany leżą na sobie w jednej komórce; widoczny jest zawsze jeden. -->
     <Grid>
@@ -330,7 +386,9 @@
         </Border>
 
       </StackPanel>
-      <ListBox ItemsSource="{Binding TodayItems}">
+      <TextBlock Classes="hint" Margin="2,4,0,0" IsVisible="{Binding !HasToday}"
+                 Text="Na dziś nic nie ma terminu ani dnia wykonania. To jest poprawny stan, nie pusty ekran." />
+      <ListBox ItemsSource="{Binding TodayItems}" IsVisible="{Binding HasToday}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TaskRow">
             <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
@@ -1085,6 +1143,32 @@
 
     </Grid>
   </DockPanel>
+
+      <!-- „Więcej": reszta ekranów. Nakładka, nie kolejny ekran — wybranie czegoś
+           ma być jednym gestem, a nie wejściem w listę i wyjściem z niej.
+           Widoczność i podmiana kontekstu na osobnych elementach, jak wszędzie. -->
+      <Panel IsVisible="{Binding IsMoreOpen}" Background="#CC101010">
+      <Border VerticalAlignment="Bottom" Padding="12" CornerRadius="12,12,0,0"
+              Background="#FF1E1E1E">
+      <ScrollViewer MaxHeight="440">
+        <StackPanel>
+          <Button Classes="sheet" Content="Następne" Command="{Binding ShowNextCommand}" />
+          <Button Classes="sheet" Content="Plany" Command="{Binding ShowPlansCommand}" />
+          <Button Classes="sheet" Content="Projekty" Command="{Binding ShowProjectsCommand}" />
+          <Button Classes="sheet" Content="Oczekiwane" Command="{Binding ShowWaitingCommand}" />
+          <Button Classes="sheet" Content="Kiedyś" Command="{Binding ShowSomedayCommand}" />
+          <Button Classes="sheet" Content="Przegląd" Command="{Binding ShowReviewCommand}" />
+          <Button Classes="sheet" Content="Notatki" Command="{Binding ShowNotesCommand}" />
+          <Button Classes="sheet" Content="Filtry" Command="{Binding ShowFiltersCommand}" />
+          <Button Classes="sheet" Content="Obszary" Command="{Binding ShowAreasCommand}" />
+          <Button Classes="sheet" Content="Archiwum" Command="{Binding ShowArchiveCommand}" />
+          <Button Classes="sheet" Content="Ustawienia" Command="{Binding ShowSettingsCommand}" />
+          <Button Classes="sheet" Content="Zamknij" Margin="0,8,0,0"
+                  Command="{Binding CloseMoreCommand}" />
+        </StackPanel>
+      </ScrollViewer>
+      </Border>
+      </Panel>
 
       <!-- Szczegół zadania: nakładka nad ekranami, nie osobna pozycja w nawigacji.
            Ta sama sztuczka co przy przetwarzaniu: widoczność na jednym elemencie,
