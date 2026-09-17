@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Ikona adaptacyjna: osobne tło i osobny rysunek, bo kształt ikony wybiera producent
+  telefonu — okrąg, kwadrat z zaokrągleniem, kropla. System przycina do niego obie
+  warstwy, więc znak jest narysowany mniejszy, z zapasem na przycięcie
+  (tools/ikona.py, BEZPIECZNE).
+
+  Starsze wydania Androida biorą zwykłą ikonę z mipmap-*/ic_launcher.png, gdzie
+  granatowe pole jest częścią obrazka.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <background android:drawable="@color/tlo_znaku" />
+  <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

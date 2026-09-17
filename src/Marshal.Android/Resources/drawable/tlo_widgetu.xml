@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zaokrąglone rogi, bo widget leży na tapecie, a nie w oknie. Prostokąt z ostrymi
+     rogami wygląda na ekranie domowym jak wycięta dziura, a nie jak karta. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="rectangle">
+  <solid android:color="@color/tlo_widgetu" />
+  <corners android:radius="18dp" />
+</shape>

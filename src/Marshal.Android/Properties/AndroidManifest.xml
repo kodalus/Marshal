@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36" />
-  <application android:label="Marshal" android:allowBackup="false" />
+
+  <!-- Od Androida 13 powiadomienia wymagają zgody, o którą aplikacja pyta przy
+       pierwszym uruchomieniu. Wcześniejsze wydania dają ją z instalacją, ale wpis
+       musi być tak czy inaczej — bez niego prośba nie ma o co pytać. -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Ikona wskazana wprost. Bez niej system bierze zieloną ikonę domyślną, przez co
+       aplikacja na ekranie domowym nie ma nic wspólnego z tą samą aplikacją na pulpicie.
+       „roundIcon" celowo nie ma: ikona adaptacyjna radzi sobie z okrągłą maską sama,
+       a osobny wpis to drugi zestaw plików, który musiałby się z tym zgadzać. -->
+  <application android:label="Marshal"
+               android:icon="@mipmap/ic_launcher"
+               android:allowBackup="false" />
 </manifest>

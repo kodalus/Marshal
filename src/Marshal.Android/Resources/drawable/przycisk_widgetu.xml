@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Przycisk widgetu w barwie wyróżnienia aplikacji. Domyślny systemowy jest szarym
+     prostokątem w stylu producenta telefonu — na granatowej karcie wygląda jak cudzy. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="rectangle">
+  <solid android:color="@color/akcent" />
+  <corners android:radius="9dp" />
+</shape>

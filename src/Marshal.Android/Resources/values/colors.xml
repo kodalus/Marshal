@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Te same barwy co w Motyw.axaml, tyle że dla systemu.
+
+  Android maluje tło okna, paski systemowe i ekran startowy **zanim** Avalonia
+  cokolwiek narysuje. Zostawione domyślne dawały biały błysk przed granatem —
+  najbardziej widoczną rzeczą przy każdym uruchomieniu aplikacji.
+
+  Rozdwojenie barw między tym plikiem a Motyw.axaml jest nie do uniknięcia: to dwa
+  różne systemy rysowania, a jeden nie umie czytać drugiego. Barwy muszą być zgodne
+  i to jest jedyne miejsce poza Motyw.axaml, w którym w ogóle wolno je zapisać.
+-->
+<resources>
+  <!-- Motyw jasny; ciemny w values-night. -->
+  <color name="tlo_okna">#F4F6FC</color>
+
+  <!-- Znak aplikacji ma jedno tło niezależnie od motywu — taki sam jak na pulpicie. -->
+  <color name="tlo_znaku">#121729</color>
+
+  <!-- Widget stoi na tapecie, nie na tle aplikacji, więc odrobinę przezroczysty:
+       nieprzezroczysty prostokąt na ekranie domowym wygląda jak wycięta dziura. -->
+  <color name="tlo_widgetu">#F2121729</color>
+  <color name="akcent">#7C6CF5</color>
+  <color name="tekst">#FFFFFFFF</color>
+  <color name="tekst_przygaszony">#FF9AA2C4</color>
+</resources>

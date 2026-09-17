@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Jasne paski systemowe znaczą **ciemne ikony na nich** — zegar, zasięg, bateria.
+  Na granatowym tle byłyby niewidoczne, więc wartość jest odwrotnością motywu,
+  a nie jego powtórzeniem.
+-->
+<resources>
+  <bool name="ciemne_ikony_paskow">true</bool>
+</resources>

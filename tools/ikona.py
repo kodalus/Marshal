@@ -39,27 +39,43 @@ def zaokraglony(plotno, bok, x0, y0, x1, y1, promien, barwa):
                 plotno[y * bok + x] = barwa
 
 
-def narysuj(bok):
-    """Znak w podanym boku, jako lista pikseli RGBA."""
+def narysuj(bok, tlo=True, udzial=1.0):
+    """
+    Znak w podanym boku, jako lista pikseli RGBA.
+
+    ``udzial`` mówi, jaką część płótna zajmuje sam znak, a ``tlo`` — czy rysować pod
+    nim granatowe pole. Jedno i drugie jest dla Androida: ikona adaptacyjna składa się
+    z osobnego tła i osobnego rysunku, przy czym system przycina ją do kształtu,
+    którego producent telefonu nie musi nam zdradzić. Widoczna zostaje mniej więcej
+    środkowa część płótna, więc rysunek musi być odpowiednio mniejszy — inaczej paski
+    kończą się dokładnie tam, gdzie okrągła maska ucina róg.
+    """
     dokladny = bok * SKALA
     plotno = [(0, 0, 0, 0)] * (dokladny * dokladny)
 
-    zaokraglony(plotno, dokladny, 0, 0, dokladny - 1, dokladny - 1,
-                dokladny * 0.22, TLO + (255,))
+    # Znak liczony we własnym kwadracie, wyśrodkowanym na płótnie.
+    pole = dokladny * udzial
+    przesuniecie = (dokladny - pole) / 2
+
+    if tlo:
+        zaokraglony(plotno, dokladny, przesuniecie, przesuniecie,
+                    przesuniecie + pole - 1, przesuniecie + pole - 1,
+                    pole * 0.22, TLO + (255,))
 
     # Trzy paski: równa wysokość, równe odstępy, szerokość wyznaczona marginesem.
-    margines = dokladny * 0.22
-    wysokosc = dokladny * 0.095
-    odstep = dokladny * 0.085
+    margines = pole * 0.22
+    wysokosc = pole * 0.095
+    odstep = pole * 0.085
     caloscPaskow = 3 * wysokosc + 2 * odstep
-    gora = (dokladny - caloscPaskow) / 2
+    gora = przesuniecie + (pole - caloscPaskow) / 2
 
     for numer in range(3):
         y = gora + numer * (wysokosc + odstep)
         barwa = WYROZNIONY if numer == 1 else PASEK
         # Środkowy jest krótszy: równe trzy paski to szlaczek, a nie znak.
-        prawa = dokladny - margines if numer != 1 else dokladny - margines * 1.55
-        zaokraglony(plotno, dokladny, margines, y, prawa, y + wysokosc,
+        prawa = pole - margines if numer != 1 else pole - margines * 1.55
+        zaokraglony(plotno, dokladny, przesuniecie + margines, y,
+                    przesuniecie + prawa, y + wysokosc,
                     wysokosc / 2, barwa + (255,))
 
     return zmniejsz(plotno, dokladny, bok)
@@ -120,6 +136,31 @@ def ico(obrazki):
     return naglowek + bytes(wpisy) + bytes(tresc)
 
 
+# Gęstości Androida: ikona uruchamiania ma 48 jednostek, ikona adaptacyjna 108.
+GESTOSCI = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
+
+# Ile płótna ikony adaptacyjnej zajmuje znak. System przycina ją do kształtu wybranego
+# przez producenta telefonu i na pewno zostaje tylko środek — 72 ze 108 jednostek.
+# Znak zajmuje w nim tyle samo, co na ikonie pulpitu, więc obie wyglądają tak samo.
+BEZPIECZNE = 72 / 108
+
+
+def android(korzen):
+    """Ikona uruchamiania: adaptacyjna dla API 26+, zwykła dla starszych."""
+    for nazwa, mnoznik in GESTOSCI.items():
+        katalog = korzen / f"mipmap-{nazwa}"
+        katalog.mkdir(parents=True, exist_ok=True)
+
+        zwykla = int(48 * mnoznik)
+        (katalog / "ic_launcher.png").write_bytes(png(narysuj(zwykla), zwykla))
+
+        adaptacyjna = int(108 * mnoznik)
+        (katalog / "ic_launcher_foreground.png").write_bytes(
+            png(narysuj(adaptacyjna, tlo=False, udzial=BEZPIECZNE), adaptacyjna))
+
+    print("ikony Androida zapisane w", korzen)
+
+
 def main():
     obrazki = [(bok, png(narysuj(bok), bok)) for bok in ROZMIARY]
 
@@ -127,6 +168,8 @@ def main():
     (DOCELOWY / "marshal.ico").write_bytes(ico(obrazki))
 
     print("marshal.png i marshal.ico zapisane w", DOCELOWY)
+
+    android(Path(__file__).resolve().parent.parent / "src/Marshal.Android/Resources")
 
 
 if __name__ == "__main__":

@@ -6,12 +6,25 @@
     pasują do rodzica, więc nie robią nic i pasek tytułu zostaje. Widać go było jako
     napis „Marshal" zabierający górę ekranu, mimo nazwy motywu „NoActionBar".
 
-    Tło okna nie jest już wymuszane na jasne. Wymuszone dawało biały błysk przy każdym
-    starcie, także wtedy, gdy aplikacja i system chodzą w trybie ciemnym; motyw DayNight
-    dobiera je sam i wtedy jest zgodne z tym, co za chwilę narysuje Avalonia.
+    Tło okna i paski systemowe w barwach aplikacji, a nie systemowych. Android maluje
+    je, zanim Avalonia cokolwiek narysuje: zostawione domyślne dawały jasny błysk przed
+    granatem, czyli pierwszą rzecz widzianą przy każdym uruchomieniu. Motyw DayNight
+    zostaje, bo barwy mają dwie odmiany (values i values-night) — i to on rozstrzyga,
+    która z nich wchodzi.
+
+    Barwy samych pasków działają do Androida 14 włącznie. Od 15 system rysuje aplikację
+    pod paskami i te dwa wpisy przestają cokolwiek znaczyć — ale wtedy paski są
+    przezroczyste, więc widać pod nimi granat z okna i wychodzi na to samo. Wpisy
+    zostają dla starszych telefonów.
   -->
   <style name="MyTheme.NoActionBar" parent="@android:style/Theme.DeviceDefault.DayNight">
     <item name="android:windowActionBar">false</item>
     <item name="android:windowNoTitle">true</item>
+
+    <item name="android:windowBackground">@color/tlo_okna</item>
+    <item name="android:statusBarColor">@color/tlo_okna</item>
+    <item name="android:navigationBarColor">@color/tlo_okna</item>
+    <item name="android:windowLightStatusBar">@bool/ciemne_ikony_paskow</item>
+    <item name="android:windowLightNavigationBar">@bool/ciemne_ikony_paskow</item>
   </style>
 </resources>

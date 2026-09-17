@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Znaczek na pasku stanu. Musi być jednobarwną sylwetką: Android maluje go własną
+  barwą i z kolorowego obrazka zostaje biała plama o kształcie prostokąta. Stąd
+  osobny rysunek, a nie ikona aplikacji — trzy paski są rozpoznawalne także
+  w dwudziestu czterech punktach i bez barw.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+        android:width="24dp"
+        android:height="24dp"
+        android:viewportWidth="24"
+        android:viewportHeight="24">
+  <path android:fillColor="#FFFFFFFF" android:pathData="M3,5h18v3h-18z" />
+  <path android:fillColor="#FFFFFFFF" android:pathData="M3,10.5h12v3h-12z" />
+  <path android:fillColor="#FFFFFFFF" android:pathData="M3,16h18v3h-18z" />
+</vector>

@@ -1,5 +1,6 @@
 using Android.App;
 using Android.Content.PM;
+using Android.OS;
 using Avalonia;
 using Avalonia.Android;
 using Marshal.UI;
@@ -18,6 +19,19 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 {
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder).WithInterFont();
+
+    /// <summary>
+    /// Powiadomienia systemowe podpinane raz, przy zakładaniu okna.
+    /// </summary>
+    /// <remarks>
+    /// Po <c>base.OnCreate</c>, bo dopiero ono stawia Avalonię i aplikację — a haczyk
+    /// na powiadomienia siedzi w warstwie współdzielonej, która wtedy dopiero istnieje.
+    /// </remarks>
+    protected override void OnCreate(Bundle? savedInstanceState)
+    {
+        base.OnCreate(savedInstanceState);
+        Powiadomienia.Podepnij(this);
+    }
 
     /// <summary>
     /// Odświeżenie widgetu przy wyjściu z aplikacji.

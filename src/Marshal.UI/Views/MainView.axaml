@@ -143,6 +143,13 @@
       <Setter Property="CornerRadius" Value="0" />
       <Setter Property="FontSize" Value="13" />
     </Style>
+    <Style Selector="Button.tab.wybrany">
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.tab.wybrany /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
+    </Style>
+
     <Style Selector="Button.sheet">
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Left" />
@@ -329,18 +336,26 @@
 
 
     <!-- Pasek dolny (wąskie okno). Cztery ekrany dnia codziennego pod kciukiem plus
-         „Więcej" na resztę. Wybór czwórki nie jest dowolny: Dzisiaj jest ekranem
-         startowym, Teraz odpowiada na „co robić", Skrzynka jest jedynym miejscem,
-         które rośnie samo, a Kalendarz jest jedyną rzeczą z godziną. Reszta to ekrany,
-         do których siada się świadomie, a nie zagląda między jednym a drugim. -->
+         „Więcej" na resztę. Wybór czwórki nie jest dowolny: Kalendarz jest ekranem
+         startowym i jedyną rzeczą z godziną, Dzisiaj mówi, co obiecane, Teraz
+         odpowiada na „co robić", a Skrzynka jest jedynym miejscem, które rośnie samo.
+         Reszta to ekrany, do których siada się świadomie, a nie zagląda między jednym
+         a drugim.
+
+         Kolejność i podświetlenie wybranego takie samo jak w pasku bocznym: to jest
+         ta sama nawigacja na węższym ekranie, a nie druga, której trzeba się uczyć
+         od nowa. -->
     <Border DockPanel.Dock="Bottom" IsVisible="{Binding ShowBottomNav}"
-            Margin="-12,8,-12,-12" Padding="4,0,4,2" Background="{DynamicResource Krawedz}">
+            Margin="-12,8,-12,-12" Padding="4,0,4,2" Background="{DynamicResource TloBoczne}">
       <Grid ColumnDefinitions="*,*,*,*,*">
-        <Button Grid.Column="0" Classes="tab" Content="Dzisiaj"
-                Command="{Binding ShowTodayCommand}" />
-        <Button Grid.Column="1" Classes="tab" Content="Teraz"
-                Command="{Binding ShowNowCommand}" />
-        <Button Grid.Column="2" Classes="tab" Command="{Binding ShowInboxCommand}">
+        <Button Grid.Column="0" Classes="tab" Classes.wybrany="{Binding IsCalendar}"
+                Content="Kalendarz" Command="{Binding ShowCalendarCommand}" />
+        <Button Grid.Column="1" Classes="tab" Classes.wybrany="{Binding IsToday}"
+                Content="Dzisiaj" Command="{Binding ShowTodayCommand}" />
+        <Button Grid.Column="2" Classes="tab" Classes.wybrany="{Binding IsNow}"
+                Content="Teraz" Command="{Binding ShowNowCommand}" />
+        <Button Grid.Column="3" Classes="tab" Classes.wybrany="{Binding IsInbox}"
+                Command="{Binding ShowInboxCommand}">
           <StackPanel Orientation="Horizontal" Spacing="5">
             <TextBlock Text="Skrzynka" VerticalAlignment="Center" />
             <!-- Liczba tylko wtedy, gdy jest niezerowa, i bez czerwieni (spec 11.1). -->
@@ -350,10 +365,8 @@
             </Border>
           </StackPanel>
         </Button>
-        <Button Grid.Column="3" Classes="tab" Content="Kalendarz"
-                Command="{Binding ShowCalendarCommand}" />
-        <Button Grid.Column="4" Classes="tab" Content="Więcej"
-                Command="{Binding ToggleMoreCommand}" />
+        <Button Grid.Column="4" Classes="tab" Classes.wybrany="{Binding IsMoreOpen}"
+                Content="Więcej" Command="{Binding ToggleMoreCommand}" />
       </Grid>
     </Border>
 
