@@ -71,6 +71,44 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Zadanie_zalozone_klikiem_w_siatke_pojawia_sie_na_siatce()
+    {
+        // Dokładnie ta droga, którą idzie ręka: klik w pustą siatkę, wypełnienie,
+        // zapis. Bez atrap — kontener ten sam, co w oknie.
+        var kalendarz = Usluga<CalendarViewModel>();
+        var szczegol = Usluga<TaskDetailViewModel>();
+
+        (DateOnly Dzien, TimeOnly Pora)? poproszono = null;
+        kalendarz.NewTaskRequested += (dzien, pora) => poproszono = (dzien, pora);
+
+        await kalendarz.LoadAsync();
+
+        var dzis = Usluga<IClock>().Today;
+
+        // 16:00 na siatce to 16 * 48 punktów od góry.
+        kalendarz.NewAt(dzis, 16 * 48);
+        poproszono.Should().NotBeNull("klik w pustą siatkę ma poprosić o nowe zadanie");
+
+        await szczegol.NewAsync(poproszono!.Value.Dzien, poproszono.Value.Pora);
+
+        szczegol.IsOpen.Should().BeTrue();
+        szczegol.DoTime.Should().Be(new TimeSpan(16, 0, 0));
+
+        szczegol.Title = "Odebrać Sanię";
+        await szczegol.SaveCommand.ExecuteAsync(null);
+
+        szczegol.Problem.Should().BeNull("zapis miał się udać");
+        szczegol.IsOpen.Should().BeFalse("udany zapis zamyka okno");
+
+        // I to jest pytanie właściwe: czy widać je tam, gdzie się je założyło.
+        await kalendarz.LoadAsync();
+
+        kalendarz.Columns.SelectMany(k => k.Slots)
+            .Should().ContainSingle(b => b.Title == "Odebrać Sanię")
+            .Which.StartText.Should().Be("16:00");
+    }
+
+    [Fact]
     public async Task Data_nadana_wrzutowi_nie_ginie_po_drodze()
     {
         // Usterka, przez którą „Dzisiaj" i „Plany" były puste, a zadanie nie pojawiało
