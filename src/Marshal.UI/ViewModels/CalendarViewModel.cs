@@ -118,36 +118,65 @@ public sealed record SlotBox(
     /// <summary>Wielkość samego ptaszka w kwadraciku.</summary>
     public double MarkSize => Math.Max(8, CheckSize - 3);
 
+    /// <summary>Zadanie półprzezroczyste: umowa z kimś i zamiar wobec siebie to nie to samo.</summary>
+    public double Opacity => IsTask ? 0.55 : 1.0;
+
+    /// <summary>Barwa kalendarza albo zadania, przyciemniona przezroczystością.</summary>
+    public IBrush Background => Barwy.Tlo(Color, IsTask, Barwy.NaSiatce);
+}
+
+/// <summary>
+/// Tło wpisu z barwy obszaru — jedno liczenie na wszystkie widoki.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Barwy z Google to jasne pastele, a okno bywa ciemne — położone wprost dawałyby jasny
+/// prostokąt z jasnym napisem. Ta sama barwa z przezroczystością zachowuje odcień,
+/// po którym poznaje się obszar, i zostawia tekst czytelnym w obu motywach.
+/// </para>
+/// <para>
+/// Wspólne dla siatki godzinowej i miesiąca, bo <b>ten sam obszar musi mieć ten sam
+/// odcień w obu</b>. Dwa liczenia rozjeżdżają się przy pierwszej poprawce w jednym
+/// z nich, a rozjechany odcień psuje dokładnie to, do czego barwa tu służy: rozpoznanie
+/// obszaru bez czytania.
+/// </para>
+/// </remarks>
+internal static class Barwy
+{
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
     private const string DomyslneWydarzenie = "#6C8FBF";
 
     private const string DomyslneZadanie = "#6E78A0";
 
-    /// <summary>Zadanie półprzezroczyste: umowa z kimś i zamiar wobec siebie to nie to samo.</summary>
-    public double Opacity => IsTask ? 0.55 : 1.0;
+    /// <summary>Krycie bloku na siatce godzinowej.</summary>
+    public const byte NaSiatce = 0x66;
 
     /// <summary>
-    /// Barwa kalendarza albo zadania, przyciemniona przezroczystością.
+    /// Krycie paska w komórce miesiąca — słabsze.
     /// </summary>
     /// <remarks>
-    /// Barwy z Google to jasne pastele, a okno bywa ciemne — położone wprost dawałyby
-    /// jasny prostokąt z jasnym napisem. Ta sama barwa z przezroczystością zachowuje
-    /// odcień, po którym poznaje się kalendarz, i zostawia tekst czytelnym w obu motywach.
-    /// Liczenie tutaj, a nie konwerterem: konwerter to trzecie miejsce do zajrzenia
-    /// przy czytaniu jednego wiersza XAML-a.
+    /// Blok na siatce dnia jest wysoki i stoi w rzadkim otoczeniu; pasek w miesiącu ma
+    /// jedenaście punktów wysokości i sąsiaduje z trzema innymi w komórce szerokiej na
+    /// jedną siódmą okna. To samo krycie robi z tygodnia pasiastą ścianę, w której nie
+    /// widać ani nazw, ani numerów dni. Odcień zostaje ten sam, co na siatce — rozpoznaje
+    /// się go po barwie, nie po jej sile.
     /// </remarks>
-    public IBrush Background
-    {
-        get
-        {
-            var zrodlo = string.IsNullOrWhiteSpace(Color)
-                ? IsTask ? DomyslneZadanie : DomyslneWydarzenie
-                : Color;
+    public const byte WKomorce = 0x38;
 
-            return Avalonia.Media.Color.TryParse(zrodlo, out var barwa)
-                ? new SolidColorBrush(Avalonia.Media.Color.FromArgb(0x66, barwa.R, barwa.G, barwa.B))
-                : new SolidColorBrush(Avalonia.Media.Color.Parse(DomyslneWydarzenie));
-        }
+    public static IBrush Tlo(string? barwa, bool zadanie, byte krycie)
+    {
+        var domyslna = zadanie ? DomyslneZadanie : DomyslneWydarzenie;
+
+        var zrodlo = string.IsNullOrWhiteSpace(barwa) ? domyslna : barwa;
+
+        // Barwa nie do odczytania wraca do domyślnej **z tym samym kryciem**. Wcześniej
+        // wracała krycie pełne i jeden nieudany odczyt dawał jedyny nieprzezroczysty
+        // prostokąt na siatce — czyli wpis wyróżniony za to, że coś z nim nie tak.
+        var kolor = Color.TryParse(zrodlo, out var odczytana)
+            ? odczytana
+            : Color.Parse(domyslna);
+
+        return new SolidColorBrush(Color.FromArgb(krycie, kolor.R, kolor.G, kolor.B));
     }
 }
 
@@ -197,6 +226,26 @@ public sealed record MonthEntry(
     public string Label => IsDone ? $"✓ {Title}" : Title;
 
     public bool HasTime => Time.Length > 0;
+
+    /// <summary>
+    /// Tło w barwie obszaru — to samo, po którym rozpoznaje się wpis na siatce dnia.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Miesiąc jest widokiem, w którym nie czyta się nazw, tylko patrzy, gdzie jest
+    /// gęsto. Same napisy odpowiadają na to najgorzej: cztery jednakowe linijki w każdej
+    /// komórce wyglądają tak samo niezależnie od tego, czy to cztery rzeczy z pracy,
+    /// czy trzy przedszkolne i jedna urzędowa. Barwa obszaru odpowiada na to bez
+    /// czytania — a jest już policzona, bo siatka dnia rysuje nią bloki.
+    /// </para>
+    /// <para>
+    /// Zadanie nie dostaje tu przygaszenia, które ma na siatce. Tam przygaszony jest
+    /// cały blok wysoki na kilkadziesiąt punktów; tutaj przygaszenie zdjęłoby połowę
+    /// czytelności z napisu o wysokości jedenastu, a odróżnienie zadania od wydarzenia
+    /// niesie już domyślna barwa i brak godziny.
+    /// </para>
+    /// </remarks>
+    public IBrush Background => Barwy.Tlo(Color, TaskId is not null, Barwy.WKomorce);
 }
 
 /// <summary>Jedna komórka siatki miesiąca.</summary>

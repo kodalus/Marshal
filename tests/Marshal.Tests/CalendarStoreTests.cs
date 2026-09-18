@@ -1,3 +1,4 @@
+using Avalonia.Media;
 using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
@@ -1917,6 +1918,56 @@ public sealed class CalendarStoreTests : IDisposable
 
         raport.Folded.Should().Be(0);
         (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(2);
+    }
+
+    [Fact]
+    public void Wpis_miesiaca_stoi_na_tle_w_barwie_swojego_obszaru()
+    {
+        // Miesiąc czyta się wzrokiem, nie literami: cztery jednakowe linijki w komórce
+        // wyglądają tak samo niezależnie od tego, czy to cztery rzeczy z pracy, czy trzy
+        // przedszkolne i jedna urzędowa. Barwa obszaru odpowiada na to bez czytania.
+        var praca = new MonthEntry("09:00", "Gala", null, false, "#C0392B");
+        var dom = new MonthEntry("17:00", "Przedszkole", null, false, "#27AE60");
+
+        var pierwsza = ((SolidColorBrush)praca.Background).Color;
+        var druga = ((SolidColorBrush)dom.Background).Color;
+
+        (pierwsza.R, pierwsza.G, pierwsza.B).Should().Be(((byte)0xC0, (byte)0x39, (byte)0x2B));
+        (druga.R, druga.G, druga.B).Should().Be(((byte)0x27, (byte)0xAE, (byte)0x60));
+    }
+
+    [Fact]
+    public void Ten_sam_obszar_ma_w_miesiacu_ten_sam_odcien_co_na_siatce()
+    {
+        // Barwa służy tu do rozpoznania obszaru, więc rozjechany odcień psuje dokładnie
+        // to, po co jest. Krycie wolno mieć inne: pasek w komórce miesiąca ma jedenaście
+        // punktów wysokości i przy sile bloku z siatki robi z tygodnia pasiastą ścianę.
+        const string barwa = "#8E24AA";
+
+        var blok = new SlotBox(
+            "Spotkanie", 0, 30, 0, 100, false, barwa, "09:00", "10:00", null, "śr", null, null, false);
+
+        var wpis = new MonthEntry("09:00", "Spotkanie", null, false, barwa);
+
+        var naSiatce = ((SolidColorBrush)blok.Background).Color;
+        var wKomorce = ((SolidColorBrush)wpis.Background).Color;
+
+        (wKomorce.R, wKomorce.G, wKomorce.B).Should().Be((naSiatce.R, naSiatce.G, naSiatce.B));
+        wKomorce.A.Should().BeLessThan(naSiatce.A);
+    }
+
+    [Fact]
+    public void Barwa_nie_do_odczytania_nie_robi_z_wpisu_wyroznionego()
+    {
+        // Obszar bez barwy i barwa zapisana czymś, czego nie umiemy odczytać, mają
+        // wyglądać jak wszystko inne bez barwy. Powrót do krycia pełnego dawał jedyny
+        // nieprzezroczysty prostokąt na siatce — czyli wpis wyróżniony za to, że coś
+        // z nim nie tak.
+        var bezBarwy = new MonthEntry("09:00", "Bez barwy", null, false, null);
+        var zeSmieciem = new MonthEntry("09:00", "Ze śmieciem", null, false, "obszar Praca");
+
+        ((SolidColorBrush)zeSmieciem.Background).Color
+            .Should().Be(((SolidColorBrush)bezBarwy.Background).Color);
     }
 
     [Fact]

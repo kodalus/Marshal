@@ -1062,8 +1062,11 @@
                         <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
                           <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:MonthEntry">
-                              <TextBlock Margin="0,1" FontSize="11" Text="{Binding Title}"
-                                         TextTrimming="CharacterEllipsis" />
+                              <Border Background="{Binding Background}" CornerRadius="3"
+                                      Padding="3,0" Margin="0,1">
+                                <TextBlock FontSize="11" Text="{Binding Title}"
+                                           TextTrimming="CharacterEllipsis" />
+                              </Border>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -1171,8 +1174,11 @@
                         <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
                           <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:MonthEntry">
-                              <TextBlock Margin="0,1" FontSize="11" Text="{Binding Title}"
-                                         TextTrimming="CharacterEllipsis" />
+                              <Border Background="{Binding Background}" CornerRadius="3"
+                                      Padding="3,0" Margin="0,1">
+                                <TextBlock FontSize="11" Text="{Binding Title}"
+                                           TextTrimming="CharacterEllipsis" />
+                              </Border>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -1407,13 +1413,21 @@
                           <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:MonthEntry">
-                                <Grid ColumnDefinitions="Auto,*" Margin="0,1"
-                                      PointerReleased="NaWpisieMiesiaca">
-                                  <TextBlock Grid.Column="0" Classes="hint" Margin="0,0,4,0"
-                                             Text="{Binding Time}" IsVisible="{Binding HasTime}" />
-                                  <TextBlock Grid.Column="1" Text="{Binding Label}"
-                                             TextTrimming="CharacterEllipsis" FontSize="11" />
-                                </Grid>
+                                <!-- Tło w barwie obszaru. Miesiąc czyta się wzrokiem,
+                                     a nie literami: cztery jednakowe linijki w komórce
+                                     nie mówią, czy dzień jest zajęty pracą, czy dziećmi.
+                                     Zaokrąglenie i odstęp, żeby sąsiadujące wpisy nie
+                                     zlały się w jeden pas. -->
+                                <Border Background="{Binding Background}" CornerRadius="3"
+                                        Padding="3,0" Margin="0,1"
+                                        PointerReleased="NaWpisieMiesiaca">
+                                  <Grid ColumnDefinitions="Auto,*">
+                                    <TextBlock Grid.Column="0" Classes="hint" Margin="0,0,4,0"
+                                               Text="{Binding Time}" IsVisible="{Binding HasTime}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Label}"
+                                               TextTrimming="CharacterEllipsis" FontSize="11" />
+                                  </Grid>
+                                </Border>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
