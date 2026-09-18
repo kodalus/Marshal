@@ -75,5 +75,16 @@ public interface ITaskRepository
     /// <summary>Wybory z dni minionych, niewykonane — do wygaszenia przy przejściu dnia.</summary>
     Task<IReadOnlyList<TaskItem>> ExpiredFocusAsync(DateOnly today, CancellationToken ct = default);
 
+    /// <summary>
+    /// Zadania wyrzucone, które wciąż wskazują na swoje odbicie w kalendarzu.
+    /// </summary>
+    /// <remarks>
+    /// To jest <b>zaległe kasowanie zapisane w bazie</b>, a nie osobna kolejka.
+    /// Wyrzucenie zadania prosi kalendarz o zdjęcie odbicia, a wskazanie znika dopiero
+    /// wtedy, gdy zdjęcie się udało — więc para „wyrzucone, a wskazuje" znaczy dokładnie
+    /// jedno: prośba nie doszła do skutku. Sieć padła, aplikacja się zamknęła, cokolwiek.
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> PendingMirrorRemovalsAsync(CancellationToken ct = default);
+
     void Add(TaskItem task);
 }

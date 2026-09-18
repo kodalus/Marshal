@@ -153,6 +153,11 @@ public sealed class CalendarStoreTests : IDisposable
         public Task DeleteAsync(
             CalendarSource source, string externalId, CancellationToken ct = default)
         {
+            if (Rzuca)
+            {
+                throw new HttpRequestException("kalendarz nie odpowiada");
+            }
+
             Wyslane.Add(("skasowanie", string.Empty, externalId, false));
             return Task.CompletedTask;
         }
@@ -842,6 +847,67 @@ public sealed class CalendarStoreTests : IDisposable
         var po = _db.Tasks.Single(t => t.Id == zadanie.Id);
         po.SharedCalendarId.Should().BeNull();
         po.SharedEventId.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Kasowanie odbicia, które się nie udało, zostaje dokończone później.
+    /// </summary>
+    /// <remarks>
+    /// Odbicie jest robione po kliknięciu i nie ma trwałości: zadanie wyrzucone przy
+    /// padniętej sieci albo tuż przed zamknięciem aplikacji zostawiało w kalendarzu
+    /// wydarzenie, po którym nikt już nie sprzątał. Objaw był przykry podwójnie —
+    /// wpis wisiał dalej, a że zadania po tej stronie już nie było, przestawał być
+    /// zadaniem: nie dawał się wyrzucić do kosza, tylko trzeba go było kasować jak
+    /// cudze wydarzenie, z potwierdzeniem.
+    /// </remarks>
+    [Fact]
+    public async Task Nieudane_kasowanie_odbicia_zostaje_dokonczone()
+    {
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Zostanie sierotą", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(11, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        await odbicie.ShareAsync(zadanie.Id, _zrodlo.Id);
+
+        // Wyrzucenie bez odbicia — dokładnie to, co zostaje po odłożonym kasowaniu,
+        // które nie doszło do skutku: zadanie w koszu, wskazanie na wydarzenie całe.
+        var skrzynka = new InboxService(
+            new TaskRepository(_db), new ProjectRepository(_db), new UnitOfWork(_db),
+            _zegar, _hlc, new NoTaskMirror());
+
+        await skrzynka.TrashAsync(zadanie.Id);
+
+        // I tak to wygląda z ekranu: wpis stoi dalej, ale już nie jako zadanie.
+        var sierota = (await _usluga.AgendaAsync(Dzis, 1))[0].Timed.Should().ContainSingle().Which;
+        sierota.Entry.TaskId.Should().BeNull("zadania już nie ma, został sam cień");
+
+        // Pierwsze podejście pada — sieć nie odpowiada. Ma nie rzucić wyżej: dokańczanie
+        // chodzi z minutnika i wywrotka zabrałaby ze sobą wszystko, co robi się obok.
+        _pisarz.Rzuca = true;
+        await odbicie.DokonczKasowaniaAsync();
+
+        _db.Tasks.Single(t => t.Id == zadanie.Id).SharedEventId
+            .Should().NotBeNull("nieudane kasowanie nie ma prawa zapomnieć wskazania");
+
+        // Drugie dochodzi — i wtedy znika i u źródła, i u nas.
+        _pisarz.Rzuca = false;
+        await odbicie.DokonczKasowaniaAsync();
+
+        _pisarz.Wyslane[^1].Co.Should().Be("skasowanie");
+
+        var po = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        po.SharedCalendarId.Should().BeNull();
+        po.SharedEventId.Should().BeNull();
+
+        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed.Should().BeEmpty();
     }
 
     /// <summary>Bez daty nie ma czego udostępnić — i mówimy to wprost.</summary>

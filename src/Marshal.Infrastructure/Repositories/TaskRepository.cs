@@ -164,5 +164,15 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
                          && t.State != TaskState.Trashed
                          && t.State != TaskState.Inbox);
 
+    public async Task<IReadOnlyList<TaskItem>> PendingMirrorRemovalsAsync(
+        CancellationToken ct = default) =>
+        await _kolejka.WykonajAsync(() => db.Tasks
+            // Także nagrobki: zadanie skasowane na drugim urządzeniu przyjeżdża tu jako
+            // nagrobek ze wskazaniem, a jego odbicie nie ma kto zdjąć poza nami.
+            .Where(t => t.SharedEventId != null
+                     && (t.Deleted || t.State == TaskState.Trashed))
+            .OrderBy(t => t.CreatedAt)
+            .ToListAsync(ct), ct);
+
     public void Add(TaskItem task) => db.Tasks.Add(task);
 }

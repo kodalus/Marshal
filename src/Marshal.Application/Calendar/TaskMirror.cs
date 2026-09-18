@@ -140,6 +140,74 @@ public sealed class TaskMirror(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
+    /// <summary>Ostatni kłopot z dokańczaniem. Do tego, żeby nie pisać go co minutę.</summary>
+    private string? _ostatniKlopot;
+
+    /// <summary>
+    /// Dokończenie kasowań odbić, które się nie udały.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Odbicie jest robione <b>po</b> kliknięciu i nie ma trwałości: zadanie wyrzucone
+    /// przy padniętej sieci albo tuż przed zamknięciem aplikacji zostawiało w kalendarzu
+    /// wydarzenie, po którym nikt już nie sprzątał. Z zewnątrz wyglądało to najgorzej,
+    /// jak może: wpis wisiał dalej, a że zadania po tej stronie już nie było, nie dawał
+    /// się wyrzucić do kosza jak zadanie — trzeba go było kasować jak cudze wydarzenie,
+    /// z potwierdzeniem.
+    /// </para>
+    /// <para>
+    /// Kolejki w bazie nie trzeba było zakładać, bo <b>ona już tam jest</b>. Wyrzucone
+    /// zadanie przestaje wskazywać na swoje odbicie dopiero wtedy, gdy zdjęcie się
+    /// udało, więc para „wyrzucone, a wskazuje" to zapisany ślad po prośbie, która nie
+    /// doszła do skutku. Zostawało ją tylko przeczytać.
+    /// </para>
+    /// <para>
+    /// Kłopot zapisywany dopiero przy zmianie treści: dokańczanie chodzi co minutę,
+    /// a sieć potrafi nie działać godzinami — ten sam wpis tysiąc razy wypchnąłby
+    /// z dziennika wszystko inne i zamienił go w miejsce, do którego się nie zagląda.
+    /// </para>
+    /// </remarks>
+    public async Task DokonczKasowaniaAsync(CancellationToken ct = default)
+    {
+        var zalegle = await tasks.PendingMirrorRemovalsAsync(ct);
+
+        if (zalegle.Count == 0)
+        {
+            _ostatniKlopot = null;
+            return;
+        }
+
+        foreach (var zadanie in zalegle)
+        {
+            try
+            {
+                await RemoveAsync(zadanie, ct);
+
+                _ostatniKlopot = null;
+
+                await dziennik.RecordAsync(
+                    "Kalendarz: dokończone kasowanie odbicia", zadanie.Title);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                var tresc = $"{e.GetType().Name}: {e.Message}";
+
+                if (_ostatniKlopot != tresc)
+                {
+                    _ostatniKlopot = tresc;
+
+                    await dziennik.RecordAsync(
+                        "Kalendarz: zaległe kasowanie odbicia",
+                        zadanie.Title, ActivityLevel.Problem, tresc);
+                }
+
+                // Reszta zaległych zostaje na następny raz: skoro to nie poszło, kolejne
+                // najpewniej też nie pójdą, a każde z nich to osobna wyprawa po sieci.
+                return;
+            }
+        }
+    }
+
     /// <summary>
     /// Przeniesienie zadania do wskazanego kalendarza. Oddaje powód odmowy albo nic.
     /// </summary>

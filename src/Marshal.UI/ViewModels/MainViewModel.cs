@@ -508,6 +508,11 @@ public sealed partial class MainViewModel : ObservableObject
             CollectReminders();
         }
 
+        // Zaległe kasowania odbić: wydarzenie po zadaniu, którego już nie ma, wisi
+        // w cudzym kalendarzu do skutku, a skutek ma tylko wtedy, gdy ktoś spróbuje
+        // ponownie. To ta sama odpowiedź na upływ czasu, co reszta tutaj.
+        await Probuj("Kalendarz: zaległe odbicia", () => _odbicie.DokonczKasowaniaAsync());
+
         // Osobno zabezpieczona: nieudany przebieg do Dysku nie ma prawa zabrać ze sobą
         // przypomnień, które właśnie się policzyły.
         await Probuj("Synchronizacja sama", SynchronizujSamaAsync);
