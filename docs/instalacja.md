@@ -118,10 +118,29 @@ ma wspólnego dla wszystkich identyfikatora klienta. Znaczy to, że:
 
 Ceną jest kwadrans klikania w konsoli Google przy pierwszym uruchomieniu.
 
-Pełna instrukcja krok po kroku: **[`google-dysk.md`](google-dysk.md)**. Tu tylko dwie
-rzeczy, na których najłatwiej się potknąć.
+Pełna instrukcja krok po kroku: **[`google-dysk.md`](google-dysk.md)**. Tu trzy rzeczy,
+na których najłatwiej się potknąć.
 
-### Potknięcie pierwsze: tryb testowy i logowanie co tydzień
+### Potknięcie pierwsze: telefon też bierze poświadczenia „komputerowe"
+
+Zakładając identyfikator klienta OAuth, wybierz typ **Aplikacja komputerowa** —
+**także wtedy, gdy zakładasz go dla telefonu**. Typ „Android" wygląda na właściwy
+i nie jest: poprosi o nazwę pakietu i odcisk klucza, którym podpisano APK, a Marshal
+tą drogą nie chodzi i nic z tym nie zadziała.
+
+Telefon używa **dokładnie tych samych** poświadczeń co komputer — tego samego
+identyfikatora, tej samej tajemnicy, tego samego ekranu zgody. W konsoli Google nie
+ma dla niego nic osobnego do zrobienia.
+
+Dlaczego tak: zgoda wraca **na port pętli zwrotnej**, a przeglądarka telefonu sięga
+do pętli zwrotnej tego samego telefonu. Google pozwala klientom komputerowym wracać
+na dowolny taki port i nie wymaga zgłaszania go z góry — więc cała maszyneria
+z odciskami podpisu jest tu niepotrzebna.
+
+Poświadczenia wkleja się **na każdym urządzeniu osobno**: leżą w ustawieniach lokalnych
+i celowo nie jadą przez synchronizację. Poświadczenia do Dysku nie mają jechać przez Dysk.
+
+### Potknięcie drugie: tryb testowy i logowanie co tydzień
 
 Ekran zgody zostawiony w trybie **testowym** sprawia, że Google unieważnia zgodę
 **co siedem dni** — i trzeba logować się od nowa, na każdym urządzeniu.
@@ -134,7 +153,7 @@ Jeśli chcesz **dodatkowo kalendarza Google**, przejście do produkcji wymagało
 Google. Wtedy albo godzisz się na logowanie raz w tygodniu, albo podłączasz kalendarz
 adresem `.ics` (kanał iCal), który nie wymaga konta w ogóle.
 
-### Potknięcie drugie: przeglądarka na telefonie nie wraca
+### Potknięcie trzecie: przeglądarka na telefonie nie wraca
 
 Po zatwierdzeniu zgody na telefonie przeglądarka zwykle **nie wraca do aplikacji** —
 zostaje na stronie, która się nie wczytuje. To nie jest błąd i nie trzeba zaczynać od nowa:
@@ -144,11 +163,13 @@ w tym adresie w całości.
 
 ### Drugie urządzenie
 
-Poświadczenia wkleja się **na każdym urządzeniu osobno** — leżą w ustawieniach lokalnych
-i celowo nie jadą przez synchronizację. Poświadczenia do Dysku nie mają jechać przez Dysk.
+Na drugim urządzeniu wklejasz **ten sam** identyfikator klienta, **tę samą** tajemnicę
+i logujesz się na **to samo** konto Google. Dopiero wtedy oba widzą nawzajem swoje
+zmiany: „aplikacja", której Dysk daje dostęp do własnych plików, to identyfikator
+klienta OAuth, a nie instalacja.
 
-Używasz **tych samych** poświadczeń i tego samego konta na telefonie i na komputerze;
-wtedy oba widzą nawzajem swoje zmiany.
+Dwa różne identyfikatory na dwóch urządzeniach dałyby dwa osobne zestawy plików na
+jednym Dysku — i dwie aplikacje, które się nawzajem nie widzą, choć obie działają.
 
 ---
 
@@ -158,6 +179,7 @@ wtedy oba widzą nawzajem swoje zmiany.
 |---|---|
 | „Ten plik zawiera wirusa" przy pobieraniu APK | Ostrzeżenie o pochodzeniu pliku, nie wynik badania. Pobierz mimo to. |
 | SmartScreen blokuje na Windows | Brak certyfikatu komercyjnego. „Więcej informacji" → „Uruchom mimo to". |
+| Konsola Google pyta o nazwę pakietu i odcisk klucza | Wybrany zły typ klienta. Ma być **Aplikacja komputerowa**, także dla telefonu. |
 | Trzeba logować się do Google co tydzień | Ekran zgody w trybie testowym — zob. wyżej. |
 | Kalendarz Google pusty mimo zalogowania | Kalendarze wybiera się w **Ustawieniach → Kalendarze**. Pobranie odświeża się samo co pięć minut. |
 | Zmiana z jednego urządzenia nie dochodzi do drugiego | Oba muszą mieć te same poświadczenia i to samo konto. Zajrzyj do **Dziennika** — jest tam każdy przebieg synchronizacji razem z powodem niepowodzenia. |
