@@ -297,6 +297,66 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Wskazanie_na_odrzucone_podlaczenie_jest_starym_imieniem_zyjacego()
+    {
+        // Ten sam kalendarz Google podłączony na dwóch urządzeniach ma na każdym własny
+        // identyfikator wiersza. Wybór kalendarza się synchronizuje, więc zadanie
+        // udostępnione na komputerze przyjeżdża na telefon ze wskazaniem na wiersz
+        // komputera — a składanie duplikatów robi z jednego z nich nagrobek.
+        _zegar.Now = _zegar.Now.AddMinutes(1);
+
+        var zDrugiegoUrzadzenia = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
+        _db.CalendarSources.Add(zDrugiegoUrzadzenia);
+        _db.SaveChanges();
+
+        _kanal.Next = new FeedResult([], null, true);
+        (await _usluga.RefreshAsync(force: true)).Folded.Should().Be(1);
+
+        // Sedno: wskazanie na nagrobek nie jest brakiem kalendarza. Odmowa przy nim
+        // wyglądała absurdalnie — wszystkie kalendarze wyświetlały się poprawnie,
+        // a zadania z drugiego urządzenia nie dawały się ani zapisać, ani skasować.
+        (await _usluga.ZywyKalendarzAsync(zDrugiegoUrzadzenia.Id)).Should().Be(_zrodlo.Id);
+        (await _usluga.ZywyKalendarzAsync(_zrodlo.Id)).Should().Be(_zrodlo.Id);
+    }
+
+    [Fact]
+    public async Task Podlaczenie_ktorego_naprawde_nie_ma_zostaje_puste()
+    {
+        // Jedyny przypadek, w którym zapis ma odmówić: odłączono ręcznie i nic nie
+        // zajęło miejsca. Bez tego rozróżnienia naprawa przykrywałaby prawdziwy brak.
+        (await _usluga.ZywyKalendarzAsync(Guid.CreateVersion7())).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Odswiezenie_naprawia_wiszacy_kalendarz_glowny()
+    {
+        // Składanie duplikatów przepina to, co widzi w chwili składania. Aplikacja,
+        // w której złożenie odbyło się przed tą poprawką, zostałaby ze wskazaniem
+        // wiszącym na zawsze — stąd naprawa przy każdym odświeżeniu.
+        _zegar.Now = _zegar.Now.AddMinutes(1);
+
+        var mlodsze = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
+        mlodsze.MarkDeleted(_hlc.Next());
+        _db.CalendarSources.Add(mlodsze);
+        _db.SaveChanges();
+
+        var ustawienia = new Ustawienia { MainCalendarId = mlodsze.Id };
+
+        var usluga = new CalendarSyncService(
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, ustawienia, [_pisarz],
+            new ProjectRepository(_db), new AreaRepository(_db));
+
+        _kanal.Next = new FeedResult([], null, true);
+        await usluga.RefreshAsync(force: true);
+
+        ustawienia.MainCalendarId.Should().Be(_zrodlo.Id);
+    }
+
+    [Fact]
     public async Task Skladanie_duplikatow_kasuje_kopie_odrzuconego_zrodla()
     {
         // Odrzucone źródło zostawiało po sobie wydarzenia: niewidoczne, bo źródła już

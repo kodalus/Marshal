@@ -7,6 +7,17 @@ public interface ICalendarStore
 {
     Task<IReadOnlyList<CalendarSource>> SourcesAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Wszystkie podłączenia, także odrzucone.
+    /// </summary>
+    /// <remarks>
+    /// Do jednej rzeczy: rozstrzygnięcia, czym <b>było</b> podłączenie, na które coś
+    /// jeszcze wskazuje. Odrzucenie jest nagrobkiem, więc wiersz zostaje i wciąż niesie
+    /// rodzaj oraz identyfikator zewnętrzny — a to wystarczy, żeby znaleźć żyjącego
+    /// bliźniaka i przepiąć wskazanie zamiast odmówić zapisu.
+    /// </remarks>
+    Task<IReadOnlyList<CalendarSource>> AllSourcesAsync(CancellationToken ct = default);
+
     Task<CalendarCursor?> CursorAsync(Guid sourceId, CancellationToken ct = default);
 
     void SaveCursor(Guid sourceId, string? syncToken, DateTimeOffset fetchedAt);

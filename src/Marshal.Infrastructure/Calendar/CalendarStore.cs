@@ -20,6 +20,11 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
             .OrderBy(s => s.Name)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<CalendarSource>> AllSourcesAsync(CancellationToken ct = default) =>
+        await db.CalendarSources
+            .OrderBy(s => s.Name)
+            .ToListAsync(ct);
+
     public Task<CalendarCursor?> CursorAsync(Guid sourceId, CancellationToken ct = default) =>
         db.CalendarCursors.FirstOrDefaultAsync(c => c.SourceId == sourceId, ct);
 

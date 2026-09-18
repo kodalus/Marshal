@@ -60,7 +60,19 @@ public sealed class TaskMirror(
         // je przeniesiono. Bez domyślnego trzeba było pamiętać o udostępnieniu przy
         // każdym zadaniu z osobna — a synchronizacja, o której trzeba pamiętać, nie
         // jest synchronizacją.
-        if ((task.SharedCalendarId ?? settings.MainCalendarId) is not { } kalendarz)
+        // Wskazanie rozstrzygane przed użyciem: zadanie udostępnione na drugim urządzeniu
+        // przyjeżdża ze wskazaniem na **tamtejszy** wiersz kalendarza, a składanie
+        // duplikatów robi z niego nagrobek. To jest stare imię tej samej rzeczy, nie brak.
+        var wskazane = task.SharedCalendarId ?? settings.MainCalendarId;
+
+        if (wskazane is { } surowy
+            && await calendar.ZywyKalendarzAsync(surowy, ct) is { } zywy
+            && zywy != surowy)
+        {
+            wskazane = zywy;
+        }
+
+        if (wskazane is not { } kalendarz)
         {
             // Zapisane, bo brak kalendarza głównego i awaria wysyłki wyglądają z zewnątrz
             // identycznie: zadanie jest w Marshalu, a w Google go nie ma. Pierwsze jest
@@ -101,8 +113,21 @@ public sealed class TaskMirror(
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        if (task.SharedCalendarId is not { } kalendarz || task.SharedEventId is not { } wydarzenie)
+        if (task.SharedCalendarId is not { } wskazany || task.SharedEventId is not { } wydarzenie)
         {
+            return;
+        }
+
+        // Jak przy wysyłaniu: wskazanie na odrzucony duplikat to stare imię żyjącego
+        // podłączenia. Bez tego zadania z drugiego urządzenia nie dawały się skasować,
+        // bo kasowanie odbicia wywracało się na kalendarzu, którego „już nie ma".
+        if (await calendar.ZywyKalendarzAsync(wskazany, ct) is not { } kalendarz)
+        {
+            // Podłączenia naprawdę nie ma — odbicia nie ma jak skasować, ale zadanie
+            // ma przestać na nie wskazywać, inaczej próba wracałaby przy każdej zmianie.
+            task.Unshare(hlc.Next());
+            await unitOfWork.SaveChangesAsync(ct);
+
             return;
         }
 

@@ -165,12 +165,91 @@ public sealed class CalendarSyncService(
         await store.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Przepięcie kalendarza głównego, jeśli wskazuje na odrzucone podłączenie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Składanie duplikatów przepina to, co widzi w chwili składania. Nie wystarczy:
+    /// wskazanie bywa <b>starsze</b> od poprawki albo przyjeżdża synchronizacją później.
+    /// Aplikacja, w której złożenie już się odbyło przed tą poprawką, zostałaby ze
+    /// wskazaniem wiszącym na zawsze — a objawem byłaby odmowa zapisu przy kalendarzach
+    /// wyświetlających się poprawnie.
+    /// </para>
+    /// <para>
+    /// Dlatego naprawa przy każdym odświeżeniu, nie tylko przy składaniu. Kosztuje jedno
+    /// porównanie, gdy nie ma czego naprawiać, i wykonuje się sama u kogoś, kto o tej
+    /// usterce nigdy się nie dowie.
+    /// </para>
+    /// </remarks>
+    private async Task NaprawGlownyAsync(CancellationToken ct)
+    {
+        if (settings.MainCalendarId is not { } glowny)
+        {
+            return;
+        }
+
+        var zywy = await ZywyKalendarzAsync(glowny, ct);
+
+        if (zywy is { } id && id != glowny)
+        {
+            settings.SetMainCalendar(id);
+        }
+    }
+
+    /// <summary>
+    /// Żyjące podłączenie, na które wskazuje ten identyfikator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ten sam kalendarz Google podłączony na dwóch urządzeniach dostaje na każdym
+    /// <b>własny</b> identyfikator wiersza — to identyfikator zewnętrzny jest wspólny,
+    /// nie nasz. Wybór kalendarza się synchronizuje, więc zadanie udostępnione na
+    /// komputerze przyjeżdża na telefon ze wskazaniem na wiersz komputera; składanie
+    /// duplikatów zostawia z tej pary jeden i drugi staje się nagrobkiem.
+    /// </para>
+    /// <para>
+    /// Wskazanie na nagrobek nie jest wtedy błędem, tylko starym imieniem tej samej
+    /// rzeczy. Odmowa zapisu przy takim wskazaniu wyglądała z zewnątrz absurdalnie:
+    /// wszystkie kalendarze wyświetlały się poprawnie, a zadania z drugiego urządzenia
+    /// nie dawały się ani zapisać, ani skasować.
+    /// </para>
+    /// <para>
+    /// Puste znaczy „tego podłączenia naprawdę nie ma" — odłączono je ręcznie i nic
+    /// nie zajęło jego miejsca. To jedyny przypadek, w którym zapis ma odmówić.
+    /// </para>
+    /// </remarks>
+    public async Task<Guid?> ZywyKalendarzAsync(Guid sourceId, CancellationToken ct = default)
+    {
+        var zywe = await store.SourcesAsync(ct);
+
+        if (zywe.Any(z => z.Id == sourceId))
+        {
+            return sourceId;
+        }
+
+        if ((await store.AllSourcesAsync(ct)).FirstOrDefault(z => z.Id == sourceId)
+            is not { } nagrobek)
+        {
+            return null;
+        }
+
+        return zywe.FirstOrDefault(
+                z => z.Kind == nagrobek.Kind && z.ExternalId == nagrobek.ExternalId)?.Id;
+    }
+
     private async Task<(CalendarSource Source, ICalendarWriter Writer)> DoZapisuAsync(
         Guid sourceId, CancellationToken ct)
     {
-        var zrodlo = (await store.SourcesAsync(ct)).FirstOrDefault(z => z.Id == sourceId)
-            ?? throw new InvalidOperationException(
-                "Tego kalendarza już nie ma na liście podłączonych.");
+        // Rozstrzygnięcie przed odmową: wskazanie na odrzucony duplikat jest starym
+        // imieniem żyjącego podłączenia, a nie brakiem kalendarza.
+        var rozstrzygniete = await ZywyKalendarzAsync(sourceId, ct);
+
+        var zrodlo = rozstrzygniete is { } id
+            ? (await store.SourcesAsync(ct)).First(z => z.Id == id)
+            : throw new InvalidOperationException(
+                "Tego kalendarza już nie ma na liście podłączonych. "
+                + "Wybierz kalendarz główny w Ustawieniach → Kalendarze.");
 
         var pisarz = writers.FirstOrDefault(w => w.Kind == zrodlo.Kind)
             ?? throw new InvalidOperationException(
@@ -260,6 +339,8 @@ public sealed class CalendarSyncService(
         var powody = new List<string>();
 
         var zlozone = await ZlozDuplikatyAsync(ct);
+
+        await NaprawGlownyAsync(ct);
 
         foreach (var zrodlo in await store.SourcesAsync(ct))
         {
