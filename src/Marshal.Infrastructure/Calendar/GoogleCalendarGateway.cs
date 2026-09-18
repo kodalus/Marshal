@@ -1,5 +1,6 @@
 using System.Globalization;
 using Google;
+using Google.Apis;
 using System.Net;
 using Google.Apis.Calendar.v3;
 using Google.Apis.Calendar.v3.Data;
@@ -155,6 +156,81 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
         await Zniknelo(() =>
             _usluga!.Events.Delete(source.ExternalId, Podstawowe(externalId)).ExecuteAsync(ct));
+    }
+
+    /// <summary>
+    /// Dopisanie osoby do gości wydarzenia.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Cała lista, nie sama dopisywana osoba.</b> Łatanie scala pola, ale nie zagląda
+    /// do środka tablicy: goście są jednym polem, którego wartością jest lista. Wysłanie
+    /// samej babci nie znaczy „dodaj babcię", tylko „gośćmi są od teraz wyłącznie ci
+    /// wymienieni" — a pozostali dostają powiadomienie, że zostali z wydarzenia usunięci.
+    /// Stąd odczyt przed zapisem, z Google, bo gości u siebie nie trzymamy w ogóle.
+    /// </para>
+    /// <para>
+    /// <b>Znacznik wersji zamyka szczelinę.</b> Między odczytem a zapisem mieści się
+    /// cudza zmiana — ktoś dopisuje kogoś ze swojego telefonu, a my sekundę później
+    /// wysyłamy listę sprzed jego zmiany i go zdmuchujemy. Warunek „tylko jeśli
+    /// wydarzenie jest nadal w tej wersji" zamienia ciche skasowanie cudzego
+    /// zaproszenia w nieudany zapis, o którym da się powiedzieć.
+    /// </para>
+    /// <para>
+    /// Powiadomienia włączone: zaproszenie, o którym nikt się nie dowiaduje, nie jest
+    /// zaproszeniem. To jest zresztą różnica między tym a wspólnym kalendarzem —
+    /// tam rzeczy pojawiają się po cichu, bo półka jest z góry wspólna.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> InviteAsync(
+        CalendarSource source, string externalId, string email, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        await PolaczAsync(ct);
+
+        var identyfikator = Podstawowe(externalId);
+        var dopisywany = email.Trim();
+
+        Event? wydarzenie = null;
+
+        await Zniknelo(async () =>
+            wydarzenie = await _usluga!.Events.Get(source.ExternalId, identyfikator).ExecuteAsync(ct));
+
+        if (wydarzenie is null)
+        {
+            throw new WydarzenieZniknelo();
+        }
+
+        var goscie = wydarzenie.Attendees?.ToList() ?? [];
+
+        if (goscie.Any(g => string.Equals(g.Email, dopisywany, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        goscie.Add(new EventAttendee { Email = dopisywany });
+
+        // Znacznik wersji przepisany z odczytanego wydarzenia — bez niego warunek
+        // „tylko jeśli nadal ta wersja" nie ma się do czego odnieść i zapis idzie
+        // bezwarunkowo, czyli dokładnie tak, jak być nie miał.
+        var zapis = _usluga!.Events.Patch(
+            new Event { Attendees = goscie, ETag = wydarzenie.ETag },
+            source.ExternalId,
+            identyfikator);
+
+        // Zaproszenie ma dojść — inaczej wydarzenie pojawia się u kogoś bez słowa.
+        zapis.SendUpdates = EventsResource.PatchRequest.SendUpdatesEnum.All;
+
+        // Zapis wyłącznie na tej wersji, którą przeczytaliśmy. Cudza zmiana w międzyczasie
+        // kończy się odmową, a nie skasowaniem jej po cichu.
+        zapis.ETagAction = ETagAction.IfMatch;
+
+        await Zniknelo(() => zapis.ExecuteAsync(ct));
+
+        return true;
     }
 
     /// <summary>

@@ -161,6 +161,34 @@ public sealed class CalendarStoreTests : IDisposable
             Wyslane.Add(("skasowanie", string.Empty, externalId, false));
             return Task.CompletedTask;
         }
+
+        /// <summary>Kto już jest gościem którego wydarzenia — atrapa listy u źródła.</summary>
+        public Dictionary<string, List<string>> Goscie { get; } = [];
+
+        public Task<bool> InviteAsync(
+            CalendarSource source, string externalId, string email, CancellationToken ct = default)
+        {
+            if (Rzuca)
+            {
+                throw new HttpRequestException("kalendarz nie odpowiada");
+            }
+
+            if (!Goscie.TryGetValue(externalId, out var lista))
+            {
+                lista = [];
+                Goscie[externalId] = lista;
+            }
+
+            if (lista.Contains(email, StringComparer.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(false);
+            }
+
+            lista.Add(email);
+            Wyslane.Add(("zaproszenie", email, externalId, false));
+
+            return Task.FromResult(true);
+        }
     }
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
@@ -979,6 +1007,34 @@ public sealed class CalendarStoreTests : IDisposable
         _pisarz.Wyslane[^1].Co.Should().Be("zmiana");
         _pisarz.Wyslane[^1].Calodniowe.Should().BeFalse("od tej chwili ma swoją porę");
         _db.Tasks.Single(t => t.Id == zadanie.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
+    }
+
+    /// <summary>
+    /// Pokazanie wydarzenia osobie dopisuje ją do gości, a powtórka nie dopisuje drugi raz.
+    /// </summary>
+    /// <remarks>
+    /// Druga z dwóch dróg Google’a i jedyna działająca na pojedynczej rzeczy:
+    /// udostępniony kalendarz znaczy „ta półka jest nasza wspólna", a gość — „spójrz
+    /// na to jedno". Powtórne pokazanie tej samej osobie nie ma nic do zrobienia
+    /// i ma to powiedzieć, zamiast wysyłać drugie zaproszenie.
+    /// </remarks>
+    [Fact]
+    public async Task Pokazanie_osobie_dopisuje_ja_do_gosci()
+    {
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "Wywiadówka", "2026-09-16", 17, 18)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.InviteAsync(_zrodlo.Id, "s1", "sylw@example.test"))
+            .Should().BeTrue("tej osoby jeszcze nie było na liście");
+
+        _pisarz.Wyslane[^1].Should().Be(("zaproszenie", "sylw@example.test", "s1", false));
+
+        (await _usluga.InviteAsync(_zrodlo.Id, "s1", "sylw@example.test"))
+            .Should().BeFalse("już to widzi");
+
+        _pisarz.Goscie["s1"].Should().ContainSingle();
     }
 
     /// <summary>

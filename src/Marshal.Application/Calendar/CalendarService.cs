@@ -146,6 +146,34 @@ public sealed class CalendarSyncService(
         }
     }
 
+    /// <summary>
+    /// Pokazanie wydarzenia jednej osobie — dopisanie jej do gości.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Druga z dwóch dróg, którymi Google pokazuje komuś coś ze swojego kalendarza,
+    /// i jedyna działająca na pojedynczej rzeczy. Pierwsza — udostępnienie całego
+    /// kalendarza — znaczy „ta półka jest nasza wspólna" i po naszej stronie załatwia
+    /// ją przypisanie kalendarza do obszaru. Ta znaczy „spójrz na to jedno".
+    /// </para>
+    /// <para>
+    /// Nie ma tu trzeciego mechanizmu i nie powinno być. Własna lista „komu pokazane"
+    /// byłaby drugim stanem mówiącym o tej samej rzeczy w miejscu, w którym Google
+    /// ma już swój — i pierwsza zmiana zrobiona przez kogoś w jego kalendarzu
+    /// rozjechałaby oba.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> InviteAsync(
+        Guid sourceId, string externalId, string email, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+
+        return await pisarz.InviteAsync(zrodlo, externalId, email, ct);
+    }
+
     /// <summary>Obszary, które mają przypisany kalendarz — razem z tym kalendarzem.</summary>
     public async Task<IReadOnlyList<Area>> AreasWithCalendarAsync(CancellationToken ct = default)
     {

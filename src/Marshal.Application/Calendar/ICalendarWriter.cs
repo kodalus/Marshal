@@ -72,4 +72,29 @@ public interface ICalendarWriter
         CalendarSource source, string externalId, string title, CancellationToken ct = default);
 
     Task DeleteAsync(CalendarSource source, string externalId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Dopisanie osoby do gości wydarzenia. Oddaje fałsz, gdy już tam była.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wykonanie <b>musi</b> odczytać obecną listę gości u źródła i wysłać ją w całości
+    /// razem z dopisaną osobą. Lista gości jest jednym polem, którego wartością jest
+    /// tablica — łatanie scala pola, ale nie zagląda do środka tablicy. Wysłanie samej
+    /// dopisywanej osoby nie znaczy „dodaj ją", tylko „od teraz gośćmi są wyłącznie ci
+    /// wymienieni" — i reszta dostaje powiadomienie, że została z wydarzenia usunięta.
+    /// </para>
+    /// <para>
+    /// Odczyt z <b>Google</b>, nie z naszej kopii: gości w ogóle nie trzymamy, więc
+    /// nasza lista byłaby pusta i zdmuchnęłaby wszystkich.
+    /// </para>
+    /// <para>
+    /// Między odczytem a zapisem jest szczelina, w którą mieści się cudza zmiana.
+    /// Wykonanie ma ją zamknąć znacznikiem wersji: zapis tylko wtedy, gdy wydarzenie
+    /// jest nadal w tej wersji, którą przeczytaliśmy. Nieudany zapis jest tu właściwym
+    /// zachowaniem — lepiej powtórzyć odczyt niż po cichu skasować komuś zaproszenie.
+    /// </para>
+    /// </remarks>
+    Task<bool> InviteAsync(
+        CalendarSource source, string externalId, string email, CancellationToken ct = default);
 }

@@ -7,7 +7,9 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Areas;
+using Marshal.Application.Repositories;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Contacts;
 using Marshal.Domain.Diagnostics;
 
 namespace Marshal.UI.ViewModels;
@@ -250,7 +252,13 @@ public sealed record ZakresWidoku(string Nazwa, int Dni, bool Miesiac)
 /// Kalendarz: dzień, trzy dni, tydzień, miesiąc (spec 11).
 /// </summary>
 public sealed partial class CalendarViewModel(
-    CalendarSyncService calendar, IClock clock, IActivityLog log, TaskEditService edit)
+    CalendarSyncService calendar,
+    IClock clock,
+    IActivityLog log,
+    TaskEditService edit,
+    IContactRepository? osoby = null,
+    IUnitOfWork? praca = null,
+    IHlcSource? zegarLogiczny = null)
     : ObservableObject
 {
     /// <summary>Wysokość godziny w punktach.</summary>
@@ -1334,6 +1342,7 @@ public sealed partial class CalendarViewModel(
         OnPropertyChanged(nameof(HasOpenedProblem));
 
         _ = WczytajObszaryAsync(blok);
+        _ = WczytajOsobyAsync();
     }
 
     /// <summary>Obszary, do których da się przełożyć wydarzenie — czyli te z kalendarzem.</summary>
@@ -1399,6 +1408,133 @@ public sealed partial class CalendarViewModel(
                 "Kalendarz: obszary wydarzenia", blok.Title, ActivityLevel.Problem, e.Message);
         }
     }
+
+    /// <summary>Osoby, którym da się pokazać wydarzenie. Puste, gdy lista jeszcze pusta.</summary>
+    public ObservableCollection<Contact> Osoby { get; } = [];
+
+    /// <summary>Wpisywany adres — do dopisania kogoś, kogo jeszcze na liście nie ma.</summary>
+    [ObservableProperty]
+    public partial string NowaOsoba { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Pokazanie otwartego wydarzenia jednej osobie.
+    /// </summary>
+    /// <remarks>
+    /// Google dopisuje ją jako gościa: dostaje zaproszenie, wydarzenie ląduje w jej
+    /// kalendarzu, może potwierdzić. To jest inna rzecz niż wspólny kalendarz — tam
+    /// wszystko pojawia się po cichu i na zawsze, tu jedna rzecz i za wiedzą obu stron.
+    /// </remarks>
+    [RelayCommand]
+    private async Task PokazOsobieAsync(Contact? osoba)
+    {
+        if (osoba is null || Opened is not { SourceId: { } zrodlo, ExternalId: { } wpis } blok)
+        {
+            return;
+        }
+
+        try
+        {
+            var dopisana = await calendar.InviteAsync(zrodlo, wpis, osoba.Email);
+
+            await log.RecordAsync(
+                "Kalendarz: pokazanie osobie",
+                $"{blok.Title} → {osoba.Name}",
+                ActivityLevel.Ok,
+                dopisana ? null : "ta osoba już była na liście gości");
+
+            OpenedProblem = dopisana
+                ? $"Zaproszenie poszło do: {osoba.Name}."
+                : $"{osoba.Name} już to widzi.";
+
+            OnPropertyChanged(nameof(HasOpenedProblem));
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            OpenedProblem = e.Message;
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: pokazanie osobie", blok.Title, ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    /// <summary>
+    /// Dopisanie osoby do listy i pokazanie jej wydarzenia w jednym ruchu.
+    /// </summary>
+    /// <remarks>
+    /// Jeden ruch, bo adres wpisuje się dokładnie wtedy, gdy się komuś coś pokazuje —
+    /// osobne „zarządzanie listą osób" byłoby ekranem, na który nikt nie wchodzi
+    /// zawczasu. Imię bierzemy z części przed małpą; poprawia się je potem, jeśli
+    /// w ogóle ma to znaczenie.
+    /// </remarks>
+    [RelayCommand]
+    private async Task DopiszOsobeAsync()
+    {
+        var adres = NowaOsoba.Trim();
+
+        if (adres.Length == 0 || osoby is null || praca is null || zegarLogiczny is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var osoba = await osoby.FindByEmailAsync(adres);
+
+            if (osoba is null)
+            {
+                osoba = new Contact(
+                    Guid.CreateVersion7(), clock.Now, zegarLogiczny.Next(),
+                    adres.Split('@')[0], adres);
+
+                osoby.Add(osoba);
+                await praca.SaveChangesAsync();
+            }
+
+            NowaOsoba = string.Empty;
+            await WczytajOsobyAsync();
+            await PokazOsobieAsync(osoba);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            OpenedProblem = e.Message;
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: dopisanie osoby", adres, ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    private async Task WczytajOsobyAsync()
+    {
+        if (osoby is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // Pobranie przed czyszczeniem: lista wyczyszczona przed oczekiwaniem
+            // zostaje pusta, gdy odczyt się nie uda, i wygląda jak brak osób.
+            var lista = await osoby.AllAsync();
+
+            Osoby.Clear();
+
+            foreach (var osoba in lista)
+            {
+                Osoby.Add(osoba);
+            }
+
+            OnPropertyChanged(nameof(HasOsoby));
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            await log.RecordAsync(
+                "Kalendarz: lista osób", "odczyt", ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    public bool HasOsoby => Osoby.Count > 0;
 
     /// <summary>Czy jest dokąd przekładać. Bez przypisanych obszarów pole nie ma sensu.</summary>
     public bool CanMoveOpened => CanEditOpened && ObszaryWydarzenia.Count > 0;

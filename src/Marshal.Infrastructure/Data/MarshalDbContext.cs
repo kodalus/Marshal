@@ -1,5 +1,6 @@
 using System.Reflection;
 using Marshal.Domain.Areas;
+using Marshal.Domain.Contacts;
 using Marshal.Domain.Attachments;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
@@ -61,6 +62,9 @@ public sealed class MarshalDbContext : DbContext
     public DbSet<SavedFilter> SavedFilters => Set<SavedFilter>();
 
     /// <summary>Które kalendarze pokazywać i w jakim kolorze. Decyzja, więc synchronizowana.</summary>
+    /// <summary>Osoby, którym pokazuje się pojedyncze wydarzenia.</summary>
+    public DbSet<Contact> Contacts => Set<Contact>();
+
     public DbSet<CalendarSource> CalendarSources => Set<CalendarSource>();
 
     /// <summary>Kopia wydarzeń z kalendarzy zewnętrznych. Lokalna — każde urządzenie pobiera sobie samo.</summary>

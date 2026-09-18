@@ -84,6 +84,7 @@ public static class DependencyInjection
         services.AddSingleton<INoteRepository, NoteRepository>();
         services.AddSingleton<IAttachmentRepository, AttachmentRepository>();
         services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
+        services.AddSingleton<IContactRepository, ContactRepository>();
         // Brama na bazę przed jednostką pracy, bo to ona przez nią przechodzi.
         // Jedna na proces — dwie bramy to brak bramy.
         services.AddSingleton<IKolejkaBazy, KolejkaBazy>();

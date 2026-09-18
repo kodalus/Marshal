@@ -9,6 +9,7 @@
              xmlns:dn="using:Marshal.Domain.Notes"
              xmlns:dc="using:Marshal.Domain.Calendar"
              xmlns:da="using:Marshal.Domain.Areas"
+             xmlns:dk="using:Marshal.Domain.Contacts"
              xmlns:cal="using:Marshal.Infrastructure.Calendar"
              xmlns:df="using:Marshal.Domain.Filters"
              x:Class="Marshal.UI.Views.MainView"
@@ -1241,6 +1242,41 @@
               </ComboBox.ItemTemplate>
             </ComboBox>
           </Grid>
+
+          <!-- Pokazanie jednej osobie. To druga z dwóch dróg, którymi Google pokazuje
+               komuś coś ze swojego kalendarza, i jedyna działająca na pojedynczej
+               rzeczy: udostępniony kalendarz znaczy „ta półka jest nasza wspólna",
+               a gość znaczy „spójrz na to jedno". Osoba dostaje zaproszenie i może
+               odmówić — wspólny kalendarz nie pyta o nic.
+
+               Adres wpisuje się tu, a nie na osobnym ekranie ustawień: wpisuje się go
+               dokładnie wtedy, gdy się komuś coś pokazuje, a „zarządzanie listą osób"
+               byłoby ekranem, na który nikt nie wchodzi zawczasu. -->
+          <StackPanel IsVisible="{Binding CanEditOpened}" Margin="0,4,0,0" Spacing="4">
+            <TextBlock Text="Pokaż osobie" Opacity="0.7" />
+
+            <ItemsControl ItemsSource="{Binding Osoby}" IsVisible="{Binding HasOsoby}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="dk:Contact">
+                  <Button Classes="nav" Margin="0,0,4,4" Content="{Binding Name}"
+                          Command="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).PokazOsobieCommand}"
+                          CommandParameter="{Binding}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Grid.Column="0" Watermark="adres e-mail"
+                       Text="{Binding NowaOsoba}" />
+              <Button Grid.Column="1" Classes="nav" Margin="4,0,0,0" Content="Pokaż"
+                      Command="{Binding DopiszOsobeCommand}" />
+            </Grid>
+          </StackPanel>
 
           <TextBlock Classes="hint" TextWrapping="Wrap" Foreground="{DynamicResource Ostrzezenie}"
                      Text="{Binding OpenedProblem}" IsVisible="{Binding HasOpenedProblem}" />
