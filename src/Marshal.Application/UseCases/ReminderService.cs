@@ -83,6 +83,30 @@ public sealed class ReminderService(
         return pokazane;
     }
 
+    /// <summary>
+    /// Najbliższa chwila, w której cokolwiek ma się odezwać. Puste, gdy nic nie czeka.
+    /// </summary>
+    /// <remarks>
+    /// Do budzika systemowego na Androidzie: przy zamkniętej aplikacji nie ma minutnika,
+    /// który sprawdzałby przypomnienia co minutę, więc system musi dostać jedną
+    /// konkretną godzinę. Po każdym odezwaniu liczy się ją od nowa — budzik jest
+    /// zawsze na **najbliższą** rzecz, a nie na wszystkie naraz.
+    /// </remarks>
+    public async Task<DateTimeOffset?> NajblizszaAsync(CancellationToken ct = default)
+    {
+        var teraz = clock.Now;
+        var strefa = settings.Zone;
+
+        var chwile = (await tasks.WithRemindersAsync(ct))
+            .SelectMany(z => Chwile(z, strefa))
+            .Select(c => c.Chwila)
+            .Where(c => c > teraz)
+            .OrderBy(c => c)
+            .ToList();
+
+        return chwile.Count > 0 ? chwile[0] : null;
+    }
+
     /// <summary>Wszystkie chwile, w których to zadanie ma się odezwać. Najdawniejsze pierwsze.</summary>
     private static IEnumerable<(DateTimeOffset Chwila, bool ZWyprzedzenia)> Chwile(
         TaskItem zadanie, TimeZoneInfo strefa)

@@ -58,5 +58,10 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     {
         base.OnPause();
         TodayWidget.Refresh(this);
+
+        // Budzik nastawiany przy wychodzeniu z aplikacji, bo to jedyna chwila, o której
+        // wiadomo na pewno, że lista przypomnień jest już taka, jaka ma być — i zaraz
+        // przestanie być komu jej pilnować.
+        _ = Budzik.PrzestawAsync(ApplicationContext!);
     }
 }

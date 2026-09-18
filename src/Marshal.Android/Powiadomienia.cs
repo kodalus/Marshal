@@ -47,9 +47,38 @@ internal static class Powiadomienia
     /// </remarks>
     public static void Podepnij(Activity okno)
     {
+        Podepnij((Context)okno);
+
         try
         {
-            if (okno.GetSystemService(Context.NotificationService) is not NotificationManager menedzer)
+            // Od Androida 13 na powiadomienia trzeba zgody, o którą pyta się raz.
+            // Wcześniejsze wydania dają ją z instalacją. Tylko z okna — usługa ani
+            // odbiornik nie mają jak o nic zapytać.
+            if (OperatingSystem.IsAndroidVersionAtLeast(33))
+            {
+                ZapytajOZgode(okno);
+            }
+        }
+        catch (Exception e)
+        {
+            InAppNotifier.StanSystemowych = $"{e.GetType().Name}: {e.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Kanał i podpięcie bez pytania o zgodę.
+    /// </summary>
+    /// <remarks>
+    /// Osobno od wersji z oknem, bo budzik systemowy budzi proces **bez okna**:
+    /// przypomnienie przy zamkniętej aplikacji powstaje w odbiorniku, a ten potrzebuje
+    /// kanału i haczyka tak samo jak okno. O zgodę pytać wtedy nie ma jak i nie ma po co
+    /// — bez niej i tak nic nie wyjdzie, a pytanie bez ekranu jest niewidoczne.
+    /// </remarks>
+    public static void Podepnij(Context kontekst)
+    {
+        try
+        {
+            if (kontekst.GetSystemService(Context.NotificationService) is not NotificationManager menedzer)
             {
                 InAppNotifier.StanSystemowych = "system nie dał menedżera powiadomień";
                 return;
@@ -61,16 +90,9 @@ internal static class Powiadomienia
                     Description = "Zadania, o których Marshal ma się odezwać.",
                 });
 
-            // Od Androida 13 na powiadomienia trzeba zgody, o którą pyta się raz.
-            // Wcześniejsze wydania dają ją z instalacją.
-            if (OperatingSystem.IsAndroidVersionAtLeast(33))
-            {
-                ZapytajOZgode(okno);
-            }
-
             InAppNotifier.Systemowe = (przypomnienie, _) =>
             {
-                Pokaz(okno, menedzer, przypomnienie);
+                Pokaz(kontekst, menedzer, przypomnienie);
                 return Task.CompletedTask;
             };
 

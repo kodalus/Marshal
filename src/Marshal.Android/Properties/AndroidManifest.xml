@@ -17,6 +17,15 @@
        obudzić. Rodzaj „dataSync", bo logowanie jest pierwszym krokiem synchronizacji. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+  <!-- Budzik na przypomnienia przy zamkniętej aplikacji. Dokładny wymaga od
+       Androida 12 osobnej zgody; bez niej aplikacja schodzi na niedokładny zamiast
+       prosić na siłę — spóźnione przypomnienie jest lepsze od żadnego. -->
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+  <!-- Budziki nie przeżywają wyłączenia telefonu. Bez tego przypomnienia milkną po
+       każdym restarcie aż do następnego otwarcia aplikacji — i nie widać, że zamilkły. -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <!-- Ikona wskazana wprost. Bez niej system bierze zieloną ikonę domyślną, przez co
        aplikacja na ekranie domowym nie ma nic wspólnego z tą samą aplikacją na pulpicie.
        „roundIcon" celowo nie ma: ikona adaptacyjna radzi sobie z okrągłą maską sama,
