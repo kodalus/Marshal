@@ -933,6 +933,8 @@
                     <ItemsControl Name="Godziny" Tag="{Binding Date}"
                                   Loaded="WarstwaGodzinGotowa"
                                   PointerPressed="NowaRzeczNaSiatce"
+                                  PointerReleased="SiatkaPuszczona"
+                                  PointerCaptureLost="SiatkaPorzucona"
                                   ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
                                   Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
                                   Background="{DynamicResource PoleSlabe}">
@@ -997,7 +999,9 @@
                                         Width="{Binding CheckSize}"
                                         Height="{Binding CheckSize}"
                                         VerticalAlignment="Top" HorizontalAlignment="Left"
-                                        PointerPressed="OdhaczNaSiatce">
+                                        PointerPressed="OdhaczNaSiatce"
+                                        PointerReleased="OdhaczeniePuszczone"
+                                        PointerCaptureLost="OdhaczeniePorzucone">
                                   <TextBlock Text="✓" IsVisible="{Binding IsDone}"
                                              FontSize="{Binding MarkSize}"
                                              LineHeight="{Binding CheckSize}"

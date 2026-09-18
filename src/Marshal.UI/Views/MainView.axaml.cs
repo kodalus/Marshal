@@ -225,6 +225,25 @@ public partial class MainView : UserControl
         _skad = e.GetPosition(this);
         _przeciagam = false;
 
+        // Myszą przeciąga się od razu; palcem dopiero po przytrzymaniu. Na dotyku
+        // ruch palca po bloku znaczy najczęściej „przewiń widok", a nie „przenieś to
+        // zadanie" — a blok, który przejmuje wskaźnik po sześciu punktach, odbiera
+        // przewijanie wszędzie tam, gdzie coś stoi. Czyli w zajęty dzień prawie wszędzie.
+        _wolnoPrzeciagac = e.Pointer.Type != PointerType.Touch;
+
+        if (!_wolnoPrzeciagac)
+        {
+            _przytrzymanie?.Stop();
+            _przytrzymanie = new DispatcherTimer(
+                Przytrzymanie, DispatcherPriority.Input, (zegar, _) =>
+                {
+                    (zegar as DispatcherTimer)?.Stop();
+                    _wolnoPrzeciagac = true;
+                });
+
+            _przytrzymanie.Start();
+        }
+
         // Gdzie **w bloku** wylądowała ręka i gdzie ten blok stoi na ekranie. Jedno
         // i drugie po to, żeby kopia w podglądzie trzymała się tego samego punktu,
         // za który została złapana, zamiast skakać rogiem pod wskaźnik.
@@ -265,8 +284,18 @@ public partial class MainView : UserControl
     /// podręcznego albo po przeliczeniu siatki. Bez tego zapamiętany blok zostawał
     /// w polu i każdy następny ruch myszy wyglądał jak przeciąganie.
     /// </remarks>
+    /// <summary>Ile trwa przytrzymanie, po którym palec zaczyna przeciągać, a nie przewijać.</summary>
+    private static readonly TimeSpan Przytrzymanie = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>Minutnik przytrzymania i jego wynik. Mysz ma zgodę od razu.</summary>
+    private DispatcherTimer? _przytrzymanie;
+
+    private bool _wolnoPrzeciagac = true;
+
     private void PuscBlok()
     {
+        _przytrzymanie?.Stop();
+        _wolnoPrzeciagac = true;
         _wciesniety = null;
         _przeciagam = false;
         _rozciagam = false;
@@ -415,6 +444,15 @@ public partial class MainView : UserControl
                 return;
             }
 
+            // Palec ruszył, zanim minęło przytrzymanie: ten gest należy do przewijania.
+            // Blok wypuszczamy z ręki na dobre, żeby przytrzymanie, które minie
+            // w połowie przewijania, nie porwało go w locie.
+            if (!_wolnoPrzeciagac)
+            {
+                PuscBlok();
+                return;
+            }
+
             _przeciagam = true;
 
             if (nadawca is Control blok)
@@ -507,21 +545,56 @@ public partial class MainView : UserControl
     /// odhaczenie bez żadnej drogi odwrotu poza bazą.
     /// </para>
     /// </remarks>
+    /// <summary>Gdzie i czym zaczęło się dotknięcie kwadracika.</summary>
+    private (SlotBox Blok, Point Skad, IPointer Wskaznik)? _dotkniety;
+
+    /// <remarks>
+    /// Tak samo jak przy pustej siatce: odhacza puszczenie, a nie naciśnięcie.
+    /// Kwadracik jest mały, ale leży na bloku zadania, a przewijanie zaczyna się tam,
+    /// gdzie akurat wylądował palec — odhaczenie zadania przy próbie przesunięcia
+    /// widoku jest gorsze od nieodhaczenia go wcale.
+    /// </remarks>
     private void OdhaczNaSiatce(object? nadawca, PointerPressedEventArgs e)
     {
         e.Handled = true;
+        _dotkniety = null;
 
-        if (nadawca is not Control kwadracik
-            || kwadracik.Tag is not SlotBox blok
-            || _kalendarz is null)
+        if (nadawca is not Control kwadracik || kwadracik.Tag is not SlotBox blok)
+        {
+            return;
+        }
+
+        _dotkniety = (blok, e.GetPosition(kwadracik), e.Pointer);
+    }
+
+    private void OdhaczeniePuszczone(object? nadawca, PointerReleasedEventArgs e)
+    {
+        var start = _dotkniety;
+        _dotkniety = null;
+
+        if (start is not { } dotyk
+            || nadawca is not Control kwadracik
+            || _kalendarz is null
+            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        {
+            return;
+        }
+
+        var koniec = e.GetPosition(kwadracik);
+
+        if (Math.Abs(koniec.X - dotyk.Skad.X) > ProgPrzeciagniecia
+            || Math.Abs(koniec.Y - dotyk.Skad.Y) > ProgPrzeciagniecia)
         {
             return;
         }
 
         // Jedno polecenie na oba rodzaje bloku i oba kierunki. Okno nie musi wiedzieć,
         // czy pod spodem idzie zapis do bazy, czy zmiana nazwy w cudzym kalendarzu.
-        _ = Probuj("Kalendarz: kwadracik", () => _kalendarz.ToggleCommand.ExecuteAsync(blok));
+        _ = Probuj("Kalendarz: kwadracik", () => _kalendarz.ToggleCommand.ExecuteAsync(dotyk.Blok));
     }
+
+    private void OdhaczeniePorzucone(object? nadawca, PointerCaptureLostEventArgs e) =>
+        _dotkniety = null;
 
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
     private void TloSzczegolu(object? nadawca, PointerPressedEventArgs e) => _szczegol?.Close();
@@ -1073,17 +1146,32 @@ public partial class MainView : UserControl
 
     private CalendarViewModel? _kalendarz;
 
+    /// <summary>Gdzie i czym zaczęło się dotknięcie pustej siatki.</summary>
+    private (DateOnly Dzien, Point Skad, IPointer Wskaznik)? _dotknieta;
+
     /// <summary>
-    /// Kliknięcie w pustą siatkę zakłada nową rzecz na tej godzinie.
+    /// Dotknięcie pustej siatki zakłada nową rzecz na tej godzinie.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Obsługiwane na warstwie linii godzin, nie na blokach: bloki są przyciskami
     /// i zjadają kliknięcie same, więc klik w zajęte miejsce nie trafia tutaj i nie
     /// zakłada niczego pod spodem. Dzień bierze się ze znacznika ustawionego w XAML-u,
     /// bo warstwa linii nie zna kolumny, na której leży.
+    /// </para>
+    /// <para>
+    /// <b>Naciśnięcie zapamiętuje, zakłada dopiero puszczenie.</b> Dotąd wystarczyło
+    /// samo naciśnięcie i na myszy było to w porządku — klik to naciśnięcie i puszczenie
+    /// w tym samym miejscu. Na dotyku naciśnięcie jest **początkiem przewijania**, więc
+    /// próba przesunięcia kalendarza palcem zakładała zadanie na godzinie, w którą
+    /// akurat trafił palec. Ręka, która przejechała dalej niż próg, należy do
+    /// przewijania i nie zakłada niczego.
+    /// </para>
     /// </remarks>
     private void NowaRzeczNaSiatce(object? nadawca, PointerPressedEventArgs e)
     {
+        _dotknieta = null;
+
         if (nadawca is not Control warstwa || warstwa.Tag is not DateOnly dzien)
         {
             return;
@@ -1096,8 +1184,37 @@ public partial class MainView : UserControl
             return;
         }
 
-        _kalendarz?.NewAt(dzien, e.GetPosition(warstwa).Y);
+        _dotknieta = (dzien, e.GetPosition(warstwa), e.Pointer);
     }
+
+    private void SiatkaPuszczona(object? nadawca, PointerReleasedEventArgs e)
+    {
+        var start = _dotknieta;
+        _dotknieta = null;
+
+        if (start is not { } dotyk
+            || nadawca is not Control warstwa
+            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        {
+            return;
+        }
+
+        var koniec = e.GetPosition(warstwa);
+
+        if (Math.Abs(koniec.X - dotyk.Skad.X) > ProgPrzeciagniecia
+            || Math.Abs(koniec.Y - dotyk.Skad.Y) > ProgPrzeciagniecia)
+        {
+            return;
+        }
+
+        // Z miejsca naciśnięcia, nie puszczenia: godzina ma być tą, w którą się trafiło,
+        // a nie tą, na którą palec zjechał o trzy punkty.
+        _kalendarz?.NewAt(dotyk.Dzien, dotyk.Skad.Y);
+    }
+
+    /// <summary>Przewijanie przejęło wskaźnik — to nie było dotknięcie siatki.</summary>
+    private void SiatkaPorzucona(object? nadawca, PointerCaptureLostEventArgs e) =>
+        _dotknieta = null;
 
     /// <summary>Szerokość kolumny godzin z lewej. Odpowiednik szerokości w XAML-u.</summary>
     private const double SlupekGodzin = 52;
