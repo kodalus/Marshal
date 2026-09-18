@@ -1419,20 +1419,22 @@ public sealed partial class CalendarViewModel(
         }
     }
 
-    /// <summary>Skasowanie wydarzenia u źródła. Nie wraca, więc pyta o potwierdzenie.</summary>
+    /// <summary>
+    /// Skasowanie wydarzenia u źródła.
+    /// </summary>
+    /// <remarks>
+    /// <b>Bez potwierdzenia</b>, choć skasowanie nie wraca. Do dziś trzeba było
+    /// zaznaczyć zgodę, bo wydarzenie bywa cudze, a zabranie komuś wpisu z kalendarza
+    /// jest nieodwracalne. Ale wydarzenie i zadanie mają być pod ręką tą samą rzeczą,
+    /// a zadanie o nic nie pyta — i pytanie tylko przy jednym z dwóch uczy odklikiwać
+    /// pytania, przez co psuje się także to, przy którym potwierdzenie ma sens.
+    /// Ostrzeżenie zostaje na karcie: ono mówi coś, czego nie widać, i nie kosztuje ruchu.
+    /// </remarks>
     [RelayCommand]
     private async Task DeleteOpenedAsync()
     {
         if (Opened is not { SourceId: { } zrodlo, ExternalId: { } identyfikator })
         {
-            return;
-        }
-
-        if (!ConfirmDelete)
-        {
-            OpenedProblem = "Skasowanego wydarzenia nie da się odzyskać. "
-                + "Zaznacz potwierdzenie, jeśli na pewno.";
-            OnPropertyChanged(nameof(HasOpenedProblem));
             return;
         }
 
@@ -1442,7 +1444,6 @@ public sealed partial class CalendarViewModel(
             await log.RecordAsync("Kalendarz: skasowanie wydarzenia", OpenedTitle);
 
             Opened = null;
-            ConfirmDelete = false;
             await RefreshAsync();
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -1454,10 +1455,6 @@ public sealed partial class CalendarViewModel(
                 "Kalendarz: skasowanie wydarzenia", OpenedTitle, ActivityLevel.Problem, e.Message);
         }
     }
-
-    /// <summary>Świadome potwierdzenie kasowania. Gaśnie razem z kartą.</summary>
-    [ObservableProperty]
-    public partial bool ConfirmDelete { get; set; }
 
     /// <summary>Otwarte wydarzenie. Puste, gdy karta jest zamknięta.</summary>
     [ObservableProperty]
@@ -1475,7 +1472,6 @@ public sealed partial class CalendarViewModel(
     private void CloseOpened()
     {
         Opened = null;
-        ConfirmDelete = false;
         OpenedProblem = null;
         OnPropertyChanged(nameof(HasOpenedProblem));
     }

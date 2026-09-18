@@ -1225,9 +1225,11 @@
           <StackPanel IsVisible="{Binding CanEditOpened}">
             <TextBlock Classes="hint" TextWrapping="Wrap"
                        Text="Zapis idzie prosto do kalendarza Google. Zmieniamy tylko tytuł i godziny — uczestnicy, przypomnienia i opis zostają nietknięte." />
-            <CheckBox Margin="0,8,0,0" IsChecked="{Binding ConfirmDelete}"
-                      Content="Pozwól skasować to wydarzenie" />
-            <TextBlock Classes="hint" TextWrapping="Wrap"
+            <!-- Bez potwierdzenia, choć kasowanie nie wraca. Wydarzenie i zadanie mają
+                 być tą samą rzeczą pod ręką, a zadanie o nic nie pyta — pytanie tylko
+                 przy jednym z nich uczy odklikiwać pytania, a wtedy psuje się także to,
+                 które ma sens. Ostrzeżenie zostaje, bo mówi coś, czego nie widać. -->
+            <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap"
                        Text="Skasowanego wydarzenia nie da się odzyskać — ani w Marshalu, ani w Google." />
           </StackPanel>
 
