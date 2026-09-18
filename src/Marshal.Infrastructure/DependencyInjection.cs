@@ -109,7 +109,14 @@ public static class DependencyInjection
         // siebie i kontener nie miałby od czego zacząć), a okno woła po udostępnienie
         // i zdjęcie udostępnienia wprost.
         services.AddSingleton<TaskMirror>();
-        services.AddSingleton<ITaskMirror>(sp => sp.GetRequiredService<TaskMirror>());
+
+        // Pod interfejsem stoi wersja odkładająca pracę na po kliknięciu: wyrównanie
+        // odbicia idzie przez sieć i trwa sekundę albo dwie, a odhaczenie zadania nie
+        // może tyle trwać. Okno, które woła o udostępnienie wprost, dostaje wersję
+        // nieodłożoną — tam użytkownik czeka świadomie i na wynik.
+        services.AddSingleton<ITaskMirror>(sp => new OdlozoneOdbicie(
+            sp.GetRequiredService<TaskMirror>(),
+            sp.GetRequiredService<IActivityLog>()));
 
         // Kanał iCal działa bez żadnych poświadczeń, więc jest podłączony od razu.
         services.AddSingleton<HttpClient>();
