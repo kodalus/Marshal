@@ -82,9 +82,21 @@ zostawia ostrzeżenie. Nic się nie psuje — po prostu wraca konflikt przy inst
 
 Dwa miejsca z tym samym plikiem. **Właściwe jest wydanie**, nie artefakt przebiegu.
 
-**Wydanie „najnowsza"** — `https://github.com/kodalus/Marshal/releases/tag/najnowsza`.
-Pojedynczy plik APK pod stałym adresem, bez logowania i bez archiwum. Otwierasz ten
-adres na telefonie, pobierasz, instalujesz. Komputer nie bierze w tym udziału.
+**Wydanie „najnowsza"**. Plik leży pod adresem, który się nie zmienia między
+budowaniami:
+
+```
+https://github.com/kodalus/Marshal/releases/download/najnowsza/marshal.apk
+```
+
+Pojedynczy plik APK, bez logowania i bez archiwum. Otwierasz ten adres na telefonie,
+pobierasz, instalujesz. Komputer nie bierze w tym udziału. Strona wydania ze SHA-256
+i numerem budowania: `https://github.com/kodalus/Marshal/releases/tag/najnowsza`.
+
+**Jeden pakiet, nie dwa.** Publikacja zostawia obok siebie pakiet podpisany
+i niepodpisany; przebieg wybiera podpisany i nadaje mu stałą nazwę. Wcześniej
+w archiwum były oba, czyli pytanie „który zainstalować" zadane komuś, kto nie ma jak
+na nie odpowiedzieć — a niepodpisany i tak by się nie zainstalował.
 
 **Artefakt przebiegu** (Actions → wybrany przebieg → `marshal-apk`) zostaje jako zapas
 i do budowań spoza gałęzi głównej. Przychodzi zapakowany w ZIP i tylko po zalogowaniu,

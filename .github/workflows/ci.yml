@@ -122,10 +122,33 @@ jobs:
         if: steps.klucz.outputs.jest != 'tak'
         run: dotnet publish src/Marshal.Android/Marshal.Android.csproj -c Release
 
-      - name: Zebranie pakietów
+      # Jeden plik, nie wszystko, co się znajdzie.
+      #
+      # Publikacja zostawia obok siebie pakiet podpisany i niepodpisany. Kopiowanie
+      # wszystkiego dawało dwa pliki w archiwum — czyli pytanie „który zainstalować"
+      # zadane komuś, kto nie ma jak na nie odpowiedzieć — a przy liczeniu sumy
+      # kontrolnej dwie linijki zamiast jednej i zerwany przebieg.
+      #
+      # Nazwa stała, bo adres pobrania z wydania ma się nie zmieniać między budowaniami.
+      - name: Zebranie pakietu
         run: |
           mkdir -p artefakty/apk
-          find src/Marshal.Android/bin/Release -name '*.apk' -exec cp {} artefakty/apk/ \;
+
+          PAKIET=$(find src/Marshal.Android/bin/Release -name '*-Signed.apk' | head -n 1)
+
+          if [ -z "$PAKIET" ]; then
+            ILE=$(find src/Marshal.Android/bin/Release -name '*.apk' | wc -l)
+
+            if [ "$ILE" != "1" ]; then
+              echo "::error::Nie da się wskazać pakietu — znalezionych APK: $ILE."
+              find src/Marshal.Android/bin/Release -name '*.apk'
+              exit 1
+            fi
+
+            PAKIET=$(find src/Marshal.Android/bin/Release -name '*.apk')
+          fi
+
+          cp "$PAKIET" artefakty/apk/marshal.apk
           ls -l artefakty/apk
 
       # Suma kontrolna w dzienniku przebiegu. Po to, żeby dało się sprawdzić, czy plik,
@@ -134,7 +157,7 @@ jobs:
       - name: Suma kontrolna
         id: suma
         run: |
-          SUMA=$(sha256sum artefakty/apk/*.apk | awk '{print $1}')
+          SUMA=$(sha256sum artefakty/apk/marshal.apk | awk '{print $1}')
           echo "sha=$SUMA" >> "$GITHUB_OUTPUT"
           echo "SHA-256: $SUMA"
 
@@ -167,10 +190,10 @@ jobs:
           OPIS=$(printf 'Budowanie z %s\n\nSHA-256: `%s`\n\nPlik pobrany na telefon powinien mieć tę samą sumę.' "$GITHUB_SHA" "$SUMA")
 
           if gh release view najnowsza >/dev/null 2>&1; then
-            gh release upload najnowsza artefakty/apk/*.apk --clobber
+            gh release upload najnowsza artefakty/apk/marshal.apk --clobber
             gh release edit najnowsza --notes "$OPIS"
           else
-            gh release create najnowsza artefakty/apk/*.apk \
+            gh release create najnowsza artefakty/apk/marshal.apk \
               --title "Marshal — najnowsze budowanie" \
               --notes "$OPIS"
           fi
