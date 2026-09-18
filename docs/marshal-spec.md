@@ -362,15 +362,27 @@ Widget na ekranie głównym **nie jest Avalonią**. To natywny `AppWidgetProvide
 (RemoteViews) w projekcie `Marshal.Android`, czytający bazę SQLite bezpośrednio przez
 osobny, minimalny `DbContext` w trybie tylko do odczytu.
 
-Zakres widgetu: **piątka wybrana na dziś** (8.6), przycisk odhaczenia, przycisk szybkiego
+Zakres widgetu: **plan dzisiejszego dnia**, przycisk odhaczenia, przycisk szybkiego
 wrzutu. Nic więcej — każda funkcja w widgecie jest utrzymywana podwójnie.
 
-Dwie poprawki wobec pierwotnego zapisu, obie z tego samego powodu — widget nie ma
-z kim rozmawiać:
+Plan to zadania z dzisiejszym dniem wykonania i zaległe — ten sam zbiór, co ekran
+„Dzisiaj" (1.5) — **plus** wzięte na dziś (8.6). Kolejność chronologiczna: najpierw to,
+co ma godzinę, potem reszta. Wiersz ma dwie linijki, bo sama nazwa nie odpowiada na
+pytanie, po które się na plan patrzy — „czy mam teraz coś umówionego".
 
+Osiem wierszy, nie pięć. Pięć brało się z limitu wybierania na dziś (N14), a ten nie
+dotyczy rzeczy umówionych ani zaległych. Osiem to tyle, ile widać na ekranie domowym
+bez przewijania; widget, po który trzeba sięgnąć palcem, przestaje być spojrzeniem.
+Co się nie mieści, liczy stopka.
+
+Trzy poprawki wobec pierwotnego zapisu:
+
+- **Plan dnia, nie sama piątka na dziś.** Widget pokazujący wyłącznie wzięte na dziś
+  pomija rzeczy umówione z kimś na godzinę — daje więc obraz dnia bez spotkania
+  o szesnastej. To jest gorsze od braku widgetu, bo wygląda na pełną odpowiedź.
 - **Wybór na dziś, nie widok „Teraz".** Lista „Teraz" powstaje z punktacji zależnej od
   zadeklarowanego czasu i energii (8.1), a widget nie ma jak o nie zapytać i musiałby
-  je zgadywać. Piątka na dziś jest już wybrana i odpowiada na to samo pytanie bez
+  je zgadywać. Wybór na dziś jest już wybrany i odpowiada na to samo pytanie bez
   zgadywania czegokolwiek.
 - **Te same usługi co aplikacja, nie osobny odczyt tylko do czytania.** Dla samego
   czytania osobny minimalny `DbContext` byłby prostszy. Rzecz jest w przycisku

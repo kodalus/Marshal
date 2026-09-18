@@ -667,6 +667,14 @@ public sealed partial class MainViewModel : ObservableObject
         // która właśnie coś na nim robi, jest kosztem bez pożytku.
         if (wynik is { Ok: true, Applied: > 0 })
         {
+            // Przypomnienia sprawdzane od razu, nie dopiero za minutę. Przyniesione
+            // przez synchronizację bywa już zaległe — zadanie zmienione na drugim
+            // urządzeniu przychodzi tu z godziną, która zdążyła minąć.
+            if (await _przypomnienia.RunAsync() > 0)
+            {
+                CollectReminders();
+            }
+
             await ReloadAsync();
         }
     }

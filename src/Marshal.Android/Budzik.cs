@@ -142,13 +142,14 @@ internal static class Budzik
     }
 
     /// <summary>Wpis do dziennika, który nie wywraca wołającego, gdy baza nie stoi.</summary>
-    public static async Task Zapisz(string co, string tresc, Exception? blad = null)
+    public static async Task Zapisz(
+        string co, string tresc, Exception? blad = null, ActivityLevel? poziom = null)
     {
         try
         {
             await AppServices.Provider.GetRequiredService<IActivityLog>().RecordAsync(
                 co, tresc,
-                blad is null ? ActivityLevel.Ok : ActivityLevel.Problem,
+                poziom ?? (blad is null ? ActivityLevel.Ok : ActivityLevel.Problem),
                 blad?.ToString());
         }
         catch
@@ -210,13 +211,16 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
 
                 await AppServices.ReadyAsync();
 
+                // Bez wyjścia po synchronizacji. Do dziś budzik synchronizacji kończył
+                // się tutaj, **przed** przestawieniem budzika przypomnień — a to znaczyło,
+                // że przypomnienie przyniesione właśnie przez synchronizację nie miało
+                // się od czego odezwać. Zadanie zmienione na komputerze docierało na
+                // telefon i milczało do najbliższego otwarcia aplikacji.
                 if (intent?.Action == Budzik.AkcjaSynchronizacji)
                 {
                     await SynchronizujAsync();
-                    return;
                 }
-
-                if (intent?.Action == Budzik.Akcja)
+                else if (intent?.Action == Budzik.Akcja)
                 {
                     var ile = await AppServices.Provider
                         .GetRequiredService<ReminderService>()
@@ -260,12 +264,35 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
     {
         var dysk = AppServices.Provider.GetRequiredService<GoogleSyncService>();
 
-        if (!Directory.Exists(dysk.TokenFolder))
+        if (!dysk.HasCredentials || !Directory.Exists(dysk.TokenFolder))
         {
             return;
         }
 
-        await dysk.SyncAsync();
+        var wynik = await dysk.SyncAsync();
+
+        if (!wynik.Ok)
+        {
+            await Budzik.Zapisz("Synchronizacja w tle", wynik.Message, poziom: ActivityLevel.Problem);
+            return;
+        }
+
+        if (wynik.Applied == 0)
+        {
+            // Cicho, gdy nic nie przyszło: budzik chodzi co pół godziny, a dziennik
+            // trzyma pięćset wpisów.
+            return;
+        }
+
+        // Przypomnienia **od razu**, nie dopiero przy następnym budziku. To, co właśnie
+        // przyszło, bywa już zaległe: zadanie zmienione rano na komputerze dociera tu
+        // po południu i ma się odezwać teraz, a nie za pół godziny. Przyszłymi zajmie
+        // się przestawienie budzika, które idzie zaraz potem.
+        var ile = await AppServices.Provider.GetRequiredService<ReminderService>().RunAsync();
+
+        await Budzik.Zapisz(
+            "Synchronizacja w tle",
+            $"przyjęte {wynik.Applied}" + (ile > 0 ? $", przypomnienia pokazane: {ile}" : string.Empty));
     }
 }
 

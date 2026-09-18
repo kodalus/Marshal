@@ -4,21 +4,38 @@ using Android.Content;
 using Android.Views;
 using Android.Widget;
 using Marshal.Application.Abstractions;
+using System.Globalization;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Areas;
+using Marshal.Domain.Projects;
+using Marshal.Domain.Tasks;
 using Marshal.UI;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Marshal.Android;
 
 /// <summary>
-/// Widget na ekranie domowym: piątka wybrana na dziś (spec 4.2, 8.6).
+/// Widget na ekranie domowym: plan dzisiejszego dnia (spec 4.2, 8.6).
 /// </summary>
 /// <remarks>
 /// <para>
+/// <b>Plan dnia, nie sama piątka na dziś.</b> Do dziś widget pokazywał wyłącznie to,
+/// co zostało wzięte „na dziś" w widoku „Teraz" — czyli obietnice dane sobie, bez
+/// rzeczy umówionych z kimś na godzinę. Na ekranie domowym daje to obraz dnia,
+/// w którym nie ma spotkania o szesnastej, i jest gorsze od braku widgetu: wygląda
+/// na pełną odpowiedź.
+/// </para>
+/// <para>
+/// Plan to zadania z dzisiejszym dniem wykonania i zaległe (ten sam zbiór, co ekran
+/// „Dzisiaj") **plus** wzięte na dziś. Kolejność jest chronologiczna: najpierw to, co
+/// ma godzinę, potem reszta. Godzina jest jedyną rzeczą, która narzuca porządek
+/// z zewnątrz; wszystko inne porządkuje się samo w trakcie dnia.
+/// </para>
+/// <para>
 /// <b>Wybór na dziś, nie widok „Teraz".</b> Spec wymieniała „Teraz", ale ta lista
 /// powstaje z punktacji zależnej od zadeklarowanego czasu i energii (8.1) — a widget
-/// nie ma jak o nie zapytać i musiałby je zgadywać. Piątka na dziś jest już wybrana,
+/// nie ma jak o nie zapytać i musiałby je zgadywać. Wybór na dziś jest już wybrany,
 /// więc odpowiada na to samo pytanie bez zgadywania czegokolwiek. Spec poprawiona.
 /// </para>
 /// <para>
@@ -40,17 +57,46 @@ public sealed class TodayWidget : AppWidgetProvider
 
     public const string TaskIdExtra = "zadanie";
 
-    /// <summary>Limit z N14 — tyle wierszy ma układ i tyle wolno wybrać na dobę.</summary>
-    private const int Slots = 5;
+    /// <summary>
+    /// Ile wierszy ma układ.
+    /// </summary>
+    /// <remarks>
+    /// Nie jest to już limit z N14 — ten dotyczy wybierania na dziś, a plan dnia bierze
+    /// też rzeczy umówione i zaległe, których nikt nie limitował. Osiem to tyle, ile
+    /// widać na ekranie domowym bez przewijania; widget, po który trzeba sięgnąć palcem,
+    /// przestaje być spojrzeniem. Co się nie mieści, liczy stopka.
+    /// </remarks>
+    private const int Slots = 8;
 
     private static readonly int[] Rows =
-        [Resource.Id.wiersz_1, Resource.Id.wiersz_2, Resource.Id.wiersz_3, Resource.Id.wiersz_4, Resource.Id.wiersz_5];
+    [
+        Resource.Id.wiersz_1, Resource.Id.wiersz_2, Resource.Id.wiersz_3, Resource.Id.wiersz_4,
+        Resource.Id.wiersz_5, Resource.Id.wiersz_6, Resource.Id.wiersz_7, Resource.Id.wiersz_8,
+    ];
 
     private static readonly int[] Titles =
-        [Resource.Id.tytul_1, Resource.Id.tytul_2, Resource.Id.tytul_3, Resource.Id.tytul_4, Resource.Id.tytul_5];
+    [
+        Resource.Id.tytul_1, Resource.Id.tytul_2, Resource.Id.tytul_3, Resource.Id.tytul_4,
+        Resource.Id.tytul_5, Resource.Id.tytul_6, Resource.Id.tytul_7, Resource.Id.tytul_8,
+    ];
+
+    private static readonly int[] Captions =
+    [
+        Resource.Id.podpis_1, Resource.Id.podpis_2, Resource.Id.podpis_3, Resource.Id.podpis_4,
+        Resource.Id.podpis_5, Resource.Id.podpis_6, Resource.Id.podpis_7, Resource.Id.podpis_8,
+    ];
+
+    private static readonly int[] Stripes =
+    [
+        Resource.Id.pasek_1, Resource.Id.pasek_2, Resource.Id.pasek_3, Resource.Id.pasek_4,
+        Resource.Id.pasek_5, Resource.Id.pasek_6, Resource.Id.pasek_7, Resource.Id.pasek_8,
+    ];
 
     private static readonly int[] Buttons =
-        [Resource.Id.zrobione_1, Resource.Id.zrobione_2, Resource.Id.zrobione_3, Resource.Id.zrobione_4, Resource.Id.zrobione_5];
+    [
+        Resource.Id.zrobione_1, Resource.Id.zrobione_2, Resource.Id.zrobione_3, Resource.Id.zrobione_4,
+        Resource.Id.zrobione_5, Resource.Id.zrobione_6, Resource.Id.zrobione_7, Resource.Id.zrobione_8,
+    ];
 
     /// <summary>Każe systemowi przerysować wszystkie osadzone widgety.</summary>
     public static void Refresh(Context context)
@@ -162,14 +208,33 @@ public sealed class TodayWidget : AppWidgetProvider
     {
         var services = await ServicesAsync(context.ApplicationContext ?? context);
         var clock = services.GetRequiredService<IClock>();
+        var dzis = clock.Today;
 
-        var wybrane = await services.GetRequiredService<ITaskRepository>()
-            .ByFocusDateAsync(clock.Today);
+        var zadania = services.GetRequiredService<ITaskRepository>();
+
+        // Dwa zapytania, bo to dwie różne rzeczy: umówione na dziś (i zaległe) oraz
+        // wzięte na dziś. Zadanie potrafi być jednym i drugim naraz, stąd odsiew po
+        // identyfikatorze — inaczej stałoby w planie dwa razy.
+        var plan = await zadania.TodayAsync(dzis);
+        var wybrane = await zadania.ByFocusDateAsync(dzis);
+
+        var razem = plan
+            .Concat(wybrane.Where(w => plan.All(p => p.Id != w.Id)))
+            .OrderBy(z => Pora(z, dzis) is null)
+            .ThenBy(z => Pora(z, dzis))
+            .ThenBy(z => z.Title, StringComparer.CurrentCulture)
+            .ToList();
+
+        var projekty = (await services.GetRequiredService<IProjectRepository>().AllAsync())
+            .ToDictionary(p => p.Id);
+        var obszary = (await services.GetRequiredService<IAreaRepository>().AllAsync())
+            .ToDictionary(o => o.Id);
 
         var widok = new RemoteViews(context.PackageName, Resource.Layout.widget_marshal);
 
-        widok.SetTextViewText(Resource.Id.naglowek, $"Na dziś — {clock.Today:d.MM}");
-        widok.SetViewVisibility(Resource.Id.pusto, wybrane.Count == 0 ? ViewStates.Visible : ViewStates.Gone);
+        widok.SetTextViewText(Resource.Id.naglowek, $"Na dziś — {dzis:d.MM}");
+        widok.SetViewVisibility(
+            Resource.Id.pusto, razem.Count == 0 ? ViewStates.Visible : ViewStates.Gone);
 
         // Wrzut otwiera aplikację, a nie pole tekstowe w widgecie: RemoteViews nie
         // zna pola do wpisywania, a wszystko inne znaczy drugi ekran do utrzymywania —
@@ -178,21 +243,150 @@ public sealed class TodayWidget : AppWidgetProvider
 
         for (var i = 0; i < Slots; i++)
         {
-            if (i >= wybrane.Count)
+            if (i >= razem.Count)
             {
                 widok.SetViewVisibility(Rows[i], ViewStates.Gone);
                 continue;
             }
 
-            var zadanie = wybrane[i];
+            var zadanie = razem[i];
+            var zrobione = zadanie.State == TaskState.Done;
 
             widok.SetViewVisibility(Rows[i], ViewStates.Visible);
-            widok.SetTextViewText(Titles[i], zadanie.Title);
+            widok.SetTextViewText(Titles[i], zrobione ? $"✓ {zadanie.Title}" : zadanie.Title);
+            widok.SetTextViewText(Captions[i], Podpis(zadanie, dzis, projekty, obszary));
+            widok.SetInt(Stripes[i], "setBackgroundColor", Barwa(zadanie, projekty, obszary));
+
+            // Przycisk tylko przy tym, co jeszcze nie zrobione: odhaczanie odhaczonego
+            // nic nie znaczy, a przycisk bez skutku uczy, że przyciski bywają bez skutku.
+            widok.SetViewVisibility(
+                Buttons[i], zrobione ? ViewStates.Invisible : ViewStates.Visible);
             widok.SetOnClickPendingIntent(Buttons[i], CompleteIntent(context, zadanie.Id, i));
+        }
+
+        // Ile dnia nie widać. Bez tego widget pełny po brzegi wygląda tak samo jak
+        // widget pokazujący wszystko — a to dwie różne wiadomości.
+        var reszta = razem.Count - Slots;
+
+        widok.SetViewVisibility(
+            Resource.Id.reszta, reszta > 0 ? ViewStates.Visible : ViewStates.Gone);
+
+        if (reszta > 0)
+        {
+            widok.SetTextViewText(Resource.Id.reszta, $"…i jeszcze {reszta} w aplikacji");
         }
 
         return widok;
     }
+
+    /// <summary>Godzina, o której to stoi w dzisiejszym planie. Pusta, gdy bez godziny.</summary>
+    /// <remarks>
+    /// Wyłącznie dla dnia dzisiejszego. Zadanie zaległe ma godzinę sprzed paru dni
+    /// i wstawiona między dzisiejsze udawałaby, że jest na nią umówione dziś.
+    /// </remarks>
+    private static TimeOnly? Pora(TaskItem zadanie, DateOnly dzis) =>
+        zadanie.DoDate == dzis ? zadanie.DoTime : null;
+
+    /// <summary>Druga linijka wiersza: kiedy i do czego to należy.</summary>
+    private static string Podpis(
+        TaskItem zadanie,
+        DateOnly dzis,
+        IReadOnlyDictionary<Guid, Project> projekty,
+        IReadOnlyDictionary<Guid, Area> obszary)
+    {
+        var czesci = new List<string>();
+
+        if (Pora(zadanie, dzis) is { } pora)
+        {
+            // Koniec liczony z oszacowania, gdy jest. „16:00 – 16:30" mówi, ile dnia
+            // to zajmie; samo „16:00" zostawia to do policzenia w głowie.
+            czesci.Add(zadanie.EstimatedMinutes is { } minut && minut > 0
+                ? $"{Godzina(pora)} – {Godzina(pora.AddMinutes(minut))}"
+                : Godzina(pora));
+        }
+        else if (zadanie.DoDate is { } dzien && dzien < dzis)
+        {
+            czesci.Add($"zaległe z {dzien:d.MM}");
+        }
+        else if (zadanie.FocusDate == dzis)
+        {
+            czesci.Add("wzięte na dziś");
+        }
+
+        if (Nalezy(zadanie, projekty, obszary) is { } gdzie)
+        {
+            czesci.Add(gdzie);
+        }
+
+        return string.Join(" / ", czesci);
+    }
+
+    private static string Godzina(TimeOnly pora) =>
+        pora.ToString("HH\:mm", CultureInfo.InvariantCulture);
+
+    private static string? Nalezy(
+        TaskItem zadanie,
+        IReadOnlyDictionary<Guid, Project> projekty,
+        IReadOnlyDictionary<Guid, Area> obszary)
+    {
+        if (zadanie.ProjectId is { } projekt && projekty.TryGetValue(projekt, out var p))
+        {
+            return p.Outcome;
+        }
+
+        return zadanie.AreaId is { } obszar && obszary.TryGetValue(obszar, out var o)
+            ? o.Name
+            : null;
+    }
+
+    /// <summary>
+    /// Barwa paska przy wierszu: zadania, a gdy go nie ma — projektu, a gdy i tego nie
+    /// ma — obszaru. Ta sama zasada, co na siatce kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// Zapis barwy jest tekstem wpisanym przez człowieka, więc może być czymkolwiek.
+    /// Wywrotka przy rysowaniu widgetu nie daje żadnego objawu poza pustym prostokątem
+    /// na ekranie domowym, więc zły zapis schodzi na barwę domyślną.
+    /// </remarks>
+    private static int Barwa(
+        TaskItem zadanie,
+        IReadOnlyDictionary<Guid, Project> projekty,
+        IReadOnlyDictionary<Guid, Area> obszary)
+    {
+        var zapis = zadanie.Color;
+
+        if (string.IsNullOrWhiteSpace(zapis)
+            && zadanie.ProjectId is { } projekt
+            && projekty.TryGetValue(projekt, out var p))
+        {
+            zapis = p.Color;
+        }
+
+        if (string.IsNullOrWhiteSpace(zapis)
+            && zadanie.AreaId is { } obszar
+            && obszary.TryGetValue(obszar, out var o))
+        {
+            zapis = o.Color;
+        }
+
+        if (string.IsNullOrWhiteSpace(zapis))
+        {
+            return Akcent;
+        }
+
+        try
+        {
+            return global::Android.Graphics.Color.ParseColor(zapis).ToArgb();
+        }
+        catch (Exception e) when (e is Java.Lang.IllegalArgumentException or ArgumentException)
+        {
+            return Akcent;
+        }
+    }
+
+    /// <summary>Barwa domyślna paska — ta sama, co akcent aplikacji.</summary>
+    private static readonly int Akcent =
+        unchecked((int)0xFF7C6CF5);
 
     /// <summary>
     /// Zamiar odhaczenia konkretnego zadania.
