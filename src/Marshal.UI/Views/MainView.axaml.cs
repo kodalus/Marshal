@@ -47,6 +47,14 @@ public partial class MainView : UserControl
         AddHandler(KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
         AddHandler(ContextRequestedEvent, NaMenu, RoutingStrategies.Bubble);
 
+        // **Także na oknie.** Klawisz idzie drogą od okna do tego, co ma skupienie —
+        // a gdy skupienia nie ma nic, droga kończy się na oknie i ten widok nie leży
+        // na niej wcale. Tak jest zaraz po otwarciu karty wydarzenia kliknięciem
+        // w siatkę: Escape nie zamykał jej, bo ta obsługa nigdy się nie odzywała.
+        AttachedToVisualTree += (_, _) =>
+            TopLevel.GetTopLevel(this)?.AddHandler(
+                KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
+
         // Układ dobierany z faktycznej szerokości, nie z platformy: obrót telefonu
         // i zwężenie okna to ta sama zmiana.
         SizeChanged += (_, e) =>
@@ -185,8 +193,11 @@ public partial class MainView : UserControl
     /// system uznał gest za skończony.
     /// </para>
     /// <para>
-    /// Tylko palcem. Na myszy przeciąganie w bok należy do bloków i zabranie im go
-    /// byłoby wymianą jednej rzeczy na drugą, a nie dołożeniem.
+    /// <b>Także myszą.</b> Pierwsza wersja odpowiadała wyłącznie na palec, żeby nie
+    /// odbierać myszy przeciągania bloków — ale przeciąganie bloku i tak wstrzymuje
+    /// przejechanie osobnym warunkiem, a pociągnięcie po pustej siatce nie znaczyło
+    /// dotąd nic. Z zewnątrz wyglądało to na zepsute: ten sam ruch działał na telefonie
+    /// i nie działał na komputerze, bez żadnego powodu widocznego na ekranie.
     /// </para>
     /// </remarks>
     private void ObszarKalendarzaGotowy(object? nadawca, RoutedEventArgs e)
@@ -213,7 +224,7 @@ public partial class MainView : UserControl
 
     private void ObszarNacisniety(object? nadawca, PointerPressedEventArgs e)
     {
-        if (e.Pointer.Type != PointerType.Touch || nadawca is not Control obszar)
+        if (nadawca is not Control obszar)
         {
             _przejechanie = null;
             return;
@@ -811,8 +822,13 @@ public partial class MainView : UserControl
             return;
         }
 
+        if (Blok(zrodlo) is not { } blok)
+        {
+            return;
+        }
+
         // Blok na siatce niesie sam identyfikator, nie całe zadanie — trzeba je dobrać.
-        if (Blok(zrodlo) is { TaskId: { } identyfikator })
+        if (blok.TaskId is { } identyfikator)
         {
             e.Handled = true;
 
@@ -823,7 +839,48 @@ public partial class MainView : UserControl
                     await PokazMenuAsync(model, zrodlo, zBazy);
                 }
             });
+
+            return;
         }
+
+        e.Handled = true;
+        PokazMenuWydarzenia(model, zrodlo, blok);
+    }
+
+    /// <summary>
+    /// Menu podręczne na wydarzeniu z podłączonego kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Do dziś prawy przycisk na wydarzeniu nie robił <b>nic</b>: obsługa rozpoznawała
+    /// blok wyłącznie po identyfikatorze zadania, a wydarzenie z Google żadnego nie ma.
+    /// Z zewnątrz wyglądało to na menu, które czasem działa — czyli najgorszy rodzaj
+    /// działania, bo uczy nie próbować.
+    /// </para>
+    /// <para>
+    /// Dwie pozycje, nie cztery. Kasowanie zostaje na karcie, bo ma tam zaporę
+    /// z osobnym przyzwoleniem — skasowanego wydarzenia nie da się odzyskać ani u nas,
+    /// ani w Google, a menu podręczne jest miejscem, w które trafia się omsknięciem.
+    /// Reszta pól też jest na karcie i to ona jest tu prawdziwą odpowiedzią.
+    /// </para>
+    /// </remarks>
+    private static void PokazMenuWydarzenia(MainViewModel model, Control zrodlo, SlotBox blok)
+    {
+        var kalendarz = model.Calendar;
+        var pozycje = new List<MenuItem>();
+
+        var otworz = new MenuItem { Header = "Otwórz" };
+        otworz.Click += (_, _) => kalendarz.OpenTaskCommand.Execute(blok);
+        pozycje.Add(otworz);
+
+        if (blok.CanComplete)
+        {
+            var odhacz = new MenuItem { Header = blok.IsDone ? "Zdejmij ptaszek" : "Odhacz" };
+            odhacz.Click += (_, _) => kalendarz.ToggleCommand.Execute(blok);
+            pozycje.Add(odhacz);
+        }
+
+        new ContextMenu { ItemsSource = pozycje }.Open(zrodlo);
     }
 
     /// <summary>Blok siatki spod wskaźnika.</summary>

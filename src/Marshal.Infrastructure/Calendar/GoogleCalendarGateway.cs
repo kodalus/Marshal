@@ -126,9 +126,9 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
         await PolaczAsync(ct);
 
-        await _usluga!.Events
+        await Zniknelo(() => _usluga!.Events
             .Patch(Zbuduj(draft), source.ExternalId, Podstawowe(externalId))
-            .ExecuteAsync(ct);
+            .ExecuteAsync(ct));
     }
 
     /// <summary>Zmiana samej nazwy — jedno pole w Patchu, więc godzin nie ma czym ruszyć.</summary>
@@ -140,9 +140,9 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
         await PolaczAsync(ct);
 
-        await _usluga!.Events
+        await Zniknelo(() => _usluga!.Events
             .Patch(new Event { Summary = title }, source.ExternalId, Podstawowe(externalId))
-            .ExecuteAsync(ct);
+            .ExecuteAsync(ct));
     }
 
     public async Task DeleteAsync(
@@ -153,7 +153,33 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
         await PolaczAsync(ct);
 
-        await _usluga!.Events.Delete(source.ExternalId, Podstawowe(externalId)).ExecuteAsync(ct);
+        await Zniknelo(() =>
+            _usluga!.Events.Delete(source.ExternalId, Podstawowe(externalId)).ExecuteAsync(ct));
+    }
+
+    /// <summary>
+    /// Zamienia „nie ma takiego zasobu" na nasz własny rodzaj wyjątku.
+    /// </summary>
+    /// <remarks>
+    /// Google oddaje na to dwa kody: 410 przy wydarzeniu skasowanym i 404 przy takim,
+    /// którego nigdy nie było albo do którego nie mamy dostępu. Dla zapisu znaczą to
+    /// samo — nie ma czego zmienić — a rozróżnianie ich na ekranie byłoby dzieleniem
+    /// włosa tam, gdzie odpowiedź i tak jest jedna.
+    ///
+    /// Tłumaczenie tutaj, a nie w warstwie aplikacji: to jedyne miejsce, które w ogóle
+    /// widzi wyjątki Google, i jedyne, które ma prawo je znać.
+    /// </remarks>
+    private static async Task Zniknelo(Func<Task> zapis)
+    {
+        try
+        {
+            await zapis();
+        }
+        catch (GoogleApiException e)
+            when (e.HttpStatusCode is HttpStatusCode.Gone or HttpStatusCode.NotFound)
+        {
+            throw new WydarzenieZniknelo();
+        }
     }
 
     /// <summary>

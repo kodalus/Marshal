@@ -70,7 +70,15 @@ public sealed class CalendarSyncService(
 
         if (!string.IsNullOrWhiteSpace(externalId))
         {
-            await pisarz.UpdateAsync(zrodlo, externalId, draft, ct);
+            try
+            {
+                await pisarz.UpdateAsync(zrodlo, externalId, draft, ct);
+            }
+            catch (WydarzenieZniknelo)
+            {
+                await ZdejmijDuchaAsync(zrodlo.Id, externalId, ct);
+                throw;
+            }
         }
 
         await store.UpsertAsync(
@@ -93,7 +101,16 @@ public sealed class CalendarSyncService(
 
         var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
 
-        await pisarz.DeleteAsync(zrodlo, externalId, ct);
+        try
+        {
+            await pisarz.DeleteAsync(zrodlo, externalId, ct);
+        }
+        catch (WydarzenieZniknelo)
+        {
+            // Skasowanie czegoś, czego już nie ma, jest **wykonaniem** prośby, a nie
+            // awarią: po drugiej stronie stan jest dokładnie ten, o który chodziło.
+            // Zostaje zdjąć to u nas — co i tak dzieje się niżej.
+        }
 
         // U nas nagrobek, nie usunięcie — tak samo jak wszędzie indziej w tym modelu.
         var nasze = await store.EventsAsync(
@@ -153,13 +170,60 @@ public sealed class CalendarSyncService(
             return;
         }
 
-        await pisarz.RenameAsync(zrodlo, externalId, nazwa, ct);
+        try
+        {
+            await pisarz.RenameAsync(zrodlo, externalId, nazwa, ct);
+        }
+        catch (WydarzenieZniknelo)
+        {
+            await ZdejmijDuchaAsync(sourceId, externalId, ct);
+            throw;
+        }
 
         await store.UpsertAsync(
             sourceId,
             [new FeedEvent(
                 externalId, nazwa, wydarzenie.StartsAt, wydarzenie.EndsAt,
                 wydarzenie.IsAllDay, wydarzenie.Location, Cancelled: false)],
+            ct);
+
+        await store.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Zdjęcie z siatki wydarzenia, którego nie ma już w Google.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Skasowane po drugiej stronie — w telefonie, w przeglądarce, przez kogoś, z kim
+    /// kalendarz jest dzielony. Nasza kopia jest wtedy duchem: widać ją, bo pobraliśmy
+    /// ją, gdy jeszcze istniała, a każdy zapis wraca odmową.
+    /// </para>
+    /// <para>
+    /// Zdejmowane od razu, przy pierwszej odmowie, a nie przy najbliższym pełnym
+    /// odczycie. Odczyt pełny bywa za godzinę, a przez tę godzinę widać wpis, którego
+    /// nie ma, i dostaje się odmowę za każdym razem, gdy się go dotknie. Jedna
+    /// odpowiedź z Google wystarczy, żeby wiedzieć — nie ma po co czekać na drugą.
+    /// </para>
+    /// <para>
+    /// Nagrobek, nie usunięcie: tak samo jak wszędzie indziej w tym modelu.
+    /// </para>
+    /// </remarks>
+    private async Task ZdejmijDuchaAsync(Guid sourceId, string externalId, CancellationToken ct)
+    {
+        var nasze = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
+
+        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
+            is not { } duch)
+        {
+            return;
+        }
+
+        await store.UpsertAsync(
+            sourceId,
+            [new FeedEvent(
+                externalId, duch.Title, duch.StartsAt, duch.EndsAt,
+                duch.IsAllDay, duch.Location, Cancelled: true)],
             ct);
 
         await store.SaveChangesAsync(ct);
