@@ -61,12 +61,15 @@ Pełny tekst: [`docs/prywatnosc.md`](docs/prywatnosc.md).
 
 ## Instalacja
 
-Gotowe wydania (APK na Androida i wersja na Windows, z sumą SHA-256) leżą w
-[wydaniach](https://github.com/kodalus/Marshal/releases). Android poprosi o zgodę na
-instalację spoza sklepu, Windows pokaże ostrzeżenie SmartScreen — aplikacja nie jest
-podpisana certyfikatem komercyjnym i nie jest w żadnym sklepie.
+APK na Androida i samodzielna paczka na Windows, obie z sumą SHA-256, leżą
+w [wydaniach](https://github.com/kodalus/Marshal/releases). Aplikacji nie ma w żadnym
+sklepie, więc Android poprosi o zgodę na instalację spoza sklepu, a Windows pokaże
+ostrzeżenie SmartScreen — jedno i drugie mówi o pochodzeniu pliku, nie o jego zawartości.
 
-Do synchronizacji i kalendarza potrzebne są **własne** poświadczenia Google; krok po
+**Pełna instrukcja dla kogoś, kto dostał link:**
+[`docs/instalacja.md`](docs/instalacja.md).
+
+Do synchronizacji i kalendarza Google potrzebne są **własne** poświadczenia; krok po
 kroku opisuje je [`docs/google-dysk.md`](docs/google-dysk.md). Bez nich aplikacja działa
 w całości, tylko offline i na jednym urządzeniu.
 
@@ -87,6 +90,7 @@ telefonie i tytułu na desktopie w trybie offline daje po scaleniu oba.
 
 | Dokument | O czym |
 |----------|--------|
+| [`docs/instalacja.md`](docs/instalacja.md) | Instalacja na Androidzie i Windows — dla kogoś, kto dostał link |
 | [`docs/marshal-spec.md`](docs/marshal-spec.md) | Specyfikacja techniczna — model, niezmienniki, algorytmy, synchronizacja |
 | [`docs/google-dysk.md`](docs/google-dysk.md) | Własny projekt Google Cloud, zgody, poświadczenia — krok po kroku |
 | [`docs/android-podpis.md`](docs/android-podpis.md) | Podpisywanie APK i budowanie wydania |

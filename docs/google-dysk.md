@@ -262,11 +262,21 @@ Cena drugiego wyboru: gdyby Google kiedyś przestało pozwalać klientom kompute
 pętlę zwrotną z telefonu, trzeba będzie założyć poświadczenia typu Android i podpisywać
 wydania stałym kluczem. To jest praca do zrobienia wtedy, a nie zapas na wszelki wypadek.
 
-### Czego telefon nie zrobi sam
+### Co telefon robi sam
 
-Przypomnienia sprawdza minutnik w oknie, a synchronizację uruchamia się ręcznie
-przyciskiem. Zamknięta aplikacja nie odezwie się i nie zsynchronizuje — jedno i drugie
-wymagałoby pracy w tle, czyli usługi pierwszoplanowej albo WorkManagera.
+Ten akapit mówił kiedyś, że przy zamkniętej aplikacji nie dzieje się nic. Dziś dzieje
+się to:
+
+- **Synchronizacja przy otwartej aplikacji**: wysyłka pięć sekund po zapisie, odczyt
+  co minutę i przy powrocie do okna.
+- **Synchronizacja przy zamkniętej**: co pół godziny, robotą w tle (WorkManager).
+- **Przypomnienia**: budzik systemowy, także przy zamkniętej aplikacji.
+- **Pobranie kalendarzy**: co pięć minut, przyrostowo.
+
+Zostaje jedno ograniczenie i wynika z oszczędzania baterii przez Androida: przy
+zamkniętej aplikacji synchronizacja chodzi co pół godziny, a nie co minutę. Zmiana
+zrobiona na komputerze dociera więc na uśpiony telefon z opóźnieniem — chyba że go
+odblokujesz i otworzysz Marshala, bo wtedy odczyt idzie od razu.
 
 ## Czego jeszcze nie ma
 

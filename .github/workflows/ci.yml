@@ -197,3 +197,76 @@ jobs:
               --title "Marshal — najnowsze budowanie" \
               --notes "$OPIS"
           fi
+
+  # Wersja na Windows — samodzielna, czyli razem ze środowiskiem uruchomieniowym.
+  #
+  # Bez tego instalacja na komputerze znaczyła „zainstaluj SDK i zbuduj sobie sam",
+  # a to nie jest instrukcja dla kogoś, kto chce po prostu używać aplikacji. Cena to
+  # kilkadziesiąt megabajtów w archiwum; zysk — brak warunków wstępnych.
+  #
+  # Budowane na Windows, nie krzyżowo z Linuksa: Avalonia ciągnie natywne części
+  # zależne od platformy, a przy budowaniu krzyżowym wychodzi to dopiero przy
+  # uruchomieniu u kogoś.
+  windows:
+    name: Windows — wydanie
+    runs-on: windows-latest
+    needs: rdzen
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publikacja
+        shell: bash
+        run: |
+          dotnet publish src/Marshal.Desktop/Marshal.Desktop.csproj \
+            -c Release -r win-x64 --self-contained true \
+            -p:PublishSingleFile=false \
+            -o artefakty/windows/Marshal
+
+      - name: Archiwum
+        shell: bash
+        run: |
+          cd artefakty/windows
+          7z a -tzip ../marshal-windows.zip Marshal
+          cd ../..
+          ls -l artefakty
+
+      - name: Suma kontrolna
+        id: suma
+        shell: bash
+        run: |
+          SUMA=$(sha256sum artefakty/marshal-windows.zip | awk '{print $1}')
+          echo "sha=$SUMA" >> "$GITHUB_OUTPUT"
+          echo "SHA-256: $SUMA"
+
+      - name: Paczka do pobrania
+        uses: actions/upload-artifact@v4
+        with:
+          name: marshal-windows
+          path: artefakty/marshal-windows.zip
+          if-no-files-found: error
+
+      # Do tego samego wydania, co APK. Opis zostaje ten, który ustawiło budowanie
+      # Androida — dopisywanie go z dwóch zadań naraz kończyłoby się tym, że wygrywa
+      # to, które akurat było drugie.
+      - name: Wydanie do pobrania
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3 4 5; do
+            if gh release view najnowsza >/dev/null 2>&1; then
+              gh release upload najnowsza artefakty/marshal-windows.zip --clobber
+              exit 0
+            fi
+
+            echo "Wydanie jeszcze nie istnieje — czekam na budowanie Androida ($i)."
+            sleep 30
+          done
+
+          echo "::error::Wydanie nie powstało — nie ma dokąd wgrać paczki Windows."
+          exit 1
