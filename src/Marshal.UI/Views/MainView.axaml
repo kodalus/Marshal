@@ -812,7 +812,10 @@
          na elemencie obowiązuje też dla pozostałych powiązań tego elementu, więc
          IsVisible szukałoby właściwości w modelu kalendarza zamiast w głównym. -->
     <Panel IsVisible="{Binding IsCalendar}">
-    <DockPanel DataContext="{Binding Calendar}">
+    <!-- Przycinane do swoich granic: siatka przesuwa się w bok razem z podglądami
+         sąsiednich zakresów, a nieprzycięte wyjeżdżałyby na nagłówki dni i na pasek
+         nawigacji. Przycięcie na rodzicu, nie na samej siatce — to ona się rusza. -->
+    <DockPanel DataContext="{Binding Calendar}" ClipToBounds="True">
 
       <StackPanel DockPanel.Dock="Top" x:DataType="vm:CalendarViewModel" Margin="0,0,0,10">
         <!-- Jeden rząd: gdzie jesteśmy, jak szeroko patrzymy, skąd bierzemy. Zakres
@@ -939,6 +942,235 @@
            w tym samym panelu, bo miesiąc nie ma godzin, kolumn ani paska całodniowego
            i wciśnięty w tamtą siatkę musiałby udawać jej szczególny przypadek. -->
       <Panel x:Name="ObszarKalendarza" Loaded="ObszarKalendarzaGotowy">
+
+      <!-- Sąsiednie zakresy, widoczne wyłącznie w trakcie przejechania palcem.
+           Stoją w tym samym panelu, co siatka, przesunięte o szerokość okna w lewo
+           i w prawo — panel przesuwa się w całości, więc jadą razem z nią i palec
+           odsłania to, co naprawdę jest obok, zamiast pustego tła.
+
+           Obrazek, nie druga siatka: nie da się w nich niczego dotknąć. Interaktywna
+           jest zawsze ta jedna, na której się stoi — inaczej każde odhaczenie
+           i każde przeciągnięcie bloku musiałoby wiedzieć, do której z trzech siatek
+           należy, a to jest ten rodzaj wiedzy, który potem zostaje wszędzie.
+           Rysowane przed siatką, żeby przy zaokrągleniach to ona była na wierzchu. -->
+      <Panel x:Name="PodgladPrzed" IsVisible="False" IsHitTestVisible="False"
+             x:DataType="vm:CalendarViewModel">
+
+        <ScrollViewer IsVisible="{Binding !IsMonth}"
+                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden">
+          <StackPanel Orientation="Horizontal">
+            <StackPanel Width="52">
+              <ItemsControl ItemsSource="{Binding HourLabels}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <Border Height="48">
+                      <TextBlock Classes="godzina" Text="{Binding}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <ItemsControl ItemsSource="{Binding KolumnyPrzed}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:CalendarColumn">
+                  <Panel Margin="0,0,2,0">
+                    <ItemsControl ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
+                                  Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
+                                  Background="{DynamicResource PoleSlabe}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <Border Height="48" BorderThickness="0,1,1,0"
+                                  BorderBrush="{DynamicResource Krawedz}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <ItemsControl ItemsSource="{Binding Slots}"
+                                  Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).GridHeight}"
+                                  Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
+                                  Background="{x:Null}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <Canvas />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemContainerTheme>
+                        <ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotBox">
+                          <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                          <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                        </ControlTheme>
+                      </ItemsControl.ItemContainerTheme>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SlotBox">
+                          <Border Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
+                                  Opacity="{Binding Opacity}" Background="{Binding Background}"
+                                  CornerRadius="4" Padding="4,2">
+                            <TextBlock Text="{Binding Title}" FontSize="11"
+                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Panel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ItemsControl IsVisible="{Binding IsMonth}" ItemsSource="{Binding TygodniePrzed}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Columns="1" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:MonthWeek">
+              <ItemsControl ItemsSource="{Binding Cells}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <UniformGrid Columns="7" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:MonthCell">
+                    <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
+                            Classes.dzisiaj="{Binding IsToday}">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="numer" Text="{Binding Day}" />
+                        <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MonthEntry">
+                              <TextBlock Margin="0,1" FontSize="11" Text="{Binding Title}"
+                                         TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Panel>
+
+      <Panel x:Name="PodgladPo" IsVisible="False" IsHitTestVisible="False"
+             x:DataType="vm:CalendarViewModel">
+
+        <ScrollViewer IsVisible="{Binding !IsMonth}"
+                      HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden">
+          <StackPanel Orientation="Horizontal">
+            <StackPanel Width="52">
+              <ItemsControl ItemsSource="{Binding HourLabels}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <Border Height="48">
+                      <TextBlock Classes="godzina" Text="{Binding}" />
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <ItemsControl ItemsSource="{Binding KolumnyPo}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:CalendarColumn">
+                  <Panel Margin="0,0,2,0">
+                    <ItemsControl ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
+                                  Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
+                                  Background="{DynamicResource PoleSlabe}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                          <Border Height="48" BorderThickness="0,1,1,0"
+                                  BorderBrush="{DynamicResource Krawedz}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <ItemsControl ItemsSource="{Binding Slots}"
+                                  Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).GridHeight}"
+                                  Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
+                                  Background="{x:Null}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <Canvas />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemContainerTheme>
+                        <ControlTheme TargetType="ContentPresenter" x:DataType="vm:SlotBox">
+                          <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                          <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                        </ControlTheme>
+                      </ItemsControl.ItemContainerTheme>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SlotBox">
+                          <Border Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
+                                  Opacity="{Binding Opacity}" Background="{Binding Background}"
+                                  CornerRadius="4" Padding="4,2">
+                            <TextBlock Text="{Binding Title}" FontSize="11"
+                                       TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Panel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <ItemsControl IsVisible="{Binding IsMonth}" ItemsSource="{Binding TygodniePo}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Columns="1" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:MonthWeek">
+              <ItemsControl ItemsSource="{Binding Cells}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <UniformGrid Columns="7" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:MonthCell">
+                    <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
+                            Classes.dzisiaj="{Binding IsToday}">
+                      <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Classes="numer" Text="{Binding Day}" />
+                        <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:MonthEntry">
+                              <TextBlock Margin="0,1" FontSize="11" Text="{Binding Title}"
+                                         TextTrimming="CharacterEllipsis" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Panel>
+
       <ScrollViewer x:Name="SiatkaKalendarza" x:DataType="vm:CalendarViewModel"
                     IsVisible="{Binding !IsMonth}"
                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">

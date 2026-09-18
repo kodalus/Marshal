@@ -1,4 +1,6 @@
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -8,6 +10,7 @@ using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
@@ -242,7 +245,22 @@ public partial class MainView : UserControl
         obszar.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerMovedEvent, ObszarRuch, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
+
+        _obszarKalendarza = obszar;
+        _podgladPrzed = this.FindControl<Panel>("PodgladPrzed");
+        _podgladPo = this.FindControl<Panel>("PodgladPo");
     }
+
+    /// <summary>Podglądy sąsiednich zakresów. Widoczne wyłącznie w trakcie przejechania.</summary>
+    private Panel? _podgladPrzed;
+
+    private Panel? _podgladPo;
+
+    /// <summary>Żeby brak warstw trafił do dziennika raz, a nie przy każdym ruchu palca.</summary>
+    private bool _brakWarstwZapisany;
+
+    /// <summary>Panel z siatkami. Trzymany do przesunięcia przy zmianie zakresu.</summary>
+    private Control? _obszarKalendarza;
 
     /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
     /// <remarks>
@@ -251,35 +269,234 @@ public partial class MainView : UserControl
     /// </remarks>
     private const double ProgPrzejechania = 60;
 
+    /// <summary>Od ilu punktów w bok siatka zaczyna iść za palcem.</summary>
+    /// <remarks>
+    /// Dwanaście, bo tyle mieści się w drgnięciu ręki przy przewijaniu w pionie.
+    /// Niżej siatka drgałaby w bok przy każdym ruchu po godzinach.
+    /// </remarks>
+    private const double ProgSledzenia = 12;
+
     /// <summary>Zsumowane przesunięcie bieżącego gestu.</summary>
     private Vector _gest;
 
     /// <summary>Czy ten gest już przeskoczył. Jeden ruch to jeden zakres.</summary>
+    /// <remarks>Dotyczy wyłącznie drogi bez sąsiadów, gdzie rozstrzyga się w trakcie ruchu.</remarks>
     private bool _gestZuzyty;
 
     /// <summary>
-    /// Przesunięcie ogłoszone przez rozpoznawacz gestu — nasze albo siatki.
+    /// Siatka idzie za palcem.
     /// </summary>
     /// <remarks>
-    /// Przesunięcia są przyrostowe i mają znak odwrotny do ruchu palca: tak je liczy
-    /// przewijanie, bo dodaje je wprost do swojego położenia. Stąd odwrócenie przy
-    /// przekazaniu dalej — reszta liczy w tym, dokąd pojechał palec.
+    /// <para>
+    /// Przesunięcia z rozpoznawacza są przyrostowe i mają znak odwrotny do ruchu palca:
+    /// tak liczy je przewijanie, bo dodaje je wprost do swojego położenia. Stąd
+    /// odwrócenie — reszta liczy w tym, dokąd pojechał palec.
+    /// </para>
+    /// <para>
+    /// Rozstrzygnięcie zapada dopiero przy puszczeniu, a nie po przekroczeniu progu
+    /// w trakcie ruchu. Przeskok w połowie gestu jest tym, co widać jako „przeskakuje
+    /// z widoku na widok": ekran zmienia się pod palcem, który jeszcze jedzie, i nie
+    /// ma już jak się z tego wycofać. Tak się nie zachowuje żadna rzecz, którą się
+    /// przesuwa — przesuwana idzie za ręką i dopiero po puszczeniu albo dojeżdża,
+    /// albo wraca.
+    /// </para>
+    /// <para>
+    /// Czego to nadal <b>nie</b> daje: widoku sąsiedniego zakresu w trakcie gestu.
+    /// Odsłania się puste tło, bo złożona jest tylko jedna siatka. Pokazanie sąsiada
+    /// znaczyłoby składanie trzech naraz i utrzymywanie ich w zgodzie przy każdym
+    /// odhaczeniu i przeciągnięciu bloku — czyli przepisanie kalendarza na karuzelę.
+    /// </para>
     /// </remarks>
     private void ObszarGest(object? nadawca, ScrollGestureEventArgs e)
     {
-        if (_gestZuzyty)
+        _gest += e.Delta;
+
+        var wBok = -_gest.X;
+        var wPion = -_gest.Y;
+
+        // W bok wyraźnie bardziej niż w pionie — inaczej dojeżdżanie do wieczora
+        // ciągnęłoby siatkę w bok przy każdym ukośnym ruchu.
+        if (Math.Abs(wBok) < ProgSledzenia || Math.Abs(wBok) < 1.5 * Math.Abs(wPion))
         {
             return;
         }
 
-        _gest += e.Delta;
-        _gestZuzyty = Przeskocz(-_gest.X, -_gest.Y);
+        // **Za palcem tylko wtedy, gdy jest co odsłonić.** Bez złożonych sąsiadów
+        // przeciąganie pokazuje puste tło, a to jest gorsze od braku ruchu: udaje
+        // płynność i pokazuje dziurę tam, gdzie powinien być następny tydzień.
+        // Wtedy siatka po prostu przeskakuje — czyli robi to, co robiła zawsze.
+        if (_kalendarz?.SasiedziGotowi != true)
+        {
+            if (!_gestZuzyty)
+            {
+                _gestZuzyty = Przeskocz(wBok, wPion);
+            }
+
+            return;
+        }
+
+        Czuwaj();
+        Przesun(wBok);
     }
 
-    private void ObszarGestSkonczony(object? nadawca, ScrollGestureEndedEventArgs e)
+    private void ObszarGestSkonczony(object? nadawca, ScrollGestureEndedEventArgs e) =>
+        ZakonczGest();
+
+    /// <summary>Ustawienie siatki na zadanym przesunięciu — bez animacji, wprost za palcem.</summary>
+    private void Przesun(double wBok)
     {
+        if (_obszarKalendarza is not { Bounds.Width: > 0 } obszar)
+        {
+            return;
+        }
+
+        OdslonSasiadow(obszar.Bounds.Width);
+
+        _przesuniecieSiatki ??= new TranslateTransform();
+        obszar.RenderTransform = _przesuniecieSiatki;
+
+        // Ograniczone do szerokości: dalej i tak nie ma czego odsłaniać, a siatka
+        // wyjechana poza ekran wygląda na zgubioną.
+        _przesuniecieSiatki.X = Math.Clamp(wBok, -obszar.Bounds.Width, obszar.Bounds.Width);
+    }
+
+    /// <summary>
+    /// Pokazanie sąsiednich zakresów po bokach siatki.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stoją w tym samym panelu, co siatka, odsunięte o szerokość okna w lewo i w prawo.
+    /// Przesuwa się <b>panel</b>, więc jadą razem z nią — palec odsłania to, co naprawdę
+    /// jest obok, a nie puste tło. Wcześniej przejechanie pokazywało pustkę i wyglądało
+    /// to jak wysunięcie kalendarza znikąd.
+    /// </para>
+    /// <para>
+    /// Dane sąsiadów składane są przy pierwszym ruchu palca, nie przy każdym przeliczeniu
+    /// siatki: siatka przelicza się po każdym odhaczeniu i po każdej minucie, a sąsiedzi
+    /// byliby wtedy prawie zawsze wyrzuceni bez użycia.
+    /// </para>
+    /// </remarks>
+    private void OdslonSasiadow(double szerokosc)
+    {
+        // Warstwy odszukiwane przy pierwszym użyciu, nie przy wczytaniu panelu, i to
+        // jest zabezpieczenie przed jedyną przyczyną, której poprzednim razem nie
+        // wykluczyłem: gdyby odszukanie po nazwie zawiodło, pola zostałyby puste,
+        // podglądy nigdy nie zapaliłyby się i wyglądałoby to dokładnie tak samo jak
+        // brak danych. Zapis w dzienniku rozdziela te dwie przyczyny.
+        _podgladPrzed ??= this.FindControl<Panel>("PodgladPrzed");
+        _podgladPo ??= this.FindControl<Panel>("PodgladPo");
+
+        if ((_podgladPrzed is null || _podgladPo is null) && !_brakWarstwZapisany)
+        {
+            _brakWarstwZapisany = true;
+
+            _ = Probuj("Kalendarz: podgląd sąsiadów", () =>
+                DataContext is MainViewModel model
+                    ? model.Journal.RecordAsync(
+                        "Kalendarz: podgląd sąsiadów",
+                        "nie ma warstw",
+                        "Warstwy PodgladPrzed/PodgladPo nie zostały odnalezione w oknie.")
+                    : Task.CompletedTask);
+        }
+
+        Ustaw(_podgladPrzed, -szerokosc);
+        Ustaw(_podgladPo, szerokosc);
+
+        static void Ustaw(Panel? podglad, double gdzie)
+        {
+            if (podglad is null)
+            {
+                return;
+            }
+
+            if (podglad.RenderTransform is not TranslateTransform przesuniecie)
+            {
+                przesuniecie = new TranslateTransform();
+                podglad.RenderTransform = przesuniecie;
+            }
+
+            przesuniecie.X = gdzie;
+            podglad.IsVisible = true;
+        }
+    }
+
+    /// <summary>Schowanie sąsiadów. Poza gestem nie mają czego pokazywać.</summary>
+    private void SchowajSasiadow()
+    {
+        if (_podgladPrzed is not null)
+        {
+            _podgladPrzed.IsVisible = false;
+        }
+
+        if (_podgladPo is not null)
+        {
+            _podgladPo.IsVisible = false;
+        }
+    }
+
+    /// <summary>
+    /// Koniec gestu: albo dojeżdżamy do sąsiedniego zakresu, albo wracamy.
+    /// </summary>
+    /// <remarks>
+    /// Zakres zmienia się <b>przed</b> animacją powrotu, więc świeża siatka dojeżdża
+    /// z miejsca, w które dociągnął ją palec. Animowanie jej od krawędzi ekranu
+    /// znaczyłoby skok z położenia, w którym była, na krawędź — czyli to samo szarpnięcie,
+    /// które ten gest ma usunąć.
+    /// </remarks>
+    private void ZakonczGest()
+    {
+        var wBok = -_gest.X;
+        var wPion = -_gest.Y;
+
         _gest = default;
-        _gestZuzyty = false;
+        _czuwanie?.Stop();
+
+        if (_gestZuzyty)
+        {
+            _gestZuzyty = false;
+            return;
+        }
+
+        var skad = _przesuniecieSiatki?.X ?? 0;
+
+        if (Math.Abs(skad) < 0.5)
+        {
+            // Siatka nigdy nie ruszyła — to nie było przejechanie, tylko przewijanie
+            // albo dotknięcie. Nie ma czego kończyć.
+            return;
+        }
+
+        Przeskocz(wBok, wPion);
+        Wroc(skad);
+    }
+
+    /// <summary>Sąsiedzi chowani po dojeździe, nie przed nim — inaczej znikliby w ruchu.</summary>
+    private async Task PoDojezdzieAsync(Task dojazd)
+    {
+        await dojazd;
+        SchowajSasiadow();
+    }
+
+    /// <summary>
+    /// Pilnowanie, żeby siatka nie została przesunięta, gdy koniec gestu nie przyjdzie.
+    /// </summary>
+    /// <remarks>
+    /// Koniec gestu ogłasza biblioteka i w zwykłym przebiegu przychodzi. Gdyby nie
+    /// przyszedł — inna wersja, przerwany dotyk, cokolwiek — siatka zostałaby odsunięta
+    /// w bok na stałe, a to jest awaria widoczna i nie do naprawienia inaczej niż
+    /// zamknięciem aplikacji. Koszt zabezpieczenia to jeden minutnik na gest.
+    /// </remarks>
+    private DispatcherTimer? _czuwanie;
+
+    private void Czuwaj()
+    {
+        _czuwanie ??= new DispatcherTimer(
+            TimeSpan.FromMilliseconds(400),
+            DispatcherPriority.Input,
+            (_, _) => ZakonczGest());
+
+        _czuwanie.Stop();
+        _czuwanie.Start();
     }
 
     private (Point Skad, Point Dokad, IPointer Wskaznik)? _przejechanie;
@@ -299,11 +516,25 @@ public partial class MainView : UserControl
 
     private void ObszarRuch(object? nadawca, PointerEventArgs e)
     {
-        if (_przejechanie is { } dotyk
-            && nadawca is Control obszar
-            && ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        if (_przejechanie is not { } dotyk
+            || nadawca is not Control obszar
+            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
         {
-            _przejechanie = dotyk with { Dokad = e.GetPosition(obszar) };
+            return;
+        }
+
+        var dokad = e.GetPosition(obszar);
+        _przejechanie = dotyk with { Dokad = dokad };
+
+        var wBok = dokad.X - dotyk.Skad.X;
+        var wPion = dokad.Y - dotyk.Skad.Y;
+
+        // Mysz idzie za ręką tak samo jak palec — ten sam próg i ten sam warunek.
+        if (!_przeciagam
+            && Math.Abs(wBok) >= ProgSledzenia
+            && Math.Abs(wBok) >= 1.5 * Math.Abs(wPion))
+        {
+            Przesun(wBok);
         }
     }
 
@@ -314,14 +545,27 @@ public partial class MainView : UserControl
 
         if (ruch is not { } dotyk || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
         {
+            // Palec: zapasowe zakończenie gestu na wypadek, gdyby biblioteka nie
+            // ogłosiła jego końca. Gdy siatka nigdy nie ruszyła, nic się nie dzieje.
+            ZakonczGest();
             return;
         }
 
         var dokad = nadawca is Control obszar ? e.GetPosition(obszar) : dotyk.Dokad;
 
+        var wBok = dokad.X - dotyk.Skad.X;
+        var wPion = dokad.Y - dotyk.Skad.Y;
+
+        var skad = _przesuniecieSiatki?.X ?? 0;
+
         // Obsłużone tylko wtedy, gdy naprawdę przejechano — inaczej zwykłe kliknięcie
         // bloku przestałoby go otwierać.
-        e.Handled = Przeskocz(dokad.X - dotyk.Skad.X, dokad.Y - dotyk.Skad.Y);
+        e.Handled = Przeskocz(wBok, wPion);
+
+        if (Math.Abs(skad) >= 0.5)
+        {
+            Wroc(skad);
+        }
     }
 
     /// <summary>Czy ruch o tyle punktów jest przejechaniem — i jeśli tak, przeskakuje.</summary>
@@ -351,29 +595,79 @@ public partial class MainView : UserControl
         return true;
     }
 
+    /// <summary>Jak długo siatka dojeżdża na miejsce po puszczeniu.</summary>
+    /// <remarks>
+    /// Sto sześćdziesiąt milisekund: dość, żeby ruch był ruchem, a nie podmianą,
+    /// i za mało, żeby zdążyło się na niego czekać.
+    /// </remarks>
+    private static readonly TimeSpan CzasDojazdu = TimeSpan.FromMilliseconds(160);
+
+    /// <summary>Przesunięcie rysowania siatki. Jedno na całe życie okna.</summary>
+    /// <remarks>
+    /// Przesuwane jest rysowanie, nie układ: siatka zostaje tam, gdzie była, więc nic
+    /// się nie przelicza i nic nie zmienia rozmiaru.
+    /// </remarks>
+    private TranslateTransform? _przesuniecieSiatki;
+
     /// <summary>
-    /// Dlaczego zmiana zakresu nie jest animowana.
+    /// Dojazd siatki do miejsca — z tego, dokąd dociągnął ją palec, do zera.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Były tu dwa podejścia i oba padły z tego samego powodu. Siatka idąca za palcem
-    /// odsłaniała puste tło, bo złożona jest tylko jedna. Wjazd nowego zakresu z krawędzi
-    /// odsłaniał to samo puste tło, tyle że przez sto sześćdziesiąt milisekund i po
-    /// puszczeniu palca — więc wyglądał nie jak ruch, tylko jak mignięcie dziury.
+    /// Jedna animacja na oba zakończenia gestu i to jest sedno. Gdy zakres się zmienił,
+    /// świeża siatka dojeżdża z miejsca, w którym zostawił ją palec — wygląda to jak
+    /// dociągnięcie tego, co się właśnie przyciągnęło. Gdy się nie zmienił, ta sama
+    /// animacja jest powrotem. Ruch jest ten sam, bo z punktu widzenia ręki dzieje się
+    /// to samo: rzecz wraca na swoje miejsce.
     /// </para>
     /// <para>
-    /// Pustka bierze się stąd, że sąsiedni zakres nie istnieje, dopóki się go nie złoży.
-    /// Żadna animacja tego nie naprawi: animowanie czegoś, czego nie ma, pokazuje brak
-    /// zamiast go ukryć. Dopóki kalendarz nie zostanie przepisany na karuzelę — trzy
-    /// siatki składane naraz i trzymane w zgodzie przy każdym odhaczeniu i przeciągnięciu
-    /// bloku — <b>lepsza jest podmiana bez ruchu</b>: nie udaje płynności i nie pokazuje
-    /// niczego, czego nie ma.
+    /// Ruszana jest sama liczba, nie własność, która ją trzyma. Podanie pod animację
+    /// panelu i kazanie jej ruszać <c>RenderTransform</c> zapisanym jako operacje
+    /// przekształcenia wywracało aplikację przy pierwszym przejechaniu: dla takiej
+    /// własności nie ma domyślnego animatora, a wychodzi to na jaw dopiero przy
+    /// pierwszej klatce, czyli w trakcie gestu.
     /// </para>
     /// <para>
-    /// Kierunek zmiany widać z nagłówka i z dat kolumn. To mniej, niż dawał ruch, ale
-    /// mniej i prawdziwie bije więcej i z dziurą.
+    /// Całość przez wspólne zabezpieczenie okna. To jest ozdoba — zakres zmienia się
+    /// tak czy owak — a ozdoba nie ma prawa zamknąć aplikacji.
     /// </para>
     /// </remarks>
+    private void Wroc(double skad) =>
+        _ = Probuj("Kalendarz: dojazd siatki", () => PoDojezdzieAsync(WrocAsync(skad)));
+
+    private Task WrocAsync(double skad)
+    {
+        if (_przesuniecieSiatki is not { } przesuniecie)
+        {
+            return Task.CompletedTask;
+        }
+
+        var animacja = new Animation
+        {
+            Duration = CzasDojazdu,
+            Easing = new CubicEaseOut(),
+            FillMode = FillMode.None,
+            Children =
+            {
+                new KeyFrame
+                {
+                    Cue = new Cue(0d),
+                    Setters = { new Setter(TranslateTransform.XProperty, skad) },
+                },
+                new KeyFrame
+                {
+                    Cue = new Cue(1d),
+                    Setters = { new Setter(TranslateTransform.XProperty, 0d) },
+                },
+            },
+        };
+
+        // Wartość zdejmowana od razu, żeby po animacji nie wrócił na nią stary stan:
+        // animacja z wygaszaniem „None" oddaje własność temu, co w niej zapisane.
+        przesuniecie.X = 0;
+
+        return animacja.RunAsync(przesuniecie);
+    }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
     /// <remarks>
