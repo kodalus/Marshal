@@ -1016,6 +1016,47 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Plan dnia — czyli widget — pokazuje także wydarzenia z podłączonych kalendarzy.
+    /// </summary>
+    /// <remarks>
+    /// Bez nich widget odpowiadał na pytanie „co mam dziś w Marshalu", a nie „co mam
+    /// dziś". Wizyta u lekarza wpisana w Google zajmuje dzień tak samo jak zadanie,
+    /// a plan, który ją pomija, kłamie o tym, ile zostało czasu.
+    /// </remarks>
+    [Fact]
+    public async Task Plan_dnia_pokazuje_wydarzenia_z_kalendarza()
+    {
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "Lekarz", Dzis.ToString("yyyy-MM-dd"), 10, 11)],
+            SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Kupić mleko", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        zadanie.SetDoTime(new TimeOnly(8, 0), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        var plan = new PlanDniaService(
+            new TaskRepository(_db), new ProjectRepository(_db), new AreaRepository(_db),
+            _zegar, _usluga);
+
+        var pozycje = await plan.DlaDniaAsync(Dzis);
+
+        // Po godzinach, niezależnie od tego, skąd wpis pochodzi — dzień ma jedną oś.
+        pozycje.Select(p => p.Tytul).Should().Equal("Kupić mleko", "Lekarz");
+
+        // Wydarzenie bez identyfikatora zadania: na widgecie nie ma czego odhaczyć
+        // jednym dotknięciem, bo ptaszek idzie do cudzego kalendarza przez sieć.
+        pozycje.Single(p => p.Tytul == "Lekarz").Zadanie.Should().BeNull();
+        pozycje.Single(p => p.Tytul == "Kupić mleko").Zadanie.Should().Be(zadanie.Id);
+    }
+
+    /// <summary>
     /// Pokazanie wydarzenia osobie dopisuje ją do gości, a powtórka nie dopisuje drugi raz.
     /// </summary>
     /// <remarks>

@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Appwidget;
 using Android.Content;
+using Android.Views;
 using Marshal.Application.Abstractions;
 using Android.Widget;
 using Marshal.Application.UseCases;
@@ -103,19 +104,41 @@ public sealed class TodayWidgetService : RemoteViewsService
             // Uzupełnienie wzorca, nie własny zamiar: wierszowi listy nie da się dać
             // osobnego zamiaru oczekującego — system trzyma jeden wzorzec na całą listę
             // i dokłada do niego to, co wiersz tu wpisze.
-            var odhaczenie = new Intent();
-            odhaczenie.PutExtra(TodayWidget.TaskIdExtra, pozycja.Id.ToString());
+            //
+            // Wydarzenie z cudzego kalendarza nie ma czego odhaczyć jednym dotknięciem:
+            // ptaszek idzie tam przez sieć, a widget nie ma jak poczekać ani pokazać,
+            // że czeka. Kwadracik zostaje wtedy schowany — niewidoczny, a nie wyłączony,
+            // bo wyłączony wyglądałby na zepsuty. Miejsce po nim zostaje, żeby wiersze
+            // miały wspólną krawędź tekstu.
+            if (pozycja.Zadanie is { } zadanie)
+            {
+                widok.SetViewVisibility(Resource.Id.zrobione, ViewStates.Visible);
 
-            widok.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
+                var odhaczenie = new Intent();
+                odhaczenie.PutExtra(TodayWidget.TaskIdExtra, zadanie.ToString());
+
+                widok.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
+            }
+            else
+            {
+                widok.SetViewVisibility(Resource.Id.zrobione, ViewStates.Invisible);
+            }
 
             // Treść wiersza otwiera aplikację. **Rodzeństwo kwadracika, nie jego rodzic:**
             // pierwsza wersja dawała ten zamiar korzeniowi wiersza, czyli czemuś, co
             // zawiera w sobie kwadracik — a wtedy o to, które dotknięcie wygrywa,
             // rozstrzyga launcher. Odhaczenie po prostu nie działało: dotknięcie szło
             // do wiersza i otwierało aplikację.
+            //
+            // Przy wydarzeniu bez identyfikatora zadania otwiera się sam kalendarz —
+            // czyli to samo miejsce, tyle że bez wskazania na konkretny wpis.
             var otwarcie = new Intent();
             otwarcie.PutExtra(TodayWidget.CoOtworzExtra, TodayWidget.CoOtworz);
-            otwarcie.PutExtra(TodayWidget.TaskIdExtra, pozycja.Id.ToString());
+
+            if (pozycja.Zadanie is { } otwierane)
+            {
+                otwarcie.PutExtra(TodayWidget.TaskIdExtra, otwierane.ToString());
+            }
 
             widok.SetOnClickFillInIntent(Resource.Id.tresc, otwarcie);
 
