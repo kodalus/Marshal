@@ -46,7 +46,10 @@ public sealed class TaskMirror(
         // Zadanie, które przestało mieć dzień albo godzinę, przestaje być wydarzeniem.
         // Kalendarz nie ma jak pokazać „kiedyś w tym tygodniu", a zostawione w nim
         // wydarzenie kłamałoby o porze, której nikt nie wybrał.
-        if (task.State == TaskState.Trashed || task.DoDate is null || task.DoTime is null)
+        // Dawniej wymagana była godzina. Znaczyło to, że wszystko, co ma dzień, ale nie
+        // ma pory — wzięte na dziś, „zrobić w czwartek" — istniało wyłącznie w Marshalu
+        // i nikt poza nim tego nie widział.
+        if (task.State == TaskState.Trashed || Dzien(task) is null)
         {
             await RemoveAsync(task, ct);
             return;
@@ -193,19 +196,36 @@ public sealed class TaskMirror(
     /// Odhaczone niesie ptaszek w nazwie — tak samo jak wydarzenie odhaczone na siatce.
     /// Druga osoba widzi wtedy u siebie, że rzecz jest zrobiona, bez pytania.
     /// </remarks>
+    /// <summary>Dzień, na który zadanie ma stanąć w kalendarzu. Puste znaczy „na żaden".</summary>
+    /// <remarks>
+    /// Dzień wykonania, a gdy go nie ma — dzień, na który zadanie zostało wybrane.
+    /// Ta sama reguła co na siatce w Marshalu: zadanie umówione na czwartek i wzięte
+    /// na dziś stoi w czwartek, bo tam jest umówione.
+    /// </remarks>
+    private static DateOnly? Dzien(TaskItem task) => task.DoDate ?? task.FocusDate;
+
     private CalendarDraft Szkic(TaskItem task)
     {
         var strefa = settings.Zone;
-        var dzien = task.DoDate!.Value;
-        var pora = task.DoTime!.Value;
-
-        var lokalny = dzien.ToDateTime(pora);
-        var start = new DateTimeOffset(lokalny, strefa.GetUtcOffset(lokalny));
-        var dlugosc = TimeSpan.FromMinutes(task.EstimatedMinutes ?? DomyslneMinuty);
+        var dzien = Dzien(task)!.Value;
 
         var nazwa = task.State == TaskState.Done
             ? EventMark.Apply(task.Title)
             : EventMark.Strip(task.Title);
+
+        // Bez godziny — wydarzenie całodniowe. Zgadnięta godzina zrobiłaby z zadania
+        // spotkanie: w cudzym kalendarzu wyglądałoby jak coś umówionego na ósmą rano,
+        // czego nikt nie umawiał. Koniec dnia później, bo u Google koniec całodniowego
+        // jest wyłączny — ten sam dzień w obu polach daje wydarzenie zerowej długości.
+        if (task.DoTime is not { } pora)
+        {
+            var poczatek = new DateTimeOffset(dzien.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            return new CalendarDraft(nazwa, poczatek, poczatek.AddDays(1), AllDay: true);
+        }
+
+        var lokalny = dzien.ToDateTime(pora);
+        var start = new DateTimeOffset(lokalny, strefa.GetUtcOffset(lokalny));
+        var dlugosc = TimeSpan.FromMinutes(task.EstimatedMinutes ?? DomyslneMinuty);
 
         return new CalendarDraft(nazwa, start, start + dlugosc);
     }

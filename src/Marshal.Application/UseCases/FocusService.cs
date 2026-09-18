@@ -1,4 +1,5 @@
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Tasks;
 
@@ -29,8 +30,42 @@ public sealed class FocusService(
     ITaskRepository tasks,
     IUnitOfWork unitOfWork,
     IClock clock,
-    IHlcSource hlc)
+    IHlcSource hlc,
+    ITaskMirror? mirror = null)
 {
+    /// <summary>
+    /// Odbicie wyboru w kalendarzu zewnętrznym.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zadanie wybrane na dziś dostaje dzień, więc od tej chwili należy do kalendarza
+    /// tak samo jak zadanie umówione — tyle że bez godziny, czyli jako całodniowe.
+    /// Zdjęcie z wyboru i wygaśnięcie zabierają mu ten dzień, więc wydarzenie znika.
+    /// </para>
+    /// <para>
+    /// Awaria wysyłki **nie przewraca** wyboru. Wzięcie zadania na dziś jest gestem
+    /// wykonywanym przy porannym planowaniu, często w biegu; odmowa dlatego, że Google
+    /// akurat nie odpowiada, znaczyłaby, że planowania nie da się zrobić bez sieci.
+    /// Ślad po nieudanej wysyłce zostaje w dzienniku — zapisuje go samo odbicie.
+    /// </para>
+    /// </remarks>
+    private async Task OdbijAsync(TaskItem zadanie, CancellationToken ct)
+    {
+        if (mirror is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await mirror.PushAsync(zadanie, ct);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // Zapisane już w dzienniku przez odbicie. Wybór zostaje.
+        }
+    }
+
     /// <summary>Ile zadań wolno wybrać na jeden dzień (N14).</summary>
     public const int Slots = 5;
 
@@ -67,6 +102,7 @@ public sealed class FocusService(
         zadanie.Activate(hlc.Next());
         zadanie.Focus(dzis, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
+        await OdbijAsync(zadanie, ct);
 
         return new FocusResult(true, await tasks.ByFocusDateAsync(dzis, ct));
     }
@@ -81,6 +117,7 @@ public sealed class FocusService(
 
         zadanie.Unfocus(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
+        await OdbijAsync(zadanie, ct);
     }
 
     /// <summary>
@@ -102,6 +139,11 @@ public sealed class FocusService(
         if (wygasle.Count > 0)
         {
             await unitOfWork.SaveChangesAsync(ct);
+
+            foreach (var zadanie in wygasle)
+            {
+                await OdbijAsync(zadanie, ct);
+            }
         }
 
         return wygasle.Count;

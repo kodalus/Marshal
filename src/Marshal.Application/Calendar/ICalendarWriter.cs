@@ -10,7 +10,18 @@ namespace Marshal.Application.Calendar;
 /// z powrotem, byłby gorszy niż brak zapisu.
 /// </remarks>
 public sealed record CalendarDraft(
-    string Title, DateTimeOffset Start, DateTimeOffset End, string? Location = null);
+    string Title, DateTimeOffset Start, DateTimeOffset End, string? Location = null,
+
+    /// <summary>
+    /// Wydarzenie całodniowe: data bez godziny.
+    /// </summary>
+    /// <remarks>
+    /// Nie to samo co „od północy do północy". Google trzyma jedno i drugie inaczej —
+    /// całodniowe ma samą datę i nie przelicza się na strefę, bo data nie ma strefy.
+    /// Wysłane jako chwila stałoby o północy czasu lokalnego i u kogoś na wschód
+    /// wypadałoby dzień wcześniej.
+    /// </remarks>
+    bool AllDay = false);
 
 /// <summary>
 /// Zapis do kalendarza zewnętrznego (spec 10.2).

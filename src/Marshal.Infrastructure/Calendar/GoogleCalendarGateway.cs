@@ -1,3 +1,4 @@
+using System.Globalization;
 using Google;
 using System.Net;
 using Google.Apis.Calendar.v3;
@@ -172,9 +173,22 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     {
         Summary = draft.Title,
         Location = draft.Location,
-        Start = new EventDateTime { DateTimeDateTimeOffset = draft.Start },
-        End = new EventDateTime { DateTimeDateTimeOffset = draft.End },
+        Start = Kiedy(draft.Start, draft.AllDay),
+        End = Kiedy(draft.End, draft.AllDay),
     };
+
+    /// <summary>
+    /// Chwila albo data — Google trzyma to w dwóch różnych polach.
+    /// </summary>
+    /// <remarks>
+    /// Całodniowe idzie jako sama data, bez strefy, bo data strefy nie ma. Wysłane
+    /// jako chwila o północy czasu lokalnego wypadałoby u kogoś na wschód dzień
+    /// wcześniej — a „wzięte na dziś" ma znaczyć dziś u każdego, kto to widzi.
+    /// </remarks>
+    private static EventDateTime Kiedy(DateTimeOffset chwila, bool calodniowe) =>
+        calodniowe
+            ? new EventDateTime { Date = chwila.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }
+            : new EventDateTime { DateTimeDateTimeOffset = chwila };
 
     private async Task<GoogleCalendarFeed> PolaczAsync(CancellationToken ct)
     {
