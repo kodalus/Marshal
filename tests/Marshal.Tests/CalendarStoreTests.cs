@@ -891,10 +891,12 @@ public sealed class CalendarStoreTests : IDisposable
     /// <remarks>
     /// Odbicie jest robione po kliknięciu i nie ma trwałości: zadanie wyrzucone przy
     /// padniętej sieci albo tuż przed zamknięciem aplikacji zostawiało w kalendarzu
-    /// wydarzenie, po którym nikt już nie sprzątał. Objaw był przykry podwójnie —
-    /// wpis wisiał dalej, a że zadania po tej stronie już nie było, przestawał być
-    /// zadaniem: nie dawał się wyrzucić do kosza, tylko trzeba go było kasować jak
-    /// cudze wydarzenie, z potwierdzeniem.
+    /// wydarzenie, po którym nikt już nie sprzątał.
+    ///
+    /// Na siatce tego dziś nie widać, bo wskazanie w zadaniu trwa i cień pozostaje
+    /// cieniem — ale w cudzym kalendarzu wpis nadal stoi, więc zdjęcie go jest wciąż
+    /// do zrobienia. Ten test pilnuje tego, co zostało po drugiej stronie, a nie tego,
+    /// co widać po naszej.
     /// </remarks>
     [Fact]
     public async Task Nieudane_kasowanie_odbicia_zostaje_dokonczone()
@@ -922,9 +924,14 @@ public sealed class CalendarStoreTests : IDisposable
 
         await skrzynka.TrashAsync(zadanie.Id);
 
-        // I tak to wygląda z ekranu: wpis stoi dalej, ale już nie jako zadanie.
-        var sierota = (await _usluga.AgendaAsync(Dzis, 1))[0].Timed.Should().ContainSingle().Which;
-        sierota.Entry.TaskId.Should().BeNull("zadania już nie ma, został sam cień");
+        // Z ekranu nie widać nic i tak ma być: wskazanie w zadaniu jeszcze jest, więc
+        // wydarzenie nadal jest cieniem, a nie osobnym wpisem. Dopóki kasowanie się nie
+        // powiodło, siatka czeka na skutek, zamiast pokazywać rzecz w połowie drogi.
+        //
+        // Ten test opisywał kiedyś objaw odwrotny — wpis stojący dalej, ale już nie jako
+        // zadanie — i objaw ten był całą usterką, a nie umową.
+        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+            .Should().BeEmpty("cień nie staje się osobnym wpisem, dopóki wskazanie trwa");
 
         // Pierwsze podejście pada — sieć nie odpowiada. Ma nie rzucić wyżej: dokańczanie
         // chodzi z minutnika i wywrotka zabrałaby ze sobą wszystko, co robi się obok.
