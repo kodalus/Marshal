@@ -243,7 +243,14 @@ public partial class MainView : UserControl
         obszar.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
 
         _obszarKalendarza = obszar;
+        _podgladPrzed = this.FindControl<Panel>("PodgladPrzed");
+        _podgladPo = this.FindControl<Panel>("PodgladPo");
     }
+
+    /// <summary>Podglądy sąsiednich zakresów. Widoczne wyłącznie w trakcie przejechania.</summary>
+    private Panel? _podgladPrzed;
+
+    private Panel? _podgladPo;
 
     /// <summary>Panel z siatkami. Trzymany do przesunięcia przy zmianie zakresu.</summary>
     private Control? _obszarKalendarza;
@@ -318,12 +325,70 @@ public partial class MainView : UserControl
             return;
         }
 
+        OdslonSasiadow(obszar.Bounds.Width);
+
         _przesuniecieSiatki ??= new TranslateTransform();
         obszar.RenderTransform = _przesuniecieSiatki;
 
         // Ograniczone do szerokości: dalej i tak nie ma czego odsłaniać, a siatka
         // wyjechana poza ekran wygląda na zgubioną.
         _przesuniecieSiatki.X = Math.Clamp(wBok, -obszar.Bounds.Width, obszar.Bounds.Width);
+    }
+
+    /// <summary>
+    /// Pokazanie sąsiednich zakresów po bokach siatki.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stoją w tym samym panelu, co siatka, odsunięte o szerokość okna w lewo i w prawo.
+    /// Przesuwa się <b>panel</b>, więc jadą razem z nią — palec odsłania to, co naprawdę
+    /// jest obok, a nie puste tło. Wcześniej przejechanie pokazywało pustkę i wyglądało
+    /// to jak wysunięcie kalendarza znikąd.
+    /// </para>
+    /// <para>
+    /// Dane sąsiadów składane są przy pierwszym ruchu palca, nie przy każdym przeliczeniu
+    /// siatki: siatka przelicza się po każdym odhaczeniu i po każdej minucie, a sąsiedzi
+    /// byliby wtedy prawie zawsze wyrzuceni bez użycia.
+    /// </para>
+    /// </remarks>
+    private void OdslonSasiadow(double szerokosc)
+    {
+        _ = Probuj("Kalendarz: sąsiednie zakresy", () =>
+            _kalendarz?.PrzygotujSasiadowAsync() ?? Task.CompletedTask);
+
+        Ustaw(_podgladPrzed, -szerokosc);
+        Ustaw(_podgladPo, szerokosc);
+
+        static void Ustaw(Panel? podglad, double gdzie)
+        {
+            if (podglad is null)
+            {
+                return;
+            }
+
+            if (podglad.RenderTransform is not TranslateTransform przesuniecie)
+            {
+                przesuniecie = new TranslateTransform();
+                podglad.RenderTransform = przesuniecie;
+            }
+
+            przesuniecie.X = gdzie;
+            podglad.IsVisible = true;
+        }
+    }
+
+    /// <summary>Schowanie sąsiadów. Poza gestem nie mają czego pokazywać.</summary>
+    private void SchowajSasiadow()
+    {
+        if (_podgladPrzed is not null)
+        {
+            _podgladPrzed.IsVisible = false;
+        }
+
+        if (_podgladPo is not null)
+        {
+            _podgladPo.IsVisible = false;
+        }
     }
 
     /// <summary>
@@ -354,6 +419,13 @@ public partial class MainView : UserControl
 
         Przeskocz(wBok, wPion);
         Wroc(skad);
+    }
+
+    /// <summary>Sąsiedzi chowani po dojeździe, nie przed nim — inaczej znikliby w ruchu.</summary>
+    private async Task PoDojezdzieAsync(Task dojazd)
+    {
+        await dojazd;
+        SchowajSasiadow();
     }
 
     /// <summary>
@@ -511,7 +583,8 @@ public partial class MainView : UserControl
     /// tak czy owak — a ozdoba nie ma prawa zamknąć aplikacji.
     /// </para>
     /// </remarks>
-    private void Wroc(double skad) => _ = Probuj("Kalendarz: dojazd siatki", () => WrocAsync(skad));
+    private void Wroc(double skad) =>
+        _ = Probuj("Kalendarz: dojazd siatki", () => PoDojezdzieAsync(WrocAsync(skad)));
 
     private Task WrocAsync(double skad)
     {
