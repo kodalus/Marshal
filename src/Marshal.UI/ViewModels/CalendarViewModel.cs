@@ -755,6 +755,33 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
+    /// <summary>Czy otwarte w karcie da się odhaczyć.</summary>
+    public bool CanCompleteOpened => Opened is { CanComplete: true };
+
+    /// <summary>
+    /// Odhaczenie z karty otwartego wydarzenia.
+    /// </summary>
+    /// <remarks>
+    /// Ptaszek przy nazwie, tak samo jak w oknie zadania, a nie przycisk obok „Zapisz".
+    /// Odhaczenie dotyczy tej jednej rzeczy, której nazwa stoi obok, a nie karty —
+    /// a przycisk stojący obok zapisu kusi, żeby kliknąć go po zmianie tytułu i wtedy
+    /// zmiana przepada.
+    ///
+    /// Karta zamyka się po odhaczeniu, tak samo jak okno zadania: to jest koniec
+    /// czynności, po której nie ma czego dalej oglądać.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ToggleOpenedAsync()
+    {
+        if (Opened is not { CanComplete: true } blok)
+        {
+            return;
+        }
+
+        await ToggleAsync(blok);
+        Opened = null;
+    }
+
     /// <summary>
     /// Rozciągnięcie bloku za dolną krawędź: nowa długość zadania.
     /// </summary>
@@ -971,7 +998,11 @@ public sealed partial class CalendarViewModel(
 
     public bool HasOpened => Opened is not null;
 
-    partial void OnOpenedChanged(SlotBox? value) => OnPropertyChanged(nameof(HasOpened));
+    partial void OnOpenedChanged(SlotBox? value)
+    {
+        OnPropertyChanged(nameof(HasOpened));
+        OnPropertyChanged(nameof(CanCompleteOpened));
+    }
 
     [RelayCommand]
     private void CloseOpened()

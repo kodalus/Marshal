@@ -151,6 +151,17 @@ public sealed partial class TaskDetailViewModel(
 
     public bool HasProblem => !string.IsNullOrEmpty(Problem);
 
+    /// <summary>
+    /// Czy zadanie jest odhaczone.
+    /// </summary>
+    /// <remarks>
+    /// Kwadracik przy nazwie stał dotąd pusty także przy zadaniu zrobionym — pokazywał
+    /// więc nie stan, tylko sam siebie. Przy zadaniu odhaczonym gdzie indziej wyglądało
+    /// to jak zgubione odhaczenie.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsDone { get; set; }
+
     /// <summary>Czy okno pokazuje zadanie, które już istnieje.</summary>
     /// <remarks>
     /// Przy zakładaniu nie ma czego odhaczać, a przycisk „Zrobione" stojący obok
@@ -360,6 +371,7 @@ public sealed partial class TaskDetailViewModel(
 
         Title = string.Empty;
         Note = string.Empty;
+        IsDone = false;
         Deadline = null;
         ReminderDay = null;
         ReminderTime = null;
@@ -409,6 +421,7 @@ public sealed partial class TaskDetailViewModel(
         ReminderDay = task.ReminderAt is { } r ? ToOffset(DateOnly.FromDateTime(r.DateTime)) : null;
         ReminderTime = task.ReminderAt?.TimeOfDay;
         WczytajWyprzedzenia(task.ReminderLeads);
+        IsDone = task.State == TaskState.Done;
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
         EstimatedMinutes = task.EstimatedMinutes;
         DoTime = task.DoTime?.ToTimeSpan();
@@ -683,10 +696,19 @@ public sealed partial class TaskDetailViewModel(
     /// <summary>Blokada wzajemnego przeliczania, żeby nie goniło się w kółko.</summary>
     private bool _zgodne;
 
-    /// <summary>Odhaczenie z okna szczegółu. Zostawia ślad, bo zamyka okno tak samo jak zapis.</summary>
+    /// <summary>
+    /// Odhaczenie i zdjęcie ptaszka z okna szczegółu. Zostawia ślad, bo zamyka okno
+    /// tak samo jak zapis.
+    /// </summary>
+    /// <remarks>
+    /// W obie strony, bo kwadracik pokazuje teraz stan zadania. Kwadracik, który daje
+    /// się tylko zaznaczyć, wygląda na zepsuty — i zostawia omyłkowe odhaczenie bez
+    /// drogi odwrotu.
+    /// </remarks>
     public async Task CompleteAsync()
     {
-        await log.RecordAsync("Zadanie: odhaczenie z okna", Title);
+        await log.RecordAsync(
+            IsDone ? "Zadanie: zdjęcie ptaszka z okna" : "Zadanie: odhaczenie z okna", Title);
 
         if (_id == Guid.Empty)
         {
@@ -695,7 +717,15 @@ public sealed partial class TaskDetailViewModel(
             return;
         }
 
-        await edit.CompleteAsync(_id);
+        if (IsDone)
+        {
+            await edit.ReopenAsync(_id);
+        }
+        else
+        {
+            await edit.CompleteAsync(_id);
+        }
+
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);
     }

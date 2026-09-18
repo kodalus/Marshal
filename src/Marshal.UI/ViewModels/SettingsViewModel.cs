@@ -222,10 +222,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// żeby czegokolwiek się dowiedzieć.
     /// </summary>
     /// <remarks>
-    /// „Nie ma dymka" ma trzy przyczyny wyglądające identycznie: biblioteka się nie
-    /// podpięła, podpięła się i Windows odmówił, albo nie było czego pokazać. Pierwsza
-    /// jest do naprawienia w kodzie, druga po stronie systemu — i bez rozróżnienia
-    /// obie naprawia się na oślep.
+    /// „Nie ma powiadomienia" ma trzy przyczyny wyglądające identycznie: nie podpięła
+    /// się obsługa systemowa, podpięła się i system odmówił, albo nie było czego
+    /// pokazać. Pierwsza jest do naprawienia w kodzie, druga po stronie systemu —
+    /// i bez rozróżnienia obie naprawia się na oślep.
     /// </remarks>
     [ObservableProperty]
     public partial string NotificationStatus { get; set; } = string.Empty;
@@ -234,15 +234,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task TestNotificationAsync()
     {
+        // Napis bez nazwy systemu. Ta sama aplikacja chodzi na Windowsie i na Androidzie,
+        // a powiadomienie mówiące o dymku Windowsa na telefonie wygląda jak wzięte
+        // z cudzego programu — i każe szukać czegoś, czego tam nie ma.
         await _powiadomienia.ShowAsync(new Notification(
             Guid.Empty,
             "Marshal — próba",
-            "Jeśli widzisz to jako dymek Windowsa, powiadomienia systemowe działają."));
+            "Jeśli widzisz to poza oknem aplikacji, powiadomienia systemowe działają."));
 
         NotificationStatus = InAppNotifier.StanSystemowych == "podpięte"
-            ? "Podpięte, wysłane. Jeśli dymek się nie pokazał, zatrzymał go Windows — "
-                + "najczęściej dlatego, że aplikacji nie ma w menu Start albo włączony "
-                + "jest tryb skupienia."
+            ? "Podpięte, wysłane. Jeśli powiadomienie się nie pokazało, zatrzymał je "
+                + "system — na Windowsie najczęściej brak aplikacji w menu Start albo "
+                + "tryb skupienia, na Androidzie odmowa zgody na powiadomienia."
             : $"Powiadomienia systemowe nie działają: {InAppNotifier.StanSystemowych}";
     }
 

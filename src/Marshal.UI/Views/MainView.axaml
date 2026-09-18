@@ -1056,8 +1056,17 @@
               CornerRadius="10" Background="{DynamicResource Karta}" VerticalAlignment="Center">
         <StackPanel Spacing="8">
 
-          <TextBox Text="{Binding OpenedTitle}" FontSize="18"
-                   IsEnabled="{Binding CanEditOpened}" />
+          <Grid ColumnDefinitions="Auto,*">
+            <!-- Ptaszek przy nazwie, tak samo jak w oknie zadania. Na siatce odhacza
+                 się kwadracikiem na bloku, ale on jest mały i na dotyku trudno w niego
+                 trafić — a kartę i tak się otwiera, żeby zobaczyć, o co chodzi. -->
+            <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
+                      IsVisible="{Binding CanCompleteOpened}"
+                      IsChecked="{Binding Opened.IsDone, Mode=OneWay}"
+                      Command="{Binding ToggleOpenedCommand}" />
+            <TextBox Grid.Column="1" Text="{Binding OpenedTitle}" FontSize="18"
+                     IsEnabled="{Binding CanEditOpened}" />
+          </Grid>
 
           <TextBlock Classes="hint" Text="{Binding Opened.DayText}" />
 
@@ -1488,9 +1497,9 @@
         <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
                    Text="{Binding TokenFolder, StringFormat='Żeton logowania: {0} — skasuj ten katalog, żeby zalogować się od nowa.'}" />
 
-        <!-- Próba powiadomienia. Przy dymkach Windowsa to jedyny sposób, żeby
-             czegokolwiek się dowiedzieć: brak dymka ma trzy przyczyny wyglądające
-             identycznie i bez rozróżnienia naprawia się je na oślep. -->
+        <!-- Próba powiadomienia. To jedyny sposób, żeby czegokolwiek się dowiedzieć:
+             brak powiadomienia ma trzy przyczyny wyglądające identycznie i bez
+             rozróżnienia naprawia się je na oślep. -->
         <TextBlock Classes="label" Margin="0,22,0,0" Text="Powiadomienia systemowe" />
         <Button Padding="14,8" HorizontalAlignment="Left"
                 Command="{Binding TestNotificationCommand}"
@@ -1949,7 +1958,9 @@
             <!-- Ptaszek przy nazwie zamiast przycisku „Zrobione" na dole: odhaczenie
                  dotyczy tej jednej rzeczy, której nazwa stoi obok, a nie okna. -->
             <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
-                      IsVisible="{Binding IsExisting}" Click="OdhaczZadanie" />
+                      IsVisible="{Binding IsExisting}"
+                      IsChecked="{Binding IsDone, Mode=OneWay}"
+                      Click="OdhaczZadanie" />
             <!-- Znak wodny, bo puste pole bez podpisu jest samym prostokątem:
                  nie widać po nim, że to jest miejsce na nazwę zadania. -->
             <TextBox Grid.Column="1" Text="{Binding Title}" FontSize="18"
