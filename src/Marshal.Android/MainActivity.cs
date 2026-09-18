@@ -21,14 +21,20 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         base.CustomizeAppBuilder(builder).WithInterFont();
 
     /// <summary>
-    /// Powiadomienia systemowe podpinane raz, przy zakładaniu okna.
+    /// Pilnowanie awarii, ślad po poprzedniej i powiadomienia systemowe.
     /// </summary>
     /// <remarks>
-    /// Po <c>base.OnCreate</c>, bo dopiero ono stawia Avalonię i aplikację — a haczyk
-    /// na powiadomienia siedzi w warstwie współdzielonej, która wtedy dopiero istnieje.
+    /// Powiadomienia po <c>base.OnCreate</c>, bo dopiero ono stawia Avalonię
+    /// i aplikację — a haczyk na powiadomienia siedzi w warstwie współdzielonej,
+    /// która wtedy dopiero istnieje.
     /// </remarks>
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        // Przed bazowym, bo to ono stawia Avalonię — a awaria przy stawianiu jest
+        // dokładnie tą, o której najtrudniej się czegokolwiek dowiedzieć.
+        Awaria.Pilnuj(this);
+        Awaria.Odczytaj(this);
+
         base.OnCreate(savedInstanceState);
         Powiadomienia.Podepnij(this);
     }

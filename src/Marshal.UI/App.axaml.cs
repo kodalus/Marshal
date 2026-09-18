@@ -18,6 +18,17 @@ namespace Marshal.UI;
 // aplikacji, nigdy nie docierając do typu Avalonii (CS0118).
 public partial class App : Avalonia.Application
 {
+    /// <summary>
+    /// Co platforma chce powiedzieć przy starcie. Puste, gdy nie ma nic.
+    /// </summary>
+    /// <remarks>
+    /// Wpis „Start" w dzienniku powstaje tutaj, w warstwie współdzielonej, a rzeczy
+    /// warte odnotowania bywają po stronie platformy — na przykład to, że poprzednie
+    /// uruchomienie padło. Warstwa współdzielona nie ma jak ich zapytać, więc to one
+    /// zostawiają tu zdanie przed startem.
+    /// </remarks>
+    public static string? SladPlatformy { get; set; }
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     /// <summary>
@@ -112,8 +123,11 @@ public partial class App : Avalonia.Application
                         + $"wydanie {Wydanie()}, "
                         + $"powiadomienia systemowe: {InAppNotifier.StanSystemowych}, "
                         + $"kalendarz główny: {ustawienia.MainCalendarId?.ToString() ?? "nieustawiony"}",
-                    ustawienia.ZoneProblem is null ? ActivityLevel.Ok : ActivityLevel.Problem,
-                    ustawienia.ZoneProblem);
+                    ustawienia.ZoneProblem is null && SladPlatformy is null
+                        ? ActivityLevel.Ok : ActivityLevel.Problem,
+                    string.Join("\n\n", new[] { ustawienia.ZoneProblem, SladPlatformy }
+                        .Where(w => !string.IsNullOrWhiteSpace(w))) is { Length: > 0 } szczegoly
+                        ? szczegoly : null);
             }
             catch (Exception ex)
             {
