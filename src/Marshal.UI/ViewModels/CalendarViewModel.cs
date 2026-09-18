@@ -785,11 +785,6 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        // Sąsiedzi złożeni pod poprzedni stan przestają być sąsiadami. Składane są
-        // od nowa przy następnym przejechaniu, nie tutaj: tu prawie zawsze byłyby
-        // wyrzucone bez użycia.
-        _sasiedziZlozeni = false;
-
         // Pole wyboru zakresu dociągane tutaj, a nie w każdym miejscu, które zmienia
         // zakres z osobna: siatka przeliczana jest po każdej takiej zmianie, więc to
         // jedyne miejsce, przez które wszystkie przechodzą.
@@ -1046,11 +1041,9 @@ public sealed partial class CalendarViewModel(
     /// Tydzień na przełomie jest tygodniem: wycięcie z niego dni należących do sąsiada
     /// zrobiłoby dziurę tam, gdzie jej nie ma. Dni spoza miesiąca zostają przygaszone.
     /// </remarks>
-    private DateOnly PoczatekSiatki() => PoczatekSiatki(Anchor);
-
-    private static DateOnly PoczatekSiatki(DateOnly kotwica)
+    private DateOnly PoczatekSiatki()
     {
-        var pierwszy = new DateOnly(kotwica.Year, kotwica.Month, 1);
+        var pierwszy = new DateOnly(Anchor.Year, Anchor.Month, 1);
 
         return pierwszy.AddDays(-(((int)pierwszy.DayOfWeek + 6) % 7));
     }
@@ -1063,12 +1056,10 @@ public sealed partial class CalendarViewModel(
     /// w poniedziałek mieści się w czterech, a rząd pustych komórek pod nim zabierałby
     /// wysokość wszystkim pozostałym — na telefonie to jedna szósta ekranu na nic.
     /// </remarks>
-    private int DniSiatki() => DniSiatki(Anchor);
-
-    private static int DniSiatki(DateOnly kotwica)
+    private int DniSiatki()
     {
-        var od = PoczatekSiatki(kotwica);
-        var koniec = new DateOnly(kotwica.Year, kotwica.Month, 1).AddMonths(1);
+        var od = PoczatekSiatki();
+        var koniec = new DateOnly(Anchor.Year, Anchor.Month, 1).AddMonths(1);
 
         // Do niedzieli włącznie po ostatnim dniu miesiąca.
         var dni = koniec.DayNumber - od.DayNumber;
@@ -1081,26 +1072,11 @@ public sealed partial class CalendarViewModel(
     {
         MonthWeeks.Clear();
 
-        foreach (var tydzien in ZlozTygodnie(_dni, Anchor))
-        {
-            MonthWeeks.Add(tydzien);
-        }
-    }
-
-    /// <summary>Tygodnie siatki miesiąca z podanych dni. Bez sieci, bez bazy, bez stanu.</summary>
-    /// <remarks>
-    /// Wyjęte ze składania bieżącego widoku, żeby dało się złożyć także sąsiedni miesiąc
-    /// — ten, który przejechanie palcem odsłania w trakcie ruchu.
-    /// </remarks>
-    private List<MonthWeek> ZlozTygodnie(IReadOnlyList<AgendaDay> dni, DateOnly kotwica)
-    {
-        var tygodnie = new List<MonthWeek>();
-
         var dzis = clock.Today;
-        var miesiac = kotwica.Month;
-        var komorki = new List<MonthCell>(dni.Count);
+        var miesiac = Anchor.Month;
+        var komorki = new List<MonthCell>(_dni.Count);
 
-        foreach (var dzien in dni)
+        foreach (var dzien in _dni)
         {
             // Całodniowe przed godzinowymi, godzinowe po godzinie. Ten sam porządek,
             // co na siatce tygodnia — inaczej ta sama doba miałaby dwie kolejności
@@ -1134,133 +1110,32 @@ public sealed partial class CalendarViewModel(
 
         for (var i = 0; i + 7 <= komorki.Count; i += 7)
         {
-            tygodnie.Add(new MonthWeek(komorki.GetRange(i, 7)));
-        }
-
-        return tygodnie;
-    }
-
-    /// <summary>Kolumny zakresu po lewej — tego, który odsłania przejechanie w prawo.</summary>
-    public ObservableCollection<CalendarColumn> KolumnyPrzed { get; } = [];
-
-    /// <summary>Kolumny zakresu po prawej.</summary>
-    public ObservableCollection<CalendarColumn> KolumnyPo { get; } = [];
-
-    /// <summary>Tygodnie poprzedniego miesiąca.</summary>
-    public ObservableCollection<MonthWeek> TygodniePrzed { get; } = [];
-
-    /// <summary>Tygodnie następnego miesiąca.</summary>
-    public ObservableCollection<MonthWeek> TygodniePo { get; } = [];
-
-    /// <summary>Czy sąsiedzi są złożeni dla bieżącego stanu siatki.</summary>
-    private bool _sasiedziZlozeni;
-
-    /// <summary>
-    /// Złożenie sąsiednich zakresów — tych, które widać w trakcie przejechania.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Robione <b>na żądanie, przy pierwszym ruchu palca</b>, a nie przy każdym
-    /// przeliczeniu siatki. Siatka przelicza się po każdym odhaczeniu, po każdej
-    /// minucie i po każdym przyjściu synchronizacji; składanie przy okazji dwóch
-    /// sąsiadów potroiłoby tę pracę po to, żeby prawie zawsze ją wyrzucić. Przejechanie
-    /// zdarza się rzadziej niż przeliczenie i ma na to własną chwilę.
-    /// </para>
-    /// <para>
-    /// Sąsiedzi są <b>obrazkiem</b>, nie drugą siatką: nie da się w nich niczego
-    /// dotknąć ani przeciągnąć. Interaktywna jest zawsze ta jedna, na której się stoi
-    /// — inaczej każde odhaczenie i każde przeciągnięcie bloku musiałoby wiedzieć,
-    /// do której z trzech siatek należy, a to jest ten rodzaj wiedzy, który potem
-    /// zostaje wszędzie.
-    /// </para>
-    /// </remarks>
-    public async Task PrzygotujSasiadowAsync()
-    {
-        if (_sasiedziZlozeni)
-        {
-            return;
-        }
-
-        _sasiedziZlozeni = true;
-
-        try
-        {
-            if (IsMonth)
-            {
-                await ZlozSasiadaMiesiaca(Anchor.AddMonths(-1), TygodniePrzed);
-                await ZlozSasiadaMiesiaca(Anchor.AddMonths(1), TygodniePo);
-            }
-            else
-            {
-                await ZlozSasiadaDni(Anchor.AddDays(-VisibleDays), KolumnyPrzed);
-                await ZlozSasiadaDni(Anchor.AddDays(VisibleDays), KolumnyPo);
-            }
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            // Sąsiad jest ozdobą gestu: bez niego przejechanie odsłania puste tło,
-            // czyli to, co było wcześniej. Nie ma powodu, żeby psuł cokolwiek innego.
-            _sasiedziZlozeni = false;
-
-            await log.RecordAsync(
-                "Kalendarz: sąsiednie zakresy", Range, ActivityLevel.Problem, e.Message);
-        }
-    }
-
-    private async Task ZlozSasiadaDni(DateOnly od, ObservableCollection<CalendarColumn> cel)
-    {
-        var kolumny = ZlozKolumny(await calendar.AgendaAsync(od, VisibleDays));
-
-        cel.Clear();
-
-        foreach (var kolumna in kolumny)
-        {
-            cel.Add(kolumna);
-        }
-    }
-
-    private async Task ZlozSasiadaMiesiaca(DateOnly kotwica, ObservableCollection<MonthWeek> cel)
-    {
-        var dni = await calendar.AgendaAsync(PoczatekSiatki(kotwica), DniSiatki(kotwica));
-        var tygodnie = ZlozTygodnie(dni, kotwica);
-
-        cel.Clear();
-
-        foreach (var tydzien in tygodnie)
-        {
-            cel.Add(tydzien);
+            MonthWeeks.Add(new MonthWeek(komorki.GetRange(i, 7)));
         }
     }
 
     /// <summary>Złożenie kolumn z ostatnio pobranych dni. Bez sieci i bez bazy.</summary>
     private void Przelicz()
     {
-        Columns.Clear();
+        var dzis = clock.Today;
+        var teraz = clock.Now.TimeOfDay.TotalHours * HourHeight;
 
-        foreach (var kolumna in ZlozKolumny(_dni))
+        Columns.Clear();
+        foreach (var dzien in _dni)
         {
-            Columns.Add(kolumna);
+            Columns.Add(new CalendarColumn(
+                dzien.Date,
+                $"{DayNames[((int)dzien.Date.DayOfWeek + 6) % 7]} {dzien.Date.Day}",
+                dzien.AllDay.Select(e => new AllDayBox(
+                    e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone)).ToList(),
+                dzien.Timed.Select(Box).ToList(),
+                dzien.Date == dzis,
+                teraz));
         }
 
         // Po złożeniu kolumn, bo obie liczą się z tego, co w nich jest.
         OnPropertyChanged(nameof(AllDayHeight));
         OnPropertyChanged(nameof(HasAnyAllDay));
-    }
-
-    /// <summary>Kolumny z podanych dni. Wyjęte, żeby dało się złożyć także sąsiedni zakres.</summary>
-    private List<CalendarColumn> ZlozKolumny(IReadOnlyList<AgendaDay> dni)
-    {
-        var dzis = clock.Today;
-        var teraz = clock.Now.TimeOfDay.TotalHours * HourHeight;
-
-        return dni.Select(dzien => new CalendarColumn(
-            dzien.Date,
-            $"{DayNames[((int)dzien.Date.DayOfWeek + 6) % 7]} {dzien.Date.Day}",
-            dzien.AllDay.Select(e => new AllDayBox(
-                e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone)).ToList(),
-            dzien.Timed.Select(Box).ToList(),
-            dzien.Date == dzis,
-            teraz)).ToList();
     }
 
     /// <summary>
