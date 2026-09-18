@@ -21,6 +21,10 @@ public sealed class AreaConfiguration : IEntityTypeConfiguration<Area>
         builder.Property(a => a.UpdatedAt).IsRequired();
         builder.Property(a => a.Deleted).IsRequired();
 
+        // Wyszukiwanie idzie od kalendarza do obszaru: siatka pyta „czyje jest to
+        // wydarzenie", a nie „gdzie stoi ten obszar".
+        builder.HasIndex(a => a.CalendarId);
+
         builder.HasIndex(a => a.SortOrder);
 
         // Nagrobki zostają w tabeli (spec 5.1) — nie filtrujemy ich zapytaniem

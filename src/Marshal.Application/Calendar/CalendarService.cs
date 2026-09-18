@@ -1,5 +1,6 @@
 using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
+using Marshal.Domain.Areas;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Projects;
 using Marshal.Domain.Tasks;
@@ -519,6 +520,7 @@ public sealed class CalendarSyncService(
 
         var zlozone = 0;
         var wszystkie = await tasks.AllAsync(ct);
+        var obszary = await areas.AllAsync(ct);
 
         foreach (var grupa in powtorzone)
         {
@@ -533,7 +535,7 @@ public sealed class CalendarSyncService(
                 // dokładnie tej usterki.
                 await store.ForgetEventsAsync(nadmiarowe.Id, ct);
 
-                Przepnij(nadmiarowe.Id, zostaje.Id, wszystkie);
+                Przepnij(nadmiarowe.Id, zostaje.Id, wszystkie, obszary);
                 zlozone++;
             }
         }
@@ -559,11 +561,23 @@ public sealed class CalendarSyncService(
     /// zostaje ten sam i dalej jest ważny.
     /// </para>
     /// </remarks>
-    private void Przepnij(Guid odrzucone, Guid zostaje, IReadOnlyList<TaskItem> zadania)
+    private void Przepnij(
+        Guid odrzucone,
+        Guid zostaje,
+        IReadOnlyList<TaskItem> zadania,
+        IReadOnlyList<Area> obszary)
     {
         if (settings.MainCalendarId == odrzucone)
         {
             settings.SetMainCalendar(zostaje);
+        }
+
+        // Obszary też, bo od nich zależy, czyje jest wydarzenie. Wskazanie na odrzucony
+        // wiersz znaczyłoby obszar bez kalendarza i kalendarz bez obszaru — czyli
+        // wydarzenia, które z dnia na dzień przestają do czegokolwiek należeć.
+        foreach (var obszar in obszary.Where(o => o.CalendarId == odrzucone))
+        {
+            obszar.SetCalendar(zostaje, hlc.Next());
         }
 
         // Z identyfikatorem wydarzenia, bo bez niego nie ma czego przepinać: udostępnienie

@@ -60,6 +60,41 @@ public sealed class Area : Entity
     /// </summary>
     public int DefaultNudgeDays { get; private set; }
 
+    /// <summary>
+    /// Kalendarz Google, który jest tym obszarem. Pusty znaczy „żaden".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Odwraca pytanie, z którym nie było co zrobić. Wydarzenie z cudzego kalendarza
+    /// nie ma gdzie trzymać obszaru — Google nie ma na to pola, a zakładanie po naszej
+    /// stronie wiersza na każde wydarzenie tylko po to, żeby było gdzie zapisać jedno
+    /// słowo, jest przebudową bazy w celu, który da się osiągnąć bez niej. Skoro jednak
+    /// kalendarz <b>jest</b> obszarem — „Dzieci" to kalendarz rodzinny, „Praca" to
+    /// firmowy — to obszaru nie trzeba nigdzie zapisywać: wynika z tego, w którym
+    /// kalendarzu wydarzenie stoi.
+    /// </para>
+    /// <para>
+    /// Powiązanie siedzi na obszarze, nie na podłączeniu, i to jest rozstrzygnięcie.
+    /// Wiersz podłączenia jest odbiciem tego, co jest u Google: bywa zakładany
+    /// dwukrotnie przy pierwszej synchronizacji między urządzeniami i bywa odrzucany
+    /// przy składaniu duplikatów. Stan położony na czymś, co ginie, ginie razem z tym.
+    /// Obszar jest nasz, synchronizuje się dziennikiem i nie znika.
+    /// </para>
+    /// <para>
+    /// Jeden obszar na jeden kalendarz. Dwa obszary wskazujące na ten sam kalendarz
+    /// znaczyłyby, że wydarzenie należy do obu — a obszar, który nie dzieli, nie jest
+    /// obszarem (ta sama przyczyna, dla której zadanie ma dokładnie jeden).
+    /// </para>
+    /// </remarks>
+    public Guid? CalendarId { get; private set; }
+
+    /// <summary>Przypisanie kalendarza do obszaru albo zdjęcie przypisania.</summary>
+    public void SetCalendar(Guid? calendarId, Hlc now)
+    {
+        CalendarId = calendarId;
+        Touch(now);
+    }
+
     public void Rename(string name, Hlc now)
     {
         Name = Normalize(name);

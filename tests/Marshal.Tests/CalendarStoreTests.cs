@@ -771,7 +771,8 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Udostepnione_zadanie_ma_swoje_wydarzenie_i_nadaza_za_zmianami()
     {
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            new AreaRepository(_db));
 
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
@@ -823,7 +824,8 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Kosz_zabiera_ze_soba_udostepnione_wydarzenie()
     {
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            new AreaRepository(_db));
 
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
@@ -864,7 +866,8 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Nieudane_kasowanie_odbicia_zostaje_dokonczone()
     {
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            new AreaRepository(_db));
 
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
@@ -919,7 +922,8 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Zadanie_bez_daty_nie_da_sie_udostepnic()
     {
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            new AreaRepository(_db));
 
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
@@ -946,7 +950,8 @@ public sealed class CalendarStoreTests : IDisposable
     {
         var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes(),
+            new AreaRepository(_db));
 
         var edycja = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar,
@@ -977,6 +982,58 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Zadanie idzie do kalendarza swojego obszaru, a nie do głównego.
+    /// </summary>
+    /// <remarks>
+    /// Obszar wskazuje kalendarz, więc zadanie z obszaru „Dzieci" ląduje w kalendarzu
+    /// rodzinnym samo. Dotąd wszystko szło do jednego głównego: zadanie z pracy
+    /// i odbiór dziecka z przedszkola lądowały obok siebie w tym samym wspólnym
+    /// kalendarzu, więc udostępnianie było wszystkim-albo-nic i znaczyło w praktyce nic.
+    /// </remarks>
+    [Fact]
+    public async Task Zadanie_idzie_do_kalendarza_swojego_obszaru()
+    {
+        var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes(),
+            new AreaRepository(_db));
+
+        var rodzinny = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/rodzina.ics", "Rodzina");
+
+        _db.CalendarSources.Add(rodzinny);
+
+        var dzieci = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dzieci", 0);
+        dzieci.SetCalendar(rodzinny.Id, _hlc.Next());
+        _db.Areas.Add(dzieci);
+
+        var praca = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Praca", 1);
+        _db.Areas.Add(praca);
+
+        var odbior = TaskItem.Capture("Odebrać Sanię", _zegar.Now, _hlc.Next());
+        odbior.Schedule(dzieci.Id, Dzis, _hlc.Next());
+        odbior.SetDoTime(new TimeOnly(16, 0), _hlc.Next());
+        _db.Tasks.Add(odbior);
+
+        var raport = TaskItem.Capture("Raport", _zegar.Now, _hlc.Next());
+        raport.Schedule(praca.Id, Dzis, _hlc.Next());
+        raport.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+        _db.Tasks.Add(raport);
+        _db.SaveChanges();
+
+        await odbicie.PushAsync(_db.Tasks.Single(t => t.Id == odbior.Id));
+        await odbicie.PushAsync(_db.Tasks.Single(t => t.Id == raport.Id));
+
+        _db.Tasks.Single(t => t.Id == odbior.Id).SharedCalendarId
+            .Should().Be(rodzinny.Id, "obszar Dzieci to kalendarz rodzinny");
+
+        // Obszar bez własnego kalendarza spada do głównego — tam idą też wrzuty,
+        // których jeszcze nikt nie rozstrzygnął.
+        _db.Tasks.Single(t => t.Id == raport.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
+    }
+
+    /// <summary>
     /// Przeniesienie do wspólnego zabiera zadanie z głównego, a cofnięcie wraca.
     /// </summary>
     /// <remarks>
@@ -989,7 +1046,8 @@ public sealed class CalendarStoreTests : IDisposable
     {
         var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
         var odbicie = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes());
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes(),
+            new AreaRepository(_db));
 
         // Drugi kalendarz zakładany tutaj, nie w konstruktorze: odświeżanie przechodzi
         // po **wszystkich** źródłach tym samym kanałem atrapy, więc stały drugi kalendarz

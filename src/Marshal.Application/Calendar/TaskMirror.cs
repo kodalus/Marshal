@@ -31,7 +31,8 @@ public sealed class TaskMirror(
     IUnitOfWork unitOfWork,
     IHlcSource hlc,
     ISettings settings,
-    IActivityLog dziennik) : ITaskMirror
+    IActivityLog dziennik,
+    IAreaRepository areas) : ITaskMirror
 {
     /// <summary>Ile trwa udostępnione zadanie bez podanej długości.</summary>
     private const int DomyslneMinuty = 30;
@@ -63,7 +64,7 @@ public sealed class TaskMirror(
         // Wskazanie rozstrzygane przed użyciem: zadanie udostępnione na drugim urządzeniu
         // przyjeżdża ze wskazaniem na **tamtejszy** wiersz kalendarza, a składanie
         // duplikatów robi z niego nagrobek. To jest stare imię tej samej rzeczy, nie brak.
-        var wskazane = task.SharedCalendarId ?? settings.MainCalendarId;
+        var wskazane = task.SharedCalendarId ?? await KalendarzObszaruAsync(task, ct);
 
         if (wskazane is { } surowy
             && await calendar.ZywyKalendarzAsync(surowy, ct) is { } zywy
@@ -120,6 +121,33 @@ public sealed class TaskMirror(
     /// zadaje, a odpowiedzi nie było nigdzie. Cisza jest tu gorsza od kłopotu: kłopot
     /// widać.
     /// </remarks>
+    /// <summary>
+    /// Kalendarz, do którego należy zadanie z tego obszaru.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Obszar wskazuje kalendarz, więc zadanie z obszaru „Dzieci" ląduje w kalendarzu
+    /// rodzinnym samo, bez ustawiania czegokolwiek przy zadaniu. Dotąd wszystko szło
+    /// do jednego kalendarza głównego: zadanie z pracy i odbiór dziecka z przedszkola
+    /// lądowały obok siebie w tym samym wspólnym kalendarzu, więc udostępnianie było
+    /// wszystkim-albo-nic i w praktyce znaczyło „nic".
+    /// </para>
+    /// <para>
+    /// Główny zostaje jako spad dla obszarów, którym nie przypisano kalendarza, i dla
+    /// zadań bez obszaru — czyli dla wrzutów, których jeszcze nikt nie rozstrzygnął.
+    /// </para>
+    /// </remarks>
+    private async Task<Guid?> KalendarzObszaruAsync(TaskItem task, CancellationToken ct)
+    {
+        if (task.AreaId is { } obszar
+            && await areas.FindAsync(obszar, ct) is { CalendarId: { } kalendarz })
+        {
+            return kalendarz;
+        }
+
+        return settings.MainCalendarId;
+    }
+
     public async Task RemoveAsync(TaskItem task, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(task);
@@ -301,13 +329,15 @@ public sealed class TaskMirror(
             return;
         }
 
-        if (settings.MainCalendarId is { } glowny && zadanie.SharedCalendarId != glowny)
+        // Wraca do kalendarza swojego obszaru, a gdy ten go nie ma — do głównego.
+        if (await KalendarzObszaruAsync(zadanie, ct) is { } wlasny
+            && zadanie.SharedCalendarId != wlasny)
         {
-            await ShareAsync(taskId, glowny, ct);
+            await ShareAsync(taskId, wlasny, ct);
             return;
         }
 
-        // Bez kalendarza głównego nie ma dokąd wracać — zostaje samo zdjęcie wpisu.
+        // Bez kalendarza obszaru i bez głównego nie ma dokąd wracać — zostaje zdjęcie wpisu.
         await RemoveAsync(zadanie, ct);
     }
 
