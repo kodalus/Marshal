@@ -225,8 +225,18 @@ public partial class MainView : UserControl
             });
         }
 
-        obszar.AddHandler(Gestures.ScrollGestureEvent, ObszarGest);
-        obszar.AddHandler(Gestures.ScrollGestureEndedEvent, ObszarGestSkonczony);
+        // **Także obsłużone.** Siatka godzinowa zjada przesunięcia, dopóki ma je jak
+        // zużyć na przewijanie — a skoro zjada, to do nas nie docierają. Stąd wzięło
+        // się „działa dopiero, gdy pasek dojedzie do końca": tam siatka przestaje
+        // mieć co przewijać, przestaje oznaczać zdarzenia jako obsłużone i dopiero
+        // wtedy je widzieliśmy. Przejechanie w bok nie odbiera przewijania niczego,
+        // bo osobno pilnuje, żeby ruch był wyraźnie poziomy.
+        obszar.AddHandler(
+            Gestures.ScrollGestureEvent, ObszarGest, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        obszar.AddHandler(
+            Gestures.ScrollGestureEndedEvent, ObszarGestSkonczony,
+            RoutingStrategies.Bubble, handledEventsToo: true);
 
         obszar.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerMovedEvent, ObszarRuch, RoutingStrategies.Tunnel);
@@ -868,6 +878,14 @@ public partial class MainView : UserControl
 
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
     private void TloSzczegolu(object? nadawca, PointerPressedEventArgs e) => _szczegol?.Close();
+
+    /// <summary>Kliknięcie obok karty wydarzenia zamyka ją.</summary>
+    /// <remarks>
+    /// To samo, co przy karcie zadania, i z tego samego powodu: karta zasłania kalendarz,
+    /// a najbliższą rzeczą, w którą trafia ręka chcąca wrócić do siatki, jest siatka.
+    /// </remarks>
+    private void TloWydarzenia(object? nadawca, PointerPressedEventArgs e) =>
+        _kalendarz?.CloseOpenedCommand.Execute(null);
 
     /// <summary>Zatrzymanie kliknięcia na ramce okna, żeby nie doszło do tła.</summary>
     private void ZatrzymajKlikniecie(object? nadawca, PointerPressedEventArgs e) =>

@@ -1169,10 +1169,17 @@
     <!-- Kliknięte wydarzenie z podłączonego kalendarza. Własna karta, nie okno szczegółu
          zadania: należy do czegoś innego i ma inne pola. Odhaczyć i przeciągnąć da się je
          wprost na siatce. -->
+    <!-- Kliknięcie obok karty zamyka ją — tak samo jak przy karcie zadania. Dotąd
+         miała to tylko tamta, a że obie wyglądają identycznie i otwierają się tym
+         samym dotknięciem, wychodziło z tego „raz działa, raz nie". Różnica nie brała
+         się z żadnej decyzji: karta wydarzenia powstała później i zamykania po prostu
+         nie dostała. -->
     <Panel DataContext="{Binding Calendar}" IsVisible="{Binding HasOpened}"
-           Background="{DynamicResource Zaslona}">
+           Background="{DynamicResource Zaslona}"
+           PointerPressed="TloWydarzenia">
       <Border x:DataType="vm:CalendarViewModel" MaxWidth="480" Margin="12" Padding="20"
-              CornerRadius="10" Background="{DynamicResource Karta}" VerticalAlignment="Center">
+              CornerRadius="10" Background="{DynamicResource Karta}" VerticalAlignment="Center"
+              PointerPressed="ZatrzymajKlikniecie">
         <StackPanel Spacing="8">
 
           <Grid ColumnDefinitions="Auto,*">
