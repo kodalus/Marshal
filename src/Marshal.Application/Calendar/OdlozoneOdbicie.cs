@@ -68,6 +68,14 @@ public sealed class OdlozoneOdbicie(ITaskMirror odbicie, IActivityLog dziennik) 
 
         var tytul = task.Title;
 
+        // Bez dziedziczenia kontekstu wywołania. Brama na bazę pozna po nim, że dany
+        // przepływ jest już w środku, i wpuści go ponownie bez czekania — a praca
+        // puszczona w tle nie jest tym samym przepływem, tylko drugą ręką. Dziś
+        // odkładanie zaczyna się poza bramą, więc różnicy nie widać; jutro wystarczy
+        // jedno wywołanie wyżej, żeby zaczęło się w środku, i wtedy ta linijka jest
+        // jedyną rzeczą stojącą między tym a odczytem w poprzek cudzego zapisu.
+        using var bezKontekstu = ExecutionContext.SuppressFlow();
+
         _ = Task.Run(async () =>
         {
             await _brama.WaitAsync();

@@ -19,11 +19,18 @@ namespace Marshal.Application.Abstractions;
 /// którą ma zamykać.
 /// </para>
 /// <para>
-/// Czego brama <b>nie</b> obejmuje: odczytów, które repozytoria robią wprost na
-/// kontekście. Zapisy są tu ujęte w całości, a odczyt trwa milisekundy i nie zmienia
-/// stanu śledzenia, więc zderzenie jest możliwe, ale rzadkie. Domknięcie tego znaczy
-/// przeprowadzenie każdego zapytania przez tę samą bramę — i to jest praca do zrobienia
-/// wtedy, gdy okaże się potrzebna, a nie na zapas.
+/// Przez bramę idą <b>także odczyty</b>. Początkowo obejmowała tylko zapisy, bo odczyt
+/// trwa milisekundy i nie zmienia stanu śledzenia — ale kontekstowi jest wszystko jedno,
+/// co robi: dwie czynności naraz to dwie czynności naraz, a objawem był błąd o drugiej
+/// operacji zaczętej przed końcem pierwszej, wyskakujący przy zapisie zadania na
+/// telefonie. Brama pilnująca połowy dróg nie jest bramą — jest tylko rzadszym zderzeniem.
+/// </para>
+/// <para>
+/// Poza bramą zostają trzy miejsca sięgające po kontekst <b>synchronicznie</b>:
+/// ustawienia urządzenia, jego identyfikator i zapamiętany stan zegara logicznego.
+/// Czekanie na semafor z wątku okna zawiesiłoby okno, a zapamiętany stan zegara i tak
+/// czytany jest wyłącznie ze środka synchronizacji, czyli spod bramy. Ustawienia
+/// i identyfikator wczytują się raz i zostają w pamięci.
 /// </para>
 /// </remarks>
 public interface IKolejkaBazy

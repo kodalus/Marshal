@@ -1,3 +1,4 @@
+using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Sync;
 using Marshal.Infrastructure.Data;
@@ -5,8 +6,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Repositories;
 
-public sealed class ReminderLog(MarshalDbContext db) : IReminderLog
+public sealed class ReminderLog(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+    : IReminderLog
 {
+    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+
     /// <summary>
     /// Czy ta konkretna chwila już się odezwała.
     /// </summary>
@@ -15,13 +19,14 @@ public sealed class ReminderLog(MarshalDbContext db) : IReminderLog
     /// chwile i każda odzywa się raz; przesunięcie zadania daje nowe chwile, więc
     /// odzywa się na nowo — i to jest właściwe, bo to jest inna pora niż poprzednio.
     /// </remarks>
-    public async Task<bool> WasShownAsync(
+    public Task<bool> WasShownAsync(
         Guid taskId, DateTimeOffset reminderAt, CancellationToken ct = default) =>
-        db.ChangeTracker.Entries<ReminderShown>()
-            .Select(e => e.Entity)
-            .Any(r => r.TaskId == taskId && r.ReminderAt == reminderAt)
-        || await db.ReminderShown.AsNoTracking()
-            .AnyAsync(r => r.TaskId == taskId && r.ReminderAt == reminderAt, ct);
+        _kolejka.WykonajAsync(async () =>
+            db.ChangeTracker.Entries<ReminderShown>()
+                .Select(e => e.Entity)
+                .Any(r => r.TaskId == taskId && r.ReminderAt == reminderAt)
+            || await db.ReminderShown.AsNoTracking()
+                .AnyAsync(r => r.TaskId == taskId && r.ReminderAt == reminderAt, ct), ct);
 
     public void Record(Guid taskId, DateTimeOffset reminderAt, DateTimeOffset shownAt)
     {

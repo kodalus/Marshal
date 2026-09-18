@@ -28,8 +28,18 @@ namespace Marshal.Infrastructure.Backup;
 /// Treść załączników też nie — to pliki, nie tekst; w kopii jest wpis, nie zawartość.
 /// </para>
 /// </remarks>
-public sealed class BackupService(MarshalDbContext db, IHlcSource hlc, IClock clock, IDeviceIdentity device)
+public sealed class BackupService(
+    MarshalDbContext db,
+    IHlcSource hlc,
+    IClock clock,
+    IDeviceIdentity device,
+    IKolejkaBazy? kolejka = null)
 {
+    // Kopia czyta albo podmienia **całą** bazę, więc idzie przez bramę w całości,
+    // a nie zapytaniami. Synchronizacja wchodząca w środek odtwarzania zapisałaby
+    // na Dysk stan z połowy podmiany.
+    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+
     private static readonly JsonSerializerOptions Json = new()
     {
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -46,7 +56,7 @@ public sealed class BackupService(MarshalDbContext db, IHlcSource hlc, IClock cl
         {
             CreatedAt = clock.Now,
             DeviceId = device.Id,
-            Lines = await BuildLinesAsync(ct),
+            Lines = await _kolejka.WykonajAsync(() => BuildLinesAsync(ct), ct),
         };
 
         await JsonSerializer.SerializeAsync(destination, plik, Json, ct);
@@ -55,9 +65,16 @@ public sealed class BackupService(MarshalDbContext db, IHlcSource hlc, IClock cl
     public async Task<ImportReport> ImportAsync(
         Stream source, ImportMode mode, CancellationToken ct = default)
     {
+        // Czytanie pliku poza bramą: to strumień, nie baza, a bywa duży.
         var plik = await JsonSerializer.DeserializeAsync<BackupFile>(source, Json, ct)
             ?? throw new InvalidDataException("Plik nie wygląda na kopię zapasową Marshala.");
 
+        return await _kolejka.WykonajAsync(() => WgrajAsync(plik, mode, ct), ct);
+    }
+
+    private async Task<ImportReport> WgrajAsync(
+        BackupFile plik, ImportMode mode, CancellationToken ct)
+    {
         // Wgranie kopii nie jest zmianą tego urządzenia: bez tego każdy odtworzony
         // rekord wróciłby do dziennika i poleciał na Dysk jako świeża zmiana,
         // wskrzeszając na drugim urządzeniu rzeczy skasowane po zrobieniu kopii.

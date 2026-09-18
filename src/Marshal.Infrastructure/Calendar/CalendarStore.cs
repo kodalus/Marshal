@@ -11,22 +11,23 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
 {
     // Ten sam wspólny kontekst, co wszędzie — a odświeżenie kalendarza chodzi po sieci
     // między odczytem a zapisem. To jest dokładnie ta szczelina, w którą potrafi wejść
-    // synchronizacja ruszająca sama, więc zapis idzie przez tę samą bramę.
+    // synchronizacja ruszająca sama, więc przez bramę idą i odczyty, i zapisy.
     private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
 
     public async Task<IReadOnlyList<CalendarSource>> SourcesAsync(CancellationToken ct = default) =>
-        await db.CalendarSources
+        await _kolejka.WykonajAsync(() => db.CalendarSources
             .Where(s => !s.Deleted)
             .OrderBy(s => s.Name)
-            .ToListAsync(ct);
+            .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<CalendarSource>> AllSourcesAsync(CancellationToken ct = default) =>
-        await db.CalendarSources
+        await _kolejka.WykonajAsync(() => db.CalendarSources
             .OrderBy(s => s.Name)
-            .ToListAsync(ct);
+            .ToListAsync(ct), ct);
 
     public Task<CalendarCursor?> CursorAsync(Guid sourceId, CancellationToken ct = default) =>
-        db.CalendarCursors.FirstOrDefaultAsync(c => c.SourceId == sourceId, ct);
+        _kolejka.WykonajAsync(
+            () => db.CalendarCursors.FirstOrDefaultAsync(c => c.SourceId == sourceId, ct), ct);
 
     public void SaveCursor(Guid sourceId, string? syncToken, DateTimeOffset fetchedAt)
     {
@@ -48,18 +49,21 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
     public async Task<IReadOnlyList<CalendarEvent>> EventsAsync(
         DateTimeOffset from, DateTimeOffset until, CancellationToken ct = default)
     {
-        var widoczne = await db.CalendarSources
-            .Where(s => s.IsVisible && !s.Deleted)
-            .Select(s => s.Id)
-            .ToListAsync(ct);
+        return await _kolejka.WykonajAsync<IReadOnlyList<CalendarEvent>>(async () =>
+        {
+            var widoczne = await db.CalendarSources
+                .Where(s => s.IsVisible && !s.Deleted)
+                .Select(s => s.Id)
+                .ToListAsync(ct);
 
-        // Warunek zachodzenia zakresów, nie „start w zakresie": wydarzenie zaczęte wczoraj
-        // i trwające do jutra musi się pokazać na dzisiejszej siatce.
-        return await db.CalendarEvents
-            .Where(e => widoczne.Contains(e.SourceId) && !e.Cancelled)
-            .Where(e => e.StartsAt < until && e.EndsAt > from)
-            .OrderBy(e => e.StartsAt)
-            .ToListAsync(ct);
+            // Warunek zachodzenia zakresów, nie „start w zakresie": wydarzenie zaczęte wczoraj
+            // i trwające do jutra musi się pokazać na dzisiejszej siatce.
+            return await db.CalendarEvents
+                .Where(e => widoczne.Contains(e.SourceId) && !e.Cancelled)
+                .Where(e => e.StartsAt < until && e.EndsAt > from)
+                .OrderBy(e => e.StartsAt)
+                .ToListAsync(ct);
+        }, ct);
     }
 
     public async Task UpsertAsync(
@@ -73,9 +77,9 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
         // Jedno zapytanie na całą porcję, nie jedno na wydarzenie. Kalendarz po pełnym
         // odczycie potrafi mieć kilkaset pozycji, a każda osobno to kilkaset zapytań.
         var klucze = events.Select(e => e.ExternalId).ToList();
-        var istniejace = await db.CalendarEvents
+        var istniejace = await _kolejka.WykonajAsync(() => db.CalendarEvents
             .Where(e => e.SourceId == sourceId && klucze.Contains(e.ExternalId))
-            .ToDictionaryAsync(e => e.ExternalId, ct);
+            .ToDictionaryAsync(e => e.ExternalId, ct), ct);
 
         foreach (var wydarzenie in events)
         {
@@ -100,9 +104,9 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
     {
         var widziane = seen.ToHashSet(StringComparer.Ordinal);
 
-        var zniknione = await db.CalendarEvents
+        var zniknione = await _kolejka.WykonajAsync(() => db.CalendarEvents
             .Where(e => e.SourceId == sourceId && !e.Cancelled)
-            .ToListAsync(ct);
+            .ToListAsync(ct), ct);
 
         var policzone = 0;
 
@@ -119,7 +123,7 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
     }
 
     public Task<int> CountAsync(CancellationToken ct = default) =>
-        db.CalendarEvents.CountAsync(e => !e.Cancelled, ct);
+        _kolejka.WykonajAsync(() => db.CalendarEvents.CountAsync(e => !e.Cancelled, ct), ct);
 
     public void AddSource(CalendarSource source) => db.CalendarSources.Add(source);
 

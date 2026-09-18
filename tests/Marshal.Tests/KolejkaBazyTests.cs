@@ -2,6 +2,7 @@ using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Domain.Areas;
 using Marshal.Infrastructure.Data;
+using Marshal.Infrastructure.Repositories;
 using Marshal.Infrastructure.Time;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -86,6 +87,66 @@ public sealed class KolejkaBazyTests : IDisposable
         });
 
         doszlo.Should().BeTrue("semafor ma być oddany także wtedy, gdy praca się wywróciła");
+    }
+
+    [Fact]
+    public async Task Brama_wpuszcza_ponownie_tego_kto_jest_w_srodku()
+    {
+        // Odkąd przez bramę idą też odczyty, zagnieżdżenie zdarza się na każdej
+        // drodze: synchronizacja bierze bramę na całą porcję i woła w środku
+        // repozytoria, a te wołają bramę. Bez wznawiania czekałaby na zwolnienie
+        // przez samą siebie — czyli zawisłaby, i to cicho.
+        var kolejka = new KolejkaBazy();
+        var doszlo = false;
+
+        await kolejka.WykonajAsync(async () =>
+        {
+            await kolejka.WykonajAsync(() =>
+            {
+                doszlo = true;
+                return Task.CompletedTask;
+            });
+        });
+
+        doszlo.Should().BeTrue("brama ma wpuszczać ponownie ten sam przepływ wywołania");
+
+        // A po wyjściu ma być znowu wolna — inaczej pierwsze zagnieżdżenie
+        // zamykałoby ją na dobre.
+        var pozniej = false;
+        await kolejka.WykonajAsync(() =>
+        {
+            pozniej = true;
+            return Task.CompletedTask;
+        });
+
+        pozniej.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Odczyt_z_repozytorium_czeka_na_brame()
+    {
+        // Brama pilnująca samych zapisów przepuszczała odczyty wprost na kontekst
+        // i stąd brał się błąd o drugiej operacji zaczętej przed końcem pierwszej.
+        // Sprawdzenie wprost: praca trzyma bramę, odczyt z repozytorium ma stać.
+        var kolejka = new KolejkaBazy();
+        var zadania = new TaskRepository(_db, kolejka);
+
+        var puscic = new TaskCompletionSource();
+
+        var trzymana = kolejka.WykonajAsync(() => puscic.Task);
+
+        // Odpalony po zajęciu bramy, więc jeśli kiedykolwiek się skończy przed
+        // zwolnieniem, znaczy, że bramę ominął.
+        var odczyt = Task.Run(() => zadania.InboxCountAsync());
+
+        var ktoPierwszy = await Task.WhenAny(odczyt, Task.Delay(200));
+
+        ktoPierwszy.Should().NotBe(odczyt, "odczyt ma czekać na swoją kolej tak samo jak zapis");
+
+        puscic.SetResult();
+        await trzymana;
+
+        (await odczyt).Should().Be(0, "po zwolnieniu bramy odczyt ma dojść do skutku");
     }
 
     [Fact]
