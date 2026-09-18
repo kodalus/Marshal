@@ -564,6 +564,37 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Wziete_na_dzis_widac_na_pasku_calodniowym()
+    {
+        // Wybór na dziś nie ustawia dnia wykonania — ustawia obietnicę. Zadanie było
+        // przez to niewidoczne w kalendarzu, czyli w jedynym miejscu, gdzie widać cały
+        // dzień naraz.
+        var zadanie = await ZaplanowaneAsync("Zadzwonić do przedszkola");
+
+        // Bez dnia wykonania: samo wzięcie na dziś ma wystarczyć.
+        var zadania = Usluga<ITaskRepository>();
+        zadanie.MoveDoDate(null, Usluga<IHlcSource>().Next());
+        await Usluga<IUnitOfWork>().SaveChangesAsync();
+
+        var kalendarz = Usluga<CalendarViewModel>();
+        await kalendarz.LoadAsync();
+
+        kalendarz.Columns.SelectMany(k => k.AllDay).Should()
+            .NotContain(b => b.Title == zadanie.Title, "jeszcze nie zostało wzięte");
+
+        (await Usluga<FocusService>().TryFocusAsync(zadanie.Id)).Accepted.Should().BeTrue();
+
+        await kalendarz.LoadAsync();
+
+        kalendarz.Columns.SelectMany(k => k.AllDay).Should()
+            .Contain(b => b.Title == zadanie.Title, "wzięte na dziś należy do dnia");
+
+        // I tylko raz — zadanie z dniem wykonania **i** wyborem nie ma stać w dwóch
+        // miejscach naraz.
+        (await zadania.FindAsync(zadanie.Id))!.DoDate.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Zapisany_filtr_wraca_z_bazy_z_tymi_samymi_warunkami()
     {
         // Warunki jadą do bazy jako JSON i wracają do **innego** modelu widoku niż ten,

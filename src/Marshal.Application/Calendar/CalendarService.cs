@@ -350,7 +350,19 @@ public sealed class CalendarSyncService(
         // nas przy odświeżaniu — narysowane obok zadania dałoby dwa bloki na tę samą
         // rzecz, w tym samym miejscu, z których jeden nie dawałby się odhaczyć.
         // Prawdą jest zadanie; wydarzenie jest jego cieniem.
-        var zadania = await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct);
+        var umowione = await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct);
+
+        // Wybory na dzień dołożone do umówionych. Zadanie wzięte „na dziś" w widoku
+        // „Teraz" nie dostaje dnia wykonania — dostaje obietnicę daną sobie — więc
+        // w kalendarzu nie było go widać wcale. A kalendarz jest jedynym miejscem,
+        // w którym widać cały dzień naraz, i obietnica należy do niego tak samo jak
+        // spotkanie. Ląduje na pasku całodniowym, bo godziny nie ma i zgadywanie jej
+        // zrobiłoby z listy zadań kalendarz, w którym wszystko jest umówione.
+        var wybrane = await tasks.FocusedBetweenAsync(from, from.AddDays(days), ct);
+
+        var zadania = umowione
+            .Concat(wybrane.Where(w => umowione.All(u => u.Id != w.Id)))
+            .ToList();
 
         var odbicia = zadania
             .Where(z => z.SharedEventId is not null)
@@ -483,12 +495,16 @@ public sealed class CalendarSyncService(
 
     private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone, string? barwa)
     {
-        if (task.DoDate is not { } dzien)
+        // Dzień wykonania, a gdy go nie ma — dzień, na który zadanie zostało wybrane.
+        // Kolejność nie jest dowolna: zadanie umówione na czwartek i wzięte na dziś
+        // ma stać w czwartek, bo tam jest umówione. Wybór mówi „zajmę się tym", a nie
+        // „to się wtedy odbywa".
+        if ((task.DoDate ?? task.FocusDate) is not { } dzien)
         {
             return null;
         }
 
-        if (task.DoTime is not { } godzina)
+        if (task.DoDate is null || task.DoTime is not { } godzina)
         {
             var poczatekDnia = WStrefie(dzien.ToDateTime(TimeOnly.MinValue), zone);
             return new AgendaEntry(

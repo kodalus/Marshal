@@ -136,6 +136,15 @@ public sealed class TaskRepository(MarshalDbContext db) : ITaskRepository
             .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct);
 
+    public async Task<IReadOnlyList<TaskItem>> FocusedBetweenAsync(
+        DateOnly from, DateOnly to, CancellationToken ct = default) =>
+        await db.Tasks
+            .Where(t => t.FocusDate != null && t.FocusDate >= from && t.FocusDate < to
+                     && !t.Deleted && t.State != TaskState.Trashed)
+            .OrderBy(t => t.SortOrder)
+            .ThenBy(t => t.CreatedAt)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<TaskItem>> ExpiredFocusAsync(
         DateOnly today, CancellationToken ct = default) =>
         await db.Tasks

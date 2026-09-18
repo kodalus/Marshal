@@ -76,7 +76,44 @@ jobs:
       - name: Workload Androida
         run: dotnet workload install android
 
-      - name: Publikacja APK
+      # Podpis stałym kluczem, jeśli jest w sekretach repozytorium.
+      #
+      # Bez niego każdy przebieg podpisuje APK **świeżym kluczem domyślnym**, bo
+      # bieżnia CI startuje za każdym razem od zera. Android nie pozwala nadpisać
+      # aplikacji pakietem o innym podpisie i odmawia komunikatem „konflikt
+      # z istniejącym pakietem" — czyli każda aktualizacja wymaga odinstalowania,
+      # a to kasuje bazę.
+      #
+      # Klucz nie może leżeć w repozytorium, bo jest publiczne, a kto ma klucz, ten
+      # może wypuścić aktualizację Marshala dla każdego, kto go ma. Sekrety są tu
+      # jedynym sensownym miejscem. Instrukcja: docs/android-podpis.md.
+      - name: Klucz podpisujący
+        id: klucz
+        env:
+          SKARBIEC: ${{ secrets.ANDROID_KEYSTORE }}
+        run: |
+          if [ -n "$SKARBIEC" ]; then
+            echo "$SKARBIEC" | base64 -d > "$RUNNER_TEMP/marshal.keystore"
+            echo "jest=tak" >> "$GITHUB_OUTPUT"
+          else
+            echo "jest=nie" >> "$GITHUB_OUTPUT"
+            echo "::warning::Brak sekretu ANDROID_KEYSTORE — APK podpisany kluczem domyślnym, więc nie nadpisze poprzedniej instalacji."
+          fi
+
+      - name: Publikacja APK (klucz stały)
+        if: steps.klucz.outputs.jest == 'tak'
+        env:
+          HASLO: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          dotnet publish src/Marshal.Android/Marshal.Android.csproj -c Release \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore="$RUNNER_TEMP/marshal.keystore" \
+            -p:AndroidSigningStorePass="$HASLO" \
+            -p:AndroidSigningKeyAlias=marshal \
+            -p:AndroidSigningKeyPass="$HASLO"
+
+      - name: Publikacja APK (klucz domyślny)
+        if: steps.klucz.outputs.jest != 'tak'
         run: dotnet publish src/Marshal.Android/Marshal.Android.csproj -c Release
 
       - name: Zebranie pakietów

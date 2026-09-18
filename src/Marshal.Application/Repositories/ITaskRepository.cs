@@ -60,6 +60,18 @@ public interface ITaskRepository
     /// <summary>Zadania wybrane na dany dzień (spec 8.6).</summary>
     Task<IReadOnlyList<TaskItem>> ByFocusDateAsync(DateOnly date, CancellationToken ct = default);
 
+    /// <summary>
+    /// Zadania wybrane na którykolwiek dzień z zakresu — do kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// Osobno od <c>UpcomingAsync</c>, a nie przez dopisanie warunku do niego: tamto
+    /// odpowiada na pytanie „co jest umówione na te dni" i pyta o nie także przegląd
+    /// tygodniowy. Wybór na dziś nie jest umówieniem — jest obietnicą daną sobie rano
+    /// i policzony razem z terminami zmieniłby liczbę, którą przegląd pokazuje.
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> FocusedBetweenAsync(
+        DateOnly from, DateOnly to, CancellationToken ct = default);
+
     /// <summary>Wybory z dni minionych, niewykonane — do wygaszenia przy przejściu dnia.</summary>
     Task<IReadOnlyList<TaskItem>> ExpiredFocusAsync(DateOnly today, CancellationToken ct = default);
 
