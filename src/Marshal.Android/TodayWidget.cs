@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using Android.App;
 using Android.Appwidget;
 using Android.Content;
@@ -87,7 +88,9 @@ public sealed class TodayWidget : AppWidgetProvider
         // ramę widgetu, ale **nie** pyta listy o nowe wiersze — ta trzyma swoje
         // w fabryce i oddaje je, dopóki nikt jej nie powie, że są nieaktualne.
         // Bez tego drugiego wywołania odhaczone zadanie zostawało na liście.
+#pragma warning disable CA1422
         manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.lista);
+#pragma warning restore CA1422
 
         var zamiar = new Intent(context, typeof(TodayWidget));
         zamiar.SetAction(AppWidgetManager.ActionAppwidgetUpdate);
@@ -142,7 +145,14 @@ public sealed class TodayWidget : AppWidgetProvider
         doUslugi.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
         doUslugi.SetData(global::Android.Net.Uri.Parse(doUslugi.ToUri(IntentUriType.Scheme)));
 
+        // Wskazanie usługi zamiarem jest od Androida 35 oznaczone jako przestarzałe na
+        // rzecz podawania wierszy wprost w RemoteViews. Tamta droga nie zna usługi
+        // dostarczającej wiersze, więc nie jest zamiennikiem dla listy, która czyta
+        // bazę — jest zamiennikiem dla listy krótkiej i znanej z góry. Nadal działa
+        // i nadal jest jedyną drogą dla listy budowanej po stronie aplikacji.
+#pragma warning disable CA1422
         widok.SetRemoteAdapter(Resource.Id.lista, doUslugi);
+#pragma warning restore CA1422
 
         // Napis zamiast pustej listy — system podmienia je sam, więc nie trzeba
         // zgadywać, czy plan jest pusty, zanim lista go wczyta.
@@ -170,9 +180,26 @@ public sealed class TodayWidget : AppWidgetProvider
         zamiar.SetAction(CompleteAction);
 
         return PendingIntent.GetBroadcast(
-            context, KodOdhaczenia, zamiar,
-            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Mutable);
+            context, KodOdhaczenia, zamiar, ZnacznikiWzorca());
     }
+
+    /// <summary>
+    /// Znaczniki wzorca: zmienny tam, gdzie system w ogóle zna to pojęcie.
+    /// </summary>
+    /// <remarks>
+    /// Pojawiło się w Androidzie 12, a aplikacja sięga do 10. Starsze wydania nie mają
+    /// czego oznaczać, bo zamiar oczekujący był tam zmienny z natury — dopisanie flagi,
+    /// której nie znają, byłoby tylko liczbą bez znaczenia, a analizator zgodności
+    /// słusznie tego nie przepuszcza.
+    /// </remarks>
+    private static PendingIntentFlags ZnacznikiWzorca() =>
+        OperatingSystem.IsAndroidVersionAtLeast(31)
+            ? PendingIntentFlags.UpdateCurrent | Zmienny()
+            : PendingIntentFlags.UpdateCurrent;
+
+    /// <summary>Osobno i z adnotacją wydania — inaczej analizator czyta to jako zwykłą liczbę.</summary>
+    [SupportedOSPlatform("android31.0")]
+    private static PendingIntentFlags Zmienny() => PendingIntentFlags.Mutable;
 
     public override void OnReceive(Context? context, Intent? intent)
     {
