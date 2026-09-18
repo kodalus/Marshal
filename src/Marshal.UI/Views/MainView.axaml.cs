@@ -1995,19 +1995,39 @@ public partial class MainView : UserControl
         _minutnik ??= new DispatcherTimer(
             TimeSpan.FromMinutes(1),
             DispatcherPriority.Background,
-            (_, _) =>
-            {
-                model.Calendar.Tick();
-
-                // Przypomnienia razem z kreską „teraz": jedno i drugie jest odpowiedzią
-                // na upływ czasu, a drugi minutnik na tę samą minutę byłby drugim
-                // miejscem do zatrzymania i do zapomnienia o zatrzymaniu.
-                _ = Probuj("Przypomnienia: sprawdzenie", model.CheckRemindersAsync);
-            });
+            (_, _) => Przebieg(model));
 
         _minutnik.Start();
 
+        // Minutnik chodzi wyłącznie wtedy, gdy ktoś patrzy. Zob. Uspienie: w tle ta sama
+        // praca jest zbędna, bo robią ją Budzik i pracownik synchronizacji, i ryzykowna,
+        // bo schowaną aplikację system zamraża — także w środku zapytania do bazy albo
+        // odczytu z sieci. Ustawienie, a nie dopisanie się do zdarzenia: okno bywa
+        // składane po raz drugi, a dwa podpięcia znaczyłyby dwa przebiegi na minutę.
+        Uspienie.Zasnij = () => _minutnik?.Stop();
+
+        Uspienie.Obudz = () =>
+        {
+            _minutnik?.Start();
+
+            // Od razu, nie za minutę. Wracając po godzinie zastaje się kreskę bieżącej
+            // godziny sprzed godziny i listę przypomnień sprzed godziny — czyli ekran,
+            // który wygląda na zepsuty, choć czeka tylko na najbliższy przebieg.
+            Przebieg(model);
+        };
+
         PodepnijPowrotDoOkna(model);
+    }
+
+    /// <summary>Jeden przebieg minutnika. Osobno, bo powrót na wierzch robi to samo.</summary>
+    private void Przebieg(MainViewModel model)
+    {
+        model.Calendar.Tick();
+
+        // Przypomnienia razem z kreską „teraz": jedno i drugie jest odpowiedzią
+        // na upływ czasu, a drugi minutnik na tę samą minutę byłby drugim
+        // miejscem do zatrzymania i do zapomnienia o zatrzymaniu.
+        _ = Probuj("Przypomnienia: sprawdzenie", model.CheckRemindersAsync);
     }
 
     /// <summary>Czy powrót do okna jest już podsłuchiwany. Podpięcie idzie raz.</summary>

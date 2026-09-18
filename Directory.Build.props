@@ -27,5 +27,20 @@
          Do przejścia wtedy, gdy będzie się co przy tym oprzeć. -->
     <IcalNetVersion>4.3.1</IcalNetVersion>
     <MarkdigVersion>1.3.2</MarkdigVersion>
+
+    <!-- Odcisk wydania w wersji informacyjnej. .NET dokleja go po znaku plus, więc
+         w aplikacji widać „0.1.0+<skrót>" i wiadomo, z którego zapisu jest to, co
+         chodzi na telefonie.
+
+         Wpisane było dotąd co innego: data pliku aplikacji. Na Androidzie pliku pod tą
+         ścieżką nie ma, a odczyt daty nieistniejącego pliku oddaje zero kalendarza
+         Windows — stąd w dzienniku „wydanie 1601-01-01 01:24" (zero czasu uniwersalnego
+         przeliczone na średni czas słoneczny Warszawy, bo tak wyglądała jej strefa przed
+         rokiem 1915). Zamiast wersji stała tam więc informacja, że aplikacja nie zna
+         swojej wersji — i tak wyglądała przez cały czas, gdy była potrzebna.
+
+         Tylko z CI: warunek na GITHUB_SHA. Przy budowaniu u siebie odcisku nie ma,
+         bo tam i tak wiadomo, co się zbudowało. -->
+    <SourceRevisionId Condition="'$(GITHUB_SHA)' != ''">$(GITHUB_SHA.Substring(0, 12))</SourceRevisionId>
   </PropertyGroup>
 </Project>

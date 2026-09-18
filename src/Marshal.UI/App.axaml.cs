@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -231,20 +232,26 @@ public partial class App : Avalonia.Application
     /// nie. „Nie ma wpisu w dzienniku" znaczy co innego w wersji, która tych wpisów
     /// jeszcze nie robi. Data zbudowania pliku rozstrzyga to jedną linijką.
     /// </remarks>
+    /// <summary>
+    /// Które to wydanie — z wersji informacyjnej zestawu.
+    /// </summary>
+    /// <remarks>
+    /// Była tu data pliku aplikacji i na Androidzie nie działała wcale: pliku pod tą
+    /// ścieżką nie ma, a data nieistniejącego pliku to zero kalendarza Windows. W
+    /// dzienniku stało przez to „wydanie 1601-01-01 01:24" — czyli dokładnie w miejscu,
+    /// w którym ma być widać, co chodzi na telefonie, stała informacja, że nie wiadomo.
+    ///
+    /// Wersja informacyjna jedzie w zestawie, więc jest na każdej platformie taka sama
+    /// i nie zależy od tego, czy cokolwiek leży na dysku. CI dokleja do niej skrót
+    /// zapisu (zob. Directory.Build.props), więc z tej linijki da się trafić w commit.
+    /// </remarks>
     private static string Wydanie()
     {
-        try
-        {
-            var plik = typeof(App).Assembly.Location;
+        var wersja = typeof(App).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion;
 
-            return string.IsNullOrEmpty(plik)
-                ? "nieznane"
-                : File.GetLastWriteTime(plik).ToString("yyyy-MM-dd HH:mm");
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return "nieznane";
-        }
+        return string.IsNullOrWhiteSpace(wersja) ? "nieznane" : wersja;
     }
 
     private static ThemeVariant Variant(ThemeChoice wybor) => wybor switch

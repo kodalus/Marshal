@@ -123,9 +123,28 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         base.OnDestroy();
     }
 
+    /// <summary>
+    /// Powrót na wierzch: minutnik okna rusza z powrotem i robi jeden przebieg od razu.
+    /// </summary>
+    /// <remarks>
+    /// Tu, a nie na zdarzeniu okna Avalonii: zejście w tło i powrót to pojęcia Androida
+    /// i tylko Android wie o nich na pewno. Zob. <see cref="Uspienie"/>.
+    /// </remarks>
+    protected override void OnResume()
+    {
+        base.OnResume();
+        Uspienie.Ocknij();
+    }
+
     protected override void OnPause()
     {
         base.OnPause();
+
+        // Najpierw uśpienie minutnika, potem reszta. Praca w tle należy do pracownika
+        // synchronizacji i budzika — mechanizmów, którym system na nią pozwala — a nie
+        // do minutnika okna, którego nikt już nie ogląda.
+        Uspienie.Uspij();
+
         TodayWidget.Refresh(this);
 
         // Budzik nastawiany przy wychodzeniu z aplikacji, bo to jedyna chwila, o której
