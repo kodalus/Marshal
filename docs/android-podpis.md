@@ -22,16 +22,16 @@ repozytorium.
 Potrzebne jest `keytool` z zestawu Javy. Jeśli go nie ma:
 `winget install Microsoft.OpenJDK.17`.
 
-W katalogu **poza repozytorium** (np. w dokumentach):
+W katalogu **poza repozytorium** (np. w dokumentach). Jedna linijka, bo znak łamania
+wiersza jest inny w PowerShellu (\`) niż w wierszu poleceń (^), a pomylony daje błąd,
+z którego nie wynika, o co chodzi:
 
 ```
-keytool -genkeypair -v -keystore marshal.keystore -alias marshal ^
-  -keyalg RSA -keysize 4096 -validity 10000 ^
-  -dname "CN=Marshal, O=Kodalus, C=PL"
+keytool -genkeypair -v -keystore marshal.keystore -alias marshal -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=Marshal, O=Kodalus, C=PL"
 ```
 
-Zapyta o hasło — **to samo hasło obsłuży magazyn i klucz**, bo tak wygląda dalsza
-konfiguracja. Zapisz je w menedżerze haseł.
+Zapyta o hasło do magazynu, a potem o hasło do klucza — **podaj to samo**, bo tak
+wygląda dalsza konfiguracja. Zapisz je w menedżerze haseł.
 
 **Ten plik jest nie do odzyskania.** Zgubiony znaczy, że kolejnych aktualizacji nie da
 się już nadpisać na żadnym telefonie, który ma Marshala — wszystkie wymagałyby
