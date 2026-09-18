@@ -35,8 +35,11 @@ public partial class WyborGodziny : UserControl
         _systemowy = Znajdz<Grid>(this, "Systemowy");
         _otwarcie = Znajdz<Button>(this, "Otwarcie");
 
-        _wbudowany.IsVisible = !Pickery.Systemowe;
-        _systemowy.IsVisible = Pickery.Systemowe;
+        // Rozstrzygnięcie przy pokazywaniu, nie raz przy powstawaniu: okno składa się
+        // wcześniej niż podpięcie okienek systemu, a pole, które zapytało za wcześnie,
+        // zostawało przy wybieraku wbudowanym na całe uruchomienie — bez śladu, bo oba
+        // wyglądają jak pole godziny.
+        AttachedToVisualTree += (_, _) => Rozstrzygnij();
 
         _wbudowany.PropertyChanged += (_, e) =>
         {
@@ -61,6 +64,7 @@ public partial class WyborGodziny : UserControl
 
         Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Wartosc = null;
 
+        Rozstrzygnij();
         Odswiez();
     }
 
@@ -72,6 +76,13 @@ public partial class WyborGodziny : UserControl
         {
             Odswiez();
         }
+    }
+
+    /// <summary>Tarcza systemu albo wybierak wbudowany — jedno albo drugie, nigdy oba.</summary>
+    private void Rozstrzygnij()
+    {
+        _wbudowany.IsVisible = !Pickery.Systemowe;
+        _systemowy.IsVisible = Pickery.Systemowe;
     }
 
     private void Odswiez()

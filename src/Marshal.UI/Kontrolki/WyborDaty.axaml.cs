@@ -5,7 +5,23 @@ using Avalonia.Markup.Xaml;
 
 namespace Marshal.UI.Kontrolki;
 
-/// <summary>Pole daty: okienko systemu tam, gdzie jest, wybierak Avalonii tam, gdzie go nie ma.</summary>
+/// <summary>
+/// Pole daty: kalendarz miesiąca, a na Androidzie ten systemowy.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Wbudowany wybierak Avalonii to trzy kolumny do przewijania — rok, miesiąc, dzień.
+/// Na pytanie „która środa" nie odpowiada wcale: trzeba ją sobie policzyć, zanim się
+/// ją wybierze. Kalendarz miesiąca odpowiada na nie samym wyglądem i to on jest tu
+/// w obu miejscach — na pulpicie własny, na Androidzie systemowy, bo tamten palec zna.
+/// </para>
+/// <para>
+/// O to, który pokazać, pyta się <b>przy pokazywaniu</b>, nie raz przy powstawaniu.
+/// Okno składa się wcześniej niż podpięcie okienek systemu i pole, które zapytało za
+/// wcześnie, zostawało przy wybieraku wbudowanym na całe uruchomienie — bez śladu,
+/// bo oba wyglądają jak pole daty.
+/// </para>
+/// </remarks>
 public partial class WyborDaty : UserControl
 {
     public static readonly StyledProperty<DateTimeOffset?> WartoscProperty =
@@ -18,32 +34,38 @@ public partial class WyborDaty : UserControl
         set => SetValue(WartoscProperty, value);
     }
 
-    /// <summary>Zapora przed odbiciem: nasz zapis do wybieraka wraca do nas jako zmiana.</summary>
-    private bool _wlasneWpisanie;
-
-    private readonly DatePicker _wbudowany;
-
-    private readonly Grid _systemowy;
-
     private readonly Button _otwarcie;
+
+    private readonly Calendar _miesiac;
+
+    private readonly Flyout _rozwiniecie;
+
+    /// <summary>Zapora przed odbiciem: nasz zapis do kalendarza wraca do nas jako zmiana.</summary>
+    private bool _wlasneWpisanie;
 
     public WyborDaty()
     {
         InitializeComponent();
 
-        _wbudowany = Znajdz<DatePicker>(this, "Wbudowany");
-        _systemowy = Znajdz<Grid>(this, "Systemowy");
         _otwarcie = Znajdz<Button>(this, "Otwarcie");
 
-        _wbudowany.IsVisible = !Pickery.Systemowe;
-        _systemowy.IsVisible = Pickery.Systemowe;
+        _miesiac = new Calendar { SelectionMode = CalendarSelectionMode.SingleDate };
+        _rozwiniecie = new Flyout { Content = _miesiac };
 
-        _wbudowany.PropertyChanged += (_, e) =>
+        _miesiac.SelectedDatesChanged += (_, _) =>
         {
-            if (e.Property == DatePicker.SelectedDateProperty && !_wlasneWpisanie)
+            if (_wlasneWpisanie)
             {
-                Wartosc = _wbudowany.SelectedDate;
+                return;
             }
+
+            Wartosc = _miesiac.SelectedDate is { } dzien
+                ? new DateTimeOffset(dzien.Date, TimeSpan.Zero)
+                : null;
+
+            // Dzień wybrany, więc nie ma na co dłużej patrzeć. Rozwinięcie zostawione
+            // otwarte zasłaniałoby pole, które właśnie wypełniło.
+            _rozwiniecie.Hide();
         };
 
         _otwarcie.Click += async (_, _) =>
@@ -63,6 +85,10 @@ public partial class WyborDaty : UserControl
 
         Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Wartosc = null;
 
+        // Rozstrzygnięcie dopiero tutaj — do tej chwili okienka systemu mogły się
+        // jeszcze nie podpiąć.
+        AttachedToVisualTree += (_, _) => Rozstrzygnij();
+
         Odswiez();
     }
 
@@ -76,13 +102,17 @@ public partial class WyborDaty : UserControl
         }
     }
 
+    /// <summary>Kalendarz własny albo systemowy — jedno albo drugie, nigdy oba.</summary>
+    private void Rozstrzygnij() =>
+        _otwarcie.Flyout = Pickery.Systemowe ? null : _rozwiniecie;
+
     private void Odswiez()
     {
         // Zmiana właściwości potrafi przyjść, zanim konstruktor dojdzie do odczytania
         // elementów — a wtedy pola są jeszcze puste. To jest ten sam kształt wywrotki,
         // przez który ta kontrolka wywracała całą aplikację przy starcie, więc stoi tu
         // zapora, a nie założenie, że się nie zdarzy.
-        if (_wbudowany is null || _otwarcie is null)
+        if (_otwarcie is null || _miesiac is null)
         {
             return;
         }
@@ -91,7 +121,13 @@ public partial class WyborDaty : UserControl
 
         try
         {
-            _wbudowany.SelectedDate = Wartosc;
+            _miesiac.SelectedDate = Wartosc?.Date;
+
+            if (Wartosc is { } dzien)
+            {
+                // Otwieraj na miesiącu, który jest wybrany, a nie na bieżącym.
+                _miesiac.DisplayDate = dzien.Date;
+            }
         }
         finally
         {
@@ -100,7 +136,7 @@ public partial class WyborDaty : UserControl
 
         // „Wybierz", nie pusty przycisk: pusty wygląda na zepsuty, a kreska nie mówi,
         // co się stanie po dotknięciu.
-        _otwarcie.Content = Wartosc is { } dzien ? $"{dzien:yyyy-MM-dd}" : "wybierz";
+        _otwarcie.Content = Wartosc is { } data ? $"{data:yyyy-MM-dd}" : "wybierz";
     }
 
     /// <summary>
@@ -109,12 +145,9 @@ public partial class WyborDaty : UserControl
     /// <remarks>
     /// W tym projekcie <c>InitializeComponent</c> jest pisany ręcznie i woła wyłącznie
     /// wczytanie XAML-a. Pola dla nazwanych elementów tworzy wtedy generator, ale
-    /// wypełnia je <b>swoja</b> wersja tej metody — której tu nie ma. Sięgnięcie po nie
+    /// wypełnia je <b>jego</b> wersja tej metody — której tu nie ma. Sięgnięcie po nie
     /// kończyło się pustym wskazaniem w konstruktorze i wywrotką całej aplikacji przy
     /// starcie, bo kontrolka powstaje w środku składania okna.
-    ///
-    /// Odczyt po nazwie nie zależy od generatora i jest tym, co reszta okna robi od
-    /// początku.
     /// </remarks>
     private static T Znajdz<T>(UserControl gdzie, string nazwa)
         where T : Control =>

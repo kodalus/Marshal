@@ -2,22 +2,20 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Marshal.UI.Kontrolki.WyborDaty">
   <!--
-    Dwa wybieraki, jeden widoczny. Który — rozstrzyga platforma, nie to okno.
-    Powiązania robione w kodzie, a nie tutaj: kontrolka ma własną właściwość, a nie
-    kontekst danych, i wyrażenie sięgające do samej siebie jest w XAML-u tym rodzajem
-    zapisu, który kompiluje się i nie działa.
+    Jeden przycisk na obie platformy. Na Androidzie otwiera okienko systemu, na
+    pulpicie rozwija kalendarz miesiąca — a że w obu przypadkach wygląda tak samo
+    i pokazuje tę samą datę, nie ma tu dwóch kontrolek do utrzymywania.
+
+    Kalendarz składany w kodzie, nie tutaj: leży w rozwinięciu, a rozwinięcie nie jest
+    częścią drzewa okna, więc odczyt po nazwie by go nie znalazł.
   -->
-  <Panel>
-    <DatePicker x:Name="Wbudowany" MinWidth="0" HorizontalAlignment="Stretch" />
+  <Grid ColumnDefinitions="*,Auto">
+    <Button x:Name="Otwarcie" Grid.Column="0" Padding="12,8"
+            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
 
-    <Grid x:Name="Systemowy" ColumnDefinitions="*,Auto" IsVisible="False">
-      <Button x:Name="Otwarcie" Grid.Column="0" Padding="12,8"
-              HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
-
-      <!-- Czyszczenie osobnym przyciskiem, bo okno systemu go nie ma: wybiera datę
-           albo nic nie zmienia, ale nie umie jej zabrać. -->
-      <Button x:Name="Czyszczenie" Grid.Column="1" Margin="6,0,0,0" Padding="12,8"
-              Content="×" />
-    </Grid>
-  </Panel>
+    <!-- Czyszczenie osobnym przyciskiem, bo okno systemu go nie ma: wybiera datę
+         albo nic nie zmienia, ale nie umie jej zabrać. -->
+    <Button x:Name="Czyszczenie" Grid.Column="1" Margin="6,0,0,0" Padding="12,8"
+            Content="×" />
+  </Grid>
 </UserControl>

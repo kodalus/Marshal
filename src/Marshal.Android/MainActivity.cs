@@ -43,12 +43,15 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         Awaria.Pilnuj(this);
         Awaria.Odczytaj(this);
 
+        // **Przed bazowym**, bo to ono stawia Avalonię, a Avalonia od razu składa okno
+        // razem z polami daty i godziny. Pole pyta przy powstawaniu, czy jest czym
+        // pokazać okienko systemu; podpięte linijkę później znaczyło, że odpowiedź
+        // zawsze brzmiała „nie" i wszystkie pola zostawały przy wybieraku wbudowanym.
+        // Samo podpięcie niczego nie otwiera, więc nie potrzebuje gotowego okna.
+        Wybieraki.Podepnij(this);
+
         base.OnCreate(savedInstanceState);
         Powiadomienia.Podepnij(this);
-
-        // Okienka systemu do daty i godziny. Przypięte do okna, bo dialog musi mieć nad
-        // czym stanąć — a okno bywa zakładane od nowa przy obrocie telefonu.
-        Wybieraki.Podepnij(this);
 
         Rozpatrz(Intent);
 
