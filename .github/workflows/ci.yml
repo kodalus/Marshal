@@ -268,6 +268,17 @@ jobs:
           for i in 1 2 3 4 5; do
             if gh release view najnowsza >/dev/null 2>&1; then
               gh release upload najnowsza artefakty/marshal-windows.zip --clobber
+
+              # Suma dopisywana do opisu, nie nadpisująca go: opis stawia budowanie
+              # Androida i jest w nim suma APK. Dwa zadania piszące własny opis
+              # znaczyłyby, że w wydaniu widać sumę tego pliku, którego zadanie
+              # skończyło później — czyli losowego.
+              OPIS=$(gh release view najnowsza --json body -q .body)
+
+              if ! printf '%s' "$OPIS" | grep -q 'marshal-windows.zip'; then
+                gh release edit najnowsza --notes "$(printf '%s\n\nSHA-256 `marshal-windows.zip`: `%s`' "$OPIS" "${{ steps.suma.outputs.sha }}")"
+              fi
+
               exit 0
             fi
 

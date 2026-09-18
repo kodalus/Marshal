@@ -102,24 +102,33 @@ Są dwie drogi:
 
 ## Windows
 
-### 1. Pobierz i rozpakuj
+Wymagany Windows 10 albo 11, 64-bitowy.
+
+### 1. Pobierz
 
 Z tych samych [wydań](https://github.com/kodalus/Marshal/releases) pobierz
-`marshal-windows.zip` i rozpakuj, gdzie chcesz. Nie ma instalatora — aplikacja
-jest katalogiem z plikami i nie wpisuje się do rejestru.
+`marshal-windows.zip`. **Jeszcze nie rozpakowuj** — najpierw krok 2.
 
 Archiwum zawiera środowisko uruchomieniowe, więc **nie trzeba niczego doinstalowywać**.
 Stąd jego rozmiar.
 
-### 2. Odblokuj archiwum przed rozpakowaniem
+### 2. Odblokuj archiwum
 
-Windows oznacza pliki pobrane z internetu i potrafi z tego powodu blokować programy
-w środku. Zanim rozpakujesz: prawy przycisk na `marshal-windows.zip` → **Właściwości**
-→ na dole **Odblokuj** → OK. Jeśli pola „Odblokuj" nie ma, nie ma też problemu.
+Windows oznacza pliki pobrane z internetu i przenosi to oznaczenie na wszystko, co
+z nich wypakujesz. Odblokowanie archiwum przed rozpakowaniem załatwia sprawę raz;
+zrobione po rozpakowaniu trzeba by powtórzyć na każdym pliku osobno.
 
-### 3. Uruchom
+Prawy przycisk na `marshal-windows.zip` → **Właściwości** → na dole zaznacz
+**Odblokuj** → OK. Jeśli tego pola nie ma, to znaczy, że Windows nie oznaczył pliku
+i nie ma czego odblokowywać.
 
-`Marshal.Desktop.exe` w rozpakowanym katalogu.
+### 3. Rozpakuj i uruchom
+
+Rozpakuj archiwum tam, gdzie chcesz — nie ma instalatora, aplikacja jest katalogiem
+z plikami i nie wpisuje się do rejestru. Potem uruchom:
+
+`Marshal.Desktop.exe` w rozpakowanym katalogu. Skrót na pulpicie robi się prawym
+przyciskiem na tym pliku → **Pokaż więcej opcji** → **Wyślij do** → **Pulpit**.
 
 Przy pierwszym uruchomieniu SmartScreen powie „System Windows ochronił Twój komputer"
 i pokaże jeden przycisk. **Kliknij „Więcej informacji", potem „Uruchom mimo to".**
@@ -133,6 +142,29 @@ rocznie i aplikacja rozdawana rodzinie go nie ma. Ostrzeżenie pojawia się raz 
 Baza, załączniki i ustawienia leżą w katalogu danych użytkownika, nie w katalogu
 aplikacji — skasowanie rozpakowanego katalogu nie kasuje zadań. Kopię zapasową robi się
 w **Ustawieniach → Kopia zapasowa**.
+
+---
+
+## Pierwsze uruchomienie — czego się spodziewać
+
+Instrukcja kończyła się dotąd na „zainstalowane", a to jest połowa pytania.
+
+**Aplikacja zakłada na start dziesięć obszarów odpowiedzialności** — Praca, Dzieci,
+Zdrowie, Dom, Finanse, Związek, Rozwój własny, Twórczość, Sprawy urzędowe, Relacje.
+Nie są one na stałe: zmienia się im nazwy, dokłada własne i usuwa niepotrzebne na
+ekranie **Projekty**. Są od początku, bo w tej metodzie każde zadanie poza skrzynką
+musi należeć do jakiegoś obszaru — bez nich pierwsze zadanie nie dałoby się zapisać.
+
+**Zacznij od skrzynki.** Pole na dole okna — „Wrzuć myśl i naciśnij Enter" — przyjmuje
+sam tytuł i nic więcej. O to chodzi: wrzucanie ma kosztować dwie sekundy, a decyzje
+podejmuje się później, na ekranie przetwarzania skrzynki.
+
+**Na telefonie jest widget.** „Marshal — na dziś": plan dnia na ekranie domowym,
+z odhaczaniem i przełączaniem między dniami. Dodaje się go jak każdy inny —
+przytrzymaj puste miejsce na ekranie domowym → Widżety → Marshal.
+
+**Kopię zapasową robi się w Ustawieniach.** Warto zrobić pierwszą, zanim zaczniesz
+wpisywać cokolwiek ważnego — to jeden plik JSON, który odtwarza całość.
 
 ---
 
@@ -152,8 +184,11 @@ ma wspólnego dla wszystkich identyfikatora klienta. Znaczy to, że:
 
 Ceną jest kwadrans klikania w konsoli Google przy pierwszym uruchomieniu.
 
-Pełna instrukcja krok po kroku: **[`google-dysk.md`](google-dysk.md)**. Tu trzy rzeczy,
-na których najłatwiej się potknąć.
+**Zrób to w tej kolejności:** przejdź całą instrukcję
+**[`google-dysk.md`](google-dysk.md)** — zakładanie projektu, włączenie API, ekran zgody,
+poświadczenia — a potem wróć tutaj po trzy rzeczy, na których najłatwiej się potknąć.
+Poniższe trzy akapity **nie zastępują** tamtej instrukcji; one tylko ostrzegają przed
+miejscami, w których łatwo skręcić w złą stronę.
 
 ### Potknięcie pierwsze: telefon też bierze poświadczenia „komputerowe"
 
@@ -220,6 +255,7 @@ jednym Dysku — i dwie aplikacje, które się nawzajem nie widzą, choć obie d
 | Przypomnienia nie przychodzą przy zamkniętej aplikacji | Bateria nie jest ustawiona na „bez ograniczeń" albo brakuje autostartu — zob. krok 4 instalacji na Androidzie. |
 | Przypomnienia milkną po restarcie telefonu | Brak autostartu. To ten sam przełącznik. |
 | Nic się nie synchronizuje, dopóki aplikacja jest zamknięta | To samo: bateria i autostart. Przy otwartej aplikacji odczyt idzie co minutę, przy zamkniętej co pół godziny — i tylko wtedy, gdy system na to pozwala. |
+| „Aplikacja nie została zainstalowana" przy aktualizacji | Nowy plik podpisano innym kluczem niż zainstalowany. **Najpierw kopia zapasowa**, potem odinstaluj starą wersję i zainstaluj nową — odinstalowanie kasuje dane. |
 | Nie wiadomo, co się stało | **Więcej → Dziennik.** Ostatnie 500 zdarzeń, z problemami osobno. |
 
 Dziennik jest pierwszym miejscem do sprawdzenia przy czymkolwiek. Jest lokalny —
