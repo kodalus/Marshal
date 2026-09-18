@@ -18,9 +18,19 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-  <!-- Budzik na przypomnienia przy zamkniętej aplikacji. Dokładny wymaga od
-       Androida 12 osobnej zgody; bez niej aplikacja schodzi na niedokładny zamiast
+  <!-- Dokładne budziki na przypomnienia. Dwa wpisy, bo Android zmienił tu zdanie:
+
+       USE_EXACT_ALARM (od Androida 13) przyznaje się **przy instalacji**, bez pytania
+       i bez wchodzenia w ustawienia systemu. Jest zastrzeżone dla aplikacji, których
+       istotą są budziki, kalendarze i przypomnienia — Marshal nią jest, więc wpis
+       jest uczciwy, a nie naciągnięty. Uwaga na przyszłość: przy publikacji w sklepie
+       Google wymaga do tego osobnej deklaracji; przy instalacji z pliku nie ma to
+       znaczenia.
+
+       SCHEDULE_EXACT_ALARM zostaje dla Androida 12, gdzie tamtego jeszcze nie ma.
+       Tam zgoda bywa nieprzyznana i aplikacja schodzi na budzik niedokładny zamiast
        prosić na siłę — spóźnione przypomnienie jest lepsze od żadnego. -->
+  <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
   <!-- Budziki nie przeżywają wyłączenia telefonu. Bez tego przypomnienia milkną po

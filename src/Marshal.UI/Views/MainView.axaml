@@ -209,6 +209,18 @@
       <Setter Property="Opacity" Value="1" />
     </Style>
 
+    <!-- Karta, która na wąskim ekranie przestaje być kartą. -->
+    <Style Selector="Border.pelny">
+      <Setter Property="MaxWidth" Value="Infinity" />
+      <Setter Property="MaxHeight" Value="Infinity" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="Padding" Value="16,14" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="VerticalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+    </Style>
+
     <Style Selector="ToggleButton.day">
       <Setter Property="MinWidth" Value="44" />
       <Setter Property="Padding" Value="8,6" />
@@ -1947,12 +1959,32 @@
              PointerPressed="TloSzczegolu">
       <!-- Kliknięcie w przyciemnione tło zamyka okno, kliknięcie w samo okno nie:
            zdarzenie zatrzymuje się na ramce, więc do tła nie dociera. -->
-      <Border MaxWidth="560" MaxHeight="620" Margin="8" Padding="24" CornerRadius="14"
+      <!-- Na wąskim ekranie karta przestaje być kartą i wypełnia okno. Okienko
+           z marginesem wygląda na telefonie jak coś doklejonego nad treścią, a przy
+           dwunastu polach i tak zasłania wszystko — więc margines kosztuje miejsce
+           i nic za nie nie daje. Ten sam warunek co przy nawigacji: wąsko to wąsko,
+           niezależnie od tego, czy jest to telefon, czy zwężone okno na pulpicie. -->
+      <Border Classes.pelny="{Binding IsNarrow}"
+              MaxWidth="560" MaxHeight="620" Margin="8" Padding="24" CornerRadius="14"
               Background="{DynamicResource Karta}" VerticalAlignment="Center"
               BorderThickness="1" BorderBrush="{DynamicResource Krawedz}"
               PointerPressed="ZatrzymajKlikniecie">
-      <ScrollViewer Name="SzczegolPrzewijanie" DataContext="{Binding Detail}">
-        <StackPanel x:DataType="vm:TaskDetailViewModel">
+      <DockPanel DataContext="{Binding Detail}" x:DataType="vm:TaskDetailViewModel">
+
+        <!-- Przyciski przyszpilone na dole, poza przewijaniem. Wcześniej stały na
+             końcu treści: przy rozwiniętym rytmie trzeba było przewinąć całe okno,
+             żeby dojść do „Zapisz", a na pełnym ekranie telefonu jest tego jeszcze
+             więcej. Bez pośrednika: okno woła metodę wprost, bo polecenie
+             asynchroniczne potrafi cicho odmówić, a odmowa wygląda wtedy dokładnie
+             jak martwy przycisk i nie zostawia śladu nigdzie. -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                    Margin="0,16,0,0" HorizontalAlignment="Right">
+          <Button Classes="cichy" Padding="14,8" Click="ZamknijZadanie" Content="Zamknij" />
+          <Button Classes="glowny" Padding="14,8" Click="ZapiszZadanie" Content="Zapisz" />
+        </StackPanel>
+
+      <ScrollViewer Name="SzczegolPrzewijanie">
+        <StackPanel>
 
           <Grid ColumnDefinitions="Auto,*">
             <!-- Ptaszek przy nazwie zamiast przycisku „Zrobione" na dole: odhaczenie
@@ -2162,18 +2194,9 @@
             </StackPanel>
           </Border>
 
-          <!-- Bez pośrednika: okno woła metodę wprost. Polecenie asynchroniczne ma
-               własny warunek wykonalności i własne pilnowanie jednoczesności, a jedno
-               i drugie potrafi cicho odmówić — odmowa wygląda wtedy dokładnie jak
-               martwy przycisk i nie zostawia śladu nigdzie. -->
-          <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,20,0,0"
-                      HorizontalAlignment="Right">
-            <Button Classes="cichy" Padding="14,8" Click="ZamknijZadanie" Content="Zamknij" />
-            <Button Classes="glowny" Padding="14,8" Click="ZapiszZadanie" Content="Zapisz" />
-          </StackPanel>
-
         </StackPanel>
       </ScrollViewer>
+      </DockPanel>
       </Border>
       </Panel>
 
