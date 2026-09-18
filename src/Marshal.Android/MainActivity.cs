@@ -3,6 +3,7 @@ using Android.Content.PM;
 using Android.OS;
 using Avalonia;
 using Avalonia.Android;
+using Marshal.Infrastructure.Sync.Google;
 using Marshal.UI;
 
 namespace Marshal.Android;
@@ -37,6 +38,11 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 
         base.OnCreate(savedInstanceState);
         Powiadomienia.Podepnij(this);
+
+        // Droga po zgodę Google. Kontekst aplikacji, nie okna: zgoda przeżywa obrót
+        // telefonu i zamknięcie okna, a okno zapamiętane w polu statycznym zostałoby
+        // w pamięci na długo po tym, jak przestało istnieć.
+        GoogleDriveFactory.OdbiorcaKodu = () => new OdbiorcaKoduAndroid(ApplicationContext!);
     }
 
     /// <summary>

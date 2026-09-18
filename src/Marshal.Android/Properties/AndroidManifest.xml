@@ -6,6 +6,11 @@
        pierwszym uruchomieniu. Wcześniejsze wydania dają ją z instalacją, ale wpis
        musi być tak czy inaczej — bez niego prośba nie ma o co pytać. -->
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+  <!-- Sieć. W wydaniu do debugowania Android dokłada to uprawnienie sam i właśnie
+       dlatego łatwo o nim zapomnieć: bez wpisu wydanie Release nie ma dostępu do
+       sieci w ogóle — ani do Dysku, ani do kalendarza, ani do kanałów iCal. -->
+  <uses-permission android:name="android.permission.INTERNET" />
   <!-- Ikona wskazana wprost. Bez niej system bierze zieloną ikonę domyślną, przez co
        aplikacja na ekranie domowym nie ma nic wspólnego z tą samą aplikacją na pulpicie.
        „roundIcon" celowo nie ma: ikona adaptacyjna radzi sobie z okrągłą maską sama,

@@ -210,12 +210,45 @@ Trzy najczęstsze przy pierwszym podejściu:
   poświadczenia są z innego projektu;
 - **odmowa dostępu** — poświadczenia są typu innego niż **Aplikacja komputerowa**.
 
+## Krok 6 — telefon
+
+**W konsoli Google nie ma tu nic do zrobienia.** Żadnych nowych poświadczeń, żadnego
+typu „Android", żadnego odcisku podpisu APK. Telefon używa **tych samych** poświadczeń
+typu „aplikacja komputerowa", które masz z kroku 4, tego samego ekranu zgody i tej
+samej listy użytkowników testowych.
+
+W aplikacji na telefonie: **Ustawienia → Konto Google — synchronizacja** → wklej ten
+sam identyfikator klienta i tę samą tajemnicę → **Zapisz i zsynchronizuj**. Otworzy się
+przeglądarka telefonu, potwierdzasz zgodę, aplikacja wraca sama.
+
+Poświadczenia wkleja się **na każdym urządzeniu osobno**, bo leżą w tabeli ustawień
+lokalnych i nie jadą przez synchronizację (krok 5). Poświadczenia do Dysku nie mają
+jechać przez Dysk.
+
+### Dlaczego telefon nie potrzebuje własnych poświadczeń
+
+Zwykła droga logowania na Androidzie to poświadczenia typu **Android** z odciskiem
+podpisu APK, własny schemat adresu powrotu i podpisywanie każdego wydania tym samym
+kluczem. Marshal idzie inaczej, bo nie musi: biblioteka Google wraca ze zgodą **na port
+pętli zwrotnej**, a przeglądarka telefonu sięga do pętli zwrotnej tego samego telefonu.
+Google pozwala klientom typu komputerowego wracać na dowolny port pętli zwrotnej i nie
+wymaga zgłaszania go z góry.
+
+Wymienione jest więc tylko otwieranie przeglądarki — na Androidzie otwiera się zamiar,
+a nie proces. Nasłuch zostaje ten sam.
+
+Cena tego wyboru: gdyby Google kiedyś przestało pozwalać klientom komputerowym na
+pętlę zwrotną z telefonu, trzeba będzie założyć poświadczenia typu Android i podpisywać
+wydania stałym kluczem. To jest praca do zrobienia wtedy, a nie zapas na wszelki wypadek.
+
+### Czego telefon nie zrobi sam
+
+Przypomnienia sprawdza minutnik w oknie, a synchronizację uruchamia się ręcznie
+przyciskiem. Zamknięta aplikacja nie odezwie się i nie zsynchronizuje — jedno i drugie
+wymagałoby pracy w tle, czyli usługi pierwszoplanowej albo WorkManagera.
+
 ## Czego jeszcze nie ma
 
-- **Logowanie na Androidzie.** Droga z kroku 5 otwiera przeglądarkę i nasłuchuje na
-  porcie pętli zwrotnej; na Androidzie nie ma ani jednego, ani drugiego. Potrzebne
-  są osobne poświadczenia typu **Android** (z odciskiem podpisu APK) i powrót przez
-  własny schemat adresu. Sama składnica i klient Dysku zostają bez zmian.
 - **Sprawdzenie na żywym koncie.** Cała logika składnicy — nazewnictwo, porządek,
   odsiewanie duplikatów, odmowa nadpisania — jest pokryta testami na udawanym Dysku.
   Nie sprawdzone jest samo wołanie API, bo do tego trzeba poświadczeń.

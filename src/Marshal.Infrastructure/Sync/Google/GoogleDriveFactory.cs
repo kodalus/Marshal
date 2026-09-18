@@ -65,6 +65,24 @@ public static class GoogleDriveFactory
     private static string UserKey(bool withCalendar) =>
         withCalendar ? "marshal-kalendarz-zapis" : "marshal";
 
+    /// <summary>
+    /// Skąd wziąć kod zgody. Puste znaczy droga domyślna, czyli pulpitowa.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pole statyczne, tak samo i z tego samego powodu co wyjście na powiadomienia
+    /// systemowe: odebranie kodu wygląda inaczej na każdej platformie, a warstwa
+    /// współdzielona nie może zależeć od żadnej z nich.
+    /// </para>
+    /// <para>
+    /// Domyślna droga biblioteki Google otwiera przeglądarkę przez uruchomienie
+    /// procesu i nasłuchuje na porcie pętli zwrotnej. Na Androidzie pierwsze nie
+    /// istnieje, więc projekt platformy podstawia tu własną wersję — nasłuch zostaje
+    /// ten sam, bo przeglądarka telefonu sięga do pętli zwrotnej tego samego telefonu.
+    /// </para>
+    /// </remarks>
+    public static Func<ICodeReceiver>? OdbiorcaKodu { get; set; }
+
     /// <summary>Zgoda użytkownika. Wspólna droga dla Dysku i kalendarza.</summary>
     public static Task<UserCredential> AuthorizeAsync(
         string clientId,
@@ -82,7 +100,8 @@ public static class GoogleDriveFactory
             zakresy,
             UserKey(withCalendar),
             ct,
-            new FileDataStore(tokenFolder, fullPath: true));
+            new FileDataStore(tokenFolder, fullPath: true),
+            OdbiorcaKodu?.Invoke());
     }
 
     /// <param name="clientId">Z poświadczeń OAuth typu „aplikacja na komputer".</param>
