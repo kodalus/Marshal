@@ -68,6 +68,16 @@ public sealed class OdlozoneOdbicieTests
         public Task<IReadOnlyList<ActivityEntry>> RecentAsync(
             int count = 200, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<ActivityEntry>>([]);
+
+        public Task ClearAsync(CancellationToken ct = default)
+        {
+            lock (Wpisy)
+            {
+                Wpisy.Clear();
+            }
+
+            return Task.CompletedTask;
+        }
     }
 
     private static TaskItem Zadanie() =>
