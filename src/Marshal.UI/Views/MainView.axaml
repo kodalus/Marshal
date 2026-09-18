@@ -871,19 +871,20 @@
                   </Border>
 
                   <!-- Pasek całodniowy nad siatką, nie w niej: wydarzenie bez godziny
-                       umieszczone o północy kłamałoby o porze. -->
-                  <Border Height="24" CornerRadius="4" Background="{DynamicResource Panel}"
-                          IsVisible="{Binding HasAllDay}">
+                       umieszczone o północy kłamałoby o porze. Po jednej rzeczy na
+                       wiersz: dwie obok siebie zostawiały z każdej po pięć znaków
+                       i kropki. Wysokość wspólna dla wszystkich kolumn, żeby pasmo
+                       miało prostą dolną krawędź, a nie schodkową. -->
+                  <Border CornerRadius="4" Background="{DynamicResource Panel}"
+                          Height="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).AllDayHeight}"
+                          IsVisible="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HasAnyAllDay}">
                     <ItemsControl ItemsSource="{Binding AllDay}">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:AllDayBox">
-                          <Button Classes="slot" Padding="6,2" Margin="0,0,4,0"
-                                  Height="24" VerticalContentAlignment="Center"
+                          <Button Classes="slot" Padding="6,2" Margin="0,0,0,1"
+                                  Height="23" HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  VerticalContentAlignment="Center"
                                   Background="{DynamicResource Panel}"
                                   Click="OtworzCalodniowe" Tag="{Binding}">
                             <TextBlock Text="{Binding Label}" FontSize="11"
@@ -894,7 +895,10 @@
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
                   </Border>
-                  <Border Height="24" IsVisible="{Binding !HasAllDay}" />
+                  <!-- Odstęp, gdy nic całodniowego nie ma w żadnym dniu: siatka nie ma
+                       się wtedy podnosić pod same nazwy dni. -->
+                  <Border Height="24"
+                          IsVisible="{Binding !$parent[ItemsControl].((vm:CalendarViewModel)DataContext).HasAnyAllDay}" />
 
                 </StackPanel>
               </DataTemplate>

@@ -13,6 +13,7 @@ using Marshal.Domain.Projects;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Notifications;
+using Marshal.Infrastructure.Sync.Google;
 
 namespace Marshal.UI.ViewModels;
 
@@ -55,6 +56,8 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly CalendarSyncService _kalendarze;
     private readonly ReminderService _przypomnienia;
 
+    private readonly GoogleSyncService _dysk;
+
     public MainViewModel(
         InboxService inbox,
         ITaskRepository tasks,
@@ -79,13 +82,15 @@ public sealed partial class MainViewModel : ObservableObject
         StructureEditService szkielet,
         TaskMirror odbicie,
         CalendarSyncService kalendarze,
-        ReminderService przypomnienia)
+        ReminderService przypomnienia,
+        GoogleSyncService dysk)
     {
         _inbox = inbox;
         _szkielet = szkielet;
         _odbicie = odbicie;
         _kalendarze = kalendarze;
         _przypomnienia = przypomnienia;
+        _dysk = dysk;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -380,6 +385,16 @@ public sealed partial class MainViewModel : ObservableObject
         // Wczytanie tego, co i tak jest już wybrane: ekranem startowym jest kalendarz
         // (patrz Current), a wybór bez danych to pusta siatka.
         await ShowCalendarAsync();
+
+        // Synchronizacja przy starcie, bez czekania na nią.
+        //
+        // Do dziś pierwsze przebiegi były świadomie ręczne: dopóki nie było wiadomo,
+        // czy droga w ogóle działa, cicha synchronizacja przy starcie znaczyłaby, że
+        // pierwszy błąd widać jako **brakujące zadania**, a nie jako komunikat. Droga
+        // działa, więc powód zniknął — a został ten po drugiej stronie: aplikacja
+        // otwarta na telefonie pokazywała stan sprzed ostatniej synchronizacji i nie
+        // było po niej widać, że jest nieświeży.
+        Bezpiecznie("Synchronizacja przy starcie", SynchronizujCichoAsync);
     }
 
     /// <summary>
@@ -460,6 +475,36 @@ public sealed partial class MainViewModel : ObservableObject
     /// ekranu, na którym akurat się było, i nic się nie przerysowywało — po zapisie,
     /// który się udał. Jedno popsute miejsce ma psuć jedno miejsce.
     /// </remarks>
+    /// <summary>
+    /// Przebieg w tle przy starcie. Cicho, ale nie po cichu: wynik idzie do dziennika.
+    /// </summary>
+    /// <remarks>
+    /// Wyłącznie wtedy, gdy jest czym: bez poświadczeń i bez zapisanego żetonu
+    /// logowanie chciałoby otworzyć przeglądarkę — przy starcie aplikacji byłoby to
+    /// okno wyskakujące bez powodu, zanim zdążysz cokolwiek zrobić.
+    /// </remarks>
+    private async Task SynchronizujCichoAsync()
+    {
+        if (!_dysk.HasCredentials || !Directory.Exists(_dysk.TokenFolder))
+        {
+            return;
+        }
+
+        var wynik = await _dysk.SyncAsync();
+
+        await _dziennik.RecordAsync(
+            "Synchronizacja przy starcie",
+            wynik.Ok ? $"wysłane {wynik.Sent}, przyjęte {wynik.Applied}" : wynik.Message,
+            wynik.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
+
+        // Przeliczenie tylko wtedy, gdy coś przyszło: przerysowanie ekranu pod ręką,
+        // która właśnie coś na nim robi, jest kosztem bez pożytku.
+        if (wynik is { Ok: true, Applied: > 0 })
+        {
+            await ReloadAsync();
+        }
+    }
+
     private async Task ReloadAsync()
     {
         await Probuj("Ekran: przeliczenie skrzynki", RefreshInboxAsync);

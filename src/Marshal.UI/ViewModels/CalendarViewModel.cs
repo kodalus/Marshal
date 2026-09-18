@@ -249,6 +249,31 @@ public sealed partial class CalendarViewModel(
     /// <summary>Odstęp między kolumnami dnia. Musi zgadzać się z marginesem w oknie.</summary>
     private const double OdstepKolumny = 2;
 
+    /// <summary>Wysokość jednego wiersza na pasku całodniowym.</summary>
+    private const double WierszCalodniowy = 24;
+
+    /// <summary>
+    /// Wysokość paska całodniowego — **wspólna dla wszystkich kolumn**.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Po jednej rzeczy na wiersz, a nie wszystkie obok siebie. Dwie rzeczy w jednym
+    /// wierszu zostawiały z każdej po pięć znaków i kropki, więc pasek mówił, że coś
+    /// jest, ale nie co.
+    /// </para>
+    /// <para>
+    /// Wspólna dla wszystkich kolumn, bo pasek jest jednym pasmem przez cały tydzień,
+    /// a nie siedmioma osobnymi. Przy wysokości liczonej osobno dzień z trzema
+    /// rzeczami byłby wyższy od sąsiada z jedną i dolna krawędź pasma szłaby schodami.
+    /// Dzień z jedną rzeczą ma więc puste miejsce pod nią.
+    /// </para>
+    /// </remarks>
+    public double AllDayHeight => Math.Max(1, Columns.Count == 0 ? 0 : Columns.Max(k => k.AllDay.Count))
+        * WierszCalodniowy;
+
+    /// <summary>Czy którykolwiek z widocznych dni ma coś całodniowego.</summary>
+    public bool HasAnyAllDay => Columns.Any(k => k.AllDay.Count > 0);
+
     /// <summary>
     /// Nowa szerokość od okna. Przelicza siatkę, o ile zmiana cokolwiek znaczy.
     /// </summary>
@@ -687,6 +712,10 @@ public sealed partial class CalendarViewModel(
                 dzien.Date == dzis,
                 teraz));
         }
+
+        // Po złożeniu kolumn, bo obie liczą się z tego, co w nich jest.
+        OnPropertyChanged(nameof(AllDayHeight));
+        OnPropertyChanged(nameof(HasAnyAllDay));
     }
 
     /// <summary>
