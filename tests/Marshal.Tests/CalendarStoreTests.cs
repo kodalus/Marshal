@@ -153,7 +153,7 @@ public sealed class CalendarStoreTests : IDisposable
         public Task DeleteAsync(
             CalendarSource source, string externalId, CancellationToken ct = default)
         {
-            Wyslane.Add(("skasowanie", string.Empty, externalId));
+            Wyslane.Add(("skasowanie", string.Empty, externalId, false));
             return Task.CompletedTask;
         }
     }
@@ -480,7 +480,7 @@ public sealed class CalendarStoreTests : IDisposable
         await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: true);
 
         _pisarz.Wyslane.Should().ContainSingle()
-            .Which.Should().Be(("nazwa", "✓ Spotkanie", "s1"));
+            .Which.Should().Be(("nazwa", "✓ Spotkanie", "s1", false));
 
         var wpis = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Single();
         wpis.Entry.IsDone.Should().BeTrue();
@@ -504,7 +504,7 @@ public sealed class CalendarStoreTests : IDisposable
         await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: false);
 
         _pisarz.Wyslane.Should().ContainSingle()
-            .Which.Should().Be(("nazwa", "Spotkanie", "s1"));
+            .Which.Should().Be(("nazwa", "Spotkanie", "s1", false));
 
         (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
             .Timed.Single().Entry.IsDone.Should().BeFalse();
@@ -622,7 +622,7 @@ public sealed class CalendarStoreTests : IDisposable
         (await odbicie.ShareAsync(zadanie.Id, _zrodlo.Id)).Should().BeNull("miało się udać");
 
         _pisarz.Wyslane.Should().ContainSingle()
-            .Which.Should().Be(("utworzenie", "Odebrać Sanię", (string?)null));
+            .Which.Should().Be(("utworzenie", "Odebrać Sanię", (string?)null, false));
 
         _db.Tasks.Single(t => t.Id == zadanie.Id).SharedEventId.Should().Be("nowe-1");
 
