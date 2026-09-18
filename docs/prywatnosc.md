@@ -1,3 +1,7 @@
+---
+title: Polityka prywatności
+---
+
 # Polityka prywatności — Marshal
 
 Obowiązuje od 18 września 2026.

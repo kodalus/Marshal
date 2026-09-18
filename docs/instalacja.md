@@ -1,3 +1,7 @@
+---
+title: Instalacja
+---
+
 # Instalacja Marshala
 
 Dla kogoś, kto dostał od kogoś link i chce z tego korzystać. Nie zakłada niczego poza

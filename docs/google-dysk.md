@@ -1,3 +1,7 @@
+---
+title: Dysk Google i kalendarz
+---
+
 # Dysk Google jako składnica synchronizacji
 
 Instrukcja jednorazowa. Po jej wykonaniu masz identyfikator klienta i tajemnicę,
@@ -55,15 +59,39 @@ Do wypełnienia są trzy rzeczy i tylko one są obowiązkowe:
 2. **Adres e-mail pomocy technicznej** — Twój własny.
 3. **Dane kontaktowe dewelopera** — ten sam adres.
 
-Logo, strona główna, polityka prywatności i regulamin są **opcjonalne** przy
-uprawnieniach nieuznanych za wrażliwe. Zostaw je puste: wpisanie adresu strony
-pociąga za sobą **domeny autoryzowane**, a te wymagają potwierdzenia własności
-domeny w Search Console. Przy aplikacji dla siebie samej nie ma czego potwierdzać.
+Do **samego testowania** tyle wystarczy. Do **przejścia w tryb produkcyjny** konsola
+żąda dwóch rzeczy więcej i nie da się ich ominąć:
 
-Gdyby konsola mimo to zażądała adresu strony albo polityki prywatności — to jest
-moment, w którym publikacja przestaje być darmowa w sensie czasu. Wtedy sensowniej
-zostać na trybie testowym i pogodzić się z logowaniem raz w tygodniu, niż zakładać
-domenę dla aplikacji, z której korzysta jedna osoba.
+4. **Adres URL strony głównej.**
+5. **Adres URL polityki prywatności.**
+
+Ten akapit mówił kiedyś, że oba są opcjonalne. **Nie są** — komunikat pod szarym
+przyciskiem wymienia je wprost. Dobra wiadomość jest taka, że nie trzeba do tego
+zakładać ani kupować domeny.
+
+### Strona bez domeny — GitHub Pages
+
+Repozytorium Marshala wystawia katalog `docs/` jako stronę. Adresy wyglądają tak:
+
+| Pole w konsoli | Co wpisać |
+|---|---|
+| Strona główna aplikacji | `https://<konto>.github.io/Marshal/` |
+| Polityka prywatności | `https://<konto>.github.io/Marshal/prywatnosc` |
+
+Włączenie: **Settings → Pages → Source: Deploy from a branch → `main` / `/docs`**.
+
+Domena autoryzowana to wtedy `<konto>.github.io`. Google wymaga potwierdzenia jej
+własności w Search Console, a to działa, bo `github.io` jest domeną publiczną —
+adres konta jest z punktu widzenia Google osobną domeną, a nie podstroną cudzej.
+Potwierdzenie idzie plikiem HTML, który GitHub Pages poda tak samo jak każdy inny.
+
+Gdyby konsola nie przyjęła adresu z podkatalogiem, zostaje droga pewniejsza:
+osobne repozytorium o nazwie **dokładnie** `<konto>.github.io`, które wystawia
+stronę w korzeniu domeny. Wtedy adresy nie mają podkatalogu, a plik potwierdzający
+leży tam, gdzie Search Console go szuka.
+
+To jest darmowe i zajmuje kwadrans. Zakładanie własnej domeny dla aplikacji, z której
+korzysta jedna rodzina, nie jest potrzebne.
 
 ### Tryb testowy kontra produkcyjny
 
@@ -84,12 +112,20 @@ Stąd zalecenie:
 | Czego chcesz | Co ustawić |
 |---|---|
 | Sama synchronizacja (`drive.file`) | **Opublikuj aplikację** — żeton bezterminowy, bez weryfikacji |
-| Dodatkowo kalendarz Google | Zostaw **testowy** i pogódź się z logowaniem co tydzień |
+| Dodatkowo kalendarz Google | **Też opublikuj** — zob. akapit niżej |
 | Kalendarze bez logowania | Kanały iCal — nie wymagają niczego z tej instrukcji |
 
-Przy dwóch ostatnich wierszach warto rozważyć, czy kalendarz Google jest wart
-cotygodniowego logowania — adres `.ics` daje to samo na siatce godzinowej i nie
-wymaga konta.
+**Kalendarz a produkcja.** Ten wiersz mówił kiedyś „zostań w trybie testowym
+i pogódź się z logowaniem co tydzień". To było zbyt ostrożne: siedmiodniowe wygasanie
+żetonu jest cechą **trybu testowego**, a nie uprawnień. W produkcji żeton nie wygasa
+również wtedy, gdy aplikacja nie przeszła weryfikacji — ceną jest jednorazowy ekran
+„Google nie zweryfikował tej aplikacji", przez który przechodzi się przez
+**Zaawansowane**, oraz limit stu użytkowników. Przy aplikacji dla jednej rodziny to
+nie jest ograniczenie.
+
+Jest to odwracalne: gdyby Google zablokowało uprawnienia kalendarza w produkcji bez
+weryfikacji, wracasz do trybu testowego i nic nie tracisz. Sprawdź po tygodniu, czy
+nadal jesteś zalogowana — to jest jedyny rzetelny dowód, że zadziałało.
 
 ### Dlaczego akurat `drive.file`
 

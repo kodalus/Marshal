@@ -1,0 +1,15 @@
+# Strona Marshala na GitHub Pages.
+#
+# Powstała z jednego konkretnego powodu: Google wymaga przy przełączaniu ekranu zgody
+# w tryb produkcyjny adresu strony głównej i adresu polityki prywatności, a adres musi
+# leżeć w domenie, której własność da się potwierdzić. Katalog „docs" tego repozytorium
+# wystawiony przez GitHub Pages daje jedno i drugie bez zakładania domeny i bez opłat.
+title: Marshal
+description: Planer zadań i projektów w metodzie GTD. Windows i Android, offline, bez serwera.
+theme: jekyll-theme-minimal
+
+# Specyfikacja i instrukcje techniczne zostają w repozytorium, ale nie na stronie:
+# strona ma odpowiadać komuś, kto instaluje, a nie komuś, kto czyta kod.
+exclude:
+  - marshal-spec.md
+  - android-podpis.md
