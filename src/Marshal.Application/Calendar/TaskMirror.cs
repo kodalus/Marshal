@@ -141,9 +141,12 @@ public sealed class TaskMirror(
             return $"Do kalendarza „{zrodlo.Name}” umiemy tylko czytać.";
         }
 
-        if (zadanie.DoDate is null || zadanie.DoTime is null)
+        // Dzień wystarczy. Dawniej wymagana była też godzina, bo bez niej nie było
+        // wiadomo, gdzie postawić blok — ale zadanie bez pory nie jest blokiem, tylko
+        // wpisem całodniowym, i to jest odpowiedź, której wtedy brakowało.
+        if (Dzien(zadanie) is null)
         {
-            return "Najpierw dzień i godzina — kalendarz nie ma jak pokazać zadania bez pory.";
+            return "Najpierw dzień — kalendarz nie ma gdzie postawić zadania bez daty.";
         }
 
         if (zadanie.SharedCalendarId == calendarId)

@@ -106,7 +106,7 @@ public sealed class CalendarStoreTests : IDisposable
     /// <summary>Pisarz, który tylko zapamiętuje, co by wysłał.</summary>
     private sealed class Pisarz : ICalendarWriter
     {
-        public List<(string Co, string Tytul, string? Id)> Wyslane { get; } = [];
+        public List<(string Co, string Tytul, string? Id, bool Calodniowe)> Wyslane { get; } = [];
 
         public bool Rzuca { get; set; }
 
@@ -120,7 +120,7 @@ public sealed class CalendarStoreTests : IDisposable
                 throw new HttpRequestException("kalendarz nie odpowiada");
             }
 
-            Wyslane.Add(("utworzenie", draft.Title, null));
+            Wyslane.Add(("utworzenie", draft.Title, null, draft.AllDay));
             return Task.FromResult("nowe-1");
         }
 
@@ -133,7 +133,7 @@ public sealed class CalendarStoreTests : IDisposable
                 throw new HttpRequestException("kalendarz nie odpowiada");
             }
 
-            Wyslane.Add(("zmiana", draft.Title, externalId));
+            Wyslane.Add(("zmiana", draft.Title, externalId, draft.AllDay));
             return Task.CompletedTask;
         }
 
@@ -146,7 +146,7 @@ public sealed class CalendarStoreTests : IDisposable
                 throw new HttpRequestException("kalendarz nie odpowiada");
             }
 
-            Wyslane.Add(("nazwa", title, externalId));
+            Wyslane.Add(("nazwa", title, externalId, false));
             return Task.CompletedTask;
         }
 
@@ -685,9 +685,13 @@ public sealed class CalendarStoreTests : IDisposable
         po.SharedEventId.Should().BeNull();
     }
 
-    /// <summary>Bez godziny nie ma czego udostępnić — i mówimy to wprost.</summary>
+    /// <summary>Bez daty nie ma czego udostępnić — i mówimy to wprost.</summary>
+    /// <remarks>
+    /// Sama godzina nie jest już wymagana: zadanie z dniem, ale bez pory, idzie jako
+    /// wydarzenie całodniowe. Bez **daty** kalendarz nadal nie ma gdzie go postawić.
+    /// </remarks>
     [Fact]
-    public async Task Zadanie_bez_godziny_nie_da_sie_udostepnic()
+    public async Task Zadanie_bez_daty_nie_da_sie_udostepnic()
     {
         var odbicie = new TaskMirror(
             _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes());
@@ -695,13 +699,12 @@ public sealed class CalendarStoreTests : IDisposable
         var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(obszar);
 
-        var zadanie = TaskItem.Capture("Kiedyś w tym tygodniu", _zegar.Now, _hlc.Next());
-        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        var zadanie = TaskItem.Capture("Kiedyś, nie wiadomo kiedy", _zegar.Now, _hlc.Next());
         _db.Tasks.Add(zadanie);
         _db.SaveChanges();
 
         (await odbicie.ShareAsync(zadanie.Id, _zrodlo.Id))
-            .Should().Contain("dzień i godzina");
+            .Should().Contain("Najpierw dzień");
 
         _pisarz.Wyslane.Should().BeEmpty("odmowa nie dotyka kalendarza");
     }
@@ -731,14 +734,20 @@ public sealed class CalendarStoreTests : IDisposable
         _db.Tasks.Add(zadanie);
         _db.SaveChanges();
 
-        // Sam dzień to za mało: kalendarz nie ma jak pokazać „kiedyś w tym tygodniu".
+        // Sam dzień wystarczy — idzie jako wydarzenie całodniowe. Zgadnięta godzina
+        // zrobiłaby z zadania spotkanie, którego nikt nie umawiał.
         await edycja.RescheduleAsync(zadanie.Id, Dzis, null);
-        _pisarz.Wyslane.Should().BeEmpty();
-
-        await edycja.RescheduleAsync(zadanie.Id, Dzis, new TimeOnly(16, 0));
 
         _pisarz.Wyslane.Should().ContainSingle()
-            .Which.Co.Should().Be("utworzenie");
+            .Which.Should().Match<(string Co, string Tytul, string? Id, bool Calodniowe)>(
+                w => w.Co == "utworzenie" && w.Calodniowe);
+
+        // Dopisana godzina zmienia to samo wydarzenie, a nie zakłada drugiego.
+        await edycja.RescheduleAsync(zadanie.Id, Dzis, new TimeOnly(16, 0));
+
+        _pisarz.Wyslane.Should().HaveCount(2);
+        _pisarz.Wyslane[^1].Co.Should().Be("zmiana");
+        _pisarz.Wyslane[^1].Calodniowe.Should().BeFalse("od tej chwili ma swoją porę");
         _db.Tasks.Single(t => t.Id == zadanie.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
     }
 
