@@ -197,6 +197,29 @@ takiego dopisuje ptaszek do jego nazwy i na tym poprzestaje. To jest jedyne miej
 w całym projekcie, w którym awaria sięga poza aplikację, więc granica jest tu wąska
 celowo.
 
+### Kalendarze z drugiego konta
+
+Marshal loguje się do **jednego** konta Google — tym samym, którym synchronizuje przez
+Dysk. Nie ma w nim listy kont i dołożenie drugiego nie jest możliwe.
+
+Prawie nigdy nie jest potrzebne, bo Google rozwiązuje to po swojej stronie i robi to
+lepiej: **udostępnij kalendarz z drugiego konta temu, którym logujesz się w Marshalu**.
+W kalendarzu Google: ustawienia tego kalendarza → *Udostępnij określonym osobom lub
+grupom* → dodaj drugi adres → uprawnienie **Wprowadzanie zmian w wydarzeniach**, jeśli
+chcesz z Marshala także zapisywać.
+
+Od tej chwili kalendarz pojawia się na liście konta, którym się logujesz, i w Marshalu
+jest zwykłym kalendarzem do podłączenia — z własną barwą i własnym obszarem.
+
+To nie jest obejście. Udostępnianie jest w Google mechanizmem **do tego właśnie**,
+a lista kont w aplikacji byłaby drugim stanem mówiącym o tym samym: dwa miejsca,
+w których trzeba pamiętać, kto ma do czego dostęp.
+
+Gdy udostępnianie jest zablokowane — konta firmowe Google Workspace bywają zamknięte
+poza domenę — zostaje **prywatny adres `.ics`** tego kalendarza (ustawienia kalendarza →
+*Prywatny adres w formacie iCal*). Marshal czyta go bez żadnych poświadczeń, ale
+wyłącznie do odczytu: wydarzeń z takiego kanału nie da się zmieniać ani kasować.
+
 ### Kanały iCal — bez żadnych poświadczeń
 
 Kalendarz przedszkola, zajęć czy szkoły zwykle udostępnia adres kończący się na `.ics`.
