@@ -29,6 +29,18 @@ namespace Marshal.Application.Calendar;
 /// pojedynczy — dwa odbicia naraz to ten sam kłopot, co dwa zapisy naraz.
 /// </para>
 /// <para>
+/// <b>Kolejność zapewnia doczepianie, nie semafor.</b> Pierwsza wersja puszczała każdą
+/// pracę osobno i kazała jej czekać na semafor. Semafor rzeczywiście przepuszczał jedną
+/// naraz, ale <b>o kolejności decydowało to, która zdążyła po niego sięgnąć</b> — a to
+/// wyznacza pula wątków, nie zgłaszający. Zadanie założone i zaraz skasowane potrafiło
+/// więc pojechać do Google w kolejności „skasuj, wyślij": kasowanie nie zastawało jeszcze
+/// żadnego wydarzenia i nie robiło nic, a wysłanie zakładało je chwilę później. W kalendarzu
+/// zostawał wpis po zadaniu, którego już nie ma — i to po stronie Google, więc nie dawał
+/// się wyrzucić do kosza jak zadanie, tylko trzeba go było kasować jak cudze wydarzenie.
+/// Teraz każda praca czeka na <b>swoją poprzedniczkę</b>, a nie na wolny semafor, i ta
+/// poprzedniczka jest wyznaczona w chwili zgłoszenia.
+/// </para>
+/// <para>
 /// Czego to <b>nie</b> daje: trwałości. Zadanie odhaczone tuż przed zamknięciem
 /// aplikacji może nie zdążyć wysłać ptaszka do Google. Kolejka w bazie rozwiązałaby to
 /// w całości i jest do zrobienia wtedy, gdy okaże się potrzebna — na razie ceną jest
@@ -38,7 +50,10 @@ namespace Marshal.Application.Calendar;
 /// </remarks>
 public sealed class OdlozoneOdbicie(ITaskMirror odbicie, IActivityLog dziennik) : ITaskMirror
 {
-    private readonly SemaphoreSlim _brama = new(1, 1);
+    private readonly Lock _zamek = new();
+
+    /// <summary>Ostatnia zgłoszona praca. Następna doczepia się do niej.</summary>
+    private Task _ogon = Task.CompletedTask;
 
     public Task PushAsync(TaskItem task, CancellationToken ct = default)
     {
@@ -76,33 +91,46 @@ public sealed class OdlozoneOdbicie(ITaskMirror odbicie, IActivityLog dziennik) 
         // jedyną rzeczą stojącą między tym a odczytem w poprzek cudzego zapisu.
         using var bezKontekstu = ExecutionContext.SuppressFlow();
 
-        _ = Task.Run(async () =>
+        lock (_zamek)
         {
-            await _brama.WaitAsync();
+            // Poprzedniczka wyznaczona **tutaj**, czyli w kolejności zgłoszeń. To jest
+            // cała różnica wobec semafora: tam kolejność wychodziła z tego, kto pierwszy
+            // dobiegł, a tu jest ustalona, zanim cokolwiek ruszy.
+            var poprzednia = _ogon;
 
+            _ogon = Task.Run(() => PoKoleiAsync(poprzednia, co, tytul, task, praca));
+        }
+    }
+
+    private async Task PoKoleiAsync(
+        Task poprzednia,
+        string co,
+        string tytul,
+        TaskItem task,
+        Func<TaskItem, CancellationToken, Task> praca)
+    {
+        // Poprzedniczka nigdy nie rzuca — wyjątek zostaje w niej, w dzienniku. Inaczej
+        // jedno nieudane odbicie zrywałoby cały ogon kolejki.
+        await poprzednia;
+
+        try
+        {
+            await praca(task, CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            // Odbicie robione po fakcie nie ma komu oddać wyjątku: ekran dawno
+            // odpowiedział. Dziennik jest tu jedyną drogą, żeby nieudane wysłanie
+            // nie było nieodróżnialne od wysłanego.
             try
             {
-                await praca(task, CancellationToken.None);
+                await dziennik.RecordAsync(
+                    co, tytul, ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
             }
-            catch (Exception e)
+            catch
             {
-                // Odbicie robione po fakcie nie ma komu oddać wyjątku: ekran dawno
-                // odpowiedział. Dziennik jest tu jedyną drogą, żeby nieudane wysłanie
-                // nie było nieodróżnialne od wysłanego.
-                try
-                {
-                    await dziennik.RecordAsync(
-                        co, tytul, ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
-                }
-                catch
-                {
-                    // Dziennik jest narzędziem do patrzenia, a nie częścią działania.
-                }
+                // Dziennik jest narzędziem do patrzenia, a nie częścią działania.
             }
-            finally
-            {
-                _brama.Release();
-            }
-        });
+        }
     }
 }
