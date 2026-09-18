@@ -180,6 +180,38 @@ public sealed class StructureEditService(
         await unitOfWork.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Przypisanie kalendarza Google do obszaru. Jeden kalendarz na jeden obszar.
+    /// </summary>
+    /// <remarks>
+    /// Zdjęcie przypisania z każdego innego obszaru, który wskazywał ten sam kalendarz,
+    /// robione tutaj, a nie zostawiane użytkowniczce. Dwa obszary na jednym kalendarzu
+    /// znaczyłyby, że wydarzenie należy do obu — a obszar, który nie dzieli, nie jest
+    /// obszarem. Ciche przełożenie jest tu lepsze od odmowy: „ten kalendarz jest już
+    /// zajęty przez Pracę" zmuszałoby do pójścia tam, zdjęcia i powrotu, żeby zrobić
+    /// dokładnie to, co się przed chwilą wybrało.
+    /// </remarks>
+    public async Task SetAreaCalendarAsync(
+        Guid areaId, Guid? calendarId, CancellationToken ct = default)
+    {
+        if (await areas.FindAsync(areaId, ct) is not { } obszar)
+        {
+            return;
+        }
+
+        if (calendarId is { } kalendarz)
+        {
+            foreach (var inny in (await areas.AllAsync(ct))
+                .Where(o => o.Id != areaId && o.CalendarId == kalendarz))
+            {
+                inny.SetCalendar(null, hlc.Next());
+            }
+        }
+
+        obszar.SetCalendar(calendarId, hlc.Next());
+        await unitOfWork.SaveChangesAsync(ct);
+    }
+
     public async Task SetProjectColorAsync(Guid projectId, string? color, CancellationToken ct = default)
     {
         if (await projects.FindAsync(projectId, ct) is not { } projekt)

@@ -982,6 +982,37 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Kalendarz stoi przy jednym obszarze naraz.
+    /// </summary>
+    /// <remarks>
+    /// Dwa obszary na jednym kalendarzu znaczyłyby, że wydarzenie należy do obu —
+    /// a obszar, który nie dzieli, nie jest obszarem. Przełożenie jest ciche, bo odmowa
+    /// („ten kalendarz jest już zajęty przez Pracę") zmuszałaby do pójścia tam, zdjęcia
+    /// i powrotu, żeby zrobić dokładnie to, co się przed chwilą wybrało.
+    /// </remarks>
+    [Fact]
+    public async Task Kalendarz_stoi_przy_jednym_obszarze()
+    {
+        var szkielet = new StructureEditService(
+            new ProjectRepository(_db), new AreaRepository(_db), new TaskRepository(_db),
+            new UnitOfWork(_db), _zegar, _hlc);
+
+        var dzieci = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dzieci", 0);
+        var dom = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 1);
+        _db.Areas.AddRange(dzieci, dom);
+        _db.SaveChanges();
+
+        await szkielet.SetAreaCalendarAsync(dzieci.Id, _zrodlo.Id);
+        _db.Areas.Single(o => o.Id == dzieci.Id).CalendarId.Should().Be(_zrodlo.Id);
+
+        // Ten sam kalendarz przy drugim obszarze zdejmuje go z pierwszego.
+        await szkielet.SetAreaCalendarAsync(dom.Id, _zrodlo.Id);
+
+        _db.Areas.Single(o => o.Id == dom.Id).CalendarId.Should().Be(_zrodlo.Id);
+        _db.Areas.Single(o => o.Id == dzieci.Id).CalendarId.Should().BeNull();
+    }
+
+    /// <summary>
     /// Zadanie idzie do kalendarza swojego obszaru, a nie do głównego.
     /// </summary>
     /// <remarks>

@@ -1314,6 +1314,28 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Kalendarz, w którym zadania lądują domyślnie.</summary>
     public Guid? MainCalendarId => _odbicie.MainCalendarId;
 
+    /// <summary>Kalendarz przypisany do obszaru — na potrzeby ptaszka w menu.</summary>
+    public async Task<Guid?> AreaCalendarAsync(Guid areaId) =>
+        (await _areas.FindAsync(areaId))?.CalendarId;
+
+    /// <summary>
+    /// Przypisanie obszaru do kalendarza Google.
+    /// </summary>
+    /// <remarks>
+    /// Stąd, a nie z ustawień: obszar wybiera się patrząc na listę obszarów, a nie
+    /// na listę kalendarzy. Kalendarz jest tu cechą obszaru — „gdzie to widać na
+    /// zewnątrz" — a nie osobną rzeczą do skonfigurowania.
+    /// </remarks>
+    public async Task SetAreaCalendarAsync(ProjectTreeRow row, Guid? calendarId)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        await _szkielet.SetAreaCalendarAsync(row.Id, calendarId);
+
+        Notice = string.Empty;
+        await ShowProjectsAsync();
+    }
+
     /// <summary>
     /// Przeniesienie zadania do wybranego kalendarza.
     /// </summary>

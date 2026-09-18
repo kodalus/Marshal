@@ -1325,14 +1325,68 @@ public partial class MainView : UserControl
                 PokazPalete(model, zrodlo, wiersz);
                 return Task.CompletedTask;
             }),
-            new Separator(),
-            przeszkoda is null
-                ? Pozycja(wiersz.IsArea ? "Usuń obszar" : "Usuń projekt",
-                    () => model.DeleteRowAsync(wiersz))
-                : new MenuItem { Header = przeszkoda, IsEnabled = false },
         };
 
+        // Kalendarz tylko przy obszarze: projekt go nie ma i mieć nie powinien. Obszar
+        // jest podziałem odpowiedzialności, a kalendarz Google jest tym samym podziałem
+        // widzianym z zewnątrz — projekt jest o poziom za drobny, żeby zakładać dla
+        // niego osobny kalendarz.
+        if (wiersz.IsArea && await KalendarzObszaruAsync(model, wiersz) is { } kalendarze)
+        {
+            pozycje.Add(kalendarze);
+        }
+
+        pozycje.Add(new Separator());
+
+        pozycje.Add(przeszkoda is null
+            ? Pozycja(wiersz.IsArea ? "Usuń obszar" : "Usuń projekt",
+                () => model.DeleteRowAsync(wiersz))
+            : new MenuItem { Header = przeszkoda, IsEnabled = false });
+
         new MenuFlyout { ItemsSource = pozycje }.ShowAt(zrodlo, showAtPointer: true);
+    }
+
+    /// <summary>
+    /// Gałąź „Kalendarz Google" przy obszarze — z ptaszkiem przy tym, który jest teraz.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Obszar wskazujący kalendarz znaczy dwie rzeczy naraz: zadania tego obszaru
+    /// lądują tam same, a wydarzenia stamtąd należą do tego obszaru. Jedno przypisanie
+    /// zamiast ustawiania kalendarza przy każdym zadaniu z osobna.
+    /// </para>
+    /// <para>
+    /// Przy obszarze, a nie w ustawieniach kalendarzy: wybiera się to patrząc na listę
+    /// obszarów. Kalendarz jest tu cechą obszaru — „gdzie to widać na zewnątrz" — a nie
+    /// osobną rzeczą do skonfigurowania.
+    /// </para>
+    /// <para>
+    /// Bez podłączonych kalendarzy oddaje pusto, a nie gałąź z pustą listą: pozycja
+    /// menu, która nic nie otwiera, jest gorsza od jej braku, bo wygląda na zepsutą.
+    /// </para>
+    /// </remarks>
+    private async Task<MenuItem?> KalendarzObszaruAsync(MainViewModel model, ProjectTreeRow wiersz)
+    {
+        var kalendarze = await model.WritableCalendarsAsync();
+
+        if (kalendarze.Count == 0)
+        {
+            return null;
+        }
+
+        var teraz = await model.AreaCalendarAsync(wiersz.Id);
+
+        var pozycje = new List<MenuItem>
+        {
+            Pozycja(teraz is null ? "✓ żaden" : "żaden",
+                () => model.SetAreaCalendarAsync(wiersz, null)),
+        };
+
+        pozycje.AddRange(kalendarze.Select(k => Pozycja(
+            teraz == k.Id ? $"✓ {k.Name}" : k.Name,
+            () => model.SetAreaCalendarAsync(wiersz, k.Id))));
+
+        return Galaz("Kalendarz Google", pozycje);
     }
 
     /// <summary>
