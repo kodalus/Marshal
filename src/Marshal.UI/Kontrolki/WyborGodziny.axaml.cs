@@ -21,22 +21,32 @@ public partial class WyborGodziny : UserControl
 
     private bool _wlasneWpisanie;
 
+    private readonly TimePicker _wbudowany;
+
+    private readonly Grid _systemowy;
+
+    private readonly Button _otwarcie;
+
     public WyborGodziny()
     {
         InitializeComponent();
 
-        Wbudowany.IsVisible = !Pickery.Systemowe;
-        Systemowy.IsVisible = Pickery.Systemowe;
+        _wbudowany = Znajdz<TimePicker>(this, "Wbudowany");
+        _systemowy = Znajdz<Grid>(this, "Systemowy");
+        _otwarcie = Znajdz<Button>(this, "Otwarcie");
 
-        Wbudowany.PropertyChanged += (_, e) =>
+        _wbudowany.IsVisible = !Pickery.Systemowe;
+        _systemowy.IsVisible = Pickery.Systemowe;
+
+        _wbudowany.PropertyChanged += (_, e) =>
         {
             if (e.Property == TimePicker.SelectedTimeProperty && !_wlasneWpisanie)
             {
-                Wartosc = Wbudowany.SelectedTime;
+                Wartosc = _wbudowany.SelectedTime;
             }
         };
 
-        Otwarcie.Click += async (_, _) =>
+        _otwarcie.Click += async (_, _) =>
         {
             if (Pickery.Godzina is not { } zapytaj)
             {
@@ -49,7 +59,7 @@ public partial class WyborGodziny : UserControl
             Wartosc = wybrana?.ToTimeSpan();
         };
 
-        Czyszczenie.Click += (_, _) => Wartosc = null;
+        Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Wartosc = null;
 
         Odswiez();
     }
@@ -66,11 +76,20 @@ public partial class WyborGodziny : UserControl
 
     private void Odswiez()
     {
+        // Zmiana właściwości potrafi przyjść, zanim konstruktor dojdzie do odczytania
+        // elementów — a wtedy pola są jeszcze puste. To jest ten sam kształt wywrotki,
+        // przez który ta kontrolka wywracała całą aplikację przy starcie, więc stoi tu
+        // zapora, a nie założenie, że się nie zdarzy.
+        if (_wbudowany is null || _otwarcie is null)
+        {
+            return;
+        }
+
         _wlasneWpisanie = true;
 
         try
         {
-            Wbudowany.SelectedTime = Wartosc;
+            _wbudowany.SelectedTime = Wartosc;
         }
         finally
         {
@@ -79,10 +98,28 @@ public partial class WyborGodziny : UserControl
 
         // Doba, nie dwunastka z dopiskiem: kalendarz obok liczy godziny tak samo,
         // a dwa zapisy tej samej godziny w jednym oknie to jeden za dużo.
-        Otwarcie.Content = Wartosc is { } pora
+        _otwarcie.Content = Wartosc is { } pora
             ? pora.ToString(@"hh\:mm", CultureInfo.InvariantCulture)
             : "wybierz";
     }
+
+    /// <summary>
+    /// Elementy z XAML-a odczytywane, a nie brane z pól.
+    /// </summary>
+    /// <remarks>
+    /// W tym projekcie <c>InitializeComponent</c> jest pisany ręcznie i woła wyłącznie
+    /// wczytanie XAML-a. Pola dla nazwanych elementów tworzy wtedy generator, ale
+    /// wypełnia je <b>swoja</b> wersja tej metody — której tu nie ma. Sięgnięcie po nie
+    /// kończyło się pustym wskazaniem w konstruktorze i wywrotką całej aplikacji przy
+    /// starcie, bo kontrolka powstaje w środku składania okna.
+    ///
+    /// Odczyt po nazwie nie zależy od generatora i jest tym, co reszta okna robi od
+    /// początku.
+    /// </remarks>
+    private static T Znajdz<T>(UserControl gdzie, string nazwa)
+        where T : Control =>
+        gdzie.FindControl<T>(nazwa)
+            ?? throw new InvalidOperationException($"Brak elementu „{nazwa}” w układzie.");
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 }
