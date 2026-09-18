@@ -124,9 +124,9 @@ Mimo to nie wkładaj jej do repozytorium: nie dlatego, że coś kryje, tylko dla
 Jeśli chcesz widzieć wydarzenia z Google Calendar na siatce godzinowej:
 
 1. **Biblioteka** → `Google Calendar API` → **Włącz**.
-2. W aplikacji: **Ustawienia → Konto Google** → zaznacz **„Czytaj też mój kalendarz
-   Google"** i kliknij **Zapisz i zsynchronizuj**. Bez tego pola aplikacja o kalendarz
-   **nie prosi wcale** — samo włączenie API w konsoli niczego nie daje.
+2. W aplikacji: **Ustawienia → Konto Google** → zaznacz **„Czytaj i zmieniaj mój
+   kalendarz Google"** i kliknij **Zapisz i zsynchronizuj**. Bez tego pola aplikacja
+   o kalendarz **nie prosi wcale** — samo włączenie API w konsoli niczego nie daje.
 3. Dalej w **Ustawieniach**, sekcja **Kalendarze**: **Dodaj kalendarz Google**
    z identyfikatorem `primary` (Twój główny) albo z identyfikatorem wklejonym
    z ustawień konkretnego kalendarza Google.
@@ -134,18 +134,32 @@ Jeśli chcesz widzieć wydarzenia z Google Calendar na siatce godzinowej:
 Zgoda z kalendarzem jest zapisywana osobno od zgody na sam Dysk, więc po zaznaczeniu
 tego pola przeglądarka otworzy się jeszcze raz — i to jest poprawne, a nie usterka.
 
-`calendar.readonly` **jest** uprawnieniem wrażliwym — inaczej niż `drive.file`. Ma to
-konkretną cenę: aplikacji z tym uprawnieniem **nie da się opublikować bez przeglądu**
-Google, więc trzeba zostać w trybie testowym, a tam żeton wygasa co siedem dni.
-Dlatego kalendarz jest osobnym polem wyboru, a nie częścią logowania — decyzja
+Uprawnienia do kalendarza **są** wrażliwe — inaczej niż `drive.file`. Aplikacja prosi
+o dwa i o żadne więcej:
+
+- `calendar.readonly` — wypisanie kalendarzy konta (samych wydarzeń to nie obejmuje);
+- `calendar.events` — czytanie i zmienianie wydarzeń.
+
+Pełnego `calendar` **nie** ma, bo dokładałoby prawo do zmiany ustawień i udostępniania
+kalendarzy, czego ta aplikacja nie robi i nie ma powodu móc.
+
+Cena jest konkretna: aplikacji z tymi uprawnieniami **nie da się opublikować bez
+przeglądu** Google, więc trzeba zostać w trybie testowym, a tam żeton wygasa co siedem
+dni. Dlatego kalendarz jest osobnym polem wyboru, a nie częścią logowania — decyzja
 „wygoda kalendarza za cotygodniowe logowanie" jest Twoja, nie aplikacji.
 
 Jeśli chodzi o kalendarze przedszkola albo zajęć, kanał `.ics` daje to samo na siatce
 godzinowej i nie kosztuje nic.
 
-Aplikacja **tylko czyta** kalendarz. Zapis jest świadomie odłożony (spec 10.2): błąd
-w dwustronnej synchronizacji potrafi skasować prawdziwe wydarzenia i jest to jedyne
-miejsce w całym projekcie, gdzie awaria niszczy dane poza aplikacją.
+Aplikacja **czyta i zapisuje** wydarzenia. Zadanie z dniem i godziną trafia na
+kalendarz główny wskazany w **Ustawieniach → Kalendarze**, a udostępnienie przenosi
+je na wybrany kalendarz współdzielony.
+
+Zapis dotyczy **wyłącznie wydarzeń założonych przez Marshala** — tych, które mają
+u nas swoje zadanie. Cudzych wydarzeń aplikacja nie zmienia i nie kasuje; odhaczenie
+takiego dopisuje ptaszek do jego nazwy i na tym poprzestaje. To jest jedyne miejsce
+w całym projekcie, w którym awaria sięga poza aplikację, więc granica jest tu wąska
+celowo.
 
 ### Kanały iCal — bez żadnych poświadczeń
 
