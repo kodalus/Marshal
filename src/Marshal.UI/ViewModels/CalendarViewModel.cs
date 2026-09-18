@@ -231,6 +231,20 @@ public sealed record MonthCell(
 /// <summary>Jeden tydzień siatki miesiąca — siedem komórek.</summary>
 public sealed record MonthWeek(IReadOnlyList<MonthCell> Cells);
 
+/// <summary>Jedna pozycja w wyborze zakresu.</summary>
+/// <remarks>
+/// Zakres jest <b>jedną decyzją o czterech możliwościach</b>, a nie czterema
+/// przyciskami. Przy czterech osobnych trzeba je najpierw obejrzeć, żeby zobaczyć,
+/// który jest wciśnięty; przy jednym polu odpowiedź stoi napisana w środku.
+/// Na szerokim oknie cztery równe pola rozciągały się zresztą przez cały ekran
+/// i wyglądały jak pasek narzędzi, a nie jak wybór.
+/// </remarks>
+public sealed record ZakresWidoku(string Nazwa, int Dni, bool Miesiac)
+{
+    /// <summary>Pole wyboru pokazuje to, co zwraca ta metoda — stąd własna, nie ta z rekordu.</summary>
+    public override string ToString() => Nazwa;
+}
+
 /// <summary>
 /// Kalendarz: dzień, trzy dni, tydzień, miesiąc (spec 11).
 /// </summary>
@@ -284,6 +298,74 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     [ObservableProperty]
     public partial bool IsMonth { get; set; }
+
+    /// <summary>Możliwe zakresy, w kolejności od najwęższego.</summary>
+    public IReadOnlyList<ZakresWidoku> Zakresy { get; } =
+    [
+        new("dzień", 1, false),
+        new("3 dni", 3, false),
+        new("tydzień", 7, false),
+        new("miesiąc", 0, true),
+    ];
+
+    /// <summary>
+    /// Wybrany zakres. Ustawiany także z zewnątrz — stąd zapora przed odbiciem.
+    /// </summary>
+    /// <remarks>
+    /// Zakres zmienia się nie tylko z pola wyboru: dotknięcie dnia w miesiącu schodzi
+    /// na siatkę godzinową, a powrót z miesiąca wraca na dzisiaj. Gdyby każde takie
+    /// przestawienie wracało tu jako wybór użytkownika, siatka przeliczałaby się dwa
+    /// razy, a przy zejściu z miesiąca — z niewłaściwym zakotwiczeniem.
+    /// </remarks>
+    [ObservableProperty]
+    public partial ZakresWidoku? Zakres { get; set; }
+
+    private bool _wlasneUstawienie;
+
+    partial void OnZakresChanged(ZakresWidoku? value)
+    {
+        if (_wlasneUstawienie || value is null)
+        {
+            return;
+        }
+
+        _ = Wybierz(value);
+    }
+
+    private async Task Wybierz(ZakresWidoku zakres)
+    {
+        try
+        {
+            await (zakres.Miesiac ? ShowMonthCommand.ExecuteAsync(null) : SetDaysAsync(zakres.Dni));
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // Zmiana zakresu idzie z pola wyboru, a nie z polecenia, więc wyjątek nie
+            // ma dokąd trafić: pole po prostu pokazywałoby nowy zakres nad starą siatką.
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: zmiana zakresu", zakres.Nazwa, ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    /// <summary>Dociągnięcie pola wyboru do stanu, który ustawiono gdzie indziej.</summary>
+    private void ZapamietajZakres()
+    {
+        _wlasneUstawienie = true;
+
+        try
+        {
+            Zakres = IsMonth
+                ? Zakresy[^1]
+                : Zakresy.FirstOrDefault(z => !z.Miesiac && z.Dni == VisibleDays) ?? Zakresy[2];
+        }
+        finally
+        {
+            _wlasneUstawienie = false;
+        }
+    }
 
     /// <summary>Tygodnie siatki miesiąca. Puste poza trybem miesiąca.</summary>
     public ObservableCollection<MonthWeek> MonthWeeks { get; } = [];
@@ -676,6 +758,11 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task RefreshAsync()
     {
+        // Pole wyboru zakresu dociągane tutaj, a nie w każdym miejscu, które zmienia
+        // zakres z osobna: siatka przeliczana jest po każdej takiej zmianie, więc to
+        // jedyne miejsce, przez które wszystkie przechodzą.
+        ZapamietajZakres();
+
         // Miesiąc liczy własny zakres: siatka zaczyna się w poniedziałek przed pierwszym
         // i kończy w niedzielę po ostatnim, bo tydzień na przełomie jest tygodniem.
         var od = IsMonth ? PoczatekSiatki() : Anchor;

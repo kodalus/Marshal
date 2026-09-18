@@ -813,34 +813,20 @@
     <DockPanel DataContext="{Binding Calendar}">
 
       <StackPanel DockPanel.Dock="Top" x:DataType="vm:CalendarViewModel" Margin="0,0,0,10">
-        <!-- Dwa rzędy, każdy o jednym znaczeniu: gdzie jesteśmy i jak szeroko patrzymy.
-             Do dziś siedem przycisków stało w jednym zawijanym rzędzie i na telefonie
-             zawijało się w przypadkowym miejscu — „tydzień" lądował sam pod spodem,
-             a wybór zakresu przestawał wyglądać jak wybór.
-
-             Wybór zakresu w siatce o równych kolumnach, a nie w zawijanym rzędzie:
-             cztery równe pola mieszczą się w jednej linii przy każdej szerokości okna,
-             a przy okazji widać, że to jedna decyzja o czterech możliwościach. -->
-        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,0,0,6">
+        <!-- Jeden rząd: gdzie jesteśmy, jak szeroko patrzymy, skąd bierzemy.
+             Zakres był czterema przyciskami w równych kolumnach i przy szerokim oknie
+             rozciągał się na całą szerokość — cztery pola wielkości dłoni na jedną
+             decyzję, którą podejmuje się raz na kilka minut. Pole wyboru zajmuje tyle
+             miejsca, ile znaczy, i mieści się obok strzałek zamiast pod nimi. -->
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
           <Button Grid.Column="0" Classes="nav" Command="{Binding PreviousCommand}" Content="◀" />
           <Button Grid.Column="1" Classes="nav" Command="{Binding TodayCommand}" Content="dziś" />
           <Button Grid.Column="2" Classes="nav" Command="{Binding NextCommand}" Content="▶" />
+          <ComboBox Grid.Column="3" Margin="6,0" MinWidth="0"
+                    HorizontalAlignment="Stretch"
+                    ItemsSource="{Binding Zakresy}"
+                    SelectedItem="{Binding Zakres}" />
           <Button Grid.Column="4" Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
-        </Grid>
-
-        <Grid ColumnDefinitions="*,*,*,*">
-          <Button Grid.Column="0" Classes="nav" HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Center"
-                  Command="{Binding ShowDayCommand}" Content="dzień" />
-          <Button Grid.Column="1" Classes="nav" HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Center"
-                  Command="{Binding ShowThreeDaysCommand}" Content="3 dni" />
-          <Button Grid.Column="2" Classes="nav" HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Center"
-                  Command="{Binding ShowWeekCommand}" Content="tydzień" />
-          <Button Grid.Column="3" Classes="nav" HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Center"
-                  Command="{Binding ShowMonthCommand}" Content="miesiąc" />
         </Grid>
         <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />
         <!-- Pusta siatka ma trzy przyczyny wyglądające tak samo. Ta linijka je rozdziela.

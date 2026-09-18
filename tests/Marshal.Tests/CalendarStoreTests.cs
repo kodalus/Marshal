@@ -1294,6 +1294,30 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Pole_zakresu_idzie_za_widokiem()
+    {
+        // Zakres zmienia się nie tylko z pola wyboru: zejście z miesiąca na dzień robi
+        // to samo jednym dotknięciem komórki. Gdyby pole zostało wtedy na „miesiącu",
+        // pokazywałoby coś innego niż siatka pod nim — a to jedyne miejsce, w którym
+        // widać, jak szeroko patrzymy.
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        await model.ShowWeekCommand.ExecuteAsync(null);
+        model.Zakres!.Dni.Should().Be(7);
+
+        await model.ShowMonthCommand.ExecuteAsync(null);
+        model.Zakres!.Miesiac.Should().BeTrue();
+
+        // Dotknięcie dnia w miesiącu schodzi na jego siatkę godzinową.
+        await model.OpenMonthDayCommand.ExecuteAsync(
+            new MonthCell(new DateOnly(2026, 9, 16), "16", true, false, [], 0));
+
+        model.Zakres!.Miesiac.Should().BeFalse();
+        model.Zakres!.Dni.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Kreska_teraz_stoi_tylko_na_dzisiejszej_kolumnie()
     {
         var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
