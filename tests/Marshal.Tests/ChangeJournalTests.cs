@@ -72,15 +72,18 @@ public sealed class ChangeJournalTests : IDisposable
     {
         var zadanie = Zapisz();
 
-        // Ktoś inny (synchronizacja) dokłada znacznik na to samo pole i **nie** zapisuje.
-        _db.Add(new FieldStamp("Tasks", zadanie.Id, "Title", new Hlc(9999, 0, "telefon").ToString()));
+        // Notatka jest pusta przy zakładaniu, więc **nie ma jeszcze swojego znacznika** —
+        // ani w bazie, ani w śledzeniu. To jest dokładnie ten stan, w którym nakładanie
+        // zmian z synchronizacji dokłada znacznik i zostawia go do wspólnego zapisu.
+        _db.Add(new FieldStamp("Tasks", zadanie.Id, "Note", new Hlc(9999, 0, "telefon").ToString()));
 
-        zadanie.Rename("Zadzwonić do przychodni jeszcze raz", Stamp());
+        zadanie.SetNote("z drugiego urządzenia", Stamp());
 
-        // Bez poprawki leci tu wyjątek o instancji, której nie da się śledzić.
+        // Bez poprawki leci tu wyjątek o instancji, której nie da się śledzić:
+        // zapytanie o znaczniki szło wyłącznie do bazy i tego dopisanego nie widziało.
         _db.Invoking(baza => baza.SaveChanges()).Should().NotThrow();
 
-        _db.FieldStamps.Count(z => z.EntityId == zadanie.Id && z.Field == "Title")
+        _db.FieldStamps.Count(z => z.EntityId == zadanie.Id && z.Field == "Note")
             .Should().Be(1, "jeden znacznik na pole, niezależnie od tego, kto go dopisał");
     }
 
