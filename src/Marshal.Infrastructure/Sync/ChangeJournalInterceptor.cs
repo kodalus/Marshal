@@ -84,9 +84,22 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
         // w pętli wewnątrz SavingChanges to i koszt, i proszenie się o kłopoty
         // z ponownym wejściem w potok zapisu.
         var ids = entries.Select(e => e.Entity.Id).ToHashSet();
-        var stamps = context.Set<FieldStamp>()
-            .Where(s => ids.Contains(s.EntityId))
+
+        // **Najpierw śledzone, potem baza.** Znacznik dopisany wcześniej w tym samym
+        // kontekście — a robi tak nakładanie zmian z synchronizacji — nie istnieje
+        // jeszcze w bazie i zapytanie go nie widzi. Dopisanie drugiego z tym samym
+        // kluczem wywraca **cały zapis** komunikatem o dwóch instancjach tego samego
+        // wiersza, a wygląda to jak błąd w zadaniu, które się właśnie zapisywało.
+        var stamps = context.ChangeTracker.Entries<FieldStamp>()
+            .Where(e => e.State != EntityState.Deleted)
+            .Select(e => e.Entity)
             .ToDictionary(s => (s.EntityType, s.EntityId, s.Field));
+
+        // Zapytanie oddaje też te już śledzone — stąd TryAdd, a nie Add.
+        foreach (var zBazy in context.Set<FieldStamp>().Where(s => ids.Contains(s.EntityId)))
+        {
+            stamps.TryAdd((zBazy.EntityType, zBazy.EntityId, zBazy.Field), zBazy);
+        }
 
         foreach (var entry in entries)
         {

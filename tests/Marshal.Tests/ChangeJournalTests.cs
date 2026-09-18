@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Domain.Primitives;
+using Marshal.Domain.Sync;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Sync;
@@ -53,6 +54,34 @@ public sealed class ChangeJournalTests : IDisposable
         wpisy.Should().NotBeEmpty();
         wpisy.Should().OnlyContain(w => w.EntityType == "Tasks");
         wpisy.Select(w => w.Field).Should().Contain(["Title", "State", "CreatedAt", "UpdatedAt"]);
+    }
+
+    /// <summary>
+    /// Znacznik dopisany w tym samym kontekście, a jeszcze niezapisany, nie ma
+    /// prowadzić do dopisania drugiego z tym samym kluczem.
+    /// </summary>
+    /// <remarks>
+    /// Tak robi nakładanie zmian z synchronizacji: dokłada znaczniki i zostawia je
+    /// do wspólnego zapisu. Zapytanie o znaczniki szło wtedy wyłącznie do bazy,
+    /// w której ich jeszcze nie było — i zapis wywracał się na dwóch instancjach
+    /// tego samego wiersza. Widać to było jako błąd przy zapisie zadania, choć
+    /// z zadaniem nie miało nic wspólnego.
+    /// </remarks>
+    [Fact]
+    public void Znacznik_dopisany_i_niezapisany_nie_powiela_sie_przy_zapisie()
+    {
+        var zadanie = Zapisz();
+
+        // Ktoś inny (synchronizacja) dokłada znacznik na to samo pole i **nie** zapisuje.
+        _db.Add(new FieldStamp("Tasks", zadanie.Id, "Title", new Hlc(9999, 0, "telefon").ToString()));
+
+        zadanie.Rename("Zadzwonić do przychodni jeszcze raz", Stamp());
+
+        // Bez poprawki leci tu wyjątek o instancji, której nie da się śledzić.
+        _db.Invoking(baza => baza.SaveChanges()).Should().NotThrow();
+
+        _db.FieldStamps.Count(z => z.EntityId == zadanie.Id && z.Field == "Title")
+            .Should().Be(1, "jeden znacznik na pole, niezależnie od tego, kto go dopisał");
     }
 
     [Fact]
