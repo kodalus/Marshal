@@ -52,7 +52,41 @@ nieznanych aplikacji, i zaproponuje ustawienia. Włącz zgodę **dla tej jednej 
 
 Po instalacji zgodę można wyłączyć — do samego działania Marshala nie jest potrzebna.
 
-### 4. Aktualizacje
+### 4. Pozwól aplikacji działać w tle — **to nie jest opcjonalne**
+
+Bez tego Marshal działa poprawnie tylko wtedy, gdy masz go otwartego na ekranie.
+Przy zamkniętej aplikacji **przypomnienia nie odezwą się, a synchronizacja nie
+dojdzie** — i nie będzie po tym żadnego śladu poza tym, że nic się nie stało.
+
+Nie da się tego załatwić uprawnieniem z instalacji. Producenci telefonów dokładają
+własne oszczędzanie baterii ponad to, co robi Android, i ono zatrzymuje aplikacje
+niezależnie od tego, o co poprosiły. Trzeba więc powiedzieć systemowi wprost, dwa razy.
+
+**Bateria bez ograniczeń.** Ustawienia → Aplikacje → Marshal → **Bateria** → wybierz
+**Bez ograniczeń** (bywa nazwane „Nieograniczone", „Nie optymalizuj", „Zezwalaj na
+działanie w tle"). Ustawienie domyślne — „Optymalizowane" — znaczy, że system odkłada
+pracę w tle na później, a „później" przy uśpionym telefonie trwa godzinami.
+
+**Autostart.** Na telefonach Xiaomi, Redmi, POCO, Huawei, Honor, OPPO, realme
+i vivo jest osobny przełącznik, bez którego system w ogóle nie pozwoli uruchomić
+aplikacji, gdy ta nie jest na ekranie. Nazywa się zwykle **Autostart** albo
+**Uruchamianie automatyczne** i leży w Ustawieniach aplikacji albo w aplikacji
+zarządzania baterią (na Xiaomi: Ustawienia → Aplikacje → Zarządzaj aplikacjami →
+Marshal → Autostart). Bez tego przypomnienia milkną **po każdym ponownym uruchomieniu
+telefonu**.
+
+**Na Xiaomi dodatkowo: zablokuj w ostatnich.** Otwórz listę ostatnich aplikacji,
+przytrzymaj kafelek Marshala i wybierz kłódkę. Bez tego zamknięcie listy ostatnich
+zabija proces razem z zaplanowanymi budzikami.
+
+**Powiadomienia.** Przy pierwszym uruchomieniu aplikacja poprosi o zgodę na
+powiadomienia. Jeśli ją odrzucisz, przypomnienia nie mają jak się pokazać —
+wtedy włącz je w Ustawienia → Aplikacje → Marshal → Powiadomienia.
+
+Sprawdzenie, czy zadziałało: zamknij aplikację na godzinę, otwórz i wejdź
+w **Więcej → Dziennik**. Powinny tam być wpisy „Synchronizacja w tle".
+
+### 5. Aktualizacje
 
 Aplikacja nie aktualizuje się sama i nie ma sklepu, który by o tym przypomniał.
 Są dwie drogi:
@@ -183,6 +217,9 @@ jednym Dysku — i dwie aplikacje, które się nawzajem nie widzą, choć obie d
 | Trzeba logować się do Google co tydzień | Ekran zgody w trybie testowym — zob. wyżej. |
 | Kalendarz Google pusty mimo zalogowania | Kalendarze wybiera się w **Ustawieniach → Kalendarze**. Pobranie odświeża się samo co pięć minut. |
 | Zmiana z jednego urządzenia nie dochodzi do drugiego | Oba muszą mieć te same poświadczenia i to samo konto. Zajrzyj do **Dziennika** — jest tam każdy przebieg synchronizacji razem z powodem niepowodzenia. |
+| Przypomnienia nie przychodzą przy zamkniętej aplikacji | Bateria nie jest ustawiona na „bez ograniczeń" albo brakuje autostartu — zob. krok 4 instalacji na Androidzie. |
+| Przypomnienia milkną po restarcie telefonu | Brak autostartu. To ten sam przełącznik. |
+| Nic się nie synchronizuje, dopóki aplikacja jest zamknięta | To samo: bateria i autostart. Przy otwartej aplikacji odczyt idzie co minutę, przy zamkniętej co pół godziny — i tylko wtedy, gdy system na to pozwala. |
 | Nie wiadomo, co się stało | **Więcej → Dziennik.** Ostatnie 500 zdarzeń, z problemami osobno. |
 
 Dziennik jest pierwszym miejscem do sprawdzenia przy czymkolwiek. Jest lokalny —
