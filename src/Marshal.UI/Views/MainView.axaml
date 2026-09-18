@@ -390,16 +390,31 @@
          sięgać przez cały ekran. Na pulpicie różnicy nie ma, więc jeden układ. -->
     <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0"
                 IsVisible="{Binding ShowCapture}">
-      <TextBox Text="{Binding CaptureText}"
-               Watermark="Wrzuć myśl i naciśnij Enter"
-               FontSize="16"
-               AcceptsReturn="False">
-        <TextBox.KeyBindings>
-          <KeyBinding Gesture="Enter" Command="{Binding CaptureCommand}" />
-        </TextBox.KeyBindings>
-      </TextBox>
+      <!-- Przycisk obok pola, nie sam Enter. Na klawiaturze ekranowej Androida klawisz
+           w prawym dolnym rogu bywa czym innym w każdej klawiaturze — raz to „gotowe",
+           raz nowa linia, raz emotikona — a pole bez przycisku daje się wypełnić
+           i nie daje się zatwierdzić. Napis w polu obiecywał przy tym Enter, którego
+           tam po prostu nie ma.
+
+           Przycisk także na pulpicie, choć tam Enter działa: dwa różne układy tego
+           samego pola znaczyłyby, że instrukcja i zrzut ekranu pasują do jednej
+           platformy, a wrzut jest czynnością, którą robi się najczęściej ze wszystkich. -->
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox Grid.Column="0" Text="{Binding CaptureText}"
+                 Watermark="Wrzuć myśl"
+                 FontSize="16"
+                 AcceptsReturn="False">
+          <TextBox.KeyBindings>
+            <KeyBinding Gesture="Enter" Command="{Binding CaptureCommand}" />
+          </TextBox.KeyBindings>
+        </TextBox>
+
+        <Button Grid.Column="1" Classes="nav glowny" Margin="6,0,0,0"
+                VerticalAlignment="Stretch"
+                Command="{Binding CaptureCommand}" Content="Wrzuć" />
+      </Grid>
       <TextBlock Classes="hint" Margin="2,4,0,0" IsVisible="{Binding ShowWideNav}"
-                 Text="Bez pól, bez decyzji — obszar i reszta dochodzą przy przetwarzaniu." />
+                 Text="Bez pól, bez decyzji — obszar i reszta dochodzą przy przetwarzaniu. Enter też wrzuca." />
     </StackPanel>
 
     <!-- Ekrany leżą na sobie w jednej komórce; widoczny jest zawsze jeden. -->
