@@ -8,6 +8,7 @@
              xmlns:sys="using:System"
              xmlns:dn="using:Marshal.Domain.Notes"
              xmlns:dc="using:Marshal.Domain.Calendar"
+             xmlns:da="using:Marshal.Domain.Areas"
              xmlns:cal="using:Marshal.Infrastructure.Calendar"
              xmlns:df="using:Marshal.Domain.Filters"
              x:Class="Marshal.UI.Views.MainView"
@@ -1217,6 +1218,28 @@
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
             <k:WyborGodziny Grid.Column="2" Wartosc="{Binding OpenedEnd}"
                             IsEnabled="{Binding CanEditOpened}" />
+          </Grid>
+
+          <!-- Obszar, czyli to samo pytanie co przy zadaniu: do kogo to należy. Przy
+               wydarzeniu odpowiedź nie ma gdzie usiąść po naszej stronie, bo Google nie
+               ma pola na obszar — siedzi więc tam, gdzie i tak siedzi, w kalendarzu.
+               Zmiana obszaru przekłada wydarzenie do kalendarza tamtego obszaru, a że
+               kalendarze udostępnia się w Google raz na zawsze, jest to zarazem jedyna
+               potrzebna droga do pokazania komuś pojedynczej rzeczy. -->
+          <Grid ColumnDefinitions="Auto,*" Margin="0,4,0,0"
+                IsVisible="{Binding CanMoveOpened}">
+            <TextBlock Grid.Column="0" Text="Obszar" VerticalAlignment="Center"
+                       Margin="0,0,8,0" Opacity="0.7" />
+            <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                      PlaceholderText="bez obszaru"
+                      ItemsSource="{Binding ObszaryWydarzenia}"
+                      SelectedItem="{Binding ObszarWydarzenia}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="da:Area">
+                  <TextBlock Text="{Binding Name}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
           </Grid>
 
           <TextBlock Classes="hint" TextWrapping="Wrap" Foreground="{DynamicResource Ostrzezenie}"

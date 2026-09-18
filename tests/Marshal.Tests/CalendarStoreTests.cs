@@ -982,6 +982,44 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Przełożenie wydarzenia do innego kalendarza zakłada w nowym, zanim skasuje w starym.
+    /// </summary>
+    /// <remarks>
+    /// Kolejność odwrotna niż przy przenoszeniu zadania i to jest rozstrzygnięcie.
+    /// Przy zadaniu prawdą jest zadanie, więc nieudane założenie da się powtórzyć
+    /// z tego, co i tak mamy — tam idzie najpierw skasowanie, żeby nie zostały dwa
+    /// wpisy. Tutaj prawdą jest wydarzenie, a nasza kopia jest kopią: nieudane
+    /// założenie po skasowaniu znaczyłoby cudzy wpis skasowany bezpowrotnie.
+    /// </remarks>
+    [Fact]
+    public async Task Przelozenie_wydarzenia_zaklada_przed_skasowaniem()
+    {
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "Zebranie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        var rodzinny = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/rodzina.ics", "Rodzina");
+
+        _db.CalendarSources.Add(rodzinny);
+        _db.SaveChanges();
+
+        var nowy = await _usluga.MoveEventAsync(_zrodlo.Id, "s1", rodzinny.Id);
+
+        nowy.Should().NotBe("s1", "u Google to jest inne wydarzenie w innym kalendarzu");
+
+        _pisarz.Wyslane.Select(w => w.Co).Should().Equal("utworzenie", "skasowanie");
+
+        // U nas zostaje jeden wpis, w nowym kalendarzu.
+        var naSiatce = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed;
+
+        naSiatce.Should().ContainSingle();
+        naSiatce.Single().Entry.SourceId.Should().Be(rodzinny.Id);
+    }
+
+    /// <summary>
     /// Wydarzenie z przypisanego kalendarza ma barwę swojego obszaru.
     /// </summary>
     /// <remarks>

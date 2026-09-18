@@ -146,6 +146,72 @@ public sealed class CalendarSyncService(
         }
     }
 
+    /// <summary>Obszary, które mają przypisany kalendarz — razem z tym kalendarzem.</summary>
+    public async Task<IReadOnlyList<Area>> AreasWithCalendarAsync(CancellationToken ct = default)
+    {
+        var zywe = (await store.SourcesAsync(ct)).Select(z => z.Id).ToHashSet();
+
+        return (await areas.AllAsync(ct))
+            .Where(o => !o.Deleted && o.IsActive && o.CalendarId is { } k && zywe.Contains(k))
+            .OrderBy(o => o.SortOrder)
+            .ToList();
+    }
+
+    /// <summary>Obszar, do którego należy ten kalendarz. Pusty, gdy żaden.</summary>
+    public async Task<Area?> AreaOfCalendarAsync(Guid sourceId, CancellationToken ct = default) =>
+        (await areas.AllAsync(ct)).FirstOrDefault(o => !o.Deleted && o.CalendarId == sourceId);
+
+    /// <summary>
+    /// Przeniesienie wydarzenia do innego kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// U Google nie ma „przenieś": jest założenie w nowym i skasowanie w starym.
+    /// Kolejność jest tu odwrotna niż przy przenoszeniu zadania i to jest rozstrzygnięcie,
+    /// nie niedopatrzenie. Przy zadaniu prawdą jest zadanie, więc nieudane założenie
+    /// w nowym miejscu da się powtórzyć z tego, co i tak mamy — dlatego tam idzie
+    /// najpierw skasowanie, żeby nie zostały dwa wpisy. Tutaj prawdą jest wydarzenie,
+    /// a nasza kopia jest kopią: nieudane założenie po skasowaniu znaczyłoby cudzy wpis
+    /// skasowany bezpowrotnie. Duplikat jest widoczny i daje się usunąć jednym ruchem,
+    /// a wpis, którego nie ma, nie daje się zauważyć.
+    /// </para>
+    /// <para>
+    /// Oddaje identyfikator wpisu w nowym kalendarzu — u Google jest inny, bo to jest
+    /// inne wydarzenie w innym kalendarzu, nie to samo przestawione.
+    /// </para>
+    /// </remarks>
+    public async Task<string> MoveEventAsync(
+        Guid sourceId, string externalId, Guid targetId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+
+        if (sourceId == targetId)
+        {
+            return externalId;
+        }
+
+        var nasze = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
+
+        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
+            is not { } wydarzenie)
+        {
+            throw new WydarzenieZniknelo(
+                "Tego wydarzenia nie ma już w naszej kopii — odśwież kalendarz i spróbuj jeszcze raz.");
+        }
+
+        var nowy = await SaveEventAsync(
+            targetId,
+            externalId: null,
+            new CalendarDraft(
+                wydarzenie.Title, wydarzenie.StartsAt, wydarzenie.EndsAt,
+                wydarzenie.Location, wydarzenie.IsAllDay),
+            ct);
+
+        await DeleteEventAsync(sourceId, externalId, ct);
+
+        return nowy;
+    }
+
     /// <summary>
     /// Odhaczenie wydarzenia z podłączonego kalendarza — ptaszkiem przy jego nazwie.
     /// </summary>

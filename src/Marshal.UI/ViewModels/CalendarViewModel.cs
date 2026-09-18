@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Areas;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
 
@@ -1331,6 +1332,111 @@ public sealed partial class CalendarViewModel(
             && calendar.CanWrite(CalendarKind.Google);
 
         OnPropertyChanged(nameof(HasOpenedProblem));
+
+        _ = WczytajObszaryAsync(blok);
+    }
+
+    /// <summary>Obszary, do których da się przełożyć wydarzenie — czyli te z kalendarzem.</summary>
+    public ObservableCollection<Area> ObszaryWydarzenia { get; } = [];
+
+    /// <summary>
+    /// Obszar otwartego wydarzenia. Zmiana przekłada je do kalendarza tamtego obszaru.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// To jest <b>to samo pytanie</b>, co „do kogo to należy" przy zadaniu — tyle że
+    /// przy wydarzeniu odpowiedź nie ma gdzie usiąść po naszej stronie, bo Google nie
+    /// ma pola na obszar. Siedzi więc tam, gdzie i tak siedzi: w kalendarzu. Obszar
+    /// wydarzenia to obszar jego kalendarza, a zmiana obszaru to przełożenie do innego.
+    /// </para>
+    /// <para>
+    /// Przy okazji jest to jedyna droga do udostępnienia komuś pojedynczego wydarzenia:
+    /// kalendarze udostępnia się w Google, raz, a potem wystarczy odłożyć rzecz na
+    /// właściwą półkę. Nie ma tu osobnego „udostępnij" i nie powinno być — byłoby
+    /// drugim mechanizmem na to samo, w miejscu, w którym Google ma już swój.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    public partial Area? ObszarWydarzenia { get; set; }
+
+    /// <summary>Zapora przed odbiciem: wczytanie stanu nie jest wyborem użytkowniczki.</summary>
+    private bool _wlasneObszary;
+
+    private async Task WczytajObszaryAsync(SlotBox blok)
+    {
+        try
+        {
+            var dostepne = await calendar.AreasWithCalendarAsync();
+            var teraz = blok.SourceId is { } zrodlo
+                ? await calendar.AreaOfCalendarAsync(zrodlo)
+                : null;
+
+            _wlasneObszary = true;
+
+            try
+            {
+                ObszaryWydarzenia.Clear();
+
+                foreach (var obszar in dostepne)
+                {
+                    ObszaryWydarzenia.Add(obszar);
+                }
+
+                // Po identyfikatorze, nie po samym obiekcie: lista pochodzi z osobnego
+                // odczytu, więc to nie są te same wystąpienia.
+                ObszarWydarzenia = dostepne.FirstOrDefault(o => o.Id == teraz?.Id);
+            }
+            finally
+            {
+                _wlasneObszary = false;
+            }
+
+            OnPropertyChanged(nameof(CanMoveOpened));
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            await log.RecordAsync(
+                "Kalendarz: obszary wydarzenia", blok.Title, ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    /// <summary>Czy jest dokąd przekładać. Bez przypisanych obszarów pole nie ma sensu.</summary>
+    public bool CanMoveOpened => CanEditOpened && ObszaryWydarzenia.Count > 0;
+
+    partial void OnObszarWydarzeniaChanged(Area? value)
+    {
+        if (_wlasneObszary || value?.CalendarId is not { } kalendarz)
+        {
+            return;
+        }
+
+        _ = PrzelozWydarzenieAsync(kalendarz);
+    }
+
+    private async Task PrzelozWydarzenieAsync(Guid kalendarz)
+    {
+        if (Opened is not { SourceId: { } zrodlo, ExternalId: { } identyfikator } blok
+            || zrodlo == kalendarz)
+        {
+            return;
+        }
+
+        try
+        {
+            await calendar.MoveEventAsync(zrodlo, identyfikator, kalendarz);
+            await log.RecordAsync("Kalendarz: przełożenie wydarzenia", blok.Title);
+
+            Opened = null;
+            await RefreshAsync();
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            OpenedProblem = e.Message;
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: przełożenie wydarzenia", blok.Title, ActivityLevel.Problem, e.Message);
+        }
     }
 
     private static TimeSpan? Pora(string tekst) =>
