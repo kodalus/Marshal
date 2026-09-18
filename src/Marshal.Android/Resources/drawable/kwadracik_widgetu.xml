@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pusty kwadrat odhaczenia.
+
+  Do dziś stał tu przycisk z ptaszkiem i czytało się go jako zadanie **już odhaczone**
+  — czyli dokładnie odwrotnie, niż znaczył. Kwadracik do zaznaczenia jest pusty; ptaszek
+  jest tym, co się w nim pojawia po kliknięciu, a nie zaproszeniem do kliknięcia.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="rectangle">
+  <solid android:color="#00000000" />
+  <stroke android:width="1.5dp" android:color="@color/tekst_przygaszony" />
+  <corners android:radius="4dp" />
+</shape>

@@ -96,10 +96,18 @@ public sealed class TodayWidgetService : RemoteViewsService
             // Uzupełnienie wzorca, nie własny zamiar: wierszowi listy nie da się dać
             // osobnego zamiaru oczekującego — system trzyma jeden wzorzec na całą listę
             // i dokłada do niego to, co wiersz tu wpisze.
-            var uzupelnienie = new Intent();
-            uzupelnienie.PutExtra(TodayWidget.TaskIdExtra, pozycja.Id.ToString());
+            var odhaczenie = new Intent();
+            odhaczenie.PutExtra(TodayWidget.TaskIdExtra, pozycja.Id.ToString());
 
-            widok.SetOnClickFillInIntent(Resource.Id.zrobione, uzupelnienie);
+            widok.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
+
+            // Dotknięcie wiersza poza kwadracikiem otwiera aplikację. Bez tego klik
+            // w treść wiersza nie robi nic, a lista zajmuje prawie cały kafelek —
+            // czyli „dotknięcie widgetu" trafiałoby w martwe pole.
+            var otwarcie = new Intent();
+            otwarcie.PutExtra(TodayWidget.CoOtworzExtra, TodayWidget.CoOtworz);
+
+            widok.SetOnClickFillInIntent(Resource.Id.wiersz, otwarcie);
 
             return widok;
         }

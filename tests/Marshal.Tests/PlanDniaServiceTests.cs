@@ -176,4 +176,42 @@ public sealed class PlanDniaServiceTests : IDisposable
     {
         (await _plan.DzisAsync()).Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Jutro_pokazuje_swoje_zadania_a_nie_dzisiejsze()
+    {
+        Dodaj("Dzisiejsze", pora: new TimeOnly(9, 0));
+        Dodaj("Jutrzejsze", dzien: Dzis.AddDays(1), pora: new TimeOnly(10, 0));
+
+        var jutro = await _plan.DlaDniaAsync(Dzis.AddDays(1));
+
+        jutro.Select(w => w.Tytul).Should().Equal("Jutrzejsze");
+        jutro.Single().Podpis.Should().Be("10:00 / Dom");
+    }
+
+    [Fact]
+    public async Task Zalegle_naleza_do_dzisiaj_a_nie_do_kazdego_ogladanego_dnia()
+    {
+        // Zaległe należą do dziś, bo to dziś trzeba z nimi coś zrobić. Dołożone do
+        // czwartku udawałyby, że ktoś je na czwartek zaplanował.
+        Dodaj("Rozliczenie", dzien: Dzis.AddDays(-3), pora: new TimeOnly(7, 0));
+
+        (await _plan.DzisAsync()).Select(w => w.Tytul).Should().Equal("Rozliczenie");
+        (await _plan.DlaDniaAsync(Dzis.AddDays(2))).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Wziete_na_inny_dzien_widac_w_tamtym_dniu()
+    {
+        var zadanie = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
+        zadanie.Focus(Dzis.AddDays(1), _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        (await _plan.DzisAsync()).Should().BeEmpty();
+
+        var jutro = await _plan.DlaDniaAsync(Dzis.AddDays(1));
+
+        jutro.Single().Podpis.Should().Be("wzięte na ten dzień");
+    }
 }

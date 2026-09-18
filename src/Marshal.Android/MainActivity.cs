@@ -1,4 +1,5 @@
 using Android.App;
+using Android.Content;
 using Android.Content.PM;
 using Android.OS;
 using Avalonia;
@@ -18,6 +19,9 @@ namespace Marshal.Android;
         | ConfigChanges.UiMode)]
 public sealed class MainActivity : AvaloniaMainActivity<App>
 {
+    /// <summary>Prośba z widgetu, żeby wejść od razu na kalendarz.</summary>
+    public const string KalendarzExtra = "kalendarz";
+
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder).WithInterFont();
 
@@ -38,6 +42,8 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 
         base.OnCreate(savedInstanceState);
         Powiadomienia.Podepnij(this);
+
+        Rozpatrz(Intent);
 
         // Droga po zgodę Google. Kontekst aplikacji, nie okna: zgoda przeżywa obrót
         // telefonu i zamknięcie okna, a okno zapamiętane w polu statycznym zostałoby
@@ -60,6 +66,33 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     /// wiadomo na pewno, że coś mogło się zmienić i że za moment będzie widać
     /// ekran domowy.
     /// </remarks>
+    /// <summary>
+    /// Ponowne wejście do okna, które już stoi.
+    /// </summary>
+    /// <remarks>
+    /// Aplikacja otwiera się w trybie „jedno na wierzchu", więc dotknięcie widgetu przy
+    /// działającym oknie <b>nie</b> woła OnCreate — nowy zamiar przychodzi tędy. Bez tego
+    /// prośba o kalendarz działałaby wyłącznie przy zamkniętej aplikacji, co jest
+    /// najtrudniejszym do zauważenia rodzajem połowicznego działania.
+    /// </remarks>
+    protected override void OnNewIntent(Intent? intent)
+    {
+        base.OnNewIntent(intent);
+
+        // Zapamiętany, bo system nie podmienia go sam: bez tego kolejne odczyty
+        // widziałyby wciąż zamiar, którym okno zostało otwarte za pierwszym razem.
+        Intent = intent;
+        Rozpatrz(intent);
+    }
+
+    private static void Rozpatrz(Intent? zamiar)
+    {
+        if (zamiar?.GetBooleanExtra(KalendarzExtra, false) == true)
+        {
+            App.PoprosOKalendarz();
+        }
+    }
+
     protected override void OnPause()
     {
         base.OnPause();

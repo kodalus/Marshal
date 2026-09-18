@@ -29,6 +29,52 @@ public partial class App : Avalonia.Application
     /// </remarks>
     public static string? SladPlatformy { get; set; }
 
+    /// <summary>Co okno umie zrobić na prośbę z zewnątrz. Puste, dopóki okna nie ma.</summary>
+    private static Action? _pokazKalendarz;
+
+    /// <summary>Czy ktoś prosił o kalendarz, zanim było komu.</summary>
+    private static bool _zadanoKalendarza;
+
+    /// <summary>
+    /// Prośba spoza okna, żeby pokazać kalendarz — z widgetu na ekranie domowym.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Prośba, nie polecenie, i dlatego przez zapamiętanie zamiast wołania wprost.
+    /// Widget dotknięty przy zamkniętej aplikacji budzi ją od zera: w tej chwili okna
+    /// jeszcze nie ma i nie ma komu niczego pokazać, a kilkaset milisekund później
+    /// już jest. Zapamiętana prośba obsługuje obie te chwile jednym zdaniem.
+    /// </para>
+    /// <para>
+    /// Zerowana po spełnieniu, bo inaczej każde następne otwarcie aplikacji —
+    /// z ikony, z powiadomienia, skądkolwiek — przerzucałoby na kalendarz.
+    /// </para>
+    /// </remarks>
+    public static void PoprosOKalendarz()
+    {
+        if (_pokazKalendarz is { } teraz)
+        {
+            teraz();
+            return;
+        }
+
+        _zadanoKalendarza = true;
+    }
+
+    /// <summary>Podpięcie okna. Spełnia prośbę, która przyszła, zanim okno powstało.</summary>
+    private static void PodepnijKalendarz(Action pokaz)
+    {
+        _pokazKalendarz = pokaz;
+
+        if (!_zadanoKalendarza)
+        {
+            return;
+        }
+
+        _zadanoKalendarza = false;
+        pokaz();
+    }
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     /// <summary>
@@ -111,6 +157,10 @@ public partial class App : Avalonia.Application
                 }
 
                 await viewModel.InitializeAsync();
+
+                PodepnijKalendarz(
+                    () => Dispatcher.UIThread.Post(
+                        () => viewModel.ShowCalendarCommand.Execute(null)));
 
                 // Strefa w dzienniku przy każdym starcie: przesuwa wszystkie godziny
                 // naraz, a przesunięte wszystko wygląda tak samo jak źle pobrane dane.

@@ -16,6 +16,7 @@
   niż co pół godziny, a widget ma być aktualny **po zmianie**, nie co pół godziny.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:id="@+id/korzen"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
               android:orientation="vertical"
@@ -25,16 +26,53 @@
   <LinearLayout
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
+      android:gravity="center_vertical"
       android:orientation="horizontal">
+
+    <Button
+        android:id="@+id/wstecz"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:background="@drawable/przycisk_widgetu"
+        android:textColor="@color/tekst"
+        android:textSize="15sp"
+        android:text="‹" />
 
     <TextView
         android:id="@+id/naglowek"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="6dp"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
         android:textColor="@color/tekst"
         android:textSize="15sp"
         android:text="Na dziś" />
+
+    <Button
+        android:id="@+id/naprzod"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:layout_marginEnd="6dp"
+        android:background="@drawable/przycisk_widgetu"
+        android:textColor="@color/tekst"
+        android:textSize="15sp"
+        android:text="›" />
 
     <Button
         android:id="@+id/wrzut"

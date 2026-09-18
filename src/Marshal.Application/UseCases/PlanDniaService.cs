@@ -41,18 +41,31 @@ public sealed class PlanDniaService(
     IAreaRepository areas,
     IClock clock)
 {
-    public async Task<IReadOnlyList<PozycjaPlanu>> DzisAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<PozycjaPlanu>> DzisAsync(CancellationToken ct = default) =>
+        DlaDniaAsync(clock.Today, ct);
+
+    /// <summary>Plan dowolnego dnia — do przeglądania w przód i wstecz.</summary>
+    /// <remarks>
+    /// Dziś różni się od pozostałych dni jednym: bierze także <b>zaległe</b>. Zaległe
+    /// należą do dzisiejszego dnia, bo to dziś trzeba z nimi coś zrobić; dołożone do
+    /// czwartku udawałyby, że ktoś je na czwartek zaplanował.
+    /// </remarks>
+    public async Task<IReadOnlyList<PozycjaPlanu>> DlaDniaAsync(
+        DateOnly dzien, CancellationToken ct = default)
     {
         var dzis = clock.Today;
 
-        var umowione = await tasks.TodayAsync(dzis, ct);
-        var wybrane = await tasks.ByFocusDateAsync(dzis, ct);
+        var umowione = dzien == dzis
+            ? await tasks.TodayAsync(dzis, ct)
+            : await tasks.UpcomingAsync(dzien.AddDays(-1), dzien, ct);
+
+        var wybrane = await tasks.ByFocusDateAsync(dzien, ct);
 
         var razem = umowione
             .Concat(wybrane.Where(w => umowione.All(u => u.Id != w.Id)))
             .Where(z => z.State != TaskState.Done)
-            .OrderBy(z => Pora(z, dzis) is null)
-            .ThenBy(z => Pora(z, dzis))
+            .OrderBy(z => Pora(z, dzien) is null)
+            .ThenBy(z => Pora(z, dzien))
             .ThenBy(z => z.Title, StringComparer.CurrentCulture)
             .ToList();
 
@@ -68,24 +81,24 @@ public sealed class PlanDniaService(
             .Select(z => new PozycjaPlanu(
                 z.Id,
                 z.Title,
-                Podpis(z, dzis, Nalezy(z, projektyWg, obszaryWg)),
+                Podpis(z, dzien, dzis, Nalezy(z, projektyWg, obszaryWg)),
                 Barwa(z, projektyWg, obszaryWg)))
             .ToList();
     }
 
     /// <summary>Godzina, o której to stoi w dzisiejszym planie. Pusta, gdy bez godziny.</summary>
     /// <remarks>
-    /// Wyłącznie dla dnia dzisiejszego. Zadanie zaległe ma godzinę sprzed paru dni
+    /// Wyłącznie dla dnia, który się ogląda. Zadanie zaległe ma godzinę sprzed paru dni
     /// i wstawiona między dzisiejsze udawałaby, że jest na nią umówione dziś.
     /// </remarks>
-    private static TimeOnly? Pora(TaskItem zadanie, DateOnly dzis) =>
-        zadanie.DoDate == dzis ? zadanie.DoTime : null;
+    private static TimeOnly? Pora(TaskItem zadanie, DateOnly dzien) =>
+        zadanie.DoDate == dzien ? zadanie.DoTime : null;
 
-    private static string Podpis(TaskItem zadanie, DateOnly dzis, string? gdzie)
+    private static string Podpis(TaskItem zadanie, DateOnly dzien, DateOnly dzis, string? gdzie)
     {
         var czesci = new List<string>();
 
-        if (Pora(zadanie, dzis) is { } pora)
+        if (Pora(zadanie, dzien) is { } pora)
         {
             // Koniec liczony z oszacowania, gdy jest. „16:00 – 16:30" mówi, ile dnia
             // to zajmie; samo „16:00" zostawia to do policzenia w głowie.
@@ -93,13 +106,13 @@ public sealed class PlanDniaService(
                 ? $"{Godzina(pora)} – {Godzina(pora.AddMinutes(minut))}"
                 : Godzina(pora));
         }
-        else if (zadanie.DoDate is { } dzien && dzien < dzis)
+        else if (zadanie.DoDate is { } termin && termin < dzien)
         {
-            czesci.Add($"zaległe z {dzien:d.MM}");
+            czesci.Add($"zaległe z {termin:d.MM}");
         }
-        else if (zadanie.FocusDate == dzis)
+        else if (zadanie.FocusDate == dzien)
         {
-            czesci.Add("wzięte na dziś");
+            czesci.Add(dzien == dzis ? "wzięte na dziś" : "wzięte na ten dzień");
         }
 
         if (gdzie is not null)
