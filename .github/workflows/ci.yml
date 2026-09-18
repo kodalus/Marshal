@@ -211,6 +211,13 @@ jobs:
     name: Windows — wydanie
     runs-on: windows-latest
     needs: rdzen
+
+    # Zapis do wydań, tak samo jak przy APK. Bez tego żeton przebiegu jest tylko do
+    # odczytu: `gh release view` przechodzi, `gh release upload` dostaje odmowę —
+    # więc pada nie budowanie, tylko ostatni krok, i wygląda to na kłopot z wydaniem.
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
 
