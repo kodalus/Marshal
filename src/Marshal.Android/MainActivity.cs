@@ -69,6 +69,6 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // wiadomo na pewno, że lista przypomnień jest już taka, jaka ma być — i zaraz
         // przestanie być komu jej pilnować.
         _ = Budzik.PrzestawAsync(ApplicationContext!);
-        Budzik.NastawSynchronizacje(ApplicationContext!);
+        SynchronizacjaWorker.Nastaw(ApplicationContext!);
     }
 }

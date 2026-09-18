@@ -5,7 +5,6 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Diagnostics;
 using Marshal.Infrastructure.Notifications;
-using Marshal.Infrastructure.Sync.Google;
 using Marshal.UI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -36,11 +35,7 @@ internal static class Budzik
 {
     public const string Akcja = "com.kodalus.marshal.PRZYPOMNIENIE";
 
-    public const string AkcjaSynchronizacji = "com.kodalus.marshal.SYNCHRONIZACJA";
-
     private const int Numer = 7101;
-
-    private const int NumerSynchronizacji = 7102;
 
     /// <summary>Przestawienie budzika na najbliższą chwilę. Wołane po każdej zmianie.</summary>
     public static async Task PrzestawAsync(Context kontekst)
@@ -102,67 +97,6 @@ internal static class Budzik
         }
     }
 
-    /// <summary>Co ile telefon ma sam zaglądać na Dysk.</summary>
-    /// <remarks>
-    /// Pół godziny to kompromis: częściej znaczy budzenie telefonu na okrągło, rzadziej
-    /// znaczy, że zmiana z komputera czeka pół dnia. System i tak traktuje to jako
-    /// „nie częściej niż" — budziki przepuszczane w uśpieniu mają własny limit,
-    /// mniej więcej kwadransowy.
-    /// </remarks>
-    private static readonly long Odstep = AlarmManager.IntervalHalfHour;
-
-    /// <summary>
-    /// Nastawienie budzika na kolejny przebieg synchronizacji.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Jednorazowy i budzący, nie powtarzalny.</b> Do dziś stało tu
-    /// <c>SetInexactRepeating</c> z <c>AlarmType.Rtc</c> i to były dwie wady naraz.
-    /// <c>Rtc</c> nie budzi telefonu — czeka, aż ten obudzi się sam z innego powodu.
-    /// A budzik powtarzalny jest w uśpieniu systemu odkładany bez ograniczenia:
-    /// telefon leżący w kieszeni potrafi nie odpalić go ani razu.
-    /// </para>
-    /// <para>
-    /// Skutek widać było dokładnie tam, gdzie trzeba: zadanie zmienione na komputerze
-    /// nie dawało na telefonie żadnego znaku, dopóki aplikacji się nie otworzyło —
-    /// a po otwarciu i zamknięciu przypomnienie przychodziło normalnie. Czyli budzik
-    /// przypomnień działał, a nie działało <b>dowiadywanie się</b> o przypomnieniu.
-    /// </para>
-    /// <para>
-    /// Teraz tak samo jak przy przypomnieniach: <c>RtcWakeup</c> i „wolno także
-    /// w uśpieniu". Jednorazowy, bo tylko takiemu system pozwala przejść przez
-    /// uśpienie; następny nastawia się po każdym odebraniu — a że odbiornik nastawia
-    /// budziki po <b>każdym</b> przebiegu, łańcuch domyka się sam. Gdyby się urwał,
-    /// podnosi go otwarcie aplikacji, jej zamknięcie i start telefonu.
-    /// </para>
-    /// <para>
-    /// Do pracy okresowej służy zwykle WorkManager i to jest następny krok, jeśli to
-    /// nie wystarczy: budzik przepuszczony w uśpieniu dostaje około dziesięciu sekund
-    /// na pracę razem z siecią, a pełny przebieg do Dysku bywa dłuższy. WorkManager
-    /// daje na to dziesięć minut i sam ponawia — kosztem kolejnej biblioteki i kodu
-    /// pisanego na ślepo.
-    /// </para>
-    /// </remarks>
-    public static void NastawSynchronizacje(Context kontekst)
-    {
-        try
-        {
-            if (kontekst.GetSystemService(Context.AlarmService) is not AlarmManager zegar)
-            {
-                return;
-            }
-
-            zegar.SetAndAllowWhileIdle(
-                AlarmType.RtcWakeup,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + Odstep,
-                Zamiar(kontekst, AkcjaSynchronizacji, NumerSynchronizacji));
-        }
-        catch (Exception e)
-        {
-            InAppNotifier.StanSystemowych = $"budzik synchronizacji: {e.GetType().Name}: {e.Message}";
-        }
-    }
-
     /// <summary>Wpis do dziennika, który nie wywraca wołającego, gdy baza nie stoi.</summary>
     public static async Task Zapisz(
         string co, string tresc, Exception? blad = null, ActivityLevel? poziom = null)
@@ -183,17 +117,14 @@ internal static class Budzik
     private static bool Dokladny(AlarmManager zegar) =>
         !OperatingSystem.IsAndroidVersionAtLeast(31) || zegar.CanScheduleExactAlarms();
 
-    private static PendingIntent Zamiar(Context kontekst) =>
-        Zamiar(kontekst, Akcja, Numer);
-
-    private static PendingIntent Zamiar(Context kontekst, string akcja, int numer)
+    private static PendingIntent Zamiar(Context kontekst)
     {
-        var zamiar = new Intent(kontekst, typeof(OdbiorcaBudzika)).SetAction(akcja);
+        var zamiar = new Intent(kontekst, typeof(OdbiorcaBudzika)).SetAction(Akcja);
 
         // „Immutable", bo nic w tym zamiarze nie ma być dopisywane z zewnątrz;
         // od Androida 12 jeden z tych dwóch znaczników jest zresztą wymagany.
         return PendingIntent.GetBroadcast(
-            kontekst, numer, zamiar,
+            kontekst, Numer, zamiar,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable)!;
     }
 }
@@ -231,27 +162,9 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
                 // zostawało zapisane jako pokazane i nie pokazywało się nigdzie.
                 Powiadomienia.Podepnij(kontekst);
 
-                // Następny budzik synchronizacji też **przed** pracą, nie po niej.
-                // Budzik jest jednorazowy i sam nastawia następny, więc cały łańcuch
-                // wisi na tym, że to wywołanie się wykona. Praca przed nim — składanie
-                // zależności, migracje, przebieg do Dysku — bywa dłuższa niż czas, który
-                // system daje obudzonemu odbiornikowi; ubity w połowie odbiornik urwałby
-                // łańcuch na zawsze, a wyglądałoby to jak cisza bez przyczyny.
-                // Nie potrzebuje bazy ani zależności: dotyka wyłącznie budzika systemu.
-                Budzik.NastawSynchronizacje(kontekst);
-
                 await AppServices.ReadyAsync();
 
-                // Bez wyjścia po synchronizacji. Do dziś budzik synchronizacji kończył
-                // się tutaj, **przed** przestawieniem budzika przypomnień — a to znaczyło,
-                // że przypomnienie przyniesione właśnie przez synchronizację nie miało
-                // się od czego odezwać. Zadanie zmienione na komputerze docierało na
-                // telefon i milczało do najbliższego otwarcia aplikacji.
-                if (intent?.Action == Budzik.AkcjaSynchronizacji)
-                {
-                    await SynchronizujAsync();
-                }
-                else if (intent?.Action == Budzik.Akcja)
+                if (intent?.Action == Budzik.Akcja)
                 {
                     var ile = await AppServices.Provider
                         .GetRequiredService<ReminderService>()
@@ -262,8 +175,9 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
                         ile == 0 ? "nie było czego pokazać" : $"pokazane: {ile}");
                 }
 
-                // Budzik przypomnień na końcu, bo ten musi znać bazę: liczy najbliższą
-                // chwilę z zadań. Synchronizacja została nastawiona na początku.
+                // Następny budzik liczony na końcu: musi znać bazę, bo najbliższa chwila
+                // bierze się z zadań. Zaglądaniem na Dysk zajmuje się osobno
+                // SynchronizacjaWorker — budzik nie jest narzędziem do pracy okresowej.
                 await Budzik.PrzestawAsync(kontekst);
             }
             catch (Exception e)
@@ -277,60 +191,11 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
         });
     }
 
-    /// <summary>
-    /// Przebieg synchronizacji w tle.
-    /// </summary>
-    /// <remarks>
-    /// Tylko wtedy, gdy żeton już jest. Bez niego logowanie chciałoby otworzyć
-    /// przeglądarkę — z tła, gdzie system i tak na to nie pozwoli, a gdyby pozwolił,
-    /// byłoby to okno wyskakujące bez powodu w środku czegoś innego.
-    /// </remarks>
     /// <summary>Wołane także po starcie telefonu — patrz OdbiorcaStartu.</summary>
     internal static void Obudz(Context kontekst)
     {
         _ = Budzik.PrzestawAsync(kontekst);
-        Budzik.NastawSynchronizacje(kontekst);
-    }
-
-    private static async Task SynchronizujAsync()
-    {
-        var dysk = AppServices.Provider.GetRequiredService<GoogleSyncService>();
-
-        if (!dysk.HasCredentials || !Directory.Exists(dysk.TokenFolder))
-        {
-            // Ze śladem, bo to jedyna droga, na której budzik odpala się poprawnie
-            // i nie robi nic. Bez wpisu wygląda identycznie jak budzik, który nie
-            // przyszedł — a to dwie różne rzeczy do naprawienia.
-            await Budzik.Zapisz(
-                "Synchronizacja w tle", "brak poświadczeń albo żetonu", poziom: ActivityLevel.Problem);
-
-            return;
-        }
-
-        var wynik = await dysk.SyncAsync();
-
-        if (!wynik.Ok)
-        {
-            await Budzik.Zapisz("Synchronizacja w tle", wynik.Message, poziom: ActivityLevel.Problem);
-            return;
-        }
-
-        if (wynik.Applied == 0)
-        {
-            // Cicho, gdy nic nie przyszło: budzik chodzi co pół godziny, a dziennik
-            // trzyma pięćset wpisów.
-            return;
-        }
-
-        // Przypomnienia **od razu**, nie dopiero przy następnym budziku. To, co właśnie
-        // przyszło, bywa już zaległe: zadanie zmienione rano na komputerze dociera tu
-        // po południu i ma się odezwać teraz, a nie za pół godziny. Przyszłymi zajmie
-        // się przestawienie budzika, które idzie zaraz potem.
-        var ile = await AppServices.Provider.GetRequiredService<ReminderService>().RunAsync();
-
-        await Budzik.Zapisz(
-            "Synchronizacja w tle",
-            $"przyjęte {wynik.Applied}" + (ile > 0 ? $", przypomnienia pokazane: {ile}" : string.Empty));
+        SynchronizacjaWorker.Nastaw(kontekst);
     }
 }
 

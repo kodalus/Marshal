@@ -1195,20 +1195,35 @@ i dwa urządzenia odbijałyby sobie te same wpisy bez końca — przy czym każd
 z osobna wyglądałby na poprawny.
 
 Wyzwalacze: start aplikacji, powrót z tła, **zapis z okna**, co 5 minut przy aktywnym
-oknie, ręcznie. Na Androidzie dodatkowo budzik co pół godziny — tam wyłączona aplikacja
-nie znaczy wyłączonego urządzenia.
+oknie, ręcznie. Na Androidzie dodatkowo praca okresowa co pół godziny — tam wyłączona
+aplikacja nie znaczy wyłączonego urządzenia.
 
-Budzik androidowy musi być **budzący i jednorazowy**: `RtcWakeup` z dopuszczeniem
-w uśpieniu, nastawiający następny po sobie. Budzik niebudzący czeka, aż telefon obudzi
-się z innego powodu, a powtarzalny jest w uśpieniu odkładany bez ograniczenia — telefon
-w kieszeni potrafi nie odpalić go ani razu. Następny nastawia się **przed** pracą, nie
-po niej: łańcuch jednorazowych budzików wisi na tym jednym wywołaniu, a obudzony
-odbiornik bywa ubity w połowie przebiegu.
+Praca okresowa na Androidzie idzie przez **WorkManager**, nie przez budzik. Budzik jest
+narzędziem do „zrób coś o tej godzinie"; okresowość zrobiona z budzików to trzy osobne
+rzeczy do dopilnowania i wszystkie trzy zawiodły po kolei: budzik niebudzący nie wybudza
+telefonu, powtarzalny jest w uśpieniu odkładany bez ograniczenia, a łańcuch jednorazowych
+urywa się, gdy system ubije odbiornik w połowie pracy. Objaw za każdym razem ten sam
+i w żadnym razie nie wskazujący przyczyny: cisza.
 
-Z tego wynika też granica: budzik przepuszczony w uśpieniu dostaje około dziesięciu
-sekund razem z dostępem do sieci. Pełny przebieg do Dysku bywa dłuższy, więc gdy to
-przestanie wystarczać, następnym krokiem jest WorkManager — dziesięć minut na pracę
-i własne ponawianie, kosztem kolejnej biblioteki.
+WorkManager przeżywa uśpienie i restart, sam ponawia nieudany przebieg, sam pilnuje
+warunku sieci — a przede wszystkim daje na pracę **dziesięć minut** zamiast dziesięciu
+sekund, które dostaje odbiornik obudzony budzikiem. Pełny przebieg do Dysku bywa dłuższy
+od dziesięciu sekund, więc ta granica i tak by go dobiła.
+
+Zlecenie zgłaszane jest z zasadą **„zostaw, jeśli już jest"**. Zastąpienie przestawiałoby
+odliczanie przy każdym otwarciu aplikacji, a przy zaglądaniu do niej co kwadrans przebieg
+w tle nie ruszyłby ani razu.
+
+Przypomnienia zostają przy budziku i to nie jest niekonsekwencja: tam pytanie brzmi
+„odezwij się o szesnastej", a nie „zajrzyj kiedyś w ciągu kwadransa". Budzik przypomnień
+jest dokładny, budzący i dopuszczony w uśpieniu, a przestawia się po każdym przebiegu
+synchronizacji — to, co przyszło z Dysku, potrafi zmienić najbliższą godzinę.
+
+Droga, której **nie** mamy: powiadomienie z serwera. Tak robi to każda aplikacja
+z własnym kontem i jest to jedyny sposób, żeby telefon dowiedział się o zmianie od razu.
+Dysk Google umie wysyłać powiadomienia o zmianach wyłącznie na publiczny adres HTTPS,
+czyli na serwer — a brak serwera jest w tym projekcie rozstrzygnięciem (9.1), nie brakiem.
+Cena tego rozstrzygnięcia to właśnie zaglądanie co pół godziny.
 
 Zapis i przerwa to dwa różne powody, bo synchronizacja ma dwie strony. Zapis jest
 powodem do **wysłania**: jest to jedyna chwila, w której wiadomo, że jest co wysyłać.

@@ -16,6 +16,10 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.Android" Version="$(AvaloniaVersion)" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+    <!-- Praca okresowa w tle. Doszła po trzech podejściach do zrobienia tego samego
+         budzikami: budzik jest narzędziem do „zrób coś o tej godzinie", a nie do
+         „zaglądaj co pół godziny". Zob. Budzik.cs i SynchronizacjaWorker.cs. -->
+    <PackageReference Include="Xamarin.AndroidX.Work.Runtime" Version="2.*" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Marshal.UI\Marshal.UI.csproj" />
