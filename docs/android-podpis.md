@@ -76,3 +76,45 @@ Od następnego wydania aktualizacje nadpisują się już bez pytania.
 
 Budowanie nie przestaje działać: APK powstaje jak dotąd, z kluczem domyślnym, a przebieg
 zostawia ostrzeżenie. Nic się nie psuje — po prostu wraca konflikt przy instalacji.
+
+
+## Skąd pobierać APK
+
+Dwa miejsca z tym samym plikiem. **Właściwe jest wydanie**, nie artefakt przebiegu.
+
+**Wydanie „najnowsza"** — `https://github.com/kodalus/Marshal/releases/tag/najnowsza`.
+Pojedynczy plik APK pod stałym adresem, bez logowania i bez archiwum. Otwierasz ten
+adres na telefonie, pobierasz, instalujesz. Komputer nie bierze w tym udziału.
+
+**Artefakt przebiegu** (Actions → wybrany przebieg → `marshal-apk`) zostaje jako zapas
+i do budowań spoza gałęzi głównej. Przychodzi zapakowany w ZIP i tylko po zalogowaniu,
+więc trzeba go pobrać na komputerze i przełożyć na telefon.
+
+### „Ten plik zawiera wirusa" przy pobieraniu ZIP-a
+
+Windows blokuje wtedy plik **po reputacji, nie po zawartości**: widzi świeżo zbudowany,
+nigdy wcześniej niewidziany plik wykonywalny w archiwum, bez podpisu uznawanego przez
+Microsoft. Nasz APK jest podpisany kluczem z sekretów repozytorium, a nie certyfikatem
+kupionym u dostawcy, którego Windows zna — i to wystarczy, żeby trafić w tę blokadę.
+
+Komunikat mówi o wirusie, ale nie znaczy, że coś znaleziono. To samo zdanie Windows
+pokazuje przy prawdziwym wykryciu i przy braku zaufania, i z zewnątrz nie da się ich
+rozróżnić.
+
+Co można zrobić, w kolejności od najlepszego:
+
+1. **Pobrać z wydania na telefonie.** Windows znika z drogi w całości.
+2. **Sprawdzić sumę kontrolną.** Każdy przebieg wypisuje SHA-256 pliku w kroku „Suma
+   kontrolna" i w opisie wydania. Jeśli plik na telefonie ma tę samą sumę, to jest
+   dokładnie ten plik, który powstał z tego kodu — i nic po drodze go nie podmieniło.
+   To jedyna rzecz, którą da się o pliku stwierdzić bez zaufania komukolwiek.
+3. Wymusić pobranie w przeglądarce („Zachowaj mimo to"). Działa, ale niczego nie
+   sprawdza — więc ma sens dopiero po punkcie 2.
+
+### Wydanie jest publiczne
+
+Repozytorium jest publiczne, więc plik z wydania może pobrać każdy, kto zna adres.
+Nie jest to wyciek: kod i tak jest jawny, a APK jest podpisany kluczem, którego nie ma
+nikt poza sekretami repozytorium, więc podszyć się pod aktualizację Marshala się nie da.
+Gdyby jednak sama dostępność pliku zaczęła przeszkadzać, drogą jest prywatne
+repozytorium albo wydania zastąpione czymś, co wymaga logowania.

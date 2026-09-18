@@ -61,6 +61,12 @@ jobs:
   android:
     name: Android — budowanie
     runs-on: ubuntu-latest
+
+    # Zapis do wydań, żeby APK dał się pobrać wprost na telefon. Reszta przebiegu
+    # niczego nie zapisuje, więc uprawnienie jest tu wąskie z rozmysłu.
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -122,9 +128,49 @@ jobs:
           find src/Marshal.Android/bin/Release -name '*.apk' -exec cp {} artefakty/apk/ \;
           ls -l artefakty/apk
 
+      # Suma kontrolna w dzienniku przebiegu. Po to, żeby dało się sprawdzić, czy plik,
+      # który doszedł na telefon, jest tym, który tu powstał — a nie żeby uspokajać.
+      # To jedyna rzecz, którą da się o pliku stwierdzić z zewnątrz bez zaufania komukolwiek.
+      - name: Suma kontrolna
+        id: suma
+        run: |
+          SUMA=$(sha256sum artefakty/apk/*.apk | awk '{print $1}')
+          echo "sha=$SUMA" >> "$GITHUB_OUTPUT"
+          echo "SHA-256: $SUMA"
+
       - name: APK do pobrania
         uses: actions/upload-artifact@v4
         with:
           name: marshal-apk
           path: artefakty/apk
           if-no-files-found: error
+
+      # Drugie miejsce na ten sam plik, i to ono jest właściwą drogą na telefon.
+      #
+      # Artefakt przebiegu przychodzi **zapakowany w ZIP i tylko po zalogowaniu**, więc
+      # trzeba go pobrać na komputerze i przełożyć. Windows widzi wtedy świeżo zbudowany,
+      # nigdy wcześniej niewidziany plik wykonywalny w archiwum i blokuje go po reputacji,
+      # a nie po zawartości — komunikatem o wirusie, którego nikt nie znalazł.
+      #
+      # Wydanie to pojedynczy plik pod stałym adresem, bez logowania i bez archiwum.
+      # Telefon pobiera go sam i Windows nie ma w tym żadnego udziału.
+      #
+      # Ruchoma etykieta „najnowsza": nie wersjonujemy jeszcze wydań, a dwadzieścia wydań
+      # dziennie byłoby listą, z której nic nie wynika. Numer wersji w opisie mówi, z czego
+      # powstało.
+      - name: Wydanie do pobrania
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUMA: ${{ steps.suma.outputs.sha }}
+        run: |
+          OPIS=$(printf 'Budowanie z %s\n\nSHA-256: `%s`\n\nPlik pobrany na telefon powinien mieć tę samą sumę.' "$GITHUB_SHA" "$SUMA")
+
+          if gh release view najnowsza >/dev/null 2>&1; then
+            gh release upload najnowsza artefakty/apk/*.apk --clobber
+            gh release edit najnowsza --notes "$OPIS"
+          else
+            gh release create najnowsza artefakty/apk/*.apk \
+              --title "Marshal — najnowsze budowanie" \
+              --notes "$OPIS"
+          fi
