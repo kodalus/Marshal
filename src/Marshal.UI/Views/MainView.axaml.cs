@@ -1,4 +1,6 @@
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -7,7 +9,9 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Platform.Storage;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
@@ -228,7 +232,12 @@ public partial class MainView : UserControl
         obszar.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerMovedEvent, ObszarRuch, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
+
+        _obszarKalendarza = obszar;
     }
+
+    /// <summary>Panel z siatkami. Trzymany do przesunięcia przy zmianie zakresu.</summary>
+    private Control? _obszarKalendarza;
 
     /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
     /// <remarks>
@@ -334,7 +343,78 @@ public partial class MainView : UserControl
                 ? _kalendarz.NextCommand.ExecuteAsync(null)
                 : _kalendarz.PreviousCommand.ExecuteAsync(null));
 
+        Zasun(wBok < 0);
+
         return true;
+    }
+
+    /// <summary>Jak długo nowy zakres wjeżdża na miejsce.</summary>
+    /// <remarks>
+    /// Sto sześćdziesiąt milisekund: dość, żeby oko zdążyło zobaczyć, z której strony
+    /// przyszedł, i za mało, żeby zdążyło na to czekać.
+    /// </remarks>
+    private static readonly TimeSpan CzasZasuniecia = TimeSpan.FromMilliseconds(160);
+
+    /// <summary>
+    /// Nowy zakres wjeżdża z tej strony, z której go wyciągnięto.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bez tego kalendarz podmieniał się w jednej klatce i przejechanie było
+    /// nieodróżnialne od przypadkowego przeładowania: widać było, że coś się stało,
+    /// ale nie było widać, <b>w którą stronę</b>. A to jest jedyna rzecz, którą ten
+    /// gest niesie.
+    /// </para>
+    /// <para>
+    /// Przesunięcie rysowania, nie układu: siatka zostaje tam, gdzie była, więc nic
+    /// się nie przelicza i nic nie zmienia rozmiaru. Po dojechaniu zdejmowane, bo
+    /// przesunięcie zerowe to i tak przesunięcie — a kolejne odświeżenia mają
+    /// zastawać panel bez żadnego.
+    /// </para>
+    /// </remarks>
+    private void Zasun(bool zPrawej)
+    {
+        if (_obszarKalendarza is not { Bounds.Width: > 0 } obszar)
+        {
+            return;
+        }
+
+        var skad = zPrawej ? obszar.Bounds.Width : -obszar.Bounds.Width;
+
+        var animacja = new Animation
+        {
+            Duration = CzasZasuniecia,
+            Easing = new CubicEaseOut(),
+            FillMode = FillMode.None,
+            Children =
+            {
+                new KeyFrame
+                {
+                    Cue = new Cue(0d),
+                    Setters =
+                    {
+                        new Setter(
+                            Visual.RenderTransformProperty,
+                            TransformOperations.Parse(
+                                string.Create(
+                                    System.Globalization.CultureInfo.InvariantCulture,
+                                    $"translateX({skad:0.##}px)"))),
+                    },
+                },
+                new KeyFrame
+                {
+                    Cue = new Cue(1d),
+                    Setters =
+                    {
+                        new Setter(
+                            Visual.RenderTransformProperty,
+                            TransformOperations.Parse("translateX(0px)")),
+                    },
+                },
+            },
+        };
+
+        _ = animacja.RunAsync(obszar);
     }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
@@ -1530,6 +1610,41 @@ public partial class MainView : UserControl
             });
 
         _minutnik.Start();
+
+        PodepnijPowrotDoOkna(model);
+    }
+
+    /// <summary>Czy powrót do okna jest już podsłuchiwany. Podpięcie idzie raz.</summary>
+    private bool _powrotPodpiety;
+
+    /// <summary>
+    /// Powrót do okna sięga na Dysk od razu, bez czekania na przerwę.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// To najlepszy moment, jaki ta aplikacja ma: dokładnie wtedy ktoś zaczyna patrzeć
+    /// na listę i dokładnie wtedy różnica między telefonem a komputerem jest widoczna.
+    /// Przerwa zostaje dla okna, przy którym się siedzi — tam nikt nie wraca, bo nikt
+    /// nie wychodził.
+    /// </para>
+    /// <para>
+    /// Na oknie, nie na cyklu życia aplikacji: pulpit jest tym miejscem, gdzie zadanie
+    /// zapisane na telefonie ma się pojawić, a tam „wrócenie" znaczy przełączenie się
+    /// na okno i nic więcej. Android ma na to robotę w tle, więc nie potrzebuje tego
+    /// haczyka, żeby nadrobić.
+    /// </para>
+    /// </remarks>
+    private void PodepnijPowrotDoOkna(MainViewModel model)
+    {
+        if (_powrotPodpiety || TopLevel.GetTopLevel(this) is not Window okno)
+        {
+            return;
+        }
+
+        _powrotPodpiety = true;
+
+        okno.Activated += (_, _) =>
+            _ = Probuj("Synchronizacja po powrocie", model.SynchronizujPoPowrocieAsync);
     }
 
     private void NaPrzewinieciuSiatki(object? nadawca, ScrollChangedEventArgs e)

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application;
@@ -85,11 +86,29 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Co ile sprawdzać Dysk, gdy nic się nie zmieniło.</summary>
     /// <remarks>
+    /// <para>
     /// Po to, żeby zobaczyć **cudze** zmiany: to, co dopisał telefon, przychodzi tylko
-    /// przez odczyt. Pięć minut, bo tyle znosi się jako opóźnienie, a częściej znaczy
-    /// kilkadziesiąt zapytań do Dysku na godzinę bez powodu.
+    /// przez odczyt.
+    /// </para>
+    /// <para>
+    /// Minuta, nie pięć. Pięć brało się z rachunku zapytań do Dysku, ale rachunek był
+    /// nie ten: liczyłem koszt przebiegu, a kosztem jest czekanie. Zadanie zapisane
+    /// na telefonie nie pojawiało się na komputerze przez kilka minut, więc obie
+    /// aplikacje pokazywały różne rzeczy — a to jest dokładnie ta sytuacja, w której
+    /// przestaje się im ufać i sprawdza wszystko dwa razy. Przebieg bez zmian to jedno
+    /// zapytanie i żadnego wpisu w dzienniku.
+    /// </para>
     /// </remarks>
-    private static readonly TimeSpan Przerwa = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan Przerwa = TimeSpan.FromMinutes(1);
+
+    /// <summary>Ile czekać z wysyłką po zapisie.</summary>
+    /// <remarks>
+    /// Nie zero: zapis w szczegółach zadania to zwykle kilka zapisów pod rząd, a każdy
+    /// z osobna znaczyłby osobny przebieg po sieci. Pięć sekund zbiera je w jeden
+    /// i nadal jest poniżej progu, przy którym człowiek zaczyna patrzeć na drugie
+    /// urządzenie i zastanawiać się, czy zadziałało.
+    /// </remarks>
+    private static readonly TimeSpan OdlozenieWysylki = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Dzień, na którym stanęło okno. Do wykrycia północy przy otwartej aplikacji.
@@ -140,8 +159,13 @@ public sealed partial class MainViewModel : ObservableObject
         _przejscieDnia = przejscieDnia;
 
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
-        // dokładnie jedno: odłożyć notatkę. Przebieg rusza z minutnika, czyli z okna.
-        sygnal.Zapisano += () => Interlocked.Exchange(ref _zmiana, 1);
+        // dokładnie dwie rzeczy: odłożyć notatkę i poprosić wątek okna o wysyłkę.
+        // Sam przebieg rusza stamtąd, bo kończy się przerysowaniem list.
+        sygnal.Zapisano += () =>
+        {
+            Interlocked.Exchange(ref _zmiana, 1);
+            PoproszOWysylke();
+        };
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -510,6 +534,60 @@ public sealed partial class MainViewModel : ObservableObject
     /// wątku i dlatego nie robi nic poza podniesieniem się.
     /// </para>
     /// </remarks>
+    /// <summary>Odłożona wysyłka po zapisie. Kolejny zapis odsuwa ją, a nie dokłada.</summary>
+    /// <remarks>
+    /// Do dziś zapis czekał na najbliższy przebieg minutnika, czyli do minuty — a przy
+    /// dwóch urządzeniach minuta ciszy wygląda jak awaria, nie jak opóźnienie.
+    /// Odwołanie poprzedniego odłożenia jest tu sednem: pięć zapisów pod rząd ma dać
+    /// jeden przebieg pięć sekund po ostatnim, a nie pięć przebiegów.
+    /// </remarks>
+    private CancellationTokenSource? _odlozonaWysylka;
+
+    private void PoproszOWysylke() => Dispatcher.UIThread.Post(() =>
+    {
+        _odlozonaWysylka?.Cancel();
+        _odlozonaWysylka?.Dispose();
+
+        var zrodlo = new CancellationTokenSource();
+        _odlozonaWysylka = zrodlo;
+
+        _ = WyslijZaChwileAsync(zrodlo.Token);
+    });
+
+    private async Task WyslijZaChwileAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(OdlozenieWysylki, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Przyszedł kolejny zapis i to on wyznacza nową chwilę.
+            return;
+        }
+
+        await Probuj("Synchronizacja po zapisie", SynchronizujSamaAsync);
+    }
+
+    /// <summary>
+    /// Odczyt przy powrocie do okna, bez czekania na przerwę.
+    /// </summary>
+    /// <remarks>
+    /// Powrót do okna jest najlepszym momentem na zajrzenie na Dysk, jaki ta aplikacja
+    /// w ogóle ma: dokładnie wtedy ktoś zaczyna patrzeć na listę i dokładnie wtedy
+    /// różnica między urządzeniami jest widoczna. Przerwa zostaje dla okna, przy którym
+    /// się siedzi.
+    /// </remarks>
+    public async Task SynchronizujPoPowrocieAsync()
+    {
+        if (_trwaSynchronizacja)
+        {
+            return;
+        }
+
+        await PrzebiegAsync("Synchronizacja po powrocie", cicha: true);
+    }
+
     private async Task SynchronizujSamaAsync()
     {
         // Najpierw blokada, dopiero potem znak: przebieg bywa dłuższy od minuty,
