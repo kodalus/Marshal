@@ -1,6 +1,4 @@
 using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -10,7 +8,6 @@ using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
-using Avalonia.Styling;
 using Avalonia.Threading;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
@@ -245,12 +242,7 @@ public partial class MainView : UserControl
         obszar.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerMovedEvent, ObszarRuch, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
-
-        _obszarKalendarza = obszar;
     }
-
-    /// <summary>Panel z siatkami. Trzymany do przesunięcia przy zmianie zakresu.</summary>
-    private Control? _obszarKalendarza;
 
     /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
     /// <remarks>
@@ -356,86 +348,32 @@ public partial class MainView : UserControl
                 ? _kalendarz.NextCommand.ExecuteAsync(null)
                 : _kalendarz.PreviousCommand.ExecuteAsync(null));
 
-        Zasun(wBok < 0);
-
         return true;
     }
 
-    /// <summary>Jak długo nowy zakres wjeżdża na miejsce.</summary>
-    /// <remarks>
-    /// Sto sześćdziesiąt milisekund: dość, żeby oko zdążyło zobaczyć, z której strony
-    /// przyszedł, i za mało, żeby zdążyło na to czekać.
-    /// </remarks>
-    private static readonly TimeSpan CzasZasuniecia = TimeSpan.FromMilliseconds(160);
-
     /// <summary>
-    /// Nowy zakres wjeżdża z tej strony, z której go wyciągnięto.
+    /// Dlaczego zmiana zakresu nie jest animowana.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Bez tego kalendarz podmieniał się w jednej klatce i przejechanie było
-    /// nieodróżnialne od przypadkowego przeładowania: widać było, że coś się stało,
-    /// ale nie było widać, <b>w którą stronę</b>. A to jest jedyna rzecz, którą ten
-    /// gest niesie.
+    /// Były tu dwa podejścia i oba padły z tego samego powodu. Siatka idąca za palcem
+    /// odsłaniała puste tło, bo złożona jest tylko jedna. Wjazd nowego zakresu z krawędzi
+    /// odsłaniał to samo puste tło, tyle że przez sto sześćdziesiąt milisekund i po
+    /// puszczeniu palca — więc wyglądał nie jak ruch, tylko jak mignięcie dziury.
     /// </para>
     /// <para>
-    /// Ruszane jest samo przesunięcie, nie własność panelu, która je trzyma. Pierwsza
-    /// wersja podawała pod animację panel i kazała jej ruszać <c>RenderTransform</c>
-    /// zapisanym jako operacje przekształcenia — i to wywracało aplikację przy
-    /// pierwszym przejechaniu: dla takiej własności nie ma domyślnego animatora,
-    /// a dowiadujemy się o tym dopiero przy pierwszej klatce, czyli w trakcie gestu.
-    /// Przesunięcie w bok jest zwykłą liczbą i ruszanie liczby biblioteka umie od zawsze.
+    /// Pustka bierze się stąd, że sąsiedni zakres nie istnieje, dopóki się go nie złoży.
+    /// Żadna animacja tego nie naprawi: animowanie czegoś, czego nie ma, pokazuje brak
+    /// zamiast go ukryć. Dopóki kalendarz nie zostanie przepisany na karuzelę — trzy
+    /// siatki składane naraz i trzymane w zgodzie przy każdym odhaczeniu i przeciągnięciu
+    /// bloku — <b>lepsza jest podmiana bez ruchu</b>: nie udaje płynności i nie pokazuje
+    /// niczego, czego nie ma.
     /// </para>
     /// <para>
-    /// Przesunięcie rysowania, nie układu: siatka zostaje tam, gdzie była, więc nic
-    /// się nie przelicza i nic nie zmienia rozmiaru. Jedno na cały czas życia okna,
-    /// bo zakładane przy każdym przejechaniu zostawiałoby po sobie stos nieżywych.
-    /// </para>
-    /// <para>
-    /// Całość przez wspólne zabezpieczenie okna. To jest ozdoba — kalendarz przeskakuje
-    /// tak czy owak — a ozdoba nie ma prawa zamknąć aplikacji. Ta właśnie zamknęła,
-    /// i to w trakcie gestu, czyli w miejscu, gdzie wyjątek nie ma komu wypaść.
+    /// Kierunek zmiany widać z nagłówka i z dat kolumn. To mniej, niż dawał ruch, ale
+    /// mniej i prawdziwie bije więcej i z dziurą.
     /// </para>
     /// </remarks>
-    private TranslateTransform? _przesuniecieSiatki;
-
-    private void Zasun(bool zPrawej) =>
-        _ = Probuj("Kalendarz: przesunięcie", () => ZasunAsync(zPrawej));
-
-    private Task ZasunAsync(bool zPrawej)
-    {
-        if (_obszarKalendarza is not { Bounds.Width: > 0 } obszar)
-        {
-            return Task.CompletedTask;
-        }
-
-        _przesuniecieSiatki ??= new TranslateTransform();
-        obszar.RenderTransform = _przesuniecieSiatki;
-
-        var skad = zPrawej ? obszar.Bounds.Width : -obszar.Bounds.Width;
-
-        var animacja = new Animation
-        {
-            Duration = CzasZasuniecia,
-            Easing = new CubicEaseOut(),
-            FillMode = FillMode.None,
-            Children =
-            {
-                new KeyFrame
-                {
-                    Cue = new Cue(0d),
-                    Setters = { new Setter(TranslateTransform.XProperty, skad) },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters = { new Setter(TranslateTransform.XProperty, 0d) },
-                },
-            },
-        };
-
-        return animacja.RunAsync(_przesuniecieSiatki);
-    }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
     /// <remarks>
