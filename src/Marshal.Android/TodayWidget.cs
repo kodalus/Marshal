@@ -1,15 +1,8 @@
-using System.Globalization;
 using Android.App;
 using Android.Appwidget;
 using Android.Content;
-using Android.Views;
 using Android.Widget;
-using Marshal.Application.Abstractions;
-using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
-using Marshal.Domain.Areas;
-using Marshal.Domain.Projects;
-using Marshal.Domain.Tasks;
 using Marshal.UI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -27,10 +20,15 @@ namespace Marshal.Android;
 /// na pełną odpowiedź.
 /// </para>
 /// <para>
-/// Plan to zadania z dzisiejszym dniem wykonania i zaległe (ten sam zbiór, co ekran
-/// „Dzisiaj") **plus** wzięte na dziś. Kolejność jest chronologiczna: najpierw to, co
-/// ma godzinę, potem reszta. Godzina jest jedyną rzeczą, która narzuca porządek
-/// z zewnątrz; wszystko inne porządkuje się samo w trakcie dnia.
+/// Treść planu liczy <see cref="PlanDniaService"/>, nie ta klasa. Tu zostaje samo
+/// rysowanie: rama i wskazanie, skąd brać wiersze.
+/// </para>
+/// <para>
+/// <b>Lista przewijana, nie wiersze wpisane na sztywno.</b> Osiem wierszy wystarczało,
+/// dopóki widget pokazywał wybór na dziś, bo tego jest najwyżej pięć. Plan całego dnia
+/// nie ma takiego limitu — a wiersz, którego nie widać, jest w planie dnia tym samym,
+/// co wiersz, którego nie ma. Kosztem jest osobna usługa i osobna fabryka widoków:
+/// system rozwija wiersze w procesie ekranu domowego, nie w naszym.
 /// </para>
 /// <para>
 /// <b>Wybór na dziś, nie widok „Teraz".</b> Spec wymieniała „Teraz", ale ta lista
@@ -58,45 +56,16 @@ public sealed class TodayWidget : AppWidgetProvider
     public const string TaskIdExtra = "zadanie";
 
     /// <summary>
-    /// Ile wierszy ma układ.
+    /// Kody żądań dla zamiarów oczekujących.
     /// </summary>
     /// <remarks>
-    /// Nie jest to już limit z N14 — ten dotyczy wybierania na dziś, a plan dnia bierze
-    /// też rzeczy umówione i zaległe, których nikt nie limitował. Osiem to tyle, ile
-    /// widać na ekranie domowym bez przewijania; widget, po który trzeba sięgnąć palcem,
-    /// przestaje być spojrzeniem. Co się nie mieści, liczy stopka.
+    /// Różne, bo system porównuje zamiary **bez patrzenia na dodatkowe dane**. Przy
+    /// wspólnym kodzie wzorzec odhaczenia i otwarcie aplikacji byłyby dla niego jednym
+    /// zamiarem, a drugie zastępowałoby pierwsze.
     /// </remarks>
-    private const int Slots = 8;
+    private const int KodOdhaczenia = 0;
 
-    private static readonly int[] Rows =
-    [
-        Resource.Id.wiersz_1, Resource.Id.wiersz_2, Resource.Id.wiersz_3, Resource.Id.wiersz_4,
-        Resource.Id.wiersz_5, Resource.Id.wiersz_6, Resource.Id.wiersz_7, Resource.Id.wiersz_8,
-    ];
-
-    private static readonly int[] Titles =
-    [
-        Resource.Id.tytul_1, Resource.Id.tytul_2, Resource.Id.tytul_3, Resource.Id.tytul_4,
-        Resource.Id.tytul_5, Resource.Id.tytul_6, Resource.Id.tytul_7, Resource.Id.tytul_8,
-    ];
-
-    private static readonly int[] Captions =
-    [
-        Resource.Id.podpis_1, Resource.Id.podpis_2, Resource.Id.podpis_3, Resource.Id.podpis_4,
-        Resource.Id.podpis_5, Resource.Id.podpis_6, Resource.Id.podpis_7, Resource.Id.podpis_8,
-    ];
-
-    private static readonly int[] Stripes =
-    [
-        Resource.Id.pasek_1, Resource.Id.pasek_2, Resource.Id.pasek_3, Resource.Id.pasek_4,
-        Resource.Id.pasek_5, Resource.Id.pasek_6, Resource.Id.pasek_7, Resource.Id.pasek_8,
-    ];
-
-    private static readonly int[] Buttons =
-    [
-        Resource.Id.zrobione_1, Resource.Id.zrobione_2, Resource.Id.zrobione_3, Resource.Id.zrobione_4,
-        Resource.Id.zrobione_5, Resource.Id.zrobione_6, Resource.Id.zrobione_7, Resource.Id.zrobione_8,
-    ];
+    private const int KodOtwarcia = 1;
 
     /// <summary>Każe systemowi przerysować wszystkie osadzone widgety.</summary>
     public static void Refresh(Context context)
@@ -114,6 +83,12 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
+        // Dwie różne rzeczy, obie potrzebne. Przerysowanie odświeża nagłówek i samą
+        // ramę widgetu, ale **nie** pyta listy o nowe wiersze — ta trzyma swoje
+        // w fabryce i oddaje je, dopóki nikt jej nie powie, że są nieaktualne.
+        // Bez tego drugiego wywołania odhaczone zadanie zostawało na liście.
+        manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.lista);
+
         var zamiar = new Intent(context, typeof(TodayWidget));
         zamiar.SetAction(AppWidgetManager.ActionAppwidgetUpdate);
         zamiar.PutExtra(AppWidgetManager.ExtraAppwidgetIds, ids);
@@ -129,42 +104,74 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
-        // Przepisane do zmiennych lokalnych: sprawdzenie na parametrze nie przenosi
-        // się do domknięcia, bo kompilator nie ma jak zagwarantować, że parametr
-        // nie zmieni się do chwili wywołania.
-        var okno = context;
-        var menedzer = appWidgetManager;
-        var identyfikatory = appWidgetIds;
-
-        // Odbiornik rozgłoszeń ma kilka sekund i działa na wątku głównym, a tu jest
-        // odczyt z bazy. GoAsync przedłuża życie odbiornika na czas pracy w tle —
-        // bez tego system potrafi ubić proces w środku zapytania.
-        var oczekiwanie = GoAsync();
-
-        _ = Task.Run(async () =>
+        // Bez GoAsync i bez wątku w tle: od czasu, gdy treść niesie lista, składanie
+        // ramy nie dotyka bazy. Rama to nagłówek, przycisk wrzutu i wskazanie, skąd
+        // brać wiersze — a wiersze wczyta usługa, na swoim wątku i we własnym czasie.
+        foreach (var id in appWidgetIds)
         {
-            try
-            {
-                var widok = await BuildAsync(okno);
+            appWidgetManager.UpdateAppWidget(id, Rama(context, id));
+        }
+    }
 
-                foreach (var id in identyfikatory)
-                {
-                    menedzer.UpdateAppWidget(id, widok);
-                }
-            }
-            catch (Exception e)
-            {
-                // Widget, który się wywali, zostaje na ekranie jako „problem
-                // z ładowaniem" — i tak wygląda gorzej niż pusta lista.
-                global::Android.Util.Log.Warn("Marshal", e.ToString());
-            }
-            finally
-            {
-                // GoAsync zwraca wartość pustą, gdy odbiornik nie działa w tle —
-                // wtedy nie ma czego kończyć.
-                oczekiwanie?.Finish();
-            }
-        });
+    /// <summary>
+    /// Rama widgetu: nagłówek, wrzut i podpięcie listy.
+    /// </summary>
+    /// <remarks>
+    /// Osobny egzemplarz na każdy osadzony widget, a nie jeden wspólny. Zamiar do
+    /// usługi niesie identyfikator widgetu, a system rozróżnia zamiary bez patrzenia
+    /// na dodatkowe dane — dwa widgety z jednym zamiarem dostałyby jedną fabrykę
+    /// i jedną listę na spółkę. Stąd też adres w zamiarze: jest po to, żeby dwa
+    /// zamiary do tej samej usługi różniły się czymś, co system porównuje.
+    /// </remarks>
+    private static RemoteViews Rama(Context context, int widgetId)
+    {
+        var widok = new RemoteViews(context.PackageName, Resource.Layout.widget_marshal);
+
+        // Sam napis, bez daty. Data musiałaby iść z zegara aplikacji, bo ten liczy dzień
+        // w strefie z ustawień — czyli czyta bazę, a rama ma się składać bez niej.
+        // Data z zegara systemowego bywałaby o dzień inna niż plan pod nią, a dzień
+        // jest i tak na ekranie domowym obok.
+        widok.SetTextViewText(Resource.Id.naglowek, "Na dziś");
+
+        // Wrzut otwiera aplikację, a nie pole tekstowe w widgecie: RemoteViews nie
+        // zna pola do wpisywania, a wszystko inne znaczy drugi ekran do utrzymywania —
+        // czyli dokładnie to, przed czym ostrzega spec 4.2.
+        widok.SetOnClickPendingIntent(Resource.Id.wrzut, LaunchIntent(context));
+
+        var doUslugi = new Intent(context, typeof(TodayWidgetService));
+        doUslugi.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
+        doUslugi.SetData(global::Android.Net.Uri.Parse(doUslugi.ToUri(IntentUriType.Scheme)));
+
+        widok.SetRemoteAdapter(Resource.Id.lista, doUslugi);
+
+        // Napis zamiast pustej listy — system podmienia je sam, więc nie trzeba
+        // zgadywać, czy plan jest pusty, zanim lista go wczyta.
+        widok.SetEmptyView(Resource.Id.lista, Resource.Id.pusto);
+
+        widok.SetPendingIntentTemplate(Resource.Id.lista, CompleteTemplate(context));
+
+        return widok;
+    }
+
+    /// <summary>
+    /// Wzorzec zamiaru odhaczenia, wspólny dla całej listy.
+    /// </summary>
+    /// <remarks>
+    /// <b>Zmienny</b>, w odróżnieniu od pozostałych zamiarów w tej aplikacji — i to nie
+    /// jest niedopatrzenie. Wiersz listy nie ma własnego zamiaru oczekującego: system
+    /// bierze ten wzorzec i dokłada do niego dane wiersza. Zamiar niezmienny odmówiłby
+    /// przyjęcia tych danych, a od Androida 12 takie połączenie jest wprost zabronione.
+    /// Nie ma tu czego nadużyć: wzorzec nie wskazuje niczego poza naszym odbiornikiem,
+    /// a dokładany jest wyłącznie identyfikator zadania.
+    /// </remarks>
+    private static PendingIntent? CompleteTemplate(Context context)
+    {
+        var zamiar = new Intent(context, typeof(TodayWidget));
+        zamiar.SetAction(CompleteAction);
+
+        return PendingIntent.GetBroadcast(
+            context, KodOdhaczenia, zamiar,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Mutable);
     }
 
     public override void OnReceive(Context? context, Intent? intent)
@@ -204,224 +211,14 @@ public sealed class TodayWidget : AppWidgetProvider
         });
     }
 
-    private static async Task<RemoteViews> BuildAsync(Context context)
-    {
-        var services = await ServicesAsync(context.ApplicationContext ?? context);
-        var clock = services.GetRequiredService<IClock>();
-        var dzis = clock.Today;
-
-        var zadania = services.GetRequiredService<ITaskRepository>();
-
-        // Dwa zapytania, bo to dwie różne rzeczy: umówione na dziś (i zaległe) oraz
-        // wzięte na dziś. Zadanie potrafi być jednym i drugim naraz, stąd odsiew po
-        // identyfikatorze — inaczej stałoby w planie dwa razy.
-        var plan = await zadania.TodayAsync(dzis);
-        var wybrane = await zadania.ByFocusDateAsync(dzis);
-
-        var razem = plan
-            .Concat(wybrane.Where(w => plan.All(p => p.Id != w.Id)))
-            .OrderBy(z => Pora(z, dzis) is null)
-            .ThenBy(z => Pora(z, dzis))
-            .ThenBy(z => z.Title, StringComparer.CurrentCulture)
-            .ToList();
-
-        var projekty = (await services.GetRequiredService<IProjectRepository>().AllAsync())
-            .ToDictionary(p => p.Id);
-        var obszary = (await services.GetRequiredService<IAreaRepository>().AllAsync())
-            .ToDictionary(o => o.Id);
-
-        var widok = new RemoteViews(context.PackageName, Resource.Layout.widget_marshal);
-
-        widok.SetTextViewText(Resource.Id.naglowek, $"Na dziś — {dzis:d.MM}");
-        widok.SetViewVisibility(
-            Resource.Id.pusto, razem.Count == 0 ? ViewStates.Visible : ViewStates.Gone);
-
-        // Wrzut otwiera aplikację, a nie pole tekstowe w widgecie: RemoteViews nie
-        // zna pola do wpisywania, a wszystko inne znaczy drugi ekran do utrzymywania —
-        // czyli dokładnie to, przed czym ostrzega spec 4.2.
-        widok.SetOnClickPendingIntent(Resource.Id.wrzut, LaunchIntent(context));
-
-        for (var i = 0; i < Slots; i++)
-        {
-            if (i >= razem.Count)
-            {
-                widok.SetViewVisibility(Rows[i], ViewStates.Gone);
-                continue;
-            }
-
-            var zadanie = razem[i];
-            var zrobione = zadanie.State == TaskState.Done;
-
-            widok.SetViewVisibility(Rows[i], ViewStates.Visible);
-            widok.SetTextViewText(Titles[i], zrobione ? $"✓ {zadanie.Title}" : zadanie.Title);
-            widok.SetTextViewText(Captions[i], Podpis(zadanie, dzis, projekty, obszary));
-            widok.SetInt(Stripes[i], "setBackgroundColor", Barwa(zadanie, projekty, obszary));
-
-            // Przycisk tylko przy tym, co jeszcze nie zrobione: odhaczanie odhaczonego
-            // nic nie znaczy, a przycisk bez skutku uczy, że przyciski bywają bez skutku.
-            widok.SetViewVisibility(
-                Buttons[i], zrobione ? ViewStates.Invisible : ViewStates.Visible);
-            widok.SetOnClickPendingIntent(Buttons[i], CompleteIntent(context, zadanie.Id, i));
-        }
-
-        // Ile dnia nie widać. Bez tego widget pełny po brzegi wygląda tak samo jak
-        // widget pokazujący wszystko — a to dwie różne wiadomości.
-        var reszta = razem.Count - Slots;
-
-        widok.SetViewVisibility(
-            Resource.Id.reszta, reszta > 0 ? ViewStates.Visible : ViewStates.Gone);
-
-        if (reszta > 0)
-        {
-            widok.SetTextViewText(Resource.Id.reszta, $"…i jeszcze {reszta} w aplikacji");
-        }
-
-        return widok;
-    }
-
-    /// <summary>Godzina, o której to stoi w dzisiejszym planie. Pusta, gdy bez godziny.</summary>
-    /// <remarks>
-    /// Wyłącznie dla dnia dzisiejszego. Zadanie zaległe ma godzinę sprzed paru dni
-    /// i wstawiona między dzisiejsze udawałaby, że jest na nią umówione dziś.
-    /// </remarks>
-    private static TimeOnly? Pora(TaskItem zadanie, DateOnly dzis) =>
-        zadanie.DoDate == dzis ? zadanie.DoTime : null;
-
-    /// <summary>Druga linijka wiersza: kiedy i do czego to należy.</summary>
-    private static string Podpis(
-        TaskItem zadanie,
-        DateOnly dzis,
-        IReadOnlyDictionary<Guid, Project> projekty,
-        IReadOnlyDictionary<Guid, Area> obszary)
-    {
-        var czesci = new List<string>();
-
-        if (Pora(zadanie, dzis) is { } pora)
-        {
-            // Koniec liczony z oszacowania, gdy jest. „16:00 – 16:30" mówi, ile dnia
-            // to zajmie; samo „16:00" zostawia to do policzenia w głowie.
-            czesci.Add(zadanie.EstimatedMinutes is { } minut && minut > 0
-                ? $"{Godzina(pora)} – {Godzina(pora.AddMinutes(minut))}"
-                : Godzina(pora));
-        }
-        else if (zadanie.DoDate is { } dzien && dzien < dzis)
-        {
-            czesci.Add($"zaległe z {dzien:d.MM}");
-        }
-        else if (zadanie.FocusDate == dzis)
-        {
-            czesci.Add("wzięte na dziś");
-        }
-
-        if (Nalezy(zadanie, projekty, obszary) is { } gdzie)
-        {
-            czesci.Add(gdzie);
-        }
-
-        return string.Join(" / ", czesci);
-    }
-
-    /// <summary>Godzina jako „16:00".</summary>
-    /// <remarks>
-    /// Niezmiennicza, nie lokalna: dwukropek jest tu **znakiem**, a nie separatorem
-    /// do podmiany. Kultura systemowa potrafi wstawić w to miejsce kropkę albo
-    /// dwunastkę z „PM", a widget ma wyglądać tak samo jak siatka kalendarza obok.
-    /// </remarks>
-    private static string Godzina(TimeOnly pora) =>
-        pora.ToString("HH:mm", CultureInfo.InvariantCulture);
-
-    private static string? Nalezy(
-        TaskItem zadanie,
-        IReadOnlyDictionary<Guid, Project> projekty,
-        IReadOnlyDictionary<Guid, Area> obszary)
-    {
-        if (zadanie.ProjectId is { } projekt && projekty.TryGetValue(projekt, out var p))
-        {
-            return p.Outcome;
-        }
-
-        return zadanie.AreaId is { } obszar && obszary.TryGetValue(obszar, out var o)
-            ? o.Name
-            : null;
-    }
-
-    /// <summary>
-    /// Barwa paska przy wierszu: zadania, a gdy go nie ma — projektu, a gdy i tego nie
-    /// ma — obszaru. Ta sama zasada, co na siatce kalendarza.
-    /// </summary>
-    /// <remarks>
-    /// Zapis barwy jest tekstem wpisanym przez człowieka, więc może być czymkolwiek.
-    /// Wywrotka przy rysowaniu widgetu nie daje żadnego objawu poza pustym prostokątem
-    /// na ekranie domowym, więc zły zapis schodzi na barwę domyślną.
-    /// </remarks>
-    private static int Barwa(
-        TaskItem zadanie,
-        IReadOnlyDictionary<Guid, Project> projekty,
-        IReadOnlyDictionary<Guid, Area> obszary)
-    {
-        var zapis = zadanie.Color;
-
-        if (string.IsNullOrWhiteSpace(zapis)
-            && zadanie.ProjectId is { } projekt
-            && projekty.TryGetValue(projekt, out var p))
-        {
-            zapis = p.Color;
-        }
-
-        if (string.IsNullOrWhiteSpace(zapis)
-            && zadanie.AreaId is { } obszar
-            && obszary.TryGetValue(obszar, out var o))
-        {
-            zapis = o.Color;
-        }
-
-        if (string.IsNullOrWhiteSpace(zapis))
-        {
-            return Akcent;
-        }
-
-        try
-        {
-            return global::Android.Graphics.Color.ParseColor(zapis).ToArgb();
-        }
-        catch (Exception e) when (e is not OperationCanceledException)
-        {
-            // Szeroko, bo rodzaj wyjątku zależy od tego, czy rozbiór barwy jest po
-            // stronie zarządzanej, czy schodzi do Javy — a to nie jest wiedza, na
-            // której wolno opierać działanie widgetu.
-            return Akcent;
-        }
-    }
-
-    /// <summary>Barwa domyślna paska — ta sama, co akcent aplikacji.</summary>
-    private static readonly int Akcent =
-        unchecked((int)0xFF7C6CF5);
-
-    /// <summary>
-    /// Zamiar odhaczenia konkretnego zadania.
-    /// </summary>
-    /// <remarks>
-    /// Kod żądania różny dla każdego wiersza. Przy wspólnym system uznałby pięć
-    /// zamiarów za jeden — porównuje je bez patrzenia na dodatkowe dane — i każdy
-    /// przycisk odhaczałby zadanie z wiersza pierwszego.
-    /// </remarks>
-    private static PendingIntent? CompleteIntent(Context context, Guid id, int slot)
-    {
-        var zamiar = new Intent(context, typeof(TodayWidget));
-        zamiar.SetAction(CompleteAction);
-        zamiar.PutExtra(TaskIdExtra, id.ToString());
-
-        return PendingIntent.GetBroadcast(
-            context, slot, zamiar, PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
-    }
-
     private static PendingIntent? LaunchIntent(Context context)
     {
         var zamiar = new Intent(context, typeof(MainActivity));
         zamiar.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
 
         return PendingIntent.GetActivity(
-            context, Slots, zamiar, PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+            context, KodOtwarcia, zamiar,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
 
     /// <summary>

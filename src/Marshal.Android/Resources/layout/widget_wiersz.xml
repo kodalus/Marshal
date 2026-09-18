@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Jeden wiersz planu dnia. Rozwijany przez system w procesie ekranu domowego, więc
+  wolno tu wyłącznie to, co RemoteViews umie rozwinąć: układy, TextView, ImageView
+  i przyciski. Zwykłego View na tej liście nie ma — stąd pasek barwy jako ImageView.
+
+  Dwie linijki, bo sama nazwa nie odpowiada na pytanie, po które się na plan patrzy:
+  „czy mam teraz coś umówionego".
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+              android:id="@+id/wiersz"
+              android:layout_width="match_parent"
+              android:layout_height="wrap_content"
+              android:orientation="horizontal"
+              android:gravity="center_vertical"
+              android:paddingTop="7dp"
+              android:paddingBottom="7dp">
+
+  <ImageView
+      android:id="@+id/pasek"
+      android:layout_width="3dp"
+      android:layout_height="26dp"
+      android:layout_marginEnd="8dp"
+      android:background="@color/akcent" />
+
+  <LinearLayout
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight="1"
+      android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/tytul"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/tekst"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/podpis"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/tekst_przygaszony"
+        android:textSize="11sp" />
+  </LinearLayout>
+
+  <Button
+      android:id="@+id/zrobione"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:minWidth="0dp"
+      android:minHeight="0dp"
+      android:padding="6dp"
+      android:layout_marginStart="6dp"
+      android:background="@drawable/przycisk_widgetu"
+      android:textColor="@color/tekst"
+      android:textSize="13sp"
+      android:text="✓" />
+
+</LinearLayout>

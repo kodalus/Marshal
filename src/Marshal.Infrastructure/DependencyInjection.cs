@@ -140,6 +140,7 @@ public static class DependencyInjection
         services.AddSingleton<TaskEditService>();
         services.AddSingleton<FocusService>();
         services.AddSingleton<NowService>();
+        services.AddSingleton<PlanDniaService>();
         services.AddSingleton<DayRolloverService>();
         services.AddSingleton<ReminderService>();
         services.AddSingleton<NoteService>();

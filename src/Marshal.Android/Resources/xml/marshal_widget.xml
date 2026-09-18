@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Opis widgetu dla systemu. Rozmiar minimalny dobrany na cztery kolumny i cztery
-  wiersze siatki ekranu domowego — tyle potrzeba na plan dnia z ośmioma pozycjami
-  po dwie linijki, a mniej znaczyłoby listę uciętą w połowie.
-
-  Rozmiar minimalny dotyczy **nowego** osadzenia. Widget postawiony wcześniej
-  zostaje w rozmiarze, który mu nadano, więc po tej zmianie trzeba go rozciągnąć
-  ręką albo postawić od nowa — system nie ma jak zrobić tego za użytkownika.
+  Opis widgetu dla systemu. Rozmiar minimalny dobrany na cztery kolumny i trzy
+  wiersze siatki ekranu domowego. Odkąd lista się przewija, rozmiar przestał
+  rozstrzygać o tym, ile dnia widać — rozstrzyga o tym, ile widać **naraz**,
+  a resztę dobiera się palcem albo rozciągnięciem widgetu.
 
   updatePeriodMillis zostaje zerem świadomie: system i tak nie odświeża częściej
   niż co pół godziny, a widget ma być aktualny **po zmianie**, nie co pół godziny.
@@ -14,7 +11,7 @@
 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
                     android:minWidth="250dp"
-                    android:minHeight="250dp"
+                    android:minHeight="180dp"
                     android:minResizeHeight="110dp"
                     android:updatePeriodMillis="0"
                     android:initialLayout="@layout/widget_marshal"

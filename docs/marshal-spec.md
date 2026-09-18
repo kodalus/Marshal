@@ -370,10 +370,22 @@ Plan to zadania z dzisiejszym dniem wykonania i zaległe — ten sam zbiór, co 
 co ma godzinę, potem reszta. Wiersz ma dwie linijki, bo sama nazwa nie odpowiada na
 pytanie, po które się na plan patrzy — „czy mam teraz coś umówionego".
 
-Osiem wierszy, nie pięć. Pięć brało się z limitu wybierania na dziś (N14), a ten nie
-dotyczy rzeczy umówionych ani zaległych. Osiem to tyle, ile widać na ekranie domowym
-bez przewijania; widget, po który trzeba sięgnąć palcem, przestaje być spojrzeniem.
-Co się nie mieści, liczy stopka.
+**Bez odhaczonych.** Plan odpowiada na pytanie „co jeszcze przede mną", a nie „co dziś
+było". Odhaczone na liście, po którą sięga się w biegu, zajmuje miejsce rzeczy, która
+czeka. Na siatce kalendarza zostają, bo tam pytanie brzmi inaczej: co się z dniem stało.
+
+**Lista przewijana**, nie wiersze wpisane na sztywno. Stała liczba wierszy wystarczała,
+dopóki widget pokazywał wybór na dziś — tego jest najwyżej pięć (N14). Plan całego dnia
+nie ma takiego limitu, a wiersz, którego nie widać, jest w nim tym samym co wiersz,
+którego nie ma. Kosztem jest osobna usługa i osobna fabryka widoków: wiersze listy
+rozwija system w procesie ekranu domowego, nie nasz. Stąd też inny sposób na kliknięcie
+— wzorzec zamiaru na liście i uzupełnienie przy wierszu — i stąd wymóg, żeby ten wzorzec
+był **zmienny**, jako jedyny zamiar w tej aplikacji.
+
+Treść planu liczy osobna usługa warstwy współdzielonej, nie kod widgetu. Widgetu nie da
+się uruchomić w teście, więc wszystko, co da się z niego wyjąć, ma być wyjęte — inaczej
+jedyną drogą sprawdzenia „czy plan ma właściwą treść i kolejność" jest patrzenie na
+telefon.
 
 Trzy poprawki wobec pierwotnego zapisu:
 

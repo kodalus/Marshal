@@ -1,19 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Pasek barwy jest ImageView, nie View. RemoteViews rozwija tylko ustaloną listę
-  widoków i zwykłego View na niej nie ma — układ z nim wstawia się bez błędu przy
-  budowaniu i wywala się dopiero na ekranie domowym, komunikatem systemu o tym,
-  że widgetu nie da się wczytać.
+  Lista przewijana, nie wiersze wpisane na sztywno.
 
-  Osiem wierszy wpisanych wprost, a nie ListView z RemoteViewsService.
-  Lista w widgecie to osobna usługa, osobna fabryka widoków i osobny cykl życia.
-  Przy planie jednego dnia osiem pozycji mieści to, co widać na ekranie domowym
-  bez przewijania — a widget, po który trzeba sięgnąć palcem, przestaje być
-  spojrzeniem i staje się aplikacją. Reszta dnia jest w aplikacji, o jedno
-  dotknięcie stąd, i licznik na dole mówi, ile jej zostało.
+  Do dziś było tu osiem wierszy wprost, bo przy stałym limicie pięciu pozycji cała
+  machina listy obsługiwałaby liczbę, która się nie zmienia. Plan całego dnia nie ma
+  takiego limitu: bierze też rzeczy umówione i zaległe, a tych bywa dowolnie wiele.
+  Wiersz, którego nie widać, jest w planie dnia tym samym co wiersz, którego nie ma.
 
-  Wiersz ma dwie linijki: co i kiedy. Sama nazwa nie odpowiada na pytanie, po
-  które się na plan patrzy — „czy mam teraz coś umówionego".
+  ListView w widgecie znaczy osobną usługę (TodayWidgetService) i osobną fabrykę
+  widoków — system rozwija wiersze w procesie ekranu domowego, a nie w naszym.
+  Stąd też inny sposób na kliknięcie: wzorzec zamiaru na liście i uzupełnienie
+  przy wierszu, bo pojedynczemu wierszowi listy nie da się dać własnego zamiaru.
 
   updatePeriodMillis zostaje zerem świadomie: system i tak nie odświeża częściej
   niż co pół godziny, a widget ma być aktualny **po zmianie**, nie co pół godziny.
@@ -55,116 +52,20 @@
   <TextView
       android:id="@+id/pusto"
       android:layout_width="match_parent"
-      android:layout_height="wrap_content"
+      android:layout_height="0dp"
+      android:layout_weight="1"
       android:layout_marginTop="10dp"
       android:textColor="@color/tekst_przygaszony"
       android:textSize="13sp"
-      android:visibility="gone"
       android:text="Na dziś nic nie zaplanowane." />
 
-  <LinearLayout android:id="@+id/wiersz_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_1" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_1" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <LinearLayout android:id="@+id/wiersz_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_2" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_2" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <LinearLayout android:id="@+id/wiersz_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_3" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_3" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <LinearLayout android:id="@+id/wiersz_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_4" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_4" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <LinearLayout android:id="@+id/wiersz_5" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_5" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_5" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_5" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_5" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <LinearLayout android:id="@+id/wiersz_6" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_6" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_6" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_6" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_6" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <LinearLayout android:id="@+id/wiersz_7" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_7" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_7" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_7" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_7" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <LinearLayout android:id="@+id/wiersz_8" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
-
-    <ImageView android:id="@+id/pasek_8" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
-
-    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
-      <TextView android:id="@+id/tytul_8" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
-      <TextView android:id="@+id/podpis_8" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst_przygaszony" android:textSize="11sp" />
-    </LinearLayout>
-
-    <Button android:id="@+id/zrobione_8" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:padding="6dp" android:layout_marginStart="6dp" android:background="@drawable/przycisk_widgetu" android:textColor="@color/tekst" android:textSize="13sp" android:text="✓" />
-  </LinearLayout>
-
-  <TextView
-      android:id="@+id/reszta"
+  <ListView
+      android:id="@+id/lista"
       android:layout_width="match_parent"
-      android:layout_height="wrap_content"
-      android:layout_marginTop="8dp"
-      android:textColor="@color/tekst_przygaszony"
-      android:textSize="11sp"
-      android:visibility="gone" />
+      android:layout_height="0dp"
+      android:layout_weight="1"
+      android:layout_marginTop="6dp"
+      android:divider="@null"
+      android:dividerHeight="0dp" />
 
 </LinearLayout>
