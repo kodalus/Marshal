@@ -183,8 +183,49 @@ public sealed record CalendarColumn(
 
 }
 
+/// <summary>Jeden wpis w komórce miesiąca — jedna linijka, bo tyle się mieści.</summary>
+/// <remarks>
+/// Godzina osobno od nazwy, żeby dało się ją wyrównać i przygasić. Sklejona z nazwą
+/// w jeden napis zlewałaby się z nią przy trzydziestu komórkach naraz.
+/// </remarks>
+public sealed record MonthEntry(
+    string Time, string Title, Guid? TaskId, bool IsDone, string? Color)
+{
+    public string Label => IsDone ? $"✓ {Title}" : Title;
+
+    public bool HasTime => Time.Length > 0;
+}
+
+/// <summary>Jedna komórka siatki miesiąca.</summary>
+/// <remarks>
+/// <para>
+/// <b>Nadmiar liczony, nie chowany po cichu.</b> Komórka mieści kilka linijek, a dzień
+/// bywa gęstszy. Ucięta lista bez śladu znaczyłaby, że miesiąc pokazuje mniej, niż jest,
+/// i nie mówi o tym — czyli najgorszy rodzaj widoku ogólnego.
+/// </para>
+/// <para>
+/// Dni spoza miesiąca zostają na siatce, tylko przygaszone. Tydzień na przełomie jest
+/// tygodniem i wycięcie z niego trzech dni robi dziurę tam, gdzie jej nie ma.
+/// </para>
+/// </remarks>
+public sealed record MonthCell(
+    DateOnly Date,
+    string Day,
+    bool IsToday,
+    bool IsOtherMonth,
+    IReadOnlyList<MonthEntry> Entries,
+    int Overflow)
+{
+    public bool HasOverflow => Overflow > 0;
+
+    public string OverflowLabel => $"+ jeszcze {Overflow}";
+}
+
+/// <summary>Jeden tydzień siatki miesiąca — siedem komórek.</summary>
+public sealed record MonthWeek(IReadOnlyList<MonthCell> Cells);
+
 /// <summary>
-/// Kalendarz godzinowy: dzień, trzy dni, tydzień (spec 11).
+/// Kalendarz: dzień, trzy dni, tydzień, miesiąc (spec 11).
 /// </summary>
 public sealed partial class CalendarViewModel(
     CalendarSyncService calendar, IClock clock, IActivityLog log, TaskEditService edit)
@@ -223,6 +264,33 @@ public sealed partial class CalendarViewModel(
     public partial string Summary { get; set; } = string.Empty;
 
     public ObservableCollection<CalendarColumn> Columns { get; } = [];
+
+    /// <summary>
+    /// Czy oglądamy miesiąc.
+    /// </summary>
+    /// <remarks>
+    /// Osobna właściwość, a nie kolejna wartość <see cref="VisibleDays"/>. Miesiąc nie
+    /// jest „siatką godzinową o innej liczbie dni": nie ma w nim godzin, kolumn ani
+    /// paska całodniowego, a ma numery dni i nadmiar. Wciśnięty w tamten model
+    /// zmusiłby połowę obliczeń siatki do sprawdzania, czy przypadkiem nie jest
+    /// miesiącem — a to jest ten rodzaj warunku, który potem zostaje wszędzie.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsMonth { get; set; }
+
+    /// <summary>Tygodnie siatki miesiąca. Puste poza trybem miesiąca.</summary>
+    public ObservableCollection<MonthWeek> MonthWeeks { get; } = [];
+
+    /// <summary>Nazwy dni nad siatką miesiąca.</summary>
+    public IReadOnlyList<string> MonthHeaders { get; } = DayNames;
+
+    /// <summary>Ile wpisów mieści komórka, zanim reszta zamieni się w liczbę.</summary>
+    /// <remarks>
+    /// Cztery, bo przy sześciu tygodniach na ekranie telefonu tyle linijek daje się
+    /// przeczytać bez mrużenia oczu. Piąta zabiera wysokość wszystkim komórkom,
+    /// także tym pustym.
+    /// </remarks>
+    private const int WMiesiacu = 4;
 
     public double GridHeight => 24 * HourHeight;
 
@@ -323,7 +391,9 @@ public sealed partial class CalendarViewModel(
     public IReadOnlyList<string> HourLabels =>
         [.. Enumerable.Range(0, 24).Select(h => $"{h:00}:00")];
 
-    public string Range => VisibleDays == 1
+    public string Range => IsMonth
+        ? $"{Anchor:yyyy-MM}"
+        : VisibleDays == 1
         ? $"{Anchor:yyyy-MM-dd}"
         : $"{Anchor:yyyy-MM-dd} — {Anchor.AddDays(VisibleDays - 1):yyyy-MM-dd}";
 
@@ -564,9 +634,21 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task RefreshAsync()
     {
-        _dni = await calendar.AgendaAsync(Anchor, VisibleDays);
+        // Miesiąc liczy własny zakres: siatka zaczyna się w poniedziałek przed pierwszym
+        // i kończy w niedzielę po ostatnim, bo tydzień na przełomie jest tygodniem.
+        var od = IsMonth ? PoczatekSiatki() : Anchor;
+        var ile = IsMonth ? DniSiatki() : VisibleDays;
 
-        Przelicz();
+        _dni = await calendar.AgendaAsync(od, ile);
+
+        if (IsMonth)
+        {
+            PrzeliczMiesiac();
+        }
+        else
+        {
+            Przelicz();
+        }
 
         var wBazie = await calendar.StoredEventCountAsync();
         var naSiatce = _dni.Sum(d => d.AllDay.Count + d.Timed.Count);
@@ -624,14 +706,14 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task PreviousAsync()
     {
-        Anchor = Anchor.AddDays(-VisibleDays);
+        Anchor = IsMonth ? Anchor.AddMonths(-1) : Anchor.AddDays(-VisibleDays);
         await RefreshAsync();
     }
 
     [RelayCommand]
     private async Task NextAsync()
     {
-        Anchor = Anchor.AddDays(VisibleDays);
+        Anchor = IsMonth ? Anchor.AddMonths(1) : Anchor.AddDays(VisibleDays);
         await RefreshAsync();
     }
 
@@ -663,9 +745,42 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private Task ShowWeek() => SetDaysAsync(7);
 
+    /// <summary>
+    /// Miesiąc: cały obrazek, bez godzin.
+    /// </summary>
+    /// <remarks>
+    /// Odpowiada na inne pytanie niż reszta. Dzień i tydzień mówią „kiedy dokładnie",
+    /// miesiąc mówi „gdzie są zagęszczenia i które dni są puste" — a tego nie widać
+    /// z siatki godzinowej, bo ta pokazuje naraz najwyżej siedem dni.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ShowMonth()
+    {
+        IsMonth = true;
+
+        // Zakotwiczenie na pierwszym dniu miesiąca, nie na dzisiejszym: miesiąc
+        // przewija się po miesiącach, a „od 18 września przez miesiąc" nie jest miesiącem.
+        Anchor = new DateOnly(Anchor.Year, Anchor.Month, 1);
+
+        OnPropertyChanged(nameof(Range));
+        await RefreshAsync();
+    }
+
     private async Task SetDaysAsync(int days)
     {
+        var zMiesiaca = IsMonth;
+
+        IsMonth = false;
+        MonthWeeks.Clear();
+
         VisibleDays = days is 1 or 3 or 7 ? days : 3;
+
+        // Wyjście z miesiąca zostawiało zakotwiczenie na pierwszym dniu, więc „dzień"
+        // po „miesiącu" pokazywał pierwszego zamiast dzisiaj.
+        if (zMiesiaca)
+        {
+            GoToToday();
+        }
 
         // Tydzień zaczyna się w poniedziałek, a nie „od dziś przez siedem dni":
         // tydzień, który zaczyna się w środę, nie wygląda jak tydzień.
@@ -697,6 +812,11 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     private void PrzewinDoTeraz()
     {
+        if (IsMonth)
+        {
+            return;
+        }
+
         var dzis = clock.Today;
 
         if (dzis < Anchor || dzis >= Anchor.AddDays(VisibleDays))
@@ -716,6 +836,121 @@ public sealed partial class CalendarViewModel(
         if (VisibleDays == 7)
         {
             Anchor = Anchor.AddDays(-(((int)Anchor.DayOfWeek + 6) % 7));
+        }
+    }
+
+    /// <summary>Dotknięcie wpisu w miesiącu otwiera zadanie.</summary>
+    /// <remarks>
+    /// Wydarzenia z kalendarza zewnętrznego nie mają tu drogi: w komórce miesiąca nie ma
+    /// miejsca na to, co odróżnia wydarzenie od zadania, a otwieranie ich szczegółu tym
+    /// samym dotknięciem znaczyłoby dwie różne rzeczy pod jednym gestem. Od tego jest
+    /// dzień, o jedno dotknięcie stąd.
+    /// </remarks>
+    public void OpenMonthEntry(MonthEntry? wpis)
+    {
+        if (wpis?.TaskId is { } identyfikator)
+        {
+            TaskRequested?.Invoke(identyfikator);
+        }
+    }
+
+    /// <summary>Dotknięcie dnia w miesiącu schodzi na jego siatkę godzinową.</summary>
+    /// <remarks>
+    /// Miesiąc mówi „gdzie jest gęsto", a nie „o której". Naturalnym następnym ruchem
+    /// jest wejście w dzień, który się właśnie wypatrzyło — a nie wracanie do przycisków
+    /// u góry i przewijanie do niego od nowa.
+    /// </remarks>
+    [RelayCommand]
+    private async Task OpenMonthDayAsync(MonthCell? komorka)
+    {
+        if (komorka is null)
+        {
+            return;
+        }
+
+        IsMonth = false;
+        MonthWeeks.Clear();
+        VisibleDays = 1;
+        Anchor = komorka.Date;
+
+        OnPropertyChanged(nameof(ColumnWidth));
+        OnPropertyChanged(nameof(Range));
+
+        await RefreshAsync();
+        PrzewinDoTeraz();
+    }
+
+    /// <summary>Poniedziałek, od którego zaczyna się siatka miesiąca.</summary>
+    /// <remarks>
+    /// Tydzień na przełomie jest tygodniem: wycięcie z niego dni należących do sąsiada
+    /// zrobiłoby dziurę tam, gdzie jej nie ma. Dni spoza miesiąca zostają przygaszone.
+    /// </remarks>
+    private DateOnly PoczatekSiatki()
+    {
+        var pierwszy = new DateOnly(Anchor.Year, Anchor.Month, 1);
+
+        return pierwszy.AddDays(-(((int)pierwszy.DayOfWeek + 6) % 7));
+    }
+
+    /// <summary>
+    /// Ile dni obejmuje siatka miesiąca.
+    /// </summary>
+    /// <remarks>
+    /// Liczone, a nie przyjęte na sztywno jako sześć tygodni. Luty zaczynający się
+    /// w poniedziałek mieści się w czterech, a rząd pustych komórek pod nim zabierałby
+    /// wysokość wszystkim pozostałym — na telefonie to jedna szósta ekranu na nic.
+    /// </remarks>
+    private int DniSiatki()
+    {
+        var od = PoczatekSiatki();
+        var koniec = new DateOnly(Anchor.Year, Anchor.Month, 1).AddMonths(1);
+
+        // Do niedzieli włącznie po ostatnim dniu miesiąca.
+        var dni = koniec.DayNumber - od.DayNumber;
+
+        return dni % 7 == 0 ? dni : dni + (7 - (dni % 7));
+    }
+
+    /// <summary>Złożenie siatki miesiąca z wczytanych dni.</summary>
+    private void PrzeliczMiesiac()
+    {
+        MonthWeeks.Clear();
+
+        var dzis = clock.Today;
+        var miesiac = Anchor.Month;
+        var komorki = new List<MonthCell>(_dni.Count);
+
+        foreach (var dzien in _dni)
+        {
+            // Całodniowe przed godzinowymi, godzinowe po godzinie. Ten sam porządek,
+            // co na siatce tygodnia — inaczej ta sama doba miałaby dwie kolejności
+            // zależnie od tego, którym przyciskiem się na nią patrzy.
+            var wpisy = dzien.AllDay
+                .Select(e => new MonthEntry(string.Empty, e.Title, e.TaskId, e.IsDone, e.Color))
+                .Concat(dzien.Timed
+                    .OrderBy(s => s.Entry.Start)
+                    .Select(s => new MonthEntry(
+                        $"{s.Entry.Start.Hour:D2}:{s.Entry.Start.Minute:D2}",
+                        s.Entry.Title,
+                        s.Entry.TaskId,
+                        s.Entry.IsDone,
+                        s.Entry.Color)))
+                .ToList();
+
+            var widoczne = wpisy.Count > WMiesiacu ? wpisy.Take(WMiesiacu).ToList() : wpisy;
+
+            komorki.Add(new MonthCell(
+                dzien.Date,
+                $"{dzien.Date.Day}",
+                dzien.Date == dzis,
+                dzien.Date.Month != miesiac,
+                widoczne,
+                wpisy.Count - widoczne.Count));
+        }
+
+        for (var i = 0; i + 7 <= komorki.Count; i += 7)
+        {
+            MonthWeeks.Add(new MonthWeek(komorki.GetRange(i, 7)));
         }
     }
 

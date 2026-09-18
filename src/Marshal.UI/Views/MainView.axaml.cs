@@ -790,6 +790,45 @@ public partial class MainView : UserControl
     /// schowanym w menu podręcznym. Zdarzenie zatrzymane: bez tego lista zaznaczyłaby
     /// wiersz pod paletą i paleta wyskoczyłaby nad zmienionym zaznaczeniem.
     /// </remarks>
+    /// <summary>Dotknięcie wpisu w siatce miesiąca — otwarcie zadania.</summary>
+    /// <remarks>
+    /// Przez kod, a nie dowiązanie do polecenia. Polecenie mieszka w modelu kalendarza,
+    /// a wpis siedzi trzy szablony głębiej, w modelu tygodnia; szukanie polecenia przez
+    /// przodka znaczyłoby wyrażenie, które kompiluje się i nie działa — a błędne
+    /// dowiązanie nie daje żadnego objawu poza przyciskiem, który nic nie robi.
+    /// </remarks>
+    private void NaWpisieMiesiaca(object? nadawca, PointerPressedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || nadawca is not Control wiersz
+            || wiersz.DataContext is not MonthEntry wpis)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        model.Calendar.OpenMonthEntry(wpis);
+    }
+
+    /// <summary>Dotknięcie dnia w siatce miesiąca — zejście na jego siatkę godzinową.</summary>
+    /// <remarks>
+    /// Na komórce, nie na samym numerze. Numer jest za mały, żeby trafić w niego palcem,
+    /// a dotknięcie pustego dnia i tak nie ma innego znaczenia. Wpis przechwytuje swoje
+    /// dotknięcie wcześniej, więc kliknięcie w nazwę zadania nie zjeżdża na dzień.
+    /// </remarks>
+    private void NaDniuMiesiaca(object? nadawca, PointerPressedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || nadawca is not Control komorka
+            || komorka.DataContext is not MonthCell dzien)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _ = Probuj("Kalendarz: dzień z miesiąca", () => model.Calendar.OpenMonthDayCommand.ExecuteAsync(dzien));
+    }
+
     private void NaBarwie(object? nadawca, PointerPressedEventArgs e)
     {
         if (DataContext is not MainViewModel model

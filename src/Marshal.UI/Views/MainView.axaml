@@ -3,7 +3,6 @@
              xmlns:vm="using:Marshal.UI.ViewModels"
              xmlns:tasks="using:Marshal.Domain.Tasks"
              xmlns:uc="using:Marshal.Application.UseCases"
-             xmlns:abs="using:Marshal.Application.Abstractions"
              xmlns:rev="using:Marshal.Application.Review"
              xmlns:sys="using:System"
              xmlns:dn="using:Marshal.Domain.Notes"
@@ -209,6 +208,36 @@
       <Setter Property="Opacity" Value="1" />
     </Style>
 
+    <!-- Komórka siatki miesiąca. Obrys zamiast wypełnienia: trzydzieści wypełnionych
+         prostokątów obok siebie zlewa się w szachownicę, a to, co ma się z nich odczytać,
+         to zagęszczenie wpisów, nie sama siatka. -->
+    <Style Selector="Border.komorka">
+      <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Margin" Value="1" />
+      <Setter Property="Padding" Value="4" />
+      <Setter Property="MinHeight" Value="84" />
+    </Style>
+
+    <!-- Dni sąsiednich miesięcy zostają, tylko przygaszone: tydzień na przełomie jest
+         tygodniem, a wycięcie z niego trzech dni robi dziurę tam, gdzie jej nie ma. -->
+    <Style Selector="Border.komorka.obcy">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <!-- Dzisiaj obrysem, nie wypełnieniem — inaczej przykrywałoby własną treść. -->
+    <Style Selector="Border.komorka.dzisiaj">
+      <Setter Property="BorderBrush" Value="{DynamicResource Blekit}" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+
+    <Style Selector="TextBlock.numer">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Opacity" Value="0.75" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+
     <!-- Karta, która na wąskim ekranie przestaje być kartą. -->
     <Style Selector="Border.pelny">
       <Setter Property="MaxWidth" Value="Infinity" />
@@ -323,29 +352,6 @@
         <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center" />
       </DockPanel>
     </Border>
-
-    <!-- Przypomnienia, które odezwały się przy starcie. Nad wszystkim, bo po to były
-         ustawione; z przyciskiem odprawienia, bo mają zniknąć po przeczytaniu, a nie
-         zostać jako kolejna lista do obsłużenia. -->
-    <Border DockPanel.Dock="Top" Margin="0,0,0,12" Padding="14,10" CornerRadius="8"
-            Background="{DynamicResource AkcentTlo}" IsVisible="{Binding HasReminders}">
-      <DockPanel>
-        <Button DockPanel.Dock="Right" Content="Zakończ" Padding="10,4" Margin="10,0,0,0"
-                VerticalAlignment="Top"
-                Command="{Binding DismissRemindersCommand}" />
-        <StackPanel>
-          <TextBlock Text="Przypomnienia" FontWeight="SemiBold" Margin="0,0,0,4" />
-          <ItemsControl ItemsSource="{Binding Reminders}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="abs:Notification">
-                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Margin="0,2" />
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </StackPanel>
-      </DockPanel>
-    </Border>
-
 
     <!-- Pasek dolny (wąskie okno). Cztery ekrany dnia codziennego pod kciukiem plus
          „Więcej" na resztę. Wybór czwórki nie jest dowolny: Kalendarz jest ekranem
@@ -812,15 +818,35 @@
     <DockPanel DataContext="{Binding Calendar}">
 
       <StackPanel DockPanel.Dock="Top" x:DataType="vm:CalendarViewModel" Margin="0,0,0,10">
-        <WrapPanel>
-          <Button Classes="nav" Command="{Binding PreviousCommand}" Content="◀" />
-          <Button Classes="nav" Command="{Binding TodayCommand}" Content="dziś" />
-          <Button Classes="nav" Command="{Binding NextCommand}" Content="▶" />
-          <Button Classes="nav" Command="{Binding ShowDayCommand}" Content="dzień" />
-          <Button Classes="nav" Command="{Binding ShowThreeDaysCommand}" Content="3 dni" />
-          <Button Classes="nav" Command="{Binding ShowWeekCommand}" Content="tydzień" />
-          <Button Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
-        </WrapPanel>
+        <!-- Dwa rzędy, każdy o jednym znaczeniu: gdzie jesteśmy i jak szeroko patrzymy.
+             Do dziś siedem przycisków stało w jednym zawijanym rzędzie i na telefonie
+             zawijało się w przypadkowym miejscu — „tydzień" lądował sam pod spodem,
+             a wybór zakresu przestawał wyglądać jak wybór.
+
+             Wybór zakresu w siatce o równych kolumnach, a nie w zawijanym rzędzie:
+             cztery równe pola mieszczą się w jednej linii przy każdej szerokości okna,
+             a przy okazji widać, że to jedna decyzja o czterech możliwościach. -->
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,0,0,6">
+          <Button Grid.Column="0" Classes="nav" Command="{Binding PreviousCommand}" Content="◀" />
+          <Button Grid.Column="1" Classes="nav" Command="{Binding TodayCommand}" Content="dziś" />
+          <Button Grid.Column="2" Classes="nav" Command="{Binding NextCommand}" Content="▶" />
+          <Button Grid.Column="4" Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
+        </Grid>
+
+        <Grid ColumnDefinitions="*,*,*,*">
+          <Button Grid.Column="0" Classes="nav" HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  Command="{Binding ShowDayCommand}" Content="dzień" />
+          <Button Grid.Column="1" Classes="nav" HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  Command="{Binding ShowThreeDaysCommand}" Content="3 dni" />
+          <Button Grid.Column="2" Classes="nav" HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  Command="{Binding ShowWeekCommand}" Content="tydzień" />
+          <Button Grid.Column="3" Classes="nav" HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  Command="{Binding ShowMonthCommand}" Content="miesiąc" />
+        </Grid>
         <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />
         <!-- Pusta siatka ma trzy przyczyny wyglądające tak samo. Ta linijka je rozdziela. -->
         <TextBlock Classes="hint" Margin="2,2,0,0" Text="{Binding Summary}" />
@@ -850,7 +876,7 @@
            gorszy od nagłówka, który ucieka. -->
       <ScrollViewer x:Name="NaglowkiDni" DockPanel.Dock="Top" x:DataType="vm:CalendarViewModel"
                     HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"
-                    Margin="0,0,0,4">
+                    Margin="0,0,0,4" IsVisible="{Binding !IsMonth}">
         <StackPanel Orientation="Horizontal">
           <Border Width="52" />
           <ItemsControl ItemsSource="{Binding Columns}">
@@ -907,7 +933,13 @@
         </StackPanel>
       </ScrollViewer>
 
+      <!-- Siatka godzinowa i siatka miesiąca w jednym miejscu: to dwie odpowiedzi na
+           to samo pytanie, pokazywane na przemian. Rozdzielone na dwoje rodzeństwa
+           w tym samym panelu, bo miesiąc nie ma godzin, kolumn ani paska całodniowego
+           i wciśnięty w tamtą siatkę musiałby udawać jej szczególny przypadek. -->
+      <Panel>
       <ScrollViewer x:Name="SiatkaKalendarza" x:DataType="vm:CalendarViewModel"
+                    IsVisible="{Binding !IsMonth}"
                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
         <StackPanel Orientation="Horizontal">
 
@@ -1061,6 +1093,78 @@
 
         </StackPanel>
       </ScrollViewer>
+
+      <!-- Miesiąc: cały obrazek bez godzin. Odpowiada na inne pytanie niż siatka
+           godzinowa — „gdzie jest gęsto i które dni są puste" — a tego nie widać
+           z siedmiu dni naraz.
+
+           Dotknięcie dnia schodzi na jego siatkę godzinową, dotknięcie wpisu otwiera
+           zadanie. Wydarzenia z podłączonych kalendarzy nie mają stąd drogi: w komórce
+           nie ma miejsca na to, co odróżnia je od zadania, a jeden gest znaczący dwie
+           różne rzeczy jest gorszy od gestu, którego nie ma. -->
+      <ScrollViewer x:DataType="vm:CalendarViewModel" IsVisible="{Binding IsMonth}"
+                    VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+
+          <ItemsControl ItemsSource="{Binding MonthHeaders}" Margin="0,0,0,4">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Columns="7" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String">
+                <TextBlock Classes="hint" Text="{Binding}" HorizontalAlignment="Center" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <ItemsControl ItemsSource="{Binding MonthWeeks}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:MonthWeek">
+                <ItemsControl ItemsSource="{Binding Cells}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <UniformGrid Columns="7" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:MonthCell">
+                      <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
+                              Classes.dzisiaj="{Binding IsToday}"
+                              PointerPressed="NaDniuMiesiaca">
+                        <StackPanel>
+                          <TextBlock Classes="numer" Text="{Binding Day}"
+                                     HorizontalAlignment="Left" />
+
+                          <ItemsControl ItemsSource="{Binding Entries}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:MonthEntry">
+                                <Grid ColumnDefinitions="Auto,*" Margin="0,1"
+                                      PointerPressed="NaWpisieMiesiaca">
+                                  <TextBlock Grid.Column="0" Classes="hint" Margin="0,0,4,0"
+                                             Text="{Binding Time}" IsVisible="{Binding HasTime}" />
+                                  <TextBlock Grid.Column="1" Text="{Binding Label}"
+                                             TextTrimming="CharacterEllipsis" FontSize="11" />
+                                </Grid>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+
+                          <TextBlock Classes="hint" Text="{Binding OverflowLabel}"
+                                     IsVisible="{Binding HasOverflow}" Margin="0,2,0,0" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+        </StackPanel>
+      </ScrollViewer>
+      </Panel>
     </DockPanel>
 
     <!-- Kliknięte wydarzenie z podłączonego kalendarza. Własna karta, nie okno szczegółu

@@ -217,9 +217,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<TaskRow> TodayItems { get; } = [];
 
-    /// <summary>Przypomnienia, które odezwały się przy tym uruchomieniu.</summary>
-    public ObservableCollection<Notification> Reminders { get; } = [];
-
     public ObservableCollection<WaitingItem> WaitingItems { get; } = [];
 
     /// <summary>Tabela równowagi (8.5). Widoczna wyłącznie tutaj i w kroku 8 przeglądu.</summary>
@@ -324,8 +321,6 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Avalonia nie zamienia liczby na wartość logiczną — potrzebne wprost.</summary>
     public bool HasInbox => InboxCount > 0;
-
-    public bool HasReminders => Reminders.Count > 0;
 
     public bool IsToday => Current == Screen.Today;
 
@@ -560,29 +555,23 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Odbiera to, co uzbierała usługa przypomnień przy starcie.
+    /// Opróżnienie kolejki przypomnień pokazanych systemowo.
     /// </summary>
     /// <remarks>
-    /// Przypomnienia odpalają się w <c>PrepareAsync</c>, zanim okno ma cokolwiek
-    /// wczytane. Zbieranie ich do odebrania, zamiast pokazywania od razu, jest tym,
-    /// co pozwala im przetrwać tę chwilę.
+    /// <para>
+    /// Do dziś okno trzymało nad wszystkimi ekranami własny pasek z przypomnieniami.
+    /// Miał sens, dopóki dymki systemowe były niepewne: pasek zostawał, gdy dymek się
+    /// rozpłynął. Dziś odzywają się obie platformy, więc pasek był drugą listą do
+    /// odprawienia, mówiącą to samo — i stał nad kalendarzem, czyli w jedynym miejscu,
+    /// gdzie liczy się każdy wiersz wysokości.
+    /// </para>
+    /// <para>
+    /// Opróżnianie zostaje, choć nikt już tego nie czyta. Powiadamiacz odkłada pokazane
+    /// przypomnienia na listę do odebrania; bez odebrania rosłaby ona przez cały czas
+    /// działania aplikacji.
+    /// </para>
     /// </remarks>
-    private void CollectReminders()
-    {
-        foreach (var przypomnienie in _notifier.Drain())
-        {
-            Reminders.Add(przypomnienie);
-        }
-
-        OnPropertyChanged(nameof(HasReminders));
-    }
-
-    [RelayCommand]
-    private void DismissReminders()
-    {
-        Reminders.Clear();
-        OnPropertyChanged(nameof(HasReminders));
-    }
+    private void CollectReminders() => _notifier.Drain();
 
     /// <summary>
     /// Robota wywołana zdarzeniem, z której wyjątek ma dokąd trafić.
