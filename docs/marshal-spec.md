@@ -1183,8 +1183,20 @@ i dwa urządzenia odbijałyby sobie te same wpisy bez końca — przy czym każd
 z osobna wyglądałby na poprawny.
 
 Wyzwalacze: start aplikacji, powrót z tła, **zapis z okna**, co 5 minut przy aktywnym
-oknie, ręcznie. Na Androidzie dodatkowo budzik — tam wyłączona aplikacja nie znaczy
-wyłączonego urządzenia.
+oknie, ręcznie. Na Androidzie dodatkowo budzik co pół godziny — tam wyłączona aplikacja
+nie znaczy wyłączonego urządzenia.
+
+Budzik androidowy musi być **budzący i jednorazowy**: `RtcWakeup` z dopuszczeniem
+w uśpieniu, nastawiający następny po sobie. Budzik niebudzący czeka, aż telefon obudzi
+się z innego powodu, a powtarzalny jest w uśpieniu odkładany bez ograniczenia — telefon
+w kieszeni potrafi nie odpalić go ani razu. Następny nastawia się **przed** pracą, nie
+po niej: łańcuch jednorazowych budzików wisi na tym jednym wywołaniu, a obudzony
+odbiornik bywa ubity w połowie przebiegu.
+
+Z tego wynika też granica: budzik przepuszczony w uśpieniu dostaje około dziesięciu
+sekund razem z dostępem do sieci. Pełny przebieg do Dysku bywa dłuższy, więc gdy to
+przestanie wystarczać, następnym krokiem jest WorkManager — dziesięć minut na pracę
+i własne ponawianie, kosztem kolejnej biblioteki.
 
 Zapis i przerwa to dwa różne powody, bo synchronizacja ma dwie strony. Zapis jest
 powodem do **wysłania**: jest to jedyna chwila, w której wiadomo, że jest co wysyłać.

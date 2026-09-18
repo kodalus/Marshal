@@ -102,22 +102,45 @@ internal static class Budzik
         }
     }
 
+    /// <summary>Co ile telefon ma sam zaglądać na Dysk.</summary>
+    /// <remarks>
+    /// Pół godziny to kompromis: częściej znaczy budzenie telefonu na okrągło, rzadziej
+    /// znaczy, że zmiana z komputera czeka pół dnia. System i tak traktuje to jako
+    /// „nie częściej niż" — budziki przepuszczane w uśpieniu mają własny limit,
+    /// mniej więcej kwadransowy.
+    /// </remarks>
+    private static readonly long Odstep = AlarmManager.IntervalHalfHour;
+
     /// <summary>
-    /// Nastawienie powtarzalnego budzika na synchronizację.
+    /// Nastawienie budzika na kolejny przebieg synchronizacji.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Niedokładny i powtarzalny: system łączy takie budziki w paczki i odpala je,
-    /// kiedy i tak kogoś budzi. „Co pół godziny" znaczy więc „nie częściej niż",
-    /// i dobrze — synchronizacja co do minuty nie jest nic warta, a wybudzanie
-    /// telefonu co pół godziny na okrągło kosztuje baterię.
+    /// <b>Jednorazowy i budzący, nie powtarzalny.</b> Do dziś stało tu
+    /// <c>SetInexactRepeating</c> z <c>AlarmType.Rtc</c> i to były dwie wady naraz.
+    /// <c>Rtc</c> nie budzi telefonu — czeka, aż ten obudzi się sam z innego powodu.
+    /// A budzik powtarzalny jest w uśpieniu systemu odkładany bez ograniczenia:
+    /// telefon leżący w kieszeni potrafi nie odpalić go ani razu.
     /// </para>
     /// <para>
-    /// Mechanizm ten sam co przy przypomnieniach, choć do pracy okresowej służy
-    /// zwykle WorkManager. Powód jest prosty: WorkManager to kolejna biblioteka
-    /// i kolejny rodzaj kodu do napisania na ślepo, a różnica sprowadza się do
-    /// warunku sieci, który tutaj zastępuje nieudany przebieg i wpis w dzienniku.
-    /// Do przepisania wtedy, gdy okaże się, że budzik jest za rzadki albo za drogi.
+    /// Skutek widać było dokładnie tam, gdzie trzeba: zadanie zmienione na komputerze
+    /// nie dawało na telefonie żadnego znaku, dopóki aplikacji się nie otworzyło —
+    /// a po otwarciu i zamknięciu przypomnienie przychodziło normalnie. Czyli budzik
+    /// przypomnień działał, a nie działało <b>dowiadywanie się</b> o przypomnieniu.
+    /// </para>
+    /// <para>
+    /// Teraz tak samo jak przy przypomnieniach: <c>RtcWakeup</c> i „wolno także
+    /// w uśpieniu". Jednorazowy, bo tylko takiemu system pozwala przejść przez
+    /// uśpienie; następny nastawia się po każdym odebraniu — a że odbiornik nastawia
+    /// budziki po <b>każdym</b> przebiegu, łańcuch domyka się sam. Gdyby się urwał,
+    /// podnosi go otwarcie aplikacji, jej zamknięcie i start telefonu.
+    /// </para>
+    /// <para>
+    /// Do pracy okresowej służy zwykle WorkManager i to jest następny krok, jeśli to
+    /// nie wystarczy: budzik przepuszczony w uśpieniu dostaje około dziesięciu sekund
+    /// na pracę razem z siecią, a pełny przebieg do Dysku bywa dłuższy. WorkManager
+    /// daje na to dziesięć minut i sam ponawia — kosztem kolejnej biblioteki i kodu
+    /// pisanego na ślepo.
     /// </para>
     /// </remarks>
     public static void NastawSynchronizacje(Context kontekst)
@@ -129,10 +152,9 @@ internal static class Budzik
                 return;
             }
 
-            zegar.SetInexactRepeating(
-                AlarmType.Rtc,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + AlarmManager.IntervalHalfHour,
-                AlarmManager.IntervalHalfHour,
+            zegar.SetAndAllowWhileIdle(
+                AlarmType.RtcWakeup,
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + Odstep,
                 Zamiar(kontekst, AkcjaSynchronizacji, NumerSynchronizacji));
         }
         catch (Exception e)
@@ -209,6 +231,15 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
                 // zostawało zapisane jako pokazane i nie pokazywało się nigdzie.
                 Powiadomienia.Podepnij(kontekst);
 
+                // Następny budzik synchronizacji też **przed** pracą, nie po niej.
+                // Budzik jest jednorazowy i sam nastawia następny, więc cały łańcuch
+                // wisi na tym, że to wywołanie się wykona. Praca przed nim — składanie
+                // zależności, migracje, przebieg do Dysku — bywa dłuższa niż czas, który
+                // system daje obudzonemu odbiornikowi; ubity w połowie odbiornik urwałby
+                // łańcuch na zawsze, a wyglądałoby to jak cisza bez przyczyny.
+                // Nie potrzebuje bazy ani zależności: dotyka wyłącznie budzika systemu.
+                Budzik.NastawSynchronizacje(kontekst);
+
                 await AppServices.ReadyAsync();
 
                 // Bez wyjścia po synchronizacji. Do dziś budzik synchronizacji kończył
@@ -231,8 +262,9 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
                         ile == 0 ? "nie było czego pokazać" : $"pokazane: {ile}");
                 }
 
+                // Budzik przypomnień na końcu, bo ten musi znać bazę: liczy najbliższą
+                // chwilę z zadań. Synchronizacja została nastawiona na początku.
                 await Budzik.PrzestawAsync(kontekst);
-                Budzik.NastawSynchronizacje(kontekst);
             }
             catch (Exception e)
             {
@@ -266,6 +298,12 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
 
         if (!dysk.HasCredentials || !Directory.Exists(dysk.TokenFolder))
         {
+            // Ze śladem, bo to jedyna droga, na której budzik odpala się poprawnie
+            // i nie robi nic. Bez wpisu wygląda identycznie jak budzik, który nie
+            // przyszedł — a to dwie różne rzeczy do naprawienia.
+            await Budzik.Zapisz(
+                "Synchronizacja w tle", "brak poświadczeń albo żetonu", poziom: ActivityLevel.Problem);
+
             return;
         }
 
