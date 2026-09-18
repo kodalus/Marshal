@@ -217,7 +217,14 @@
       <Setter Property="CornerRadius" Value="4" />
       <Setter Property="Margin" Value="1" />
       <Setter Property="Padding" Value="4" />
-      <Setter Property="MinHeight" Value="84" />
+
+      <!-- Bez najmniejszej wysokości: tę ustala okno, dzieląc swoją między tygodnie.
+           Wpisana tutaj wygrywałaby z podziałem i wracałoby przewijanie.
+
+           Przycięcie, bo przy sześciu tygodniach na telefonie komórka bywa niższa niż
+           jej treść. Wylewająca się nazwa weszłaby na sąsiedni tydzień i byłoby to
+           gorsze niż nazwa ucięta w połowie — ucięta wygląda na uciętą. -->
+      <Setter Property="ClipToBounds" Value="True" />
     </Style>
 
     <!-- Dni sąsiednich miesięcy zostają, tylko przygaszone: tydzień na przełomie jest
@@ -1102,11 +1109,18 @@
            zadanie. Wydarzenia z podłączonych kalendarzy nie mają stąd drogi: w komórce
            nie ma miejsca na to, co odróżnia je od zadania, a jeden gest znaczący dwie
            różne rzeczy jest gorszy od gestu, którego nie ma. -->
-      <ScrollViewer x:DataType="vm:CalendarViewModel" IsVisible="{Binding IsMonth}"
-                    VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
+      <!-- Na całą wysokość, bez przewijania. Miesiąc jest widokiem ogólnym: jego wartość
+           bierze się z tego, że widać **cały** naraz — gdzie jest gęsto, a gdzie pusto.
+           Miesiąc, po którym trzeba przewijać, przestaje odpowiadać na to pytanie,
+           a zaczyna udawać gorszy tydzień.
 
-          <ItemsControl ItemsSource="{Binding MonthHeaders}" Margin="0,0,0,4">
+           Stąd tygodnie w siatce o jednej kolumnie: dzieli ona wysokość równo między
+           nie, więc luty z czterema tygodniami ma komórki wyższe niż marzec z sześcioma.
+           Wysokość ustala okno, nie treść. -->
+      <Grid x:DataType="vm:CalendarViewModel" IsVisible="{Binding IsMonth}"
+            RowDefinitions="Auto,*">
+
+          <ItemsControl Grid.Row="0" ItemsSource="{Binding MonthHeaders}" Margin="0,0,0,4">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <UniformGrid Columns="7" />
@@ -1119,7 +1133,12 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <ItemsControl ItemsSource="{Binding MonthWeeks}">
+          <ItemsControl Grid.Row="1" ItemsSource="{Binding MonthWeeks}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Columns="1" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:MonthWeek">
                 <ItemsControl ItemsSource="{Binding Cells}">
@@ -1133,11 +1152,18 @@
                       <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
                               Classes.dzisiaj="{Binding IsToday}"
                               PointerPressed="NaDniuMiesiaca">
-                        <StackPanel>
-                          <TextBlock Classes="numer" Text="{Binding Day}"
-                                     HorizontalAlignment="Left" />
+                        <DockPanel>
+                          <!-- Numer dnia i licznik nadmiaru w jednym wierszu u góry:
+                               oba są wiadomością o komórce, a nie jej treścią, i oba
+                               mają przetrwać przycięcie. -->
+                          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*">
+                            <TextBlock Grid.Column="0" Classes="numer" Text="{Binding Day}" />
+                            <TextBlock Grid.Column="1" Classes="hint" HorizontalAlignment="Right"
+                                       Text="{Binding OverflowLabel}"
+                                       IsVisible="{Binding HasOverflow}" />
+                          </Grid>
 
-                          <ItemsControl ItemsSource="{Binding Entries}">
+                          <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:MonthEntry">
                                 <Grid ColumnDefinitions="Auto,*" Margin="0,1"
@@ -1150,10 +1176,7 @@
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-
-                          <TextBlock Classes="hint" Text="{Binding OverflowLabel}"
-                                     IsVisible="{Binding HasOverflow}" Margin="0,2,0,0" />
-                        </StackPanel>
+                        </DockPanel>
                       </Border>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
@@ -1162,8 +1185,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-        </StackPanel>
-      </ScrollViewer>
+      </Grid>
       </Panel>
     </DockPanel>
 

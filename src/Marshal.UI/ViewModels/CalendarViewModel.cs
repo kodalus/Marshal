@@ -218,7 +218,14 @@ public sealed record MonthCell(
 {
     public bool HasOverflow => Overflow > 0;
 
-    public string OverflowLabel => $"+ jeszcze {Overflow}";
+    /// <summary>Licznik nadmiaru przy numerze dnia, nie pod listą.</summary>
+    /// <remarks>
+    /// Pod listą wyglądał lepiej i znikał pierwszy: komórka dostaje tyle wysokości, ile
+    /// zostanie po podziale okna między tygodnie, a przy sześciu tygodniach na telefonie
+    /// bywa jej mniej niż treści. Przycinane jest to, co na dole — czyli akurat jedyna
+    /// wiadomość o tym, że coś jest przycięte. Przy numerze dnia zostaje zawsze.
+    /// </remarks>
+    public string OverflowLabel => $"+{Overflow}";
 }
 
 /// <summary>Jeden tydzień siatki miesiąca — siedem komórek.</summary>
