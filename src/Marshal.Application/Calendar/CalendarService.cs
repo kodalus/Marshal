@@ -113,19 +113,34 @@ public sealed class CalendarSyncService(
         }
 
         // U nas nagrobek, nie usunięcie — tak samo jak wszędzie indziej w tym modelu.
+        //
+        // Po samym identyfikatorze wydarzenia, nie po parze ze źródłem. Nasza kopia
+        // bywa zapisana pod **innym** wierszem podłączenia niż to, przez które właśnie
+        // kasujemy: dwa wiersze na ten sam kalendarz Google robią się przy pierwszej
+        // synchronizacji między urządzeniami i żyją do chwili złożenia. Kasowanie
+        // trafiało wtedy u źródła, a u nas nie trafiało nigdzie — i wpis zostawał
+        // na siatce jako cudze wydarzenie po zadaniu, którego już nie ma. Identyfikator
+        // wydarzenia jest u Google jednoznaczny, więc szersze dopasowanie nie może
+        // zdjąć niczego innego.
         var nasze = await store.EventsAsync(
             DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
 
-        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
-            is { } wydarzenie)
+        var zdjete = false;
+
+        foreach (var wydarzenie in nasze.Where(e => e.ExternalId == externalId))
         {
             await store.UpsertAsync(
-                sourceId,
+                wydarzenie.SourceId,
                 [new FeedEvent(
                     externalId, wydarzenie.Title, wydarzenie.StartsAt, wydarzenie.EndsAt,
                     wydarzenie.IsAllDay, wydarzenie.Location, Cancelled: true)],
                 ct);
 
+            zdjete = true;
+        }
+
+        if (zdjete)
+        {
             await store.SaveChangesAsync(ct);
         }
     }

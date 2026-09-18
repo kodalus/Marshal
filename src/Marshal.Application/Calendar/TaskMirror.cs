@@ -109,12 +109,26 @@ public sealed class TaskMirror(
         }
     }
 
+    /// <summary>
+    /// Zdjęcie odbicia z kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// <b>Każde wyjście zostawia ślad.</b> Do dziś wysłanie zapisywało się w dzienniku,
+    /// a zdjęcie nie zapisywało się wcale — więc z dziennika nie dało się odróżnić
+    /// „skasowane" od „nigdy nie doszło do skutku". Przy wpisie, który został w cudzym
+    /// kalendarzu po zadaniu wyrzuconym do kosza, jest to jedyne pytanie, jakie się
+    /// zadaje, a odpowiedzi nie było nigdzie. Cisza jest tu gorsza od kłopotu: kłopot
+    /// widać.
+    /// </remarks>
     public async Task RemoveAsync(TaskItem task, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(task);
 
         if (task.SharedCalendarId is not { } wskazany || task.SharedEventId is not { } wydarzenie)
         {
+            // Bez wpisu: zadanie nieudostępnione przechodzi tędy przy każdym zapisie,
+            // bo wysyłanie kieruje tu wszystko, co przestało mieć dzień. Nie ma czego
+            // zdejmować i nie ma o czym pisać.
             return;
         }
 
@@ -125,8 +139,18 @@ public sealed class TaskMirror(
         {
             // Podłączenia naprawdę nie ma — odbicia nie ma jak skasować, ale zadanie
             // ma przestać na nie wskazywać, inaczej próba wracałaby przy każdej zmianie.
+            // Zapisane jako kłopot, bo to jest dokładnie ten przypadek, w którym wpis
+            // zostaje w cudzym kalendarzu na zawsze: po zdjęciu wskazania nikt już nie
+            // ma po czym poznać, że tam jest i skąd się wziął.
             task.Unshare(hlc.Next());
             await unitOfWork.SaveChangesAsync(ct);
+
+            await dziennik.RecordAsync(
+                "Kalendarz: skasowanie odbicia",
+                task.Title,
+                ActivityLevel.Problem,
+                $"Kalendarza {wskazany} nie ma już na liście podłączonych — "
+                + $"wydarzenie {wydarzenie} zostaje w nim i trzeba je skasować ręcznie.");
 
             return;
         }
@@ -138,6 +162,8 @@ public sealed class TaskMirror(
 
         task.Unshare(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
+
+        await dziennik.RecordAsync("Kalendarz: skasowanie odbicia", task.Title);
     }
 
     /// <summary>Ostatni kłopot z dokańczaniem. Do tego, żeby nie pisać go co minutę.</summary>
