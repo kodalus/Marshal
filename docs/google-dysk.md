@@ -219,7 +219,16 @@ samej listy użytkowników testowych.
 
 W aplikacji na telefonie: **Ustawienia → Konto Google — synchronizacja** → wklej ten
 sam identyfikator klienta i tę samą tajemnicę → **Zapisz i zsynchronizuj**. Otworzy się
-przeglądarka telefonu, potwierdzasz zgodę, aplikacja wraca sama.
+przeglądarka telefonu i poprosi o zgodę.
+
+**Po potwierdzeniu zgody przeglądarka zwykle nie wraca do aplikacji sama** — zostaje na
+stronie, która się nie wczytuje. Wtedy: przytrzymaj pasek adresu, **Kopiuj**, wróć do
+Marshala i wklej adres w pole **„Przeglądarka nie wróciła sama?"**, które pokazuje się
+na czas logowania. Kod zgody jest w tym adresie w całości, więc logowanie kończy się
+tak samo, jakby przeglądarka wróciła.
+
+Sprawdzone na Androidzie 15: powrót sam nie nastąpił ani razu, wklejenie zadziałało
+za pierwszym razem.
 
 Poświadczenia wkleja się **na każdym urządzeniu osobno**, bo leżą w tabeli ustawień
 lokalnych i nie jadą przez synchronizację (krok 5). Poświadczenia do Dysku nie mają
@@ -237,7 +246,19 @@ wymaga zgłaszania go z góry.
 Wymienione jest więc tylko otwieranie przeglądarki — na Androidzie otwiera się zamiar,
 a nie proces. Nasłuch zostaje ten sam.
 
-Cena tego wyboru: gdyby Google kiedyś przestało pozwalać klientom komputerowym na
+### Dlaczego przeglądarka nie wraca sama
+
+Objaw jest charakterystyczny: strona **wisi**, a nie pokazuje odmowy połączenia. Gdyby
+nikt nie nasłuchiwał na porcie, odmowa przyszłaby natychmiast. Czekanie znaczy, że
+połączenie zostało przyjęte przez jądro, ale nikt go nie obsłużył — czyli proces
+aplikacji jest uśpiony. Android odkłada do zamrażarki procesy, które zeszły w tło,
+a przeglądarka schodzi z aplikacji dokładnie w chwili, w której ma ona zacząć czekać.
+
+Utrzymanie procesu przy życiu wymagałoby usługi pierwszoplanowej, czyli stałego
+powiadomienia „Marshal działa" i osobnego uprawnienia. Wklejenie adresu kosztuje mniej
+i nie zależy od tego, jak system akurat gospodaruje pamięcią.
+
+Cena drugiego wyboru: gdyby Google kiedyś przestało pozwalać klientom komputerowym na
 pętlę zwrotną z telefonu, trzeba będzie założyć poświadczenia typu Android i podpisywać
 wydania stałym kluczem. To jest praca do zrobienia wtedy, a nie zapas na wszelki wypadek.
 
