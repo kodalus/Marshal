@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.GestureRecognizers;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
@@ -174,30 +175,30 @@ public partial class MainView : UserControl
     /// było wycelowanie w przycisk szerokości kciuka.
     /// </para>
     /// <para>
-    /// <b>Podsłuchiwane w fazie opadania, nie podnoszenia.</b> Bloki na siatce są
-    /// przyciskami i zjadają puszczenie same, więc obsługa dopięta zwyczajnie nigdy by
-    /// go nie zobaczyła. W fazie opadającej zdarzenie idzie od okna w dół, czyli przez
-    /// nas <b>przed</b> blokiem — i tylko wtedy, gdy ruch okazał się przejechaniem,
-    /// oznaczamy je jako obsłużone, żeby blok się nie otworzył po drodze.
+    /// <b>Palec słuchany gestem, nie wskaźnikiem.</b> Dwie poprzednie wersje śledziły
+    /// zdarzenia wskaźnika i łapały jeden ruch na kilkadziesiąt. Powód jest w środku
+    /// biblioteki: gdy rozpoznawacz gestu przewijania uzna dotyk za swój, przejmuje
+    /// wskaźnik i od tej chwili zdarzenia wskaźnika <b>przestają iść drzewem</b> —
+    /// idą wprost do niego. Ruch, który miał zostać przejechaniem, urywa się po
+    /// kilku pikselach, a przejechanie widać tylko wtedy, gdy palec zdążył zrobić
+    /// całą drogę, zanim przewijanie się zorientowało. Stąd „raz na kilkadziesiąt".
     /// </para>
     /// <para>
-    /// <b>Koniec ruchu bywa dwojaki i dlatego pilnujemy obu.</b> Pierwsza wersja czekała
-    /// wyłącznie na puszczenie i łapała mniej więcej co dziesiąty ruch: gdy przewijanie
-    /// uzna gest za swój, przejmuje wskaźnik, a wtedy puszczenie nie przychodzi wcale —
-    /// przychodzi porzucenie. Siatka godzinowa odrobiła tę lekcję wcześniej, przy
-    /// zakładaniu zadań, i tam jest osobna obsługa porzucenia; tutaj jej zabrakło.
+    /// Ścigać się z tym nie ma jak, bo rozpoznawacz siatki jest bliżej palca i zawsze
+    /// będzie pierwszy. Zamiast tego słuchamy <b>jego</b>: przesunięcia gestu idą
+    /// w górę drzewa jako zdarzenia i przechodzą przez nas tak czy owak. Kalendarz
+    /// nie odbiera więc przewijania, tylko sumuje to, co przewijanie i tak ogłasza.
     /// </para>
     /// <para>
-    /// Porzucenie nie niesie położenia, więc ruch jest próbkowany po drodze. To zresztą
-    /// wierniejsze: liczy się to, dokąd palec dojechał, a nie gdzie był w chwili, gdy
-    /// system uznał gest za skończony.
+    /// Własny rozpoznawacz na tym samym panelu jest po to, żeby gest miał się z czego
+    /// wziąć w miesiącu: tam nie ma przewijanej siatki, więc nie byłoby czego słuchać.
+    /// W dniu i tygodniu pierwszy jest ten z siatki — i tak ma być, bo to on przewija
+    /// w pionie.
     /// </para>
     /// <para>
-    /// <b>Także myszą.</b> Pierwsza wersja odpowiadała wyłącznie na palec, żeby nie
-    /// odbierać myszy przeciągania bloków — ale przeciąganie bloku i tak wstrzymuje
-    /// przejechanie osobnym warunkiem, a pociągnięcie po pustej siatce nie znaczyło
-    /// dotąd nic. Z zewnątrz wyglądało to na zepsute: ten sam ruch działał na telefonie
-    /// i nie działał na komputerze, bez żadnego powodu widocznego na ekranie.
+    /// <b>Mysz zostaje przy wskaźniku.</b> Gestu przewijania nie wytwarza, a jej nikt
+    /// nie przejmuje — tam śledzenie ruchu działało od początku i nie ma powodu go
+    /// ruszać.
     /// </para>
     /// </remarks>
     private void ObszarKalendarzaGotowy(object? nadawca, RoutedEventArgs e)
@@ -207,10 +208,26 @@ public partial class MainView : UserControl
             return;
         }
 
+        // Loaded potrafi przyjść po każdym powrocie na ekran, a dwa rozpoznawacze
+        // na jednym panelu liczyłyby ten sam ruch dwa razy.
+        if (obszar.GestureRecognizers.Count == 0)
+        {
+            obszar.GestureRecognizers.Add(new ScrollGestureRecognizer
+            {
+                CanHorizontallyScroll = true,
+
+                // W pionie nie: panel obejmuje też siatkę godzinową, a przejęcie
+                // pionu odebrałoby jej przewijanie.
+                CanVerticallyScroll = false,
+            });
+        }
+
+        obszar.AddHandler(Gestures.ScrollGestureEvent, ObszarGest);
+        obszar.AddHandler(Gestures.ScrollGestureEndedEvent, ObszarGestSkonczony);
+
         obszar.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerMovedEvent, ObszarRuch, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
-        obszar.AddHandler(PointerCaptureLostEvent, ObszarPorzucony, RoutingStrategies.Tunnel);
     }
 
     /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
@@ -220,11 +237,43 @@ public partial class MainView : UserControl
     /// </remarks>
     private const double ProgPrzejechania = 60;
 
+    /// <summary>Zsumowane przesunięcie bieżącego gestu.</summary>
+    private Vector _gest;
+
+    /// <summary>Czy ten gest już przeskoczył. Jeden ruch to jeden zakres.</summary>
+    private bool _gestZuzyty;
+
+    /// <summary>
+    /// Przesunięcie ogłoszone przez rozpoznawacz gestu — nasze albo siatki.
+    /// </summary>
+    /// <remarks>
+    /// Przesunięcia są przyrostowe i mają znak odwrotny do ruchu palca: tak je liczy
+    /// przewijanie, bo dodaje je wprost do swojego położenia. Stąd odwrócenie przy
+    /// przekazaniu dalej — reszta liczy w tym, dokąd pojechał palec.
+    /// </remarks>
+    private void ObszarGest(object? nadawca, ScrollGestureEventArgs e)
+    {
+        if (_gestZuzyty)
+        {
+            return;
+        }
+
+        _gest += e.Delta;
+        _gestZuzyty = Przeskocz(-_gest.X, -_gest.Y);
+    }
+
+    private void ObszarGestSkonczony(object? nadawca, ScrollGestureEndedEventArgs e)
+    {
+        _gest = default;
+        _gestZuzyty = false;
+    }
+
     private (Point Skad, Point Dokad, IPointer Wskaznik)? _przejechanie;
 
     private void ObszarNacisniety(object? nadawca, PointerPressedEventArgs e)
     {
-        if (nadawca is not Control obszar)
+        // Gest palca ma własną drogę; tu zostaje mysz, bo jej nikt nie przejmuje.
+        if (nadawca is not Control obszar || e.Pointer.Type != PointerType.Mouse)
         {
             _przejechanie = null;
             return;
@@ -246,36 +295,29 @@ public partial class MainView : UserControl
 
     private void ObszarPuszczony(object? nadawca, PointerReleasedEventArgs e)
     {
-        if (_przejechanie is { } dotyk
-            && nadawca is Control obszar
-            && ReferenceEquals(dotyk.Wskaznik, e.Pointer))
-        {
-            _przejechanie = dotyk with { Dokad = e.GetPosition(obszar) };
-        }
-
-        // Obsłużone tylko wtedy, gdy naprawdę przejechano — inaczej zwykłe dotknięcie
-        // bloku przestałoby go otwierać.
-        e.Handled = Rozstrzygnij();
-    }
-
-    /// <summary>Przewijanie przejęło wskaźnik — ruch skończył się, choć nikt nie puścił.</summary>
-    private void ObszarPorzucony(object? nadawca, PointerCaptureLostEventArgs e) =>
-        Rozstrzygnij();
-
-    /// <summary>Czy zapamiętany ruch był przejechaniem. Zużywa go niezależnie od wyniku.</summary>
-    private bool Rozstrzygnij()
-    {
         var ruch = _przejechanie;
         _przejechanie = null;
 
+        if (ruch is not { } dotyk || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        {
+            return;
+        }
+
+        var dokad = nadawca is Control obszar ? e.GetPosition(obszar) : dotyk.Dokad;
+
+        // Obsłużone tylko wtedy, gdy naprawdę przejechano — inaczej zwykłe kliknięcie
+        // bloku przestałoby go otwierać.
+        e.Handled = Przeskocz(dokad.X - dotyk.Skad.X, dokad.Y - dotyk.Skad.Y);
+    }
+
+    /// <summary>Czy ruch o tyle punktów jest przejechaniem — i jeśli tak, przeskakuje.</summary>
+    private bool Przeskocz(double wBok, double wPion)
+    {
         // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, nie zakres.
-        if (_przeciagam || ruch is not { } dotyk || _kalendarz is null)
+        if (_przeciagam || _kalendarz is null)
         {
             return false;
         }
-
-        var wBok = dotyk.Dokad.X - dotyk.Skad.X;
-        var wPion = dotyk.Dokad.Y - dotyk.Skad.Y;
 
         // W bok **wyraźnie bardziej** niż w pionie: ukośny ruch przy przewijaniu dnia
         // przeskakiwałby tydzień przy każdej próbie dojechania do wieczora.
