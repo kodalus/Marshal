@@ -514,9 +514,39 @@ public sealed partial class MainViewModel : ObservableObject
         // ponownie. To ta sama odpowiedź na upływ czasu, co reszta tutaj.
         await Probuj("Kalendarz: zaległe odbicia", () => _odbicie.DokonczKasowaniaAsync());
 
+        await Probuj("Kalendarz: pobranie w tle", PobierzKalendarzeAsync);
+
         // Osobno zabezpieczona: nieudany przebieg do Dysku nie ma prawa zabrać ze sobą
         // przypomnień, które właśnie się policzyły.
         await Probuj("Synchronizacja sama", SynchronizujSamaAsync);
+    }
+
+    /// <summary>
+    /// Pobranie kalendarzy zewnętrznych bez klikania.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Do dziś kalendarz pobierał się <b>wyłącznie</b> po naciśnięciu „Pobierz".
+    /// Odstęp między odczytami był napisany i pilnowany, ale nikt go nie wołał —
+    /// więc wydarzenie dodane na komputerze nie pojawiało się na telefonie wcale,
+    /// dopóki się o nie nie poprosiło. Zadania jechały tymczasem same, co dawało
+    /// najgorszy z możliwych obrazów: połowa tej samej rzeczy dociera, druga nie,
+    /// i nie widać żadnej reguły, która by to tłumaczyła.
+    /// </para>
+    /// <para>
+    /// Bez wymuszania: odstęp pilnuje sam, żeby nie chodzić po sieci częściej, niż
+    /// trzeba. Przeliczenie ekranu tylko wtedy, gdy coś przyszło — przerysowanie siatki
+    /// pod ręką, która właśnie coś na niej robi, jest kosztem bez pożytku.
+    /// </para>
+    /// </remarks>
+    private async Task PobierzKalendarzeAsync()
+    {
+        var raport = await _kalendarze.RefreshAsync();
+
+        if (raport.Events > 0 || raport.Folded > 0)
+        {
+            await ReloadAsync();
+        }
     }
 
     /// <summary>
@@ -650,6 +680,9 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         await PrzebiegAsync("Synchronizacja po powrocie", cicha: true);
+
+        // Kalendarze też: powrót do okna jest chwilą, w której patrzy się na siatkę.
+        await Probuj("Kalendarz: pobranie po powrocie", PobierzKalendarzeAsync);
     }
 
     private async Task SynchronizujSamaAsync()

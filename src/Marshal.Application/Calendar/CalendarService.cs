@@ -509,7 +509,21 @@ public sealed class CalendarSyncService(
     }
 
     /// <summary>Co ile odświeżać kanały (spec 10.1).</summary>
-    public static readonly TimeSpan RefreshInterval = TimeSpan.FromHours(1);
+    /// <remarks>
+    /// <para>
+    /// Godzina brała się z czasów, gdy kalendarz zewnętrzny był tłem dla zadań: coś,
+    /// na co się zerka, żeby nie zaplanować spotkania na spotkaniu. Odkąd wydarzenie
+    /// i zadanie mają być tą samą rzeczą pod ręką, godzina znaczy, że połowa tej samej
+    /// rzeczy dociera w kilkanaście sekund, a druga połowa po godzinie — i że wpis
+    /// dodany na komputerze nie istnieje na telefonie przez cały wieczór.
+    /// </para>
+    /// <para>
+    /// Pięć minut, bo pobranie przyrostowe jest tanie: znacznik z poprzedniego odczytu
+    /// sprawia, że Google oddaje samą różnicę, a najczęściej pustą. To jedno małe
+    /// zapytanie na kalendarz.
+    /// </para>
+    /// </remarks>
+    public static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// Odświeża źródła, którym minął czas. Zwraca też liczbę tych, które nie odpowiedziały.

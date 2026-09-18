@@ -479,8 +479,14 @@ public sealed class CalendarStoreTests : IDisposable
         _kanal.Wywolan.Should().Be(1);
     }
 
+    /// <summary>Po odstępie kalendarz pobiera się ponownie — sam, bez proszenia.</summary>
+    /// <remarks>
+    /// Odstęp liczony z nazwanej stałej, nie z wpisanej godziny: sama jego długość jest
+    /// decyzją, która się zmienia, a to, że po jego upływie sięgamy po świeże dane,
+    /// zmienić się nie ma.
+    /// </remarks>
     [Fact]
-    public async Task Po_godzinie_kalendarz_jest_pobierany_ponownie()
+    public async Task Po_odstepie_kalendarz_jest_pobierany_ponownie()
     {
         await _usluga.RefreshAsync();
         _zegar.Now = _zegar.Now.Add(CalendarSyncService.RefreshInterval).AddMinutes(1);
