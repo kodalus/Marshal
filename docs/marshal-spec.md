@@ -1467,7 +1467,38 @@ Pierwotna godzina brała się z czasów, gdy kalendarz był tłem dla zadań. Od
 i zadanie mają być tą samą rzeczą pod ręką, godzina znaczyła, że połowa tej samej rzeczy
 dociera w kilkanaście sekund, a druga po godzinie.
 
-### 10.6 OAuth
+### 10.6 Więcej niż jedno konto Google
+
+Kalendarz z drugiego konta wciąga się przede wszystkim **udostępnieniem w Google**:
+właściciel dopuszcza do niego konto główne, kalendarz pojawia się na jego liście
+i dalej jest zwykłym podłączeniem. To zostaje drogą pierwszą, bo zgoda jest jedna,
+a uprawnienia widać w jednym miejscu — po stronie Google.
+
+Nie zawsze jednak wolno: konta Google Workspace bywają zamknięte poza domenę, a wtedy
+udostępnienia po prostu nie da się kliknąć. Dlatego jest droga druga — **osobna zgoda
+drugiego konta**, obejmująca **sam kalendarz, bez Dysku**. Dysk z dziennikiem
+synchronizacji należy do konta głównego i to się nie zmienia; konto dodatkowe wnosi
+wyłącznie swoje kalendarze, więc prosi wyłącznie o nie.
+
+Rozstrzygnięcia, które z tego wynikają:
+
+- **Konto to adres pocztowy** (`CalendarSource.Account`, puste = główne). Podłączenie
+  jedzie synchronizacją na drugie urządzenie, żeton nie — więc identyfikator nadany
+  lokalnie po drugiej stronie nie znaczyłby nic. Adres znaczy wszędzie to samo.
+  Bierzemy go z kalendarza oznaczonego jako główny, którego identyfikator **jest**
+  adresem konta; osobne uprawnienie do danych osobowych nie jest potrzebne i nie
+  prosimy o nie.
+- **Duplikat rozpoznajemy po trójce rodzaj–identyfikator–konto.** Kalendarz udostępniony
+  obu stronom widnieje u każdej pod tym samym adresem, a to są wtedy dwa różne
+  podłączenia o różnych uprawnieniach.
+- **Lista kont jest lokalna i niesynchronizowana**, tak samo jak motyw i strefa: znaczy
+  „mam tu jego żeton", a żeton nigdzie nie jedzie. Rozesłana obiecywałaby dostęp,
+  którego na drugim urządzeniu nie ma.
+- **Brak żetonu nie otwiera okna zgody.** Urządzenie, do którego doszło podłączenie bez
+  zgody, mówi to zdaniem przy pobieraniu. Okno zgody wyskakujące samo w środku
+  odświeżania wygląda jak awaria, a na Androidzie nie wygląda wcale — pobieranie zawisa.
+
+### 10.7 OAuth
 
 Jedno logowanie Google, trzy zakresy (`drive.file`, `calendar.readonly`,
 `calendar.events`), jeden ekran zgody. `drive.file` daje dostęp wyłącznie do plików

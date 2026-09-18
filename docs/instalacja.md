@@ -255,7 +255,7 @@ jednym Dysku — i dwie aplikacje, które się nawzajem nie widzą, choć obie d
 | Konsola Google pyta o nazwę pakietu i odcisk klucza | Wybrany zły typ klienta. Ma być **Aplikacja komputerowa**, także dla telefonu. |
 | Trzeba logować się do Google co tydzień | Ekran zgody w trybie testowym — zob. wyżej. |
 | Kalendarz Google pusty mimo zalogowania | Kalendarze wybiera się w **Ustawieniach → Kalendarze**. Pobranie odświeża się samo co pięć minut. |
-| Kalendarza z drugiego konta nie ma na liście | Marshal loguje się do jednego konta. Udostępnij ten kalendarz w Google temu kontu, którym się logujesz — wtedy pojawi się jak każdy inny. |
+| Kalendarza z drugiego konta nie ma na liście | Najprościej: udostępnij ten kalendarz w Google temu kontu, którym się logujesz — pojawi się jak każdy inny. Gdy udostępnianie jest zablokowane (konta firmowe): **Ustawienia → Kalendarze → Konta Google → „Dodaj konto Google"** i zaloguj się na to drugie konto. Zgoda leży na urządzeniu, więc na telefonie trzeba ją dać osobno. |
 | Zmiana z jednego urządzenia nie dochodzi do drugiego | Oba muszą mieć te same poświadczenia i to samo konto. Zajrzyj do **Dziennika** — jest tam każdy przebieg synchronizacji razem z powodem niepowodzenia. |
 | Przypomnienia nie przychodzą przy zamkniętej aplikacji | Bateria nie jest ustawiona na „bez ograniczeń" albo brakuje autostartu — zob. krok 4 instalacji na Androidzie. |
 | Przypomnienia milkną po restarcie telefonu | Brak autostartu. To ten sam przełącznik. |

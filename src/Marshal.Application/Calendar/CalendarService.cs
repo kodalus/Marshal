@@ -409,7 +409,9 @@ public sealed class CalendarSyncService(
         }
 
         return zywe.FirstOrDefault(
-                z => z.Kind == nagrobek.Kind && z.ExternalId == nagrobek.ExternalId)?.Id;
+                z => z.Kind == nagrobek.Kind
+                  && z.ExternalId == nagrobek.ExternalId
+                  && z.Account == nagrobek.Account)?.Id;
     }
 
     private async Task<(CalendarSource Source, ICalendarWriter Writer)> DoZapisuAsync(
@@ -474,21 +476,28 @@ public sealed class CalendarSyncService(
         string externalId,
         string name,
         string? color = null,
+        string? account = null,
         CancellationToken ct = default)
     {
         // Ten sam kalendarz dwa razy to zawsze pomyłka — najczęściej klikanie „Dodaj"
         // w reakcji na to, że nic się nie pojawiło. Duplikaty mnożą potem te same
         // błędy w raporcie i zaciemniają jedyny, który coś znaczy.
+        //
+        // Z kontem w porównaniu: ten sam identyfikator kalendarza potrafi wystąpić
+        // na dwóch kontach — udostępniony widnieje u obu stron pod tym samym adresem
+        // — a to są wtedy dwa różne podłączenia, o różnych uprawnieniach.
         var szukany = externalId?.Trim() ?? string.Empty;
+        var konto = string.IsNullOrWhiteSpace(account) ? null : account.Trim();
 
         if ((await store.SourcesAsync(ct)).FirstOrDefault(
-                z => z.Kind == kind && z.ExternalId == szukany) is { } juzJest)
+                z => z.Kind == kind && z.ExternalId == szukany && z.Account == konto)
+            is { } juzJest)
         {
             return juzJest;
         }
 
         var zrodlo = new CalendarSource(
-            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, szukany, name, color);
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, szukany, name, color, konto);
 
         store.AddSource(zrodlo);
         await store.SaveChangesAsync(ct);
@@ -633,7 +642,7 @@ public sealed class CalendarSyncService(
     private async Task<int> ZlozDuplikatyAsync(CancellationToken ct)
     {
         var powtorzone = (await store.SourcesAsync(ct))
-            .GroupBy(z => (z.Kind, z.ExternalId))
+            .GroupBy(z => (z.Kind, z.ExternalId, z.Account))
             .Where(g => g.Count() > 1)
             .ToList();
 

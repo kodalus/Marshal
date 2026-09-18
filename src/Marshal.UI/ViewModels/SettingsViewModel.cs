@@ -86,6 +86,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         GoogleCalendar = _settings.GoogleCalendarEnabled;
         AvailableGoogleCalendars.Clear();
         OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
+        WczytajKonta();
 
         _wczytywanie = false;
 
@@ -266,31 +267,128 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         CalendarStatus = "Pobieranie listy kalendarzy…";
 
-        try
+        List<GoogleCalendarInfo> lista = [];
+        List<string> klopoty = [];
+
+        // Konto główne i każde dodane — po kolei, a nie „wszystko albo nic". Jedno
+        // konto bez zgody na tym urządzeniu nie ma zabierać kalendarzy pozostałych:
+        // wtedy przycisk zwracałby pustą listę i wyglądałoby to na brak kalendarzy
+        // w ogóle, zamiast na brak zgody jednego konta.
+        var konta = new List<string?> { null };
+        konta.AddRange(_settings.CalendarAccounts);
+
+        foreach (var konto in konta)
         {
-            var lista = await _google.ListAsync();
-
-            AvailableGoogleCalendars.Clear();
-            foreach (var kalendarz in lista)
+            try
             {
-                AvailableGoogleCalendars.Add(kalendarz);
+                lista.AddRange(await _google.ListAsync(konto));
             }
+            catch (Exception e)
+            {
+                klopoty.Add($"{konto ?? "konto główne"}: {e.Message}");
+                await _dziennik.RecordAsync(
+                    "Kalendarze Google: lista",
+                    konto ?? "konto główne",
+                    ActivityLevel.Problem,
+                    e.Message);
+            }
+        }
 
-            OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
+        AvailableGoogleCalendars.Clear();
+        foreach (var kalendarz in lista)
+        {
+            AvailableGoogleCalendars.Add(kalendarz);
+        }
 
-            CalendarStatus = lista.Count == 0
-                ? "Konto nie ma żadnych kalendarzy."
-                : $"Znalezione: {lista.Count}. Wybierz, które podłączyć.";
+        OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
 
+        var podsumowanie = lista.Count == 0
+            ? "Żadne konto nie pokazało kalendarzy."
+            : $"Znalezione: {lista.Count}. Wybierz, które podłączyć.";
+
+        CalendarStatus = klopoty.Count == 0
+            ? podsumowanie
+            : podsumowanie + Environment.NewLine + string.Join(Environment.NewLine, klopoty);
+
+        if (klopoty.Count == 0)
+        {
             await _dziennik.RecordAsync(
                 "Kalendarze Google: lista", $"znalezionych {lista.Count}");
+        }
+    }
+
+    /// <summary>Konta, z których podłączono kalendarze. Bez konta głównego.</summary>
+    public ObservableCollection<string> CalendarAccounts { get; } = [];
+
+    public bool HasCalendarAccounts => CalendarAccounts.Count > 0;
+
+    /// <summary>
+    /// Zgoda drugiego konta Google.
+    /// </summary>
+    /// <remarks>
+    /// Osobno od logowania głównego, bo to nie to samo: konto główne trzyma Dysk
+    /// z dziennikiem synchronizacji, dodatkowe wnosi wyłącznie kalendarze. Droga przez
+    /// udostępnienie kalendarza samemu sobie zostaje i dalej jest prostsza tam, gdzie
+    /// wystarcza — ale kalendarza służbowego często nie wolno udostępnić na zewnątrz,
+    /// a wtedy nie ma czym jej zastąpić poza drugą zgodą.
+    /// </remarks>
+    [RelayCommand]
+    private async Task AddGoogleAccountAsync()
+    {
+        CalendarStatus = "Czekam na zgodę w przeglądarce…";
+
+        try
+        {
+            var adres = await _google.DodajKontoAsync();
+
+            _settings.AddCalendarAccount(adres);
+            WczytajKonta();
+
+            CalendarStatus = $"Konto {adres} dodane. Pobierz kalendarze, żeby je podłączyć.";
+            await _dziennik.RecordAsync("Kalendarz: konto Google", adres);
+
+            await LoadGoogleCalendarsAsync();
         }
         catch (Exception e)
         {
             CalendarStatus = e.Message;
             await _dziennik.RecordAsync(
-                "Kalendarze Google: lista", "nie udało się", ActivityLevel.Problem, e.Message);
+                "Kalendarz: konto Google", "nie udało się", ActivityLevel.Problem, e.Message);
         }
+    }
+
+    /// <summary>
+    /// Odłączenie konta. Podłączone z niego kalendarze zostają — i mówią, czego im brak.
+    /// </summary>
+    /// <remarks>
+    /// Kasowanie przy okazji kalendarzy tego konta byłoby kasowaniem danych, które jadą
+    /// na inne urządzenia — tam zgoda może dalej być. Odłączenie konta jest decyzją
+    /// tego urządzenia, więc i skutek ma mieć tylko tutaj.
+    /// </remarks>
+    [RelayCommand]
+    private async Task RemoveGoogleAccountAsync(string? adres)
+    {
+        if (string.IsNullOrWhiteSpace(adres))
+        {
+            return;
+        }
+
+        _settings.RemoveCalendarAccount(adres);
+        WczytajKonta();
+
+        CalendarStatus = $"Konto {adres} odłączone od tego urządzenia.";
+        await _dziennik.RecordAsync("Kalendarz: konto odłączone", adres);
+    }
+
+    private void WczytajKonta()
+    {
+        CalendarAccounts.Clear();
+        foreach (var konto in _settings.CalendarAccounts)
+        {
+            CalendarAccounts.Add(konto);
+        }
+
+        OnPropertyChanged(nameof(HasCalendarAccounts));
     }
 
     [RelayCommand]
@@ -301,7 +399,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        await DodajAsync(CalendarKind.Google, kalendarz.Id, kalendarz.Name, kalendarz.Color);
+        await DodajAsync(
+            CalendarKind.Google, kalendarz.Id, kalendarz.Name, kalendarz.Color, kalendarz.Account);
     }
 
     [ObservableProperty]
@@ -389,12 +488,21 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
-    private async Task DodajAsync(CalendarKind kind, string externalId, string name, string? color = null)
+    private async Task DodajAsync(
+        CalendarKind kind,
+        string externalId,
+        string name,
+        string? color = null,
+        string? konto = null)
     {
         try
         {
-            await _kalendarze.AddAsync(kind, externalId, name, color);
-            await _dziennik.RecordAsync("Kalendarz: podłączenie", $"{name} ({kind})");
+            await _kalendarze.AddAsync(kind, externalId, name, color, konto);
+
+            // Konto w dzienniku, bo ten sam kalendarz podłączony z dwóch kont daje dwa
+            // wiersze o tej samej nazwie — i bez adresu nie widać, który jest który.
+            var skad = string.IsNullOrWhiteSpace(konto) ? kind.ToString() : $"{kind}, {konto}";
+            await _dziennik.RecordAsync("Kalendarz: podłączenie", $"{name} ({skad})");
             await ReloadCalendarsAsync();
             await RefreshCalendarsAsync();
         }

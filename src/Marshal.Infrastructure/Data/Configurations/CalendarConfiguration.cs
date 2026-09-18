@@ -18,6 +18,9 @@ public sealed class CalendarSourceConfiguration : IEntityTypeConfiguration<Calen
         builder.Property(s => s.Name).IsRequired().HasMaxLength(200);
         builder.Property(s => s.Color).HasMaxLength(16);
         builder.Property(s => s.IsVisible).IsRequired();
+
+        // Adres pocztowy konta, z którego pochodzi kalendarz. Puste = konto główne.
+        builder.Property(s => s.Account).HasMaxLength(320);
         builder.Property(s => s.CreatedAt).IsRequired();
         builder.Property(s => s.UpdatedAt).IsRequired();
         builder.Property(s => s.Deleted).IsRequired();

@@ -41,7 +41,8 @@ public sealed class CalendarSource : Entity
         CalendarKind kind,
         string externalId,
         string name,
-        string? color = null)
+        string? color = null,
+        string? account = null)
         : base(id, createdAt, updatedAt)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
@@ -51,6 +52,7 @@ public sealed class CalendarSource : Entity
         ExternalId = externalId.Trim();
         Name = name.Trim();
         Color = color;
+        Account = string.IsNullOrWhiteSpace(account) ? null : account.Trim();
         IsVisible = true;
     }
 
@@ -66,6 +68,26 @@ public sealed class CalendarSource : Entity
 
     /// <summary>Ukryty zostaje podłączony, ale nie zaśmieca siatki.</summary>
     public bool IsVisible { get; private set; }
+
+    /// <summary>
+    /// Konto Google, z którego pochodzi ten kalendarz. Puste znaczy konto główne.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Adres pocztowy, nie wewnętrzny identyfikator, i to jest rozstrzygnięcie.
+    /// Wiersz podłączenia jedzie synchronizacją na drugie urządzenie, a żeton zostaje
+    /// tam, gdzie powstał — bo jest tajemnicą tego urządzenia. Drugie urządzenie musi
+    /// więc umieć **rozpoznać to samo konto po czymś, co obie strony widzą tak samo**,
+    /// a jedyną taką rzeczą jest adres. Identyfikator nadany przy dodawaniu byłby
+    /// lokalny i po drugiej stronie nie znaczyłby nic.
+    /// </para>
+    /// <para>
+    /// Puste zostaje dla wszystkiego, co podłączono, zanim konta w ogóle istniały,
+    /// i dla kanałów iCal, które konta nie mają. Puste znaczy „konto główne", czyli to,
+    /// którym aplikacja synchronizuje przez Dysk — a nie „nie wiadomo".
+    /// </para>
+    /// </remarks>
+    public string? Account { get; private set; }
 
     public void Rename(string name, Hlc stamp)
     {

@@ -1978,6 +1978,12 @@
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                   <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
                   <TextBlock Classes="hint" Text="{Binding ExternalId}" TextWrapping="Wrap" />
+                  <!-- Konto widoczne tylko tam, gdzie jest inne niż główne. Wiersz
+                       „konto: (główne)" przy każdym kalendarzu byłby szumem, a przy
+                       dwóch kontach właśnie tego jednego zdania się szuka. -->
+                  <TextBlock Classes="hint" TextWrapping="Wrap"
+                             Text="{Binding Account, StringFormat='konto: {0}'}"
+                             IsVisible="{Binding Account, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
                 <TextBlock Grid.Column="1" Classes="hint" VerticalAlignment="Center"
                            Margin="0,0,10,0" Text="{Binding Kind}" />
@@ -1988,6 +1994,33 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+
+        <!-- Konta dodatkowe. Kalendarz z drugiego konta da się zwykle wciągnąć taniej
+             — udostępniając go w Google samemu sobie — ale kalendarza służbowego
+             często nie wolno udostępnić na zewnątrz i wtedy zostaje druga zgoda. -->
+        <TextBlock Classes="label" Margin="0,18,0,0" Text="Konta Google" />
+        <TextBlock Classes="hint" TextWrapping="Wrap"
+                   Text="Konto główne jest zawsze. Dodatkowe wnosi wyłącznie swoje kalendarze — Dysk z dziennikiem synchronizacji zostaje przy głównym. Zgoda leży na tym urządzeniu, więc na telefonie trzeba ją dać osobno." />
+
+        <ItemsControl ItemsSource="{Binding CalendarAccounts}" Margin="0,6,0,0"
+                      IsVisible="{Binding HasCalendarAccounts}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                           Text="{Binding}" TextWrapping="Wrap" />
+                <Button Grid.Column="1" Content="Odłącz konto" Padding="10,4"
+                        VerticalAlignment="Center"
+                        Command="{Binding $parent[ItemsControl].((vm:SettingsViewModel)DataContext).RemoveGoogleAccountCommand}"
+                        CommandParameter="{Binding}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button Classes="nav" Margin="0,6,0,0" Padding="14,10"
+                Command="{Binding AddGoogleAccountCommand}"
+                Content="Dodaj konto Google" />
 
         <TextBlock Classes="label" Margin="0,12,0,0" Text="Dodaj kalendarz Google" />
         <Button Classes="nav" Padding="14,10"
@@ -2005,7 +2038,9 @@
             <DataTemplate x:DataType="cal:GoogleCalendarInfo">
               <Grid ColumnDefinitions="*,Auto" Margin="0,3">
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding Name}" TextWrapping="Wrap" />
+                  <!-- Opis, nie sama nazwa: „Prywatny" bywa na obu kontach i bez adresu
+                       nie widać, który wiersz jest który. -->
+                  <TextBlock Text="{Binding Opis}" TextWrapping="Wrap" />
                   <TextBlock Classes="hint" Text="{Binding Id}" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Podłącz" Padding="10,4" VerticalAlignment="Center"

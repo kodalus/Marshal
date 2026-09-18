@@ -1,4 +1,5 @@
 using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Calendar.v3;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
@@ -64,6 +65,100 @@ public static class GoogleDriveFactory
     /// </remarks>
     private static string UserKey(bool withCalendar) =>
         withCalendar ? "marshal-kalendarz-zapis" : "marshal";
+
+    /// <summary>Klucz żetonu dodatkowego konta. Adres, bo to on jest jego tożsamością.</summary>
+    /// <remarks>
+    /// Żeton trafia do pliku o tej nazwie, więc znaki niedopuszczalne w nazwie pliku
+    /// zamieniamy na kreskę. Adres pocztowy ich nie zawiera, ale nazwa pliku budowana
+    /// z cudzych danych bez sprawdzenia jest dokładnie tym rodzajem założenia, które
+    /// kiedyś okazuje się nieprawdziwe.
+    /// </remarks>
+    public static string KluczKonta(string adres) =>
+        "marshal-konto-" + new string(adres.Trim().Select(
+            z => char.IsAsciiLetterOrDigit(z) || z is '@' or '.' or '-' or '_' ? z : '-').ToArray());
+
+    /// <summary>
+    /// Zgoda dodatkowego konta — <b>sam kalendarz</b>, bez Dysku.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dysk jest jeden i należy do konta głównego: to tam leży dziennik synchronizacji
+    /// i tam ma zostać. Dodatkowe konto wnosi wyłącznie swoje kalendarze, więc prosi
+    /// wyłącznie o nie — a zgoda, która prosi o mniej, jest zgodą, którą łatwiej dać.
+    /// </para>
+    /// <para>
+    /// Osobny klucz żetonu, bo biblioteka rozpoznaje konta właśnie po nim. Wspólny
+    /// oddawałby żeton konta głównego i drugie konto nigdy nie doszłoby do głosu.
+    /// </para>
+    /// </remarks>
+    public static Task<UserCredential> AuthorizeCalendarAsync(
+        string clientId,
+        string clientSecret,
+        string tokenFolder,
+        string userKey,
+        CancellationToken ct = default) =>
+        GoogleWebAuthorizationBroker.AuthorizeAsync(
+            new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
+            [CalendarScope, CalendarWriteScope],
+            userKey,
+            ct,
+            new FileDataStore(tokenFolder, fullPath: true),
+            OdbiorcaKodu?.Invoke());
+
+    /// <summary>Przepisanie żetonu spod klucza tymczasowego pod docelowy.</summary>
+    /// <remarks>
+    /// Konta nie da się nazwać przed zgodą, bo jego adres poznajemy dopiero z listy
+    /// kalendarzy — a zgody nie da się poprosić bez klucza. Stąd klucz tymczasowy
+    /// na czas jednej wymiany i przepisanie żetonu, gdy adres jest już znany.
+    /// Drugie proszenie o zgodę tylko po to, żeby nazwać plik, byłoby dwoma ekranami
+    /// zgody na jedno konto.
+    /// </remarks>
+    public static async Task PrzepiszZetonAsync(
+        string tokenFolder, string zKlucza, string naKlucz, CancellationToken ct = default)
+    {
+        var skladnica = new FileDataStore(tokenFolder, fullPath: true);
+
+        var zeton = await skladnica.GetAsync<TokenResponse>(zKlucza)
+            ?? throw new InvalidOperationException(
+                "Zgoda nie zostawiła żetonu — spróbuj dodać konto jeszcze raz.");
+
+        await skladnica.StoreAsync(naKlucz, zeton);
+        await skladnica.DeleteAsync<TokenResponse>(zKlucza);
+    }
+
+    /// <summary>Czy to urządzenie ma już żeton pod tym kluczem.</summary>
+    /// <remarks>
+    /// Biblioteka Google na brak żetonu reaguje otwarciem przeglądarki ze zgodą.
+    /// Przy odświeżaniu w tle to najgorsza możliwa reakcja: okno zgody wyskakuje
+    /// samo, bez pytania, w środku innej pracy — a na Androidzie w ogóle nie ma komu
+    /// go pokazać i pobieranie zawisa. Podłączenie kalendarza jedzie między
+    /// urządzeniami, żeton nie, więc drugie urządzenie **z założenia** trafia na ten
+    /// przypadek i ma o nim powiedzieć zdaniem, a nie ekranem.
+    /// </remarks>
+    public static async Task<bool> MaZetonAsync(
+        string tokenFolder, string userKey, CancellationToken ct = default)
+    {
+        if (!Directory.Exists(tokenFolder))
+        {
+            return false;
+        }
+
+        try
+        {
+            var zeton = await new FileDataStore(tokenFolder, fullPath: true)
+                .GetAsync<TokenResponse>(userKey).WaitAsync(ct);
+
+            return zeton is not null
+                && (!string.IsNullOrEmpty(zeton.RefreshToken)
+                    || !string.IsNullOrEmpty(zeton.AccessToken));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Nie do odczytania to nie to samo co „nie ma", ale skutek jest ten sam
+            // i tak samo nie wolno na to odpowiedzieć oknem zgody.
+            return false;
+        }
+    }
 
     /// <summary>
     /// Skąd wziąć kod zgody. Puste znaczy droga domyślna, czyli pulpitowa.

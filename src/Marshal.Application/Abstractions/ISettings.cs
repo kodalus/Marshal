@@ -107,6 +107,23 @@ public interface ISettings
 
     void SetMainCalendar(Guid? calendarId);
 
+    /// <summary>
+    /// Dodatkowe konta Google, z których podłączono kalendarze. Adresy pocztowe.
+    /// </summary>
+    /// <remarks>
+    /// <b>Lokalne, nie synchronizowane</b>, i to nie jest przeoczenie. Konto znaczy tu
+    /// „mam tu jego żeton", a żeton jest tajemnicą tego urządzenia i nigdzie nie jedzie.
+    /// Lista rozesłana na drugie urządzenie obiecywałaby dostęp, którego tam nie ma.
+    ///
+    /// Same podłączenia kalendarzy jadą normalnie i niosą adres konta — więc drugie
+    /// urządzenie wie, czego mu brakuje, i mówi to wprost, zamiast po cichu nie pobierać.
+    /// </remarks>
+    IReadOnlyList<string> CalendarAccounts { get; }
+
+    void AddCalendarAccount(string email);
+
+    void RemoveCalendarAccount(string email);
+
     void SetGoogleCalendarEnabled(bool enabled);
 
     void SetZone(string id);

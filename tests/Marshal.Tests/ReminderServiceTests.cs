@@ -42,6 +42,12 @@ public sealed class ReminderServiceTests : IDisposable
 
         public void SetMainCalendar(Guid? calendarId) => throw new NotSupportedException();
 
+        public IReadOnlyList<string> CalendarAccounts => [];
+
+        public void AddCalendarAccount(string email) => throw new NotSupportedException();
+
+        public void RemoveCalendarAccount(string email) => throw new NotSupportedException();
+
         public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
 
         public void SetZone(string id) => throw new NotSupportedException();

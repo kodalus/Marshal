@@ -199,11 +199,11 @@ celowo.
 
 ### Kalendarze z drugiego konta
 
-Marshal loguje się do **jednego** konta Google — tym samym, którym synchronizuje przez
-Dysk. Nie ma w nim listy kont i dołożenie drugiego nie jest możliwe.
+Są na to dwie drogi i **pierwsza jest zwykle lepsza**.
 
-Prawie nigdy nie jest potrzebne, bo Google rozwiązuje to po swojej stronie i robi to
-lepiej: **udostępnij kalendarz z drugiego konta temu, którym logujesz się w Marshalu**.
+#### Droga pierwsza: udostępnienie w Google
+
+**Udostępnij kalendarz z drugiego konta temu, którym logujesz się w Marshalu.**
 W kalendarzu Google: ustawienia tego kalendarza → *Udostępnij określonym osobom lub
 grupom* → dodaj drugi adres → uprawnienie **Wprowadzanie zmian w wydarzeniach**, jeśli
 chcesz z Marshala także zapisywać.
@@ -211,14 +211,36 @@ chcesz z Marshala także zapisywać.
 Od tej chwili kalendarz pojawia się na liście konta, którym się logujesz, i w Marshalu
 jest zwykłym kalendarzem do podłączenia — z własną barwą i własnym obszarem.
 
-To nie jest obejście. Udostępnianie jest w Google mechanizmem **do tego właśnie**,
-a lista kont w aplikacji byłaby drugim stanem mówiącym o tym samym: dwa miejsca,
-w których trzeba pamiętać, kto ma do czego dostęp.
+Dlaczego lepsza: nic nie trzeba robić po raz drugi na telefonie, zgoda jest jedna,
+a uprawnienia widać w jednym miejscu — w Google.
+
+#### Droga druga: drugie konto w Marshalu
 
 Gdy udostępnianie jest zablokowane — konta firmowe Google Workspace bywają zamknięte
-poza domenę — zostaje **prywatny adres `.ics`** tego kalendarza (ustawienia kalendarza →
-*Prywatny adres w formacie iCal*). Marshal czyta go bez żadnych poświadczeń, ale
-wyłącznie do odczytu: wydarzeń z takiego kanału nie da się zmieniać ani kasować.
+poza domenę — **Ustawienia → Kalendarze → Konta Google → „Dodaj konto Google"**.
+Otwiera się zwykłe okno zgody; zaloguj się tam na **drugie** konto.
+
+Co warto wiedzieć:
+
+- Drugie konto wnosi **wyłącznie swoje kalendarze**. Dysk z dziennikiem synchronizacji
+  zostaje przy koncie głównym i to się nie zmienia — dlatego ta zgoda prosi o mniej niż
+  główna: o sam kalendarz, bez Dysku.
+- **Zgoda leży na urządzeniu.** Podłączony kalendarz dojedzie na telefon sam, ale zgody
+  z nim nie ma — na telefonie trzeba kliknąć „Dodaj konto Google" jeszcze raz. Dopóki
+  tego nie zrobisz, telefon pokaże przy tym kalendarzu zdanie o brakującej zgodzie,
+  zamiast po cichu nic nie pobierać.
+- Konto rozpoznawane jest **po adresie pocztowym**, bo tylko on znaczy to samo na obu
+  urządzeniach. Ten sam kalendarz podłączony z dwóch różnych kont to dwa osobne
+  podłączenia — i tak ma być, bo mają różne uprawnienia.
+- „Odłącz konto" zdejmuje zgodę **z tego urządzenia**. Kalendarze z niego zostają na
+  liście; na innym urządzeniu, gdzie zgoda dalej jest, pobierają się jak wcześniej.
+
+#### Droga trzecia: prywatny adres `.ics`
+
+Gdy nie ma ani udostępnienia, ani możliwości zalogowania się — zostaje **prywatny adres
+`.ics`** tego kalendarza (ustawienia kalendarza → *Prywatny adres w formacie iCal*).
+Marshal czyta go bez żadnych poświadczeń, ale wyłącznie do odczytu: wydarzeń z takiego
+kanału nie da się zmieniać ani kasować.
 
 ### Kanały iCal — bez żadnych poświadczeń
 

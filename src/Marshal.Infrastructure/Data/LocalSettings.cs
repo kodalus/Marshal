@@ -125,6 +125,77 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         }
     }
 
+    public const string CalendarAccountsKey = "calendar-accounts";
+
+    private string? _konta;
+
+    /// <summary>
+    /// Dodatkowe konta Google. Adresy rozdzielone znakiem nowej linii.
+    /// </summary>
+    /// <remarks>
+    /// Nowa linia, nie przecinek: adres pocztowy przecinka nie zawiera, ale rozdzielanie
+    /// nim jest tym rodzajem założenia, który przestaje być prawdziwy, gdy ktoś wpisze
+    /// coś, czego nie przewidzieliśmy. W adresie nie ma też znaku nowej linii i tego
+    /// akurat pilnuje już sam format.
+    /// </remarks>
+    public IReadOnlyList<string> CalendarAccounts
+    {
+        get
+        {
+            lock (_gate)
+            {
+                _konta ??= Read(CalendarAccountsKey) ?? string.Empty;
+
+                return _konta
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList();
+            }
+        }
+    }
+
+    public void AddCalendarAccount(string email)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+
+        lock (_gate)
+        {
+            var adres = email.Trim();
+
+            var teraz = (Read(CalendarAccountsKey) ?? string.Empty)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+
+            // Powtórzenie nie jest błędem: ponowne dodanie konta to najczęstsza reakcja
+            // na „chyba nie zadziałało" i ma po prostu odświeżyć żeton.
+            if (!teraz.Contains(adres, StringComparer.OrdinalIgnoreCase))
+            {
+                teraz.Add(adres);
+            }
+
+            Zapisz(teraz);
+        }
+    }
+
+    public void RemoveCalendarAccount(string email)
+    {
+        lock (_gate)
+        {
+            var teraz = (Read(CalendarAccountsKey) ?? string.Empty)
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(k => !string.Equals(k, email?.Trim(), StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            Zapisz(teraz);
+        }
+    }
+
+    private void Zapisz(IEnumerable<string> konta)
+    {
+        var zapis = string.Join('\n', konta);
+        Write(CalendarAccountsKey, zapis);
+        _konta = zapis;
+    }
+
     public void SetGoogleCalendarEnabled(bool enabled)
     {
         lock (_gate)

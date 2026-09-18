@@ -93,6 +93,14 @@ public sealed class CalendarStoreTests : IDisposable
 
         public void SetMainCalendar(Guid? calendarId) => MainCalendarId = calendarId;
 
+        public List<string> Konta { get; } = [];
+
+        public IReadOnlyList<string> CalendarAccounts => Konta;
+
+        public void AddCalendarAccount(string email) => Konta.Add(email);
+
+        public void RemoveCalendarAccount(string email) => Konta.Remove(email);
+
         public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
 
         public void SetZone(string id) => throw new NotSupportedException();
@@ -1870,6 +1878,45 @@ public sealed class CalendarStoreTests : IDisposable
 
         drugi.Id.Should().Be(pierwszy.Id);
         (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Ten_sam_kalendarz_z_dwoch_kont_to_dwa_podlaczenia()
+    {
+        // Kalendarz udostępniony obu stronom widnieje u każdej pod tym samym adresem.
+        // Gdyby konto nie liczyło się do rozpoznania duplikatu, drugie podłączenie
+        // po cichu oddawałoby pierwsze — czyli kalendarz służbowy czytany byłby
+        // żetonem konta prywatnego, które nie ma do niego prawa.
+        var praca = await _usluga.AddAsync(
+            CalendarKind.Google, "wspolny@group.calendar.google.com", "Wspólny",
+            account: "praca@example.test");
+
+        var dom = await _usluga.AddAsync(
+            CalendarKind.Google, "wspolny@group.calendar.google.com", "Wspólny",
+            account: "dom@example.test");
+
+        dom.Id.Should().NotBe(praca.Id);
+
+        var zrodla = await _usluga.SourcesAsync();
+        zrodla.Where(z => z.ExternalId == "wspolny@group.calendar.google.com")
+            .Select(z => z.Account)
+            .Should().BeEquivalentTo(["praca@example.test", "dom@example.test"]);
+    }
+
+    [Fact]
+    public async Task Konto_glowne_i_dodatkowe_to_nie_jest_ten_sam_kalendarz()
+    {
+        // Ta sama para rodzaj–identyfikator, różne konta: składanie duplikatów przy
+        // odświeżaniu ma zostawić oba. Objaw pomyłki byłby cichy — jeden z dwóch
+        // kalendarzy przestałby się pobierać, bez śladu na ekranie.
+        await _usluga.AddAsync(CalendarKind.Google, "primary", "Mój");
+        await _usluga.AddAsync(
+            CalendarKind.Google, "primary", "Służbowy", account: "praca@example.test");
+
+        var raport = await _usluga.RefreshAsync(force: true);
+
+        raport.Folded.Should().Be(0);
+        (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(2);
     }
 
     [Fact]
