@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
+  Pasek barwy jest ImageView, nie View. RemoteViews rozwija tylko ustaloną listę
+  widoków i zwykłego View na niej nie ma — układ z nim wstawia się bez błędu przy
+  budowaniu i wywala się dopiero na ekranie domowym, komunikatem systemu o tym,
+  że widgetu nie da się wczytać.
+
   Osiem wierszy wpisanych wprost, a nie ListView z RemoteViewsService.
   Lista w widgecie to osobna usługa, osobna fabryka widoków i osobny cykl życia.
   Przy planie jednego dnia osiem pozycji mieści to, co widać na ekranie domowym
@@ -59,7 +64,7 @@
 
   <LinearLayout android:id="@+id/wiersz_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_1" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_1" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_1" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
@@ -71,7 +76,7 @@
 
   <LinearLayout android:id="@+id/wiersz_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_2" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_2" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_2" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
@@ -83,7 +88,7 @@
 
   <LinearLayout android:id="@+id/wiersz_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_3" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_3" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_3" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
@@ -95,7 +100,7 @@
 
   <LinearLayout android:id="@+id/wiersz_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_4" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_4" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_4" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
@@ -107,7 +112,7 @@
 
   <LinearLayout android:id="@+id/wiersz_5" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_5" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_5" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_5" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
@@ -119,7 +124,7 @@
 
   <LinearLayout android:id="@+id/wiersz_6" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_6" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_6" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_6" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
@@ -131,7 +136,7 @@
 
   <LinearLayout android:id="@+id/wiersz_7" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_7" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_7" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_7" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />
@@ -143,7 +148,7 @@
 
   <LinearLayout android:id="@+id/wiersz_8" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="7dp" android:gravity="center_vertical">
 
-    <View android:id="@+id/pasek_8" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
+    <ImageView android:id="@+id/pasek_8" android:layout_width="3dp" android:layout_height="26dp" android:layout_marginEnd="8dp" android:background="@color/akcent" />
 
     <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
       <TextView android:id="@+id/tytul_8" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:ellipsize="end" android:textColor="@color/tekst" android:textSize="14sp" />

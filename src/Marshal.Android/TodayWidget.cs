@@ -1,10 +1,10 @@
+using System.Globalization;
 using Android.App;
 using Android.Appwidget;
 using Android.Content;
 using Android.Views;
 using Android.Widget;
 using Marshal.Application.Abstractions;
-using System.Globalization;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Areas;
@@ -321,8 +321,14 @@ public sealed class TodayWidget : AppWidgetProvider
         return string.Join(" / ", czesci);
     }
 
+    /// <summary>Godzina jako „16:00".</summary>
+    /// <remarks>
+    /// Niezmiennicza, nie lokalna: dwukropek jest tu **znakiem**, a nie separatorem
+    /// do podmiany. Kultura systemowa potrafi wstawić w to miejsce kropkę albo
+    /// dwunastkę z „PM", a widget ma wyglądać tak samo jak siatka kalendarza obok.
+    /// </remarks>
     private static string Godzina(TimeOnly pora) =>
-        pora.ToString("HH\:mm", CultureInfo.InvariantCulture);
+        pora.ToString("HH:mm", CultureInfo.InvariantCulture);
 
     private static string? Nalezy(
         TaskItem zadanie,
@@ -378,8 +384,11 @@ public sealed class TodayWidget : AppWidgetProvider
         {
             return global::Android.Graphics.Color.ParseColor(zapis).ToArgb();
         }
-        catch (Exception e) when (e is Java.Lang.IllegalArgumentException or ArgumentException)
+        catch (Exception e) when (e is not OperationCanceledException)
         {
+            // Szeroko, bo rodzaj wyjątku zależy od tego, czy rozbiór barwy jest po
+            // stronie zarządzanej, czy schodzi do Javy — a to nie jest wiedza, na
+            // której wolno opierać działanie widgetu.
             return Akcent;
         }
     }
