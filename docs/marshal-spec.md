@@ -132,7 +132,7 @@ zerowy kreatora przeglądu. Koszt zerowy, jedna flaga.
 
 | Etap | Zawartość | Rezultat |
 |---|---|---|
-| 0 | Szkielet, BD, testy, CI, okno desktopowe i ekran Androida | ✅ Pusta aplikacja startuje na obu platformach |
+| 0 | Szkielet, BD, testy, CI, okno desktopowe i ekran Androida | ✅ Pusta aplikacja startuje na obu platformach (Android dopiero od 18.09, patrz niżej) |
 | 1 | Zadania, podzadania, projekty, skrzynka, drzewko przetwarzania, pierwsza migracja, APK tylko `arm64-v8a`, wydanie z APK | Działające GTD na jednym urządzeniu |
 | 2 | Dzisiaj, Plany, Kiedyś, Archiwum, **obszary**, zagnieżdżanie projektów, tagi, priorytety, kolory | Pełna nawigacja po sekcjach |
 | 3 | **Synchronizacja przez Dysk Google** | Telefon i desktop to jedna aplikacja — punkt bez odwrotu |
@@ -145,9 +145,18 @@ zerowy kreatora przeglądu. Koszt zerowy, jedna flaga.
 | 10 | Widget Androida, tryb ciemny, kopia zapasowa | Domknięcie — poza tym, co wymaga sprzętu |
 | Później | Dwustronny zapis do Google Calendar | Osobno, po przeżyciu etapu 7 |
 
-**Etap 0 zamknięty 16.09.2026.** Zweryfikowany na prawdziwym sprzęcie, nie tylko w CI:
-okno otwiera się na Windowsie, aplikacja startuje na Androidzie. Tego nie dało się
-sprawdzić zdalnie — CI buduje, nie uruchamia.
+**Etap 0 zamknięty 16.09.2026** — i zamknięty przedwcześnie w połowie androidowej.
+Okno na Windowsie otwierało się od tamtego dnia. Aplikacja na Androidzie **nie
+startowała ani razu** aż do 18.09.2026: motyw okna dziedziczył po systemowym
+`Theme.DeviceDefault`, a okno Avalonii wywodzi się z `AppCompatActivity`, która przy
+zakładaniu widoku wymaga motywu z rodziny AppCompat i bez niego rzuca wyjątkiem.
+Tak było od pierwszego dnia projektu, w każdej wersji Avalonii 11.
+
+Nie wyszło to przez dwa dni z powodu, który warto zapamiętać: **CI buduje APK, ale
+go nie uruchamia.** Pakiet powstawał poprawnie, przebiegi były zielone, a zapis
+„zweryfikowany na prawdziwym sprzęcie" w tym miejscu specyfikacji był nieprawdziwy —
+i to on kazał wierzyć, że sprawa jest sprawdzona. Zielone budowanie nie jest dowodem
+uruchomienia i wpis o weryfikacji wolno postawić dopiero po niej.
 
 Do etapu 1 dołożone dwie rzeczy z budowania, które wyszły przy pierwszej instalacji:
 
