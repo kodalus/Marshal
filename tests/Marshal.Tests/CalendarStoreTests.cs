@@ -1016,6 +1016,45 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Zadanie zdjęte z dnia nie zostawia na siatce swojego odbicia.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie znika z siatki natychmiast, a zdjęcie jego odbicia z Google idzie przez
+    /// sieć i wraca sekundę albo dwie później. Przez tę chwilę cień nie był już przez
+    /// nic odsiewany — odsiew szedł po zadaniach z oglądanego zakresu, a tego zadania
+    /// w nim właśnie zabrakło — i rysował się jako całodniowy pasek przez cały dzień.
+    /// </remarks>
+    [Fact]
+    public async Task Odbicie_zadania_zdjetego_z_dnia_nie_rysuje_sie_jako_wydarzenie()
+    {
+        var odbicie = new TaskMirror(
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            new AreaRepository(_db));
+
+        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(obszar);
+
+        var zadanie = TaskItem.Capture("Wzięte na dziś", _zegar.Now, _hlc.Next());
+        zadanie.Schedule(obszar.Id, Dzis, _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        await odbicie.ShareAsync(zadanie.Id, _zrodlo.Id);
+
+        // Jeden blok: zadanie. Jego wydarzenie w Google jest cieniem i nie rysuje się.
+        (await _usluga.AgendaAsync(Dzis, 1))[0].AllDay
+            .Should().ContainSingle().Which.Entry.TaskId.Should().Be(zadanie.Id);
+
+        // Zdjęcie z dnia — bez zdejmowania odbicia, czyli dokładnie stan z tej sekundy,
+        // w której zadanie już zniknęło, a odpowiedź z sieci jeszcze nie wróciła.
+        _db.Tasks.Single(t => t.Id == zadanie.Id).LeaveAsDebt(_hlc.Next());
+        _db.SaveChanges();
+
+        (await _usluga.AgendaAsync(Dzis, 1))[0].AllDay
+            .Should().BeEmpty("cień nie ma prawa stać się osobnym wpisem");
+    }
+
+    /// <summary>
     /// Plan dnia — czyli widget — pokazuje także wydarzenia z podłączonych kalendarzy.
     /// </summary>
     /// <remarks>

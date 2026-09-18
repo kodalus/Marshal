@@ -86,5 +86,16 @@ public interface ITaskRepository
     /// </remarks>
     Task<IReadOnlyList<TaskItem>> PendingMirrorRemovalsAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Identyfikatory wszystkich odbić, na które wskazuje jakiekolwiek zadanie.
+    /// </summary>
+    /// <remarks>
+    /// Bez względu na stan zadania i na to, czy wypada w oglądanym zakresie. Wskazanie
+    /// znaczy „to wydarzenie jest cieniem zadania" i przestaje znaczyć dopiero wtedy,
+    /// gdy zdjęcie odbicia doszło do skutku. Siatka rysuje po tym, żeby cień nie stał
+    /// się na chwilę osobnym wpisem, kiedy zadanie przestaje być widoczne.
+    /// </remarks>
+    Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default);
+
     void Add(TaskItem task);
 }

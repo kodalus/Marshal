@@ -174,5 +174,12 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
             .OrderBy(t => t.CreatedAt)
             .ToListAsync(ct), ct);
 
+    public async Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default) =>
+        await _kolejka.WykonajAsync(() => db.Tasks
+            .Where(t => t.SharedEventId != null)
+            .Select(t => t.SharedEventId!)
+            .Distinct()
+            .ToListAsync(ct), ct);
+
     public void Add(TaskItem task) => db.Tasks.Add(task);
 }

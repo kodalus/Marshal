@@ -783,10 +783,20 @@ public sealed class CalendarSyncService(
             .Concat(wybrane.Where(w => umowione.All(u => u.Id != w.Id)))
             .ToList();
 
-        var odbicia = zadania
-            .Where(z => z.SharedEventId is not null)
-            .Select(z => z.SharedEventId!)
-            .ToHashSet();
+        // Wskazania **wszystkich** zadań, nie tylko tych widocznych w tym zakresie.
+        //
+        // Objaw, który to wymusił: zadanie zdjęte z dzisiejszego dnia zostawiało na
+        // sekundę albo dwie swoje odbicie z Google, narysowane jako całodniowy pasek
+        // przez cały dzień. Zadanie znikało z siatki natychmiast, a jego cień żył do
+        // chwili, gdy zdjęcie odbicia wróciło z sieci — i przez tę chwilę nic już go
+        // nie odsiewało, bo odsiew szedł po zadaniach **z oglądanego zakresu**, a tego
+        // zadania w nim właśnie zabrakło.
+        //
+        // Wskazanie znika dopiero wtedy, gdy zdjęcie odbicia doszło do skutku, więc
+        // przez cały ten czas cień pozostaje cieniem. Gdyby zdjęcie nie doszło nigdy,
+        // dokańczanie zaległych kasowań próbuje co minutę i zapisuje powód w dzienniku
+        // — wpis nie znika więc po cichu, tylko czeka na skutek.
+        var odbicia = (await tasks.MirroredEventIdsAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
         foreach (var wydarzenie in await store.EventsAsync(poczatek, koniec, ct))
         {
