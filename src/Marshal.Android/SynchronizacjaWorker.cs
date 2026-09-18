@@ -86,7 +86,7 @@ public sealed class SynchronizacjaWorker : Worker
 
             WorkManager.GetInstance(kontekst).EnqueueUniquePeriodicWork(
                 Nazwa,
-                ExistingPeriodicWorkPolicy.Keep,
+                ExistingPeriodicWorkPolicy.Keep!,
                 (PeriodicWorkRequest)budowniczy.Build());
         }
         catch (Exception e)

@@ -197,12 +197,18 @@ public sealed class TodayWidget : AppWidgetProvider
     /// Złożenie i podanie ramy systemowi.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// W tle, bo nagłówek niesie datę, a dzisiejszy dzień liczy zegar aplikacji
     /// w strefie z ustawień — czyli czyta bazę. Zegar systemowy byłby o dzień inny od
     /// planu pod nagłówkiem u kogoś, kto ma ustawioną inną strefę, i właśnie przy
     /// przełączaniu dni byłoby to widać najbardziej.
+    /// </para>
+    /// <para>
+    /// Składowa odbiornika, nie metoda statyczna: <c>GoAsync</c> przedłuża życie
+    /// <b>tego</b> odbiornika i nie ma znaczenia w oderwaniu od niego.
+    /// </para>
     /// </remarks>
-    private static void Przerysuj(Context context, AppWidgetManager menedzer, int[] identyfikatory)
+    private void Przerysuj(Context context, AppWidgetManager menedzer, int[] identyfikatory)
     {
         var okno = context;
         var oczekiwanie = GoAsync();
