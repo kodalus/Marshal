@@ -7,6 +7,7 @@ using Android.Widget;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Requests;
 using Google.Apis.Auth.OAuth2.Responses;
+using Marshal.Infrastructure.Sync.Google;
 
 namespace Marshal.Android;
 
@@ -69,6 +70,11 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         // w trakcie przyjmowania połączenia nie ogląda się na znacznik odwołania.
         await using var przerwanie = zegar.Token.Register(nasluch.Stop);
 
+        // Druga droga powrotu, na wypadek gdyby pierwsza nie doszła: adres przepisany
+        // z paska przeglądarki. Zgłoszona **przed** otwarciem przeglądarki, żeby okno
+        // ustawień miało co pokazać od pierwszej chwili.
+        var reczny = PowrotZgody.Czekaj();
+
         try
         {
             Otworz(url.Build());
@@ -78,35 +84,22 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
             // pierwsza rzecz, którą trzeba wiedzieć.
             Powiedz($"Czekam na zgodę Google — 127.0.0.1:{_port}");
 
-            while (true)
+            var gniazdo = Gniazdo(nasluch, zegar.Token);
+
+            if (await Task.WhenAny(gniazdo, reczny) == reczny)
             {
-                using var polaczenie = await nasluch.AcceptTcpClientAsync(zegar.Token);
-                var strumien = polaczenie.GetStream();
+                // Gniazdo zostaje porzucone i zaraz zgaśnie razem z nasłuchem.
+                // Jego wyjątek trzeba obejrzeć, inaczej wraca później jako nieobsłużony.
+                _ = gniazdo.ContinueWith(
+                    zadanie => _ = zadanie.Exception, TaskScheduler.Default);
 
-                if (await Zadanie(strumien, zegar.Token) is not { } adres)
-                {
-                    continue;
-                }
-
-                var pola = Pola(adres);
-
-                // Przeglądarka pyta też o inne rzeczy, choćby o ikonę strony.
-                // Żądanie bez kodu i bez błędu nie jest powrotem ze zgody.
-                if (!pola.ContainsKey("code") && !pola.ContainsKey("error"))
-                {
-                    await Odpisz(strumien, "Marshal czeka na zgodę.", zegar.Token);
-                    continue;
-                }
-
-                await Odpisz(strumien, "Zgoda przyjęta. Możesz wrócić do Marshala.", zegar.Token);
-
-                // Powrót do aplikacji sam, bez szukania jej w przełączniku okien.
-                Wroc();
-
-                return new AuthorizationCodeResponseUrl(pola);
+                return new AuthorizationCodeResponseUrl(Pola(await reczny));
             }
+
+            return await gniazdo;
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        // Pełna nazwa, bo Android.OS ma własny typ o tej samej nazwie.
+        catch (System.OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             // Skończyła się cierpliwość, a nie zostało to przerwane z zewnątrz.
             // Wyjątek z treścią, bo ląduje pod przyciskiem synchronizacji i jest
@@ -118,7 +111,41 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         }
         finally
         {
+            PowrotZgody.Przestan();
             nasluch.Stop();
+        }
+    }
+
+    /// <summary>Powrót przeglądarki na port pętli zwrotnej — droga pierwsza.</summary>
+    private async Task<AuthorizationCodeResponseUrl> Gniazdo(
+        TcpListener nasluch, CancellationToken ct)
+    {
+        while (true)
+        {
+            using var polaczenie = await nasluch.AcceptTcpClientAsync(ct);
+            var strumien = polaczenie.GetStream();
+
+            if (await Zadanie(strumien, ct) is not { } adres)
+            {
+                continue;
+            }
+
+            var pola = Pola(adres);
+
+            // Przeglądarka pyta też o inne rzeczy, choćby o ikonę strony.
+            // Żądanie bez kodu i bez błędu nie jest powrotem ze zgody.
+            if (!pola.ContainsKey("code") && !pola.ContainsKey("error"))
+            {
+                await Odpisz(strumien, "Marshal czeka na zgodę.", ct);
+                continue;
+            }
+
+            await Odpisz(strumien, "Zgoda przyjęta. Możesz wrócić do Marshala.", ct);
+
+            // Powrót do aplikacji sam, bez szukania jej w przełączniku okien.
+            Wroc();
+
+            return new AuthorizationCodeResponseUrl(pola);
         }
     }
 

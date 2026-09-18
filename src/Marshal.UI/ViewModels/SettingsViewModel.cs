@@ -171,6 +171,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsSyncing { get; set; }
 
+    /// <summary>Adres przepisany z paska przeglądarki, gdy nie wróciła sama.</summary>
+    [ObservableProperty]
+    public partial string ConsentUrl { get; set; } = string.Empty;
+
     /// <summary>
     /// Czy prosić także o odczyt kalendarza. Osobno, bo to uprawnienie ma inną cenę —
     /// zob. <see cref="ISettings.GoogleCalendarEnabled"/>.
@@ -522,6 +526,33 @@ public sealed partial class SettingsViewModel : ObservableObject
     private static readonly TimeSpan CzasNaZgode = TimeSpan.FromMinutes(5);
 
     private CancellationTokenSource? _przerwanie;
+
+    /// <summary>
+    /// <summary>
+    /// Dokończenie zgody adresem przepisanym z przeglądarki.
+    /// </summary>
+    /// <remarks>
+    /// Droga ratunkowa, nie zwykła. Przeglądarka po zgodzie ma wrócić do aplikacji
+    /// sama; na telefonie potrafi tego nie zrobić, bo system odkłada do zamrażarki
+    /// proces, który zszedł w tło — wtedy jądro przyjmuje połączenie, ale nie ma go
+    /// komu obsłużyć i przeglądarka wisi. Adres z jej paska zawiera ten sam kod zgody,
+    /// który przyszedłby przez gniazdo.
+    /// </remarks>
+    [RelayCommand]
+    private void FinishConsent()
+    {
+        if (string.IsNullOrWhiteSpace(ConsentUrl))
+        {
+            SyncStatus = "Wklej adres z paska przeglądarki — ten, na którym się zatrzymała.";
+            return;
+        }
+
+        SyncStatus = PowrotZgody.Podaj(ConsentUrl.Trim())
+            ? "Adres przyjęty — dokańczam logowanie."
+            : "Nic nie czeka na adres. Najpierw kliknij „Zapisz i zsynchronizuj”.";
+
+        ConsentUrl = string.Empty;
+    }
 
     /// <summary>
     /// Zapisanie poświadczeń i przebieg. Jedno polecenie, bo to jedna czynność:

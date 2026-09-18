@@ -1467,6 +1467,22 @@
         <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
                    Text="Przy pierwszym razie otworzy się przeglądarka i poprosi o zgodę. Potem już nie — żeton zostaje na tym urządzeniu. Na Androidzie tak samo: te same poświadczenia co na komputerze, przeglądarka telefonu i powrót do aplikacji." />
 
+        <!-- Droga ratunkowa, widoczna tylko w trakcie logowania. Przeglądarka ma
+             wrócić do aplikacji sama; na telefonie potrafi tego nie zrobić, bo system
+             odkłada do zamrażarki proces, który zszedł w tło — wtedy strona wisi
+             zamiast się zamknąć. Adres z jej paska zawiera ten sam kod zgody. -->
+        <StackPanel IsVisible="{Binding IsSyncing}" Margin="0,10,0,0">
+          <TextBlock Classes="label" Text="Przeglądarka nie wróciła sama?" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" Text="{Binding ConsentUrl}"
+                     Watermark="http://127.0.0.1:…/authorize/?code=…" />
+            <Button Grid.Column="1" Margin="6,0,0,0" Content="Dokończ"
+                    Command="{Binding FinishConsentCommand}" />
+          </Grid>
+          <TextBlock Classes="hint" Margin="2,4,0,0"
+                     Text="Skopiuj adres z paska przeglądarki — ten, na którym się zatrzymała — i wklej tutaj." />
+        </StackPanel>
+
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding SyncStatus}" />
 
         <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
