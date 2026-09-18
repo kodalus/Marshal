@@ -731,6 +731,44 @@ public sealed partial class TaskDetailViewModel(
     }
 
     /// <summary>
+    /// Zadanie do kosza, z okna szczegółu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Na komputerze kasowało się z listy, prawym przyciskiem. Na telefonie nie ma
+    /// prawego przycisku ani listy pod ręką — szczegół jest tam całym ekranem — więc
+    /// zadania otwartego z kalendarza <b>nie dało się usunąć w ogóle</b>. Jedyną drogą
+    /// było wrócić na komputer.
+    /// </para>
+    /// <para>
+    /// <b>Do kosza, nie „usuń".</b> Nazwa mówi prawdę o tym, co się dzieje: zadanie
+    /// dostaje nagrobek i zostaje w archiwum, a nie znika z bazy. Dlatego też nie ma
+    /// tu pytania „czy na pewno" — pytanie o potwierdzenie przy czynności odwracalnej
+    /// uczy odklikiwać pytania, a to psuje te, przy których potwierdzenie ma sens.
+    /// </para>
+    /// <para>
+    /// Udostępnione zabiera ze sobą swoje odbicie w kalendarzu — tym zajmuje się
+    /// usługa skrzynki. Zostawione byłoby zaproszeniem na coś, czego już nie ma.
+    /// </para>
+    /// </remarks>
+    public async Task TrashAsync()
+    {
+        await log.RecordAsync("Zadanie: do kosza z okna", Title);
+
+        if (_id == Guid.Empty)
+        {
+            // Nowe zadanie nie ma czego wyrzucać; zamknięcie okna robi dokładnie to samo.
+            Close();
+            return;
+        }
+
+        await inbox.TrashAsync(_id);
+
+        IsOpen = false;
+        Saved?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
     /// Chwila przypomnienia z dnia i pory. Sam dzień bez pory znaczy rano — ale
     /// **sama pora bez dnia nie znaczy nic**, bo nie wiadomo którego. Wtedy przypomnienia
     /// nie ma, zamiast zgadywać dzisiaj i odezwać się natychmiast.

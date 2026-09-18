@@ -950,7 +950,7 @@
            to samo pytanie, pokazywane na przemian. Rozdzielone na dwoje rodzeństwa
            w tym samym panelu, bo miesiąc nie ma godzin, kolumn ani paska całodniowego
            i wciśnięty w tamtą siatkę musiałby udawać jej szczególny przypadek. -->
-      <Panel>
+      <Panel x:Name="ObszarKalendarza" Loaded="ObszarKalendarzaGotowy">
       <ScrollViewer x:Name="SiatkaKalendarza" x:DataType="vm:CalendarViewModel"
                     IsVisible="{Binding !IsMonth}"
                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
@@ -1157,7 +1157,7 @@
                     <DataTemplate x:DataType="vm:MonthCell">
                       <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
                               Classes.dzisiaj="{Binding IsToday}"
-                              PointerPressed="NaDniuMiesiaca">
+                              PointerReleased="NaDniuMiesiaca">
                         <DockPanel>
                           <!-- Numer dnia i licznik nadmiaru w jednym wierszu u góry:
                                oba są wiadomością o komórce, a nie jej treścią, i oba
@@ -1173,7 +1173,7 @@
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:MonthEntry">
                                 <Grid ColumnDefinitions="Auto,*" Margin="0,1"
-                                      PointerPressed="NaWpisieMiesiaca">
+                                      PointerReleased="NaWpisieMiesiaca">
                                   <TextBlock Grid.Column="0" Classes="hint" Margin="0,0,4,0"
                                              Text="{Binding Time}" IsVisible="{Binding HasTime}" />
                                   <TextBlock Grid.Column="1" Text="{Binding Label}"
@@ -2115,11 +2115,22 @@
              więcej. Bez pośrednika: okno woła metodę wprost, bo polecenie
              asynchroniczne potrafi cicho odmówić, a odmowa wygląda wtedy dokładnie
              jak martwy przycisk i nie zostawia śladu nigdzie. -->
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
-                    Margin="0,16,0,0" HorizontalAlignment="Right">
-          <Button Classes="cichy" Padding="14,8" Click="ZamknijZadanie" Content="Zamknij" />
-          <Button Classes="glowny" Padding="14,8" Click="ZapiszZadanie" Content="Zapisz" />
-        </StackPanel>
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,16,0,0">
+          <!-- Kosz z lewej, z dala od zapisu: to jedyny przycisk w tym oknie, który coś
+               zabiera, a na telefonie kciuk ląduje po prawej. Widoczny tylko przy
+               zadaniu, które już istnieje — nowego nie ma czego wyrzucać.
+
+               Do dziś nie było go wcale. Na komputerze kasowało się z listy, prawym
+               przyciskiem; na telefonie nie ma ani prawego przycisku, ani listy pod
+               ręką, więc zadania otwartego z kalendarza nie dało się usunąć w ogóle. -->
+          <Button Grid.Column="0" Classes="cichy" Padding="14,8" Click="UsunZadanie"
+                  Content="Do kosza" IsVisible="{Binding IsExisting}" />
+
+          <Button Grid.Column="2" Classes="cichy" Padding="14,8" Margin="8,0"
+                  Click="ZamknijZadanie" Content="Zamknij" />
+          <Button Grid.Column="3" Classes="glowny" Padding="14,8"
+                  Click="ZapiszZadanie" Content="Zapisz" />
+        </Grid>
 
       <ScrollViewer Name="SzczegolPrzewijanie">
         <StackPanel>

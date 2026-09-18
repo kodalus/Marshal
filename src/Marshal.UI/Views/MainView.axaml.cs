@@ -136,6 +136,9 @@ public partial class MainView : UserControl
     private void OdhaczZadanie(object? nadawca, RoutedEventArgs e) =>
         Zadanie("Zadanie: odhaczenie z okna", m => m.CompleteAsync());
 
+    private void UsunZadanie(object? nadawca, RoutedEventArgs e) =>
+        Zadanie("Zadanie: do kosza z okna", m => m.TrashAsync());
+
     private void ZamknijZadanie(object? nadawca, RoutedEventArgs e) =>
         Zadanie("Zadanie: zamknięcie okna", m =>
         {
@@ -151,6 +154,92 @@ public partial class MainView : UserControl
             e.Handled = true;
             Zadanie("Zadanie: zapis z klawisza", m => m.SaveAsync());
         }
+    }
+
+    /// <summary>
+    /// Przejechanie palcem w bok przewija kalendarz o cały zakres.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Strzałki u góry zostają, bo na myszy są szybsze. Ale na telefonie cały widok
+    /// jest o zakresie — tydzień, trzy dni, miesiąc — a jedyną drogą do sąsiedniego
+    /// było wycelowanie w przycisk szerokości kciuka. Przejechanie w bok jest tym,
+    /// czego się na tym ekranie próbuje pierwszym odruchem.
+    /// </para>
+    /// <para>
+    /// <b>Podsłuchiwane w fazie opadania, nie podnoszenia.</b> Bloki na siatce są
+    /// przyciskami i zjadają puszczenie same, więc obsługa dopięta zwyczajnie nigdy by
+    /// go nie zobaczyła. W fazie opadającej zdarzenie idzie od okna w dół, czyli przez
+    /// nas <b>przed</b> blokiem — i tylko wtedy, gdy ruch okazał się przejechaniem,
+    /// oznaczamy je jako obsłużone, żeby blok się nie otworzył po drodze.
+    /// </para>
+    /// <para>
+    /// Tylko palcem. Na myszy przeciąganie w bok należy do bloków i zabranie im go
+    /// byłoby wymianą jednej rzeczy na drugą, a nie dołożeniem.
+    /// </para>
+    /// </remarks>
+    private void ObszarKalendarzaGotowy(object? nadawca, RoutedEventArgs e)
+    {
+        if (nadawca is not Control obszar)
+        {
+            return;
+        }
+
+        obszar.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
+        obszar.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
+    }
+
+    /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
+    /// <remarks>
+    /// Osiemdziesiąt punktów to około jednej piątej szerokości telefonu: za dużo, żeby
+    /// wyszło przy pionowym przewijaniu, za mało, żeby trzeba było brać rozmach.
+    /// </remarks>
+    private const double ProgPrzejechania = 80;
+
+    private (Point Skad, IPointer Wskaznik)? _przejechanie;
+
+    private void ObszarNacisniety(object? nadawca, PointerPressedEventArgs e)
+    {
+        _przejechanie = e.Pointer.Type == PointerType.Touch && nadawca is Control obszar
+            ? (e.GetPosition(obszar), e.Pointer)
+            : null;
+    }
+
+    private void ObszarPuszczony(object? nadawca, PointerReleasedEventArgs e)
+    {
+        var start = _przejechanie;
+        _przejechanie = null;
+
+        // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, a nie zakres.
+        if (_przeciagam
+            || start is not { } dotyk
+            || nadawca is not Control obszar
+            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer)
+            || _kalendarz is null)
+        {
+            return;
+        }
+
+        var koniec = e.GetPosition(obszar);
+        var wBok = koniec.X - dotyk.Skad.X;
+
+        // W bok **wyraźnie bardziej** niż w pionie: ukośny ruch przy przewijaniu dnia
+        // przeskakiwałby tydzień przy każdej próbie dojechania do wieczora.
+        if (Math.Abs(wBok) < ProgPrzejechania || Math.Abs(wBok) < 1.5 * Math.Abs(koniec.Y - dotyk.Skad.Y))
+        {
+            return;
+        }
+
+        // Obsłużone tutaj, żeby blok pod palcem nie otworzył się przy okazji.
+        e.Handled = true;
+
+        // Palec w lewo odsłania to, co po prawej — czyli następny zakres. Tak samo
+        // zachowuje się każda lista, po której się przejeżdża.
+        _ = Probuj(
+            "Kalendarz: przejechanie",
+            () => wBok < 0
+                ? _kalendarz.NextCommand.ExecuteAsync(null)
+                : _kalendarz.PreviousCommand.ExecuteAsync(null));
     }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
@@ -797,7 +886,7 @@ public partial class MainView : UserControl
     /// przodka znaczyłoby wyrażenie, które kompiluje się i nie działa — a błędne
     /// dowiązanie nie daje żadnego objawu poza przyciskiem, który nic nie robi.
     /// </remarks>
-    private void NaWpisieMiesiaca(object? nadawca, PointerPressedEventArgs e)
+    private void NaWpisieMiesiaca(object? nadawca, PointerReleasedEventArgs e)
     {
         if (DataContext is not MainViewModel model
             || nadawca is not Control wiersz
@@ -815,8 +904,14 @@ public partial class MainView : UserControl
     /// Na komórce, nie na samym numerze. Numer jest za mały, żeby trafić w niego palcem,
     /// a dotknięcie pustego dnia i tak nie ma innego znaczenia. Wpis przechwytuje swoje
     /// dotknięcie wcześniej, więc kliknięcie w nazwę zadania nie zjeżdża na dzień.
+    ///
+    /// Na puszczeniu, nie na naciśnięciu. Naciśnięcie jest na dotyku **początkiem
+    /// przejechania palcem** — a odkąd przejechanie przewija kalendarz o cały zakres,
+    /// reakcja na naciśnięcie znaczyłaby zejście na dzień przy każdej próbie zmiany
+    /// miesiąca. Przejechanie jest zresztą przechwytywane wcześniej i nie dochodzi
+    /// tutaj wcale; ta zmiana jest po to, żeby nie polegać na tamtej.
     /// </remarks>
-    private void NaDniuMiesiaca(object? nadawca, PointerPressedEventArgs e)
+    private void NaDniuMiesiaca(object? nadawca, PointerReleasedEventArgs e)
     {
         if (DataContext is not MainViewModel model
             || nadawca is not Control komorka
