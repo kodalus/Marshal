@@ -1121,10 +1121,17 @@ public sealed class CalendarStoreTests : IDisposable
         model.ColumnWidth.Should().Be(298, "trzy dni z dziewięciuset punktów bez odstępów");
         model.Columns.SelectMany(k => k.Slots).Should().OnlyContain(b => b.Width <= 298);
 
-        // Dolna granica: siedem kolumn po czternaście punktów to nie jest tydzień,
-        // tylko siedem nieczytelnych pasków. Węższe okno ma się przewijać w bok.
+        // Tydzień na telefonie mieści się bez przewijania w bok: przy szerokości,
+        // jaką zostawia ekran w pionie, siedem kolumn wychodzi po czterdzieści punktów
+        // i tyle ma zostać. Granica jest niżej, więc tu jej nie widać.
+        await model.ShowWeekCommand.ExecuteAsync(null);
+        model.SetAvailableWidth(294);
+        model.ColumnWidth.Should().Be(40, "siedem kolumn z dwustu dziewięćdziesięciu czterech");
+
+        // Dolna granica dopiero przy oknie, w którym kolumna zeszłaby poniżej czytelności:
+        // sześć widocznych i jedna ucięta jest lepsze od siedmiu pasków bez treści.
         model.SetAvailableWidth(100);
-        model.ColumnWidth.Should().BeGreaterThanOrEqualTo(96);
+        model.ColumnWidth.Should().BeGreaterThanOrEqualTo(34);
     }
 
     [Fact]

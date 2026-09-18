@@ -70,7 +70,15 @@ public sealed record SlotBox(
     /// wpisać w blok; poniżej dwunastu punktów już się nie da i wtedy odhacza się
     /// z listy albo z otwartego szczegółu.
     /// </remarks>
-    public bool ShowCheck => CanComplete && Height >= 12 && Width >= 40;
+    /// <remarks>
+    /// Szerokość podniesiona z czterdziestu punktów do pięćdziesięciu sześciu, odkąd
+    /// tydzień mieści się na telefonie. Przy kolumnie czterdziestopunktowej kwadracik
+    /// zabierał połowę bloku i na tytuł zostawały dwa znaki — czyli blok przestawał
+    /// mówić, czego dotyczy, żeby dało się go odhaczyć. Odwrotnie niż powinno:
+    /// odhaczyć da się z listy i z otwartego szczegółu, a przeczytać nie da się nigdzie
+    /// indziej.
+    /// </remarks>
+    public bool ShowCheck => CanComplete && Height >= 12 && Width >= 56;
 
     /// <summary>
     /// Czy zostawić z lewej miejsce na znacznik.
@@ -225,8 +233,24 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     private double _doDyspozycji;
 
-    /// <summary>Najwęższa kolumna, jaką da się jeszcze czytać.</summary>
-    private const double NajwezszaKolumna = 96;
+    /// <summary>
+    /// Najwęższa kolumna, poniżej której tydzień zaczyna się przewijać w bok.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Było tu dziewięćdziesiąt sześć punktów — czyli tyle, ile trzeba, żeby w bloku
+    /// zmieścił się tytuł w jednej linijce. Skutek: na telefonie tydzień nie mieścił
+    /// się na ekranie i trzeba było przewijać w bok, żeby zobaczyć sobotę. Tydzień,
+    /// którego nie widać naraz, nie odpowiada na pytanie, po które się go otwiera.
+    /// </para>
+    /// <para>
+    /// Trzydzieści cztery punkty to szerokość, przy której tytuł jeszcze się zawija
+    /// na kilka linijek zamiast zniknąć. Siedem takich kolumn mieści się na telefonie
+    /// w pionie z zapasem. Poniżej tej granicy przewijanie wraca — bo sześć kolumn
+    /// widocznych i jedna ucięta jest lepsze od siedmiu pasków bez treści.
+    /// </para>
+    /// </remarks>
+    private const double NajwezszaKolumna = 34;
 
     /// <summary>
     /// Szerokość kolumny dnia.
