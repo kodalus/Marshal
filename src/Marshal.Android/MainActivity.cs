@@ -43,6 +43,12 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // telefonu i zamknięcie okna, a okno zapamiętane w polu statycznym zostałoby
         // w pamięci na długo po tym, jak przestało istnieć.
         GoogleDriveFactory.OdbiorcaKodu = () => new OdbiorcaKoduAndroid(ApplicationContext!);
+
+        // Budziki nastawiane także przy otwieraniu, nie tylko przy wychodzeniu.
+        // Wyjście bywa gwałtowne — zdjęcie aplikacji z listy ostatnich potrafi zabić
+        // proces, zanim nastawianie dobiegnie końca — a wtedy budzik nie istnieje
+        // i nie widać tego po niczym. Otwarcie jest chwilą, w której da się to nadrobić.
+        OdbiorcaBudzika.Obudz(ApplicationContext!);
     }
 
     /// <summary>
