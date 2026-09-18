@@ -1043,7 +1043,7 @@ public sealed class CalendarStoreTests : IDisposable
 
         // Jeden blok: zadanie. Jego wydarzenie w Google jest cieniem i nie rysuje się.
         (await _usluga.AgendaAsync(Dzis, 1))[0].AllDay
-            .Should().ContainSingle().Which.Entry.TaskId.Should().Be(zadanie.Id);
+            .Should().ContainSingle().Which.TaskId.Should().Be(zadanie.Id);
 
         // Zdjęcie z dnia — bez zdejmowania odbicia, czyli dokładnie stan z tej sekundy,
         // w której zadanie już zniknęło, a odpowiedź z sieci jeszcze nie wróciła.
