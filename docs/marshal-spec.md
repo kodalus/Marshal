@@ -356,7 +356,45 @@ Marshal.Tests            xUnit
 `Domain` nie zna niczego. `Application` zna `Domain`. `Infrastructure` i `UI` znają
 `Application`. Hosty znają `UI`.
 
-### 4.2 Widget Androida
+### 4.2 Jeden kontekst bazy i brama przed nim
+
+Kontekst EF jest **pojedynczy na cały proces**. Dopóki wszystko robiło się z okna,
+wystarczało to samo z siebie: okno ma jeden wątek i jedną rzecz naraz. Odkąd
+synchronizacja, odbicie do kalendarza i pobieranie kalendarzy ruszają same, druga
+strona pojawiła się naprawdę.
+
+Stąd **brama** (`IKolejkaBazy`): przepuszcza jedną pracę naraz i trzyma się przez
+całość jednej czynności, łącznie z jej oczekiwaniami. Puszczona na czas oczekiwania
+wpuszczałaby drugą pracę dokładnie w tę szczelinę, którą ma zamykać.
+
+Przez bramę idą **także odczyty**. Pierwsza wersja obejmowała tylko zapisy, bo odczyt
+trwa milisekundy i nie zmienia stanu śledzenia — ale kontekstowi jest wszystko jedno,
+co robi, a objawem był błąd o drugiej operacji zaczętej przed końcem pierwszej. Brama
+pilnująca połowy dróg nie jest bramą, tylko rzadszym zderzeniem, a rzadsze zderzenie
+jest gorsze od częstego: wygląda na przypadek.
+
+Warunkiem przepuszczenia odczytów było **wznawianie**: synchronizacja bierze bramę na
+całą porcję i woła w środku repozytoria, więc bez tego czekałaby na zwolnienie przez
+samą siebie — i to cicho. Znacznik idzie z przepływem wywołania, a nie z wątkiem.
+
+Poza bramą zostają trzy miejsca sięgające po kontekst synchronicznie: ustawienia,
+identyfikator urządzenia i zapamiętany stan zegara logicznego. Czekanie na semafor
+z wątku okna zawiesiłoby okno; dwa pierwsze wczytują się raz i zostają w pamięci,
+trzeci czytany jest wyłącznie spod bramy.
+
+### 4.3 Ekran idzie za bazą
+
+Każdy zapis podnosi znak (`ISygnalZapisu`), a znak prosi o dwie rzeczy: wysyłkę na Dysk
+za pięć sekund i przeliczenie ekranu za sekundę.
+
+Przeliczenie po zapisie **zrobionym w tle** jest tu sednem. Robota odłożona — odbicie
+do kalendarza, dokańczanie zaległych kasowań, pobranie kalendarzy — kończy się po
+chwili i nie ma jak dać o sobie znać. Objaw, który to wymusił: wyrzucone zadanie
+zostawiało na siatce swoje odbicie z Google, bo siatka przeliczała się natychmiast po
+wyrzuceniu, czyli dokładnie w chwili, gdy zadania już nie ma, a jego wydarzenia jeszcze
+nikt nie zdjął. Dane były w porządku sekundę później; nie był w porządku ekran.
+
+### 4.4 Widget Androida
 
 Widget na ekranie głównym **nie jest Avalonią**. To natywny `AppWidgetProvider`
 (RemoteViews) w projekcie `Marshal.Android`, czytający bazę SQLite bezpośrednio przez
@@ -1338,20 +1376,110 @@ w którym nic się nie zmieniło.
 dodatkiem do zadań; brak sieci ma znaczyć „brak świeżych wydarzeń", a nie „aplikacja
 się nie otwiera".
 
-### 10.2 Później — zapis
+### 10.2 Zapis — i dlaczego pierwotne ograniczenie upadło
 
-Zakres `calendar.events` i osobny kalendarz `Marshal`, do którego aplikacja pisze
-wyłącznie utworzone przez siebie wydarzenia. **Nigdy nie modyfikuje i nie kasuje
-wydarzeń z kalendarzy cudzych ani głównego.**
+Pierwotnie: osobny kalendarz `Marshal`, do którego aplikacja pisze wyłącznie własne
+wydarzenia, i **żadnego** dotykania kalendarzy cudzych. Ograniczenie sprowadzało
+najgroźniejszą awarię w projekcie — skasowanie prawdziwych wydarzeń — do awarii
+w kalendarzu, który usuwa się jednym kliknięciem.
 
-To ograniczenie sprowadza najgroźniejszą awarię w projekcie — skasowanie prawdziwych
-wydarzeń — do awarii w kalendarzu, który można usunąć jednym kliknięciem.
+**Zostało porzucone świadomie**, bo kupowało bezpieczeństwo za cenę bezużyteczności:
+osobny kalendarz `Marshal` widzi tylko ta osoba, która go założyła, więc zadanie
+udostępnione nie docierało do nikogo. Aplikacja pisze dziś do kalendarzy podłączonych
+przez użytkowniczkę i kasuje w nich wydarzenia. W zamian obowiązują trzy zasady,
+których nie wolno obejść:
 
-### 10.3 OAuth
+1. **Łatamy, nie nadpisujemy.** Wysyłamy wyłącznie pola, które użytkowniczka zmieniła.
+   Zapis całego wydarzenia wyczyściłby uczestników, przypomnienia, opis i załączniki —
+   czyli wszystko, czego nie znamy.
+2. **Pole będące listą wysyłamy w całości.** Łatanie scala pola, ale nie zagląda do
+   środka tablicy. Dopisanie gościa wymaga odczytania obecnej listy z Google
+   i odesłania jej razem z dopisaną osobą; wysłanie samej dopisywanej osoby znaczy
+   „gośćmi są od teraz wyłącznie ci wymienieni".
+3. **Najpierw źródło, potem nasza kopia.** Odwrotna kolejność zostawiałaby przy
+   nieudanym zapisie wydarzenie widoczne w Marshalu i nieistniejące nigdzie indziej.
 
-Jedno logowanie Google, dwa zakresy (`drive.file`, `calendar.readonly`), jeden ekran
-zgody. `drive.file` daje dostęp wyłącznie do plików utworzonych przez aplikację —
-nie widzi reszty Dysku.
+**Prawdą jest zadanie, wydarzenie jest jego cieniem.** Zadanie udostępnione ma swoje
+odbicie w kalendarzu; siatka rysuje zadanie, a odpowiadające mu wydarzenie pomija,
+bo dwa bloki na jedną rzecz to jeden blok, którego nie da się odhaczyć.
+
+**Odbicie jest odkładane.** Wyrównanie idzie po sieci i trwa sekundę albo dwie, a rzecz
+robiona kilkanaście razy dziennie jednym ruchem nie może czekać na cudzy serwer. Prace
+idą kolejką **w kolejności zgłoszeń** — doczepiane jedna do drugiej, nie przez semafor:
+semafor daje „jedno naraz", ale o kolejności decyduje wtedy to, która praca pierwsza
+po niego sięgnęła, czyli pula wątków. Zadanie założone i zaraz skasowane potrafiło
+przez to pojechać do Google jako „skasuj, wyślij".
+
+**Zaległe kasowania dokańczają się same.** Odkładanie nie daje trwałości: zadanie
+wyrzucone przy padniętej sieci zostawiało w kalendarzie wydarzenie, po którym nikt
+nie sprzątał. Kolejki w bazie nie trzeba było zakładać, bo ona tam jest — wyrzucone
+zadanie przestaje wskazywać na swoje odbicie dopiero wtedy, gdy zdjęcie się udało,
+więc para „wyrzucone, a wciąż wskazuje" to zapisany ślad po prośbie bez skutku.
+Minutnik czyta ją razem z przypomnieniami.
+
+### 10.3 Obszar wskazuje kalendarz
+
+Wydarzenie z Google nie ma gdzie trzymać obszaru — Google nie ma na to pola. Zamiast
+zakładać po naszej stronie wiersz dla każdego wydarzenia, odwracamy pytanie: **kalendarz
+jest obszarem**. Kalendarz rodzinny to „Dzieci", firmowy to „Praca", a obszar wydarzenia
+wynika z tego, w którym kalendarzu ono stoi.
+
+Powiązanie siedzi **na obszarze** (`Area.CalendarId`), nie na podłączeniu. Wiersz
+podłączenia jest odbiciem tego, co jest u Google: bywa zakładany dwukrotnie przy pierwszej
+synchronizacji między urządzeniami i bywa odrzucany przy składaniu duplikatów, a stan
+położony na czymś, co ginie, ginie razem z tym. Składanie duplikatów przepina obszary
+tak samo jak zadania.
+
+Jeden kalendarz na jeden obszar: dwa obszary na jednym znaczyłyby, że wydarzenie należy
+do obu, a obszar, który nie dzieli, nie jest obszarem.
+
+Konsekwencje, obie natychmiastowe:
+
+- **Zadanie idzie do kalendarza swojego obszaru**, nie do jednego głównego. Główny
+  zostaje spadem dla obszarów bez kalendarza i dla wrzutów bez obszaru.
+- **Wydarzenie bierze barwę swojego obszaru.** Barwa kalendarza zostaje dla wszystkiego,
+  czego nikt do obszaru nie przypisał — świąt, wywiadówek, kanałów do odczytu.
+
+### 10.4 Udostępnianie — dwie drogi Google, nie trzecia własna
+
+Google pokazuje komuś coś ze swojego kalendarza na dwa sposoby i Marshal nie dokłada
+trzeciego:
+
+- **Udostępniony kalendarz** znaczy „ta półka jest nasza wspólna": wszystko pojawia się
+  po cichu i na zawsze. Po naszej stronie załatwia to przypisanie kalendarza do obszaru.
+- **Gość przy wydarzeniu** znaczy „spójrz na to jedno": osoba dostaje zaproszenie, może
+  odmówić, a zdjęcie jej z listy zabiera jej wpis z widoku.
+
+Własna lista „komu pokazane" byłaby drugim stanem mówiącym o tej samej rzeczy w miejscu,
+w którym Google ma już swój — pierwsza zmiana zrobiona przez kogoś w jego kalendarzu
+rozjechałaby oba. U nas zostaje sama książka adresowa (`Contact`: imię i adres),
+synchronizowana dziennikiem zmian, bo wpisywanie adresu za każdym razem zabija taką
+funkcję.
+
+### 10.5 Pobieranie samo z siebie
+
+Odstęp między odczytami to pięć minut, liczony per kalendarz od ostatniego pobrania.
+Pobranie rusza z tego samego minutnika, co przypomnienia i przejście dnia, oraz przy
+powrocie do okna. Pobranie przyrostowe jest tanie: żeton z poprzedniego odczytu sprawia,
+że Google oddaje samą różnicę, najczęściej pustą.
+
+Pierwotna godzina brała się z czasów, gdy kalendarz był tłem dla zadań. Odkąd wydarzenie
+i zadanie mają być tą samą rzeczą pod ręką, godzina znaczyła, że połowa tej samej rzeczy
+dociera w kilkanaście sekund, a druga po godzinie.
+
+### 10.6 OAuth
+
+Jedno logowanie Google, trzy zakresy (`drive.file`, `calendar.readonly`,
+`calendar.events`), jeden ekran zgody. `drive.file` daje dostęp wyłącznie do plików
+utworzonych przez aplikację — nie widzi reszty Dysku. `calendar.readonly` służy do
+wypisania kalendarzy konta, `calendar.events` do czytania i zmiany wydarzeń. Pełnego
+`calendar` nie bierzemy: dołożyłoby prawo do zmiany ustawień i udostępniania kalendarzy,
+czego ta aplikacja nie robi i nie ma powodu móc.
+
+Poświadczenia klienta OAuth są **własnością użytkowniczki**, nie aplikacji: projekt
+w Google Cloud zakłada się samemu, a identyfikator i sekret wkleja w ustawieniach.
+Aplikacja nie ma wspólnego klienta, więc nie ma też jednego miejsca, przez które
+przechodziłyby cudze zgody.
 
 Token odświeżania w `DPAPI` (Windows) i `EncryptedSharedPreferences` (Android).
 

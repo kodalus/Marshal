@@ -27,11 +27,48 @@ sprawa czekająca od trzech tygodni, obszar życia milczący od pół roku — j
 | Projekty | Drzewo: obszar → cel → projekt → zadania |
 | Obszary | Dziesięć obszarów odpowiedzialności, tabela równowagi |
 | Oczekiwane | Czekam na kogoś, z licznikiem dni i progiem per obszar |
-| Kalendarz | Godzinowo, z Google Calendar i kanałów iCal |
+| Kalendarz | Godzinowo, dzień/3 dni/tydzień/miesiąc, z Google Calendar i kanałów iCal |
 | Przegląd | Kreator ośmiu kroków, wznawialny po każdej pojedynczej pozycji |
 | Notatki | Markdown z podglądem, załączniki |
 | Filtry | Warunki łączone, zapisywane do ulubionych |
 | Kopia | Eksport i import JSON, offline |
+
+## Kalendarz i udostępnianie
+
+Wydarzenie z Google i zadanie z Marshala mają być pod ręką **tą samą rzeczą**: ta sama
+karta, te same gesty, to samo kasowanie.
+
+**Obszar wskazuje kalendarz Google.** Kalendarz rodzinny to obszar „Dzieci", firmowy to
+„Praca". Z tego jednego przypisania wynikają dwie rzeczy naraz: zadania obszaru lądują
+w jego kalendarzu same, a wydarzenia stamtąd należą do tego obszaru — mają jego barwę
+i dają się przełożyć gdzie indziej jedną zmianą pola.
+
+Dzięki temu obszar wydarzenia nie musi być nigdzie zapisany: wynika z tego, w którym
+kalendarzu ono stoi. To odpowiedź na pytanie, na które Google nie ma pola.
+
+**Udostępnianie idzie dwiema drogami Google, a nie trzecią własną.** Udostępniony
+kalendarz znaczy „ta półka jest nasza wspólna"; gość przy wydarzeniu znaczy „spójrz na
+to jedno" — osoba dostaje zaproszenie i może odmówić. Marshal trzyma tylko krótką listę
+osób, żeby nie wpisywać adresu za każdym razem.
+
+## Prywatność
+
+Brak serwera, brak analityki, brak telemetrii. Dane zostają na urządzeniu, a przy
+włączonej synchronizacji — na **twoim** koncie Google, przy poświadczeniach OAuth, które
+zakładasz sama. Autor aplikacji nie ma do niczego dostępu i nie figuruje w tej relacji.
+
+Pełny tekst: [`docs/prywatnosc.md`](docs/prywatnosc.md).
+
+## Instalacja
+
+Gotowe wydania (APK na Androida i wersja na Windows, z sumą SHA-256) leżą w
+[wydaniach](https://github.com/kodalus/Marshal/releases). Android poprosi o zgodę na
+instalację spoza sklepu, Windows pokaże ostrzeżenie SmartScreen — aplikacja nie jest
+podpisana certyfikatem komercyjnym i nie jest w żadnym sklepie.
+
+Do synchronizacji i kalendarza potrzebne są **własne** poświadczenia Google; krok po
+kroku opisuje je [`docs/google-dysk.md`](docs/google-dysk.md). Bez nich aplikacja działa
+w całości, tylko offline i na jednym urządzeniu.
 
 ## Stos
 
@@ -48,7 +85,12 @@ telefonie i tytułu na desktopie w trybie offline daje po scaleniu oba.
 
 ## Dokumentacja
 
-Specyfikacja techniczna: [`docs/marshal-spec.md`](docs/marshal-spec.md).
+| Dokument | O czym |
+|----------|--------|
+| [`docs/marshal-spec.md`](docs/marshal-spec.md) | Specyfikacja techniczna — model, niezmienniki, algorytmy, synchronizacja |
+| [`docs/google-dysk.md`](docs/google-dysk.md) | Własny projekt Google Cloud, zgody, poświadczenia — krok po kroku |
+| [`docs/android-podpis.md`](docs/android-podpis.md) | Podpisywanie APK i budowanie wydania |
+| [`docs/prywatnosc.md`](docs/prywatnosc.md) | Polityka prywatności |
 
 ## Licencja
 
