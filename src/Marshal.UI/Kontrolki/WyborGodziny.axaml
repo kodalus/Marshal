@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Marshal.UI.Kontrolki.WyborGodziny">
+  <!-- Jak przy dacie: dwa wybieraki, jeden widoczny, powiązania w kodzie. -->
+  <Panel>
+    <TimePicker x:Name="Wbudowany" MinWidth="0" HorizontalAlignment="Stretch"
+                ClockIdentifier="24HourClock" />
+
+    <Grid x:Name="Systemowy" ColumnDefinitions="*,Auto" IsVisible="False">
+      <Button x:Name="Otwarcie" Grid.Column="0" Padding="12,8"
+              HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+      <Button x:Name="Czyszczenie" Grid.Column="1" Margin="6,0,0,0" Padding="12,8"
+              Content="×" />
+    </Grid>
+  </Panel>
+</UserControl>

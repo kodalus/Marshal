@@ -46,6 +46,10 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         base.OnCreate(savedInstanceState);
         Powiadomienia.Podepnij(this);
 
+        // Okienka systemu do daty i godziny. Przypięte do okna, bo dialog musi mieć nad
+        // czym stanąć — a okno bywa zakładane od nowa przy obrocie telefonu.
+        Wybieraki.Podepnij(this);
+
         Rozpatrz(Intent);
 
         // Droga po zgodę Google. Kontekst aplikacji, nie okna: zgoda przeżywa obrót
@@ -101,6 +105,15 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
             Guid.TryParse(zamiar.GetStringExtra(ZadanieExtra), out var zadanie)
                 ? zadanie
                 : null);
+    }
+
+    protected override void OnDestroy()
+    {
+        // Haczyk wskazujący na zamknięte okno jest gorszy od pustego: pusty znaczy
+        // „użyj wbudowanego", a wskazujący na nic wywraca się dopiero przy dotknięciu.
+        Wybieraki.Odepnij();
+
+        base.OnDestroy();
     }
 
     protected override void OnPause()

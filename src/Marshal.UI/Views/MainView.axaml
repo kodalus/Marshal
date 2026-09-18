@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Marshal.UI.ViewModels"
+             xmlns:k="using:Marshal.UI.Kontrolki"
              xmlns:tasks="using:Marshal.Domain.Tasks"
              xmlns:uc="using:Marshal.Application.UseCases"
              xmlns:rev="using:Marshal.Application.Review"
@@ -17,14 +18,6 @@
     <!-- Pole daty ma własną szerokość najmniejszą, liczoną na trzy panele. W wierszu
          przypomnienia stało obok pola godziny i wypychało je poza krawędź karty —
          widać to było jako „hourminute" wciśnięte w sam róg. -->
-    <Style Selector="DatePicker.waska">
-      <Setter Property="MinWidth" Value="0" />
-      <Setter Property="HorizontalAlignment" Value="Stretch" />
-    </Style>
-    <Style Selector="DatePicker.waska /template/ Button#PART_FlyoutButton">
-      <Setter Property="MinWidth" Value="0" />
-    </Style>
-
     <Style Selector="Button.nav">
       <Setter Property="Margin" Value="0,0,8,0" />
       <Setter Property="Padding" Value="14,8" />
@@ -58,14 +51,6 @@
          z sekundami — dwa takie pola obok siebie nie mieściły się w karcie i wychodziły
          poza jej krawędź. Zerowa szerokość najmniejsza oddaje rozstrzygnięcie siatce,
          w której leżą; ta sama poprawka dotyczy przycisku w środku, bo on ma swoją. -->
-    <Style Selector="TimePicker.waska">
-      <Setter Property="MinWidth" Value="0" />
-      <Setter Property="HorizontalAlignment" Value="Stretch" />
-    </Style>
-    <Style Selector="TimePicker.waska /template/ Button#PART_FlyoutButton">
-      <Setter Property="MinWidth" Value="0" />
-    </Style>
-
     <!-- Pasek ikon: równe kwadraty, nie prostokąty wielkości znaku. Pięć przycisków
          o pięciu różnych szerokościach czytało się jak pięć różnych rzeczy. -->
     <!-- Przełącznik rzadkiego pola. Szerokość z treści, nie kwadrat: odkąd niesie słowo,
@@ -535,7 +520,7 @@
         </Grid>
 
         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-          <DatePicker Grid.Column="0" SelectedDate="{Binding ScheduledFor}" />
+          <k:WyborDaty Grid.Column="0" Wartosc="{Binding ScheduledFor}" />
           <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
                   Command="{Binding ScheduleCommand}" Content="Zaplanuj" />
         </Grid>
@@ -1219,13 +1204,11 @@
           <TextBlock Classes="hint" Text="{Binding Opened.DayText}" />
 
           <Grid ColumnDefinitions="*,Auto,*">
-            <TimePicker Classes="waska" Grid.Column="0" SelectedTime="{Binding OpenedStart}"
-                        ClockIdentifier="24HourClock" IsEnabled="{Binding CanEditOpened}"
-                        HorizontalAlignment="Stretch" />
+            <k:WyborGodziny Grid.Column="0" Wartosc="{Binding OpenedStart}"
+                            IsEnabled="{Binding CanEditOpened}" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <TimePicker Classes="waska" Grid.Column="2" SelectedTime="{Binding OpenedEnd}"
-                        ClockIdentifier="24HourClock" IsEnabled="{Binding CanEditOpened}"
-                        HorizontalAlignment="Stretch" />
+            <k:WyborGodziny Grid.Column="2" Wartosc="{Binding OpenedEnd}"
+                            IsEnabled="{Binding CanEditOpened}" />
           </Grid>
 
           <TextBlock Classes="hint" TextWrapping="Wrap" Foreground="{DynamicResource Ostrzezenie}"
@@ -2173,15 +2156,13 @@
           </ComboBox>
 
           <TextBlock Classes="label" Text="Dzień wykonania — obietnica dana sobie" />
-          <DatePicker SelectedDate="{Binding DoDate}" HorizontalAlignment="Stretch" />
+          <k:WyborDaty Wartosc="{Binding DoDate}" />
 
           <TextBlock Classes="label" Text="Od której do której" />
           <Grid ColumnDefinitions="*,Auto,*">
-            <TimePicker Classes="waska" Grid.Column="0" SelectedTime="{Binding DoTime}"
-                        ClockIdentifier="24HourClock" HorizontalAlignment="Stretch" />
+            <k:WyborGodziny Grid.Column="0" Wartosc="{Binding DoTime}" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <TimePicker Classes="waska" Grid.Column="2" SelectedTime="{Binding EndTime}"
-                        ClockIdentifier="24HourClock" HorizontalAlignment="Stretch" />
+            <k:WyborGodziny Grid.Column="2" Wartosc="{Binding EndTime}" />
           </Grid>
           <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                      Text="Bez godziny zadanie idzie na pasek całodniowy. Bez godziny końca trwa pół godziny." />
@@ -2218,7 +2199,7 @@
           <StackPanel>
           <StackPanel IsVisible="{Binding ShowDeadline}">
             <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
-            <DatePicker SelectedDate="{Binding Deadline}" HorizontalAlignment="Stretch" />
+            <k:WyborDaty Wartosc="{Binding Deadline}" />
           </StackPanel>
 
           <StackPanel IsVisible="{Binding ShowReminder}">
@@ -2262,10 +2243,8 @@
                ma własny dzień i porę. -->
           <StackPanel IsVisible="{Binding !HasTime}">
             <Grid ColumnDefinitions="*,Auto">
-              <DatePicker Classes="waska" Grid.Column="0" SelectedDate="{Binding ReminderDay}"
-                          HorizontalAlignment="Stretch" />
-              <TimePicker Classes="waska" Grid.Column="1" Margin="6,0,0,0" SelectedTime="{Binding ReminderTime}"
-                          ClockIdentifier="24HourClock" />
+              <k:WyborDaty Grid.Column="0" Wartosc="{Binding ReminderDay}" />
+              <k:WyborGodziny Grid.Column="1" Margin="6,0,0,0" Wartosc="{Binding ReminderTime}" />
             </Grid>
             <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                        Text="Bez godziny znaczy rano. Sama godzina bez dnia nie znaczy nic." />
