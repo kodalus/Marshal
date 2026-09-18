@@ -51,6 +51,10 @@ public partial class MainView : UserControl
         AddHandler(KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
         AddHandler(ContextRequestedEvent, NaMenu, RoutingStrategies.Bubble);
 
+        // Cofnięcie systemowe — na Androidzie przycisk albo gest wstecz. Ta sama
+        // odpowiedź co Escape, bo to jest to samo pytanie: „zamknij to, co na wierzchu".
+        Wstecz.Obsluga = Cofnij;
+
         // **Także na oknie.** Klawisz idzie drogą od okna do tego, co ma skupienie —
         // a gdy skupienia nie ma nic, droga kończy się na oknie i ten widok nie leży
         // na niej wcale. Tak jest zaraz po otwarciu karty wydarzenia kliknięciem
@@ -901,9 +905,40 @@ public partial class MainView : UserControl
     /// </remarks>
     private void NaKlawiszu(object? nadawca, KeyEventArgs e)
     {
-        if (e.Key != Key.Escape || DataContext is not MainViewModel model)
+        if (e.Key == Key.Escape)
         {
-            return;
+            e.Handled = Cofnij();
+        }
+    }
+
+    /// <summary>
+    /// Cofnięcie: zamknięcie tego, co jest otwarte na wierzchu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Jedna odpowiedź na Escape z klawiatury i na przycisk wstecz Androida, bo to jest
+    /// to samo pytanie. Dwie osobne rozjechałyby się przy pierwszym dołożonym okienku
+    /// — i to na tej platformie, na której nikt tego nie sprawdza codziennie.
+    /// </para>
+    /// <para>
+    /// <b>Przetwarzanie skrzynki jest tu osobnym przypadkiem, nie okienkiem.</b> Chowa
+    /// całą nawigację — pasek boczny i dolny — bo ma być drzewkiem decyzyjnym bez
+    /// rozpraszania. Na telefonie znaczyło to, że raz wszedłszy, nie dało się z niego
+    /// wyjść inaczej niż opróżniając skrzynkę do końca albo zamykając aplikację.
+    /// Ekran bez wyjścia jest pułapką niezależnie od tego, jak dobry jest w środku.
+    /// </para>
+    /// <para>
+    /// Fałsz znaczy „nie mam nic do cofnięcia" i oddaje cofnięcie systemowi, czyli
+    /// zwykle zamyka aplikację. Odpowiedź zawsze twierdząca zamieniłaby przycisk wstecz
+    /// w przycisk, który nic nie robi — a to jest gorsze od zamknięcia aplikacji,
+    /// bo po zamknięciu przynajmniej widać, że przycisk działa.
+    /// </para>
+    /// </remarks>
+    private bool Cofnij()
+    {
+        if (DataContext is not MainViewModel model)
+        {
+            return false;
         }
 
         if (model.Detail.IsOpen)
@@ -918,12 +953,17 @@ public partial class MainView : UserControl
         {
             model.CloseMoreCommand.Execute(null);
         }
+        else if (model.IsClarify)
+        {
+            _ = Probuj("Skrzynka: wyjście z przetwarzania",
+                () => model.ShowInboxCommand.ExecuteAsync(null));
+        }
         else
         {
-            return;
+            return false;
         }
 
-        e.Handled = true;
+        return true;
     }
 
     /// <summary>

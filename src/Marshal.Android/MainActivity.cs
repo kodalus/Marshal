@@ -53,6 +53,10 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         base.OnCreate(savedInstanceState);
         Powiadomienia.Podepnij(this);
 
+        // Po bazowym, bo dopiero ono stawia okno — a nasza odpowiedź na cofnięcie
+        // pyta o to, co w tym oknie jest otwarte.
+        OnBackPressedDispatcher.AddCallback(this, new ObslugaWstecz(this));
+
         Rozpatrz(Intent);
 
         // Droga po zgodę Google. Kontekst aplikacji, nie okna: zgoda przeżywa obrót
