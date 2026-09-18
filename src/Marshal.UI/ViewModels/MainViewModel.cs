@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Marshal.Application;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Domain.Diagnostics;
@@ -677,7 +678,20 @@ public sealed partial class MainViewModel : ObservableObject
     /// ekranu, na którym akurat się było, i nic się nie przerysowywało — po zapisie,
     /// który się udał. Jedno popsute miejsce ma psuć jedno miejsce.
     /// </remarks>
-    private async Task ReloadAsync()
+    private Task ReloadAsync() => _ekran.RunAsync(PrzeliczAsync);
+
+    /// <summary>
+    /// Jeden przebieg naraz, na końcu zawsze najnowszy.
+    /// </summary>
+    /// <remarks>
+    /// Odkąd synchronizacja rusza sama, przeliczenie ekranu przychodzi z kilku stron
+    /// naraz: z minutnika, ze scalenia, z zapisu w szczegółach. Dwa przebiegi jeden
+    /// w drugim to podwójne odczyty tego samego i podwójna praca na listach — a wyniku
+    /// pośredniego i tak nikt nie widzi.
+    /// </remarks>
+    private readonly LatestOnly _ekran = new();
+
+    private async Task PrzeliczAsync()
     {
         await Probuj("Ekran: przeliczenie skrzynki", RefreshInboxAsync);
 
@@ -722,11 +736,12 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task RefreshFocusAsync()
     {
         var dzis = Today();
+        var naDzis = await _focus.TodayAsync();
 
         FocusItems.Clear();
         FocusOffGrid.Clear();
 
-        foreach (var zadanie in await _focus.TodayAsync())
+        foreach (var zadanie in naDzis)
         {
             FocusItems.Add(zadanie);
 
@@ -870,7 +885,6 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowProjectsAsync()
     {
         Current = Screen.Projects;
-        ProjectRows.Clear();
 
         var zablokowane = (await _queries.BlockedProjectsAsync())
             .Select(p => p.ProjectId)
@@ -886,6 +900,7 @@ public sealed partial class MainViewModel : ObservableObject
         var rownowaga = (await _queries.BalanceAsync(Today()))
             .ToDictionary(w => w.AreaId);
 
+        ProjectRows.Clear();
         foreach (var row in rows)
         {
             ProjectRows.Add(new ProjectTreeRow(
@@ -898,9 +913,11 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowWaitingAsync()
     {
         Current = Screen.Waiting;
-        WaitingItems.Clear();
 
-        foreach (var pozycja in await _queries.WaitingAsync(Today()))
+        var czekajace = await _queries.WaitingAsync(Today());
+
+        WaitingItems.Clear();
+        foreach (var pozycja in czekajace)
         {
             WaitingItems.Add(pozycja);
         }
@@ -980,14 +997,17 @@ public sealed partial class MainViewModel : ObservableObject
         // Ponaglenia (N3) i projekty zablokowane (N1) idą na „Dzisiaj", bo są sprawami
         // na dziś. Cisza obszarów (N10) **nigdy tu nie trafia** — to nie jest sprawa na
         // dziś, a codzienne przypominanie o niej zamieniłoby ją w szum (spec 6).
+        var ponaglenia = (await _queries.WaitingAsync(dzis)).Where(w => w.NeedsNudge).ToList();
+        var zablokowane = await _queries.BlockedProjectsAsync();
+
         Nudges.Clear();
-        foreach (var pozycja in (await _queries.WaitingAsync(dzis)).Where(w => w.NeedsNudge))
+        foreach (var pozycja in ponaglenia)
         {
             Nudges.Add(pozycja);
         }
 
         BlockedProjects.Clear();
-        foreach (var projekt in await _queries.BlockedProjectsAsync())
+        foreach (var projekt in zablokowane)
         {
             BlockedProjects.Add(projekt);
         }
@@ -1394,8 +1414,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task RefreshInboxAsync()
     {
+        var wrzuty = await _inbox.ListAsync();
+
         InboxItems.Clear();
-        foreach (var item in await _inbox.ListAsync())
+        foreach (var item in wrzuty)
         {
             InboxItems.Add(item);
         }
