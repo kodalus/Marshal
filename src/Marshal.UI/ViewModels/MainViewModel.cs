@@ -60,8 +60,16 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly DayRolloverService _przejscieDnia;
 
-    /// <summary>Dzień, na którym stanęło okno. Do wykrycia północy przy otwartej aplikacji.</summary>
-    private DateOnly _dzien;
+    /// <summary>
+    /// Dzień, na którym stanęło okno. Do wykrycia północy przy otwartej aplikacji.
+    /// </summary>
+    /// <remarks>
+    /// Pusty do pierwszego sprawdzenia, a nie ustawiony w konstruktorze. Zegar liczy
+    /// dzień w strefie z ustawień, czyli **czyta bazę** — a składanie zależności musi
+    /// się obejść bez bazy, bo dzieje się przed migracjami. Pilnuje tego test
+    /// „złożenie zależności nie sięga do bazy".
+    /// </remarks>
+    private DateOnly? _dzien;
 
     public MainViewModel(
         InboxService inbox,
@@ -98,7 +106,6 @@ public sealed partial class MainViewModel : ObservableObject
         _przypomnienia = przypomnienia;
         _dysk = dysk;
         _przejscieDnia = przejscieDnia;
-        _dzien = clock.Today;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -456,17 +463,27 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     private async Task PrzejscieDniaAsync()
     {
-        if (_clock.Today == _dzien)
+        var dzis = _clock.Today;
+
+        // Pierwsze sprawdzenie tylko zapamiętuje dzień. Start nadrabia przejście własną
+        // drogą (CatchUpAsync), więc robienie tego drugi raz byłoby pracą bez skutku.
+        if (_dzien is null)
+        {
+            _dzien = dzis;
+            return;
+        }
+
+        if (_dzien == dzis)
         {
             return;
         }
 
-        _dzien = _clock.Today;
+        _dzien = dzis;
 
         await _przejscieDnia.RunAsync();
         await _focus.ExpireAsync();
 
-        await _dziennik.RecordAsync("Przejście dnia", $"nowy dzień: {_dzien:yyyy-MM-dd}");
+        await _dziennik.RecordAsync("Przejście dnia", $"nowy dzień: {dzis:yyyy-MM-dd}");
         await ReloadAsync();
     }
 
