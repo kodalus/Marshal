@@ -75,6 +75,10 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         // ustawień miało co pokazać od pierwszej chwili.
         var reczny = PowrotZgody.Czekaj();
 
+        // Usługa pierwszoplanowa na czas czekania: bez niej proces idzie do zamrażarki,
+        // gdy przeglądarka go przykryje, i powrót ze zgody nie ma kogo obudzić.
+        UslugaLogowania.Pilnuj(kontekst, wlacz: true);
+
         try
         {
             Otworz(url.Build());
@@ -111,6 +115,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         }
         finally
         {
+            UslugaLogowania.Pilnuj(kontekst, wlacz: false);
             PowrotZgody.Przestan();
             nasluch.Stop();
         }
