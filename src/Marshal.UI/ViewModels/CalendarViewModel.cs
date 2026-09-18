@@ -399,6 +399,22 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public bool ShowSummary => !Waski;
 
+    /// <summary>
+    /// Czy zakres wybiera się przyciskami, czy polem wyboru.
+    /// </summary>
+    /// <remarks>
+    /// Cztery przyciski mówią od razu, jakie są możliwości i który zakres jest teraz —
+    /// jedno spojrzenie zamiast rozwijania. Na to trzeba jednak miejsca, a na telefonie
+    /// stoją już w tej linii strzałki i pobieranie. Pole wyboru mówi to samo jednym
+    /// słowem i mieści się tam, gdzie one nie. To nie są dwa wyglądy tej samej rzeczy,
+    /// tylko dwie odpowiedzi na to, ile jest miejsca: szerokie okno stać na pokazanie
+    /// wszystkiego naraz, wąskie nie.
+    /// </remarks>
+    public bool ShowRangeButtons => !Waski;
+
+    /// <summary>Pole wyboru zakresu — na wąskim, gdzie przyciski się nie mieszczą.</summary>
+    public bool ShowRangePicker => Waski;
+
     /// <summary>Ile wpisów mieści komórka, zanim reszta zamieni się w liczbę.</summary>
     /// <remarks>
     /// Cztery, bo przy sześciu tygodniach na ekranie telefonu tyle linijek daje się
@@ -501,6 +517,8 @@ public sealed partial class CalendarViewModel(
 
         OnPropertyChanged(nameof(ColumnWidth));
         OnPropertyChanged(nameof(ShowSummary));
+        OnPropertyChanged(nameof(ShowRangeButtons));
+        OnPropertyChanged(nameof(ShowRangePicker));
 
         if (IsMonth)
         {

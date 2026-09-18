@@ -813,19 +813,34 @@
     <DockPanel DataContext="{Binding Calendar}">
 
       <StackPanel DockPanel.Dock="Top" x:DataType="vm:CalendarViewModel" Margin="0,0,0,10">
-        <!-- Jeden rząd: gdzie jesteśmy, jak szeroko patrzymy, skąd bierzemy.
-             Zakres był czterema przyciskami w równych kolumnach i przy szerokim oknie
-             rozciągał się na całą szerokość — cztery pola wielkości dłoni na jedną
-             decyzję, którą podejmuje się raz na kilka minut. Pole wyboru zajmuje tyle
-             miejsca, ile znaczy, i mieści się obok strzałek zamiast pod nimi. -->
+        <!-- Jeden rząd: gdzie jesteśmy, jak szeroko patrzymy, skąd bierzemy. Zakres
+             stał wcześniej w osobnym rzędzie, w czterech równych kolumnach rozciągniętych
+             na całą szerokość — cztery pola wielkości dłoni na jedną decyzję. Teraz
+             mieści się w tej samej linii, co reszta, a czym dokładnie jest, rozstrzyga
+             szerokość okna. -->
         <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
           <Button Grid.Column="0" Classes="nav" Command="{Binding PreviousCommand}" Content="◀" />
           <Button Grid.Column="1" Classes="nav" Command="{Binding TodayCommand}" Content="dziś" />
           <Button Grid.Column="2" Classes="nav" Command="{Binding NextCommand}" Content="▶" />
-          <ComboBox Grid.Column="3" Margin="6,0" MinWidth="0"
-                    HorizontalAlignment="Stretch"
-                    ItemsSource="{Binding Zakresy}"
-                    SelectedItem="{Binding Zakres}" />
+          <!-- Jedna komórka, dwie odpowiedzi na to, ile jest miejsca. Na szerokim
+               oknie cztery przyciski: widać naraz, jakie są możliwości i który zakres
+               jest teraz. Na telefonie stoją w tej linii strzałki i pobieranie, więc
+               zostaje pole wyboru — mówi to samo jednym słowem. -->
+          <Panel Grid.Column="3" Margin="6,0">
+            <StackPanel Orientation="Horizontal" Spacing="4"
+                        HorizontalAlignment="Left" VerticalAlignment="Center"
+                        IsVisible="{Binding ShowRangeButtons}">
+              <Button Classes="nav" Command="{Binding ShowDayCommand}" Content="dzień" />
+              <Button Classes="nav" Command="{Binding ShowThreeDaysCommand}" Content="3 dni" />
+              <Button Classes="nav" Command="{Binding ShowWeekCommand}" Content="tydzień" />
+              <Button Classes="nav" Command="{Binding ShowMonthCommand}" Content="miesiąc" />
+            </StackPanel>
+
+            <ComboBox MinWidth="0" HorizontalAlignment="Stretch"
+                      IsVisible="{Binding ShowRangePicker}"
+                      ItemsSource="{Binding Zakresy}"
+                      SelectedItem="{Binding Zakres}" />
+          </Panel>
           <Button Grid.Column="4" Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
         </Grid>
         <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />

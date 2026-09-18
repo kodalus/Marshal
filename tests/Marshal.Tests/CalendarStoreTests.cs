@@ -1360,6 +1360,26 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Zakres_przyciskami_na_szerokim_polem_na_waskim()
+    {
+        // Nie dwa wyglądy tej samej rzeczy, tylko dwie odpowiedzi na to, ile jest
+        // miejsca. Cztery przyciski mówią od razu, jakie są możliwości i który zakres
+        // jest teraz — ale w linii ze strzałkami i pobieraniem mieszczą się dopiero
+        // przy szerokim oknie. Zawsze dokładnie jedno z dwojga: żadnego naraz ani
+        // obu naraz.
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+
+        model.SetAvailableWidth(1200);
+        model.ShowRangeButtons.Should().BeTrue();
+        model.ShowRangePicker.Should().BeFalse();
+
+        model.SetAvailableWidth(360);
+        model.ShowRangeButtons.Should().BeFalse();
+        model.ShowRangePicker.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Pole_zakresu_idzie_za_widokiem()
     {
         // Zakres zmienia się nie tylko z pola wyboru: zejście z miesiąca na dzień robi
