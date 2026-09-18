@@ -135,6 +135,35 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     public partial string GoogleClientSecret { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Czy pokazać tajemnicę klienta zamiast kropek.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kropki są tu odruchem, a nie zabezpieczeniem. Tajemnica klienta w aplikacji
+    /// instalowanej u użytkownika nie jest tajemnicą — chroni zgoda w przeglądarce,
+    /// nie ona — a zakryta na stałe robi z tego pola pułapkę: konsola Google pokazuje
+    /// ją **raz, przy zakładaniu**, więc jeśli nie została wtedy zapisana, jedynym
+    /// miejscem, w którym jeszcze jest, bywa właśnie to pole.
+    /// </para>
+    /// <para>
+    /// Domyślnie zakryte, bo ekran ustawień otwiera się też przy kimś obok.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool ShowSecret { get; set; }
+
+    /// <summary>
+    /// Znak zasłaniający tajemnicę. Zero znaczy „nie zasłaniaj".
+    /// </summary>
+    /// <remarks>
+    /// Właściwość widoku zamiast przelicznika wartości — tak jak wszędzie w tym
+    /// projekcie. XAML wiąże się tu wprost i nie ma czego szukać w osobnym pliku.
+    /// </remarks>
+    public char SecretChar => ShowSecret ? '\0' : '\u2022';
+
+    partial void OnShowSecretChanged(bool value) => OnPropertyChanged(nameof(SecretChar));
+
     /// <summary>Wynik ostatniej próby synchronizacji. Osobno od Status, bo dotyczy czego innego.</summary>
     [ObservableProperty]
     public partial string SyncStatus { get; set; } = string.Empty;

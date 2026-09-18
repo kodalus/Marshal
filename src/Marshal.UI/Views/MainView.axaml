@@ -1428,8 +1428,17 @@
                  Watermark="…apps.googleusercontent.com" />
 
         <TextBlock Classes="label" Margin="0,6,0,0" Text="Tajemnica klienta" />
-        <TextBox Text="{Binding GoogleClientSecret}" PasswordChar="•"
-                 Watermark="GOCSPX-…" />
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" Text="{Binding GoogleClientSecret}"
+                   PasswordChar="{Binding SecretChar}"
+                   Watermark="GOCSPX-…" />
+          <!-- Podejrzenie, bo konsola Google pokazuje tajemnicę raz, przy zakładaniu.
+               Jeśli nie została wtedy zapisana, to pole bywa jedynym miejscem,
+               w którym jeszcze jest — a drugie urządzenie potrzebuje tej samej. -->
+          <ToggleButton Grid.Column="1" Classes="ikona" Margin="6,0,0,0"
+                        IsChecked="{Binding ShowSecret}"
+                        Content="👁" ToolTip.Tip="Pokaż tajemnicę" />
+        </Grid>
 
         <CheckBox Margin="0,10,0,0" IsChecked="{Binding GoogleCalendar}"
                   Content="Czytaj i zmieniaj mój kalendarz Google" />
