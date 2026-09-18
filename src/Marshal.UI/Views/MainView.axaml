@@ -1465,7 +1465,7 @@
              wynik: synchronizacja uruchamiana po cichu przy starcie znaczy, że pierwszy
              błąd zobaczysz jako brakujące zadania, a nie jako komunikat. -->
         <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
-                   Text="Przy pierwszym razie otworzy się przeglądarka i poprosi o zgodę. Potem już nie — żeton zostaje na tym urządzeniu. Na Androidzie ta droga jeszcze nie działa, bo wymaga osobnych poświadczeń." />
+                   Text="Przy pierwszym razie otworzy się przeglądarka i poprosi o zgodę. Potem już nie — żeton zostaje na tym urządzeniu. Na Androidzie tak samo: te same poświadczenia co na komputerze, przeglądarka telefonu i powrót do aplikacji." />
 
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding SyncStatus}" />
 

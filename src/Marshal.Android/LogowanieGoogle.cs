@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using Android.Content;
+using Android.OS;
+using Android.Widget;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Requests;
 using Google.Apis.Auth.OAuth2.Responses;
@@ -36,6 +38,17 @@ namespace Marshal.Android;
 /// </remarks>
 internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
 {
+    /// <summary>
+    /// Ile czekać na powrót z przeglądarki.
+    /// </summary>
+    /// <remarks>
+    /// Czekanie bez końca jest tu najgorszym z możliwych zachowań: nie widać, czy
+    /// zgoda się nie udała, czy trwa, czy aplikacja o niej zapomniała — a jedyne,
+    /// co można zrobić, to zamknąć wszystko i nie dowiedzieć się niczego. Po tym
+    /// czasie zamiast wiszenia jest zdanie mówiące, gdzie stał nasłuch i co sprawdzić.
+    /// </remarks>
+    private static readonly TimeSpan Cierpliwosc = TimeSpan.FromMinutes(3);
+
     private readonly int _port = WolnyPort();
 
     public string RedirectUri => $"http://127.0.0.1:{_port}/authorize/";
@@ -48,20 +61,29 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         var nasluch = new TcpListener(IPAddress.Loopback, _port);
         nasluch.Start();
 
+        // Własny zegar doliczony do odwołania z zewnątrz: bez niego czekanie nie ma końca.
+        using var zegar = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        zegar.CancelAfter(Cierpliwosc);
+
         // Zatrzymanie nasłuchu jest tu jedyną drogą przerwania czekania: gniazdo
         // w trakcie przyjmowania połączenia nie ogląda się na znacznik odwołania.
-        await using var przerwanie = ct.Register(nasluch.Stop);
+        await using var przerwanie = zegar.Token.Register(nasluch.Stop);
 
         try
         {
             Otworz(url.Build());
 
+            // Dymek, bo przeglądarka przykrywa aplikację i bez niego nie widać, czy
+            // Marshal w ogóle doszedł do tego kroku. Przy nieudanym powrocie to jest
+            // pierwsza rzecz, którą trzeba wiedzieć.
+            Powiedz($"Czekam na zgodę Google — 127.0.0.1:{_port}");
+
             while (true)
             {
-                using var polaczenie = await nasluch.AcceptTcpClientAsync(ct);
+                using var polaczenie = await nasluch.AcceptTcpClientAsync(zegar.Token);
                 var strumien = polaczenie.GetStream();
 
-                if (await Zadanie(strumien, ct) is not { } adres)
+                if (await Zadanie(strumien, zegar.Token) is not { } adres)
                 {
                     continue;
                 }
@@ -72,11 +94,11 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
                 // Żądanie bez kodu i bez błędu nie jest powrotem ze zgody.
                 if (!pola.ContainsKey("code") && !pola.ContainsKey("error"))
                 {
-                    await Odpisz(strumien, "Marshal czeka na zgodę.", ct);
+                    await Odpisz(strumien, "Marshal czeka na zgodę.", zegar.Token);
                     continue;
                 }
 
-                await Odpisz(strumien, "Zgoda przyjęta. Możesz wrócić do Marshala.", ct);
+                await Odpisz(strumien, "Zgoda przyjęta. Możesz wrócić do Marshala.", zegar.Token);
 
                 // Powrót do aplikacji sam, bez szukania jej w przełączniku okien.
                 Wroc();
@@ -84,11 +106,29 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
                 return new AuthorizationCodeResponseUrl(pola);
             }
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Skończyła się cierpliwość, a nie zostało to przerwane z zewnątrz.
+            // Wyjątek z treścią, bo ląduje pod przyciskiem synchronizacji i jest
+            // jedyną rzeczą, jaką widać po nieudanym logowaniu.
+            throw new TimeoutException(
+                $"Przeglądarka nie wróciła ze zgodą w ciągu {Cierpliwosc.TotalMinutes:0} minut. "
+                + $"Nasłuch stał na 127.0.0.1:{_port}. Jeśli przeglądarka pokazała stronę "
+                + "z błędem połączenia, znaczy to, że nie dotarła z powrotem do aplikacji.");
+        }
         finally
         {
             nasluch.Stop();
         }
     }
+
+    /// <summary>
+    /// Dymek systemowy. Przez główną pętlę, bo czekanie na zgodę siedzi na wątku
+    /// roboczym, a dymek wywołany spoza głównego wątku kończy się wyjątkiem.
+    /// </summary>
+    private void Powiedz(string tresc) =>
+        new Handler(Looper.MainLooper!).Post(
+            () => Toast.MakeText(kontekst, tresc, ToastLength.Long)?.Show());
 
     /// <summary>Port wybrany przez system. Zajęty na stałe byłby zajęty akurat wtedy, gdy trzeba.</summary>
     private static int WolnyPort()
