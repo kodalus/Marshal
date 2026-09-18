@@ -131,17 +131,24 @@ public sealed class SyncEngine(
     {
         var applied = 0;
 
+        // Kursory odczytane **raz**, na własność tego bloku. Pytanie o kursor przy każdej
+        // porcji z osobna wyglądało niewinnie, a było błędem: kursor dołożony przy
+        // pierwszej porcji urządzenia nie jest jeszcze w bazie, więc drugie pytanie nie
+        // widziało go i dokładało drugi. Zapytanie nie widzi tego, co czeka na zapis.
+        //
+        // Czytane tutaj, a nie przekazane z góry: brama była puszczona na czas sieci,
+        // więc stan sprzed pobierania nie jest już tym samym stanem.
+        var kursory = await db.SyncCursors.ToDictionaryAsync(c => c.RemoteDeviceId, ct);
+
         using (SyncScope.Begin())
         {
             foreach (var (urzadzenie, nazwa, tresc) in porcje)
             {
-                var kursor = await db.SyncCursors
-                    .FirstOrDefaultAsync(c => c.RemoteDeviceId == urzadzenie, ct);
-
-                if (kursor is null)
+                if (!kursory.TryGetValue(urzadzenie, out var kursor))
                 {
                     kursor = new SyncCursor(urzadzenie, string.Empty);
                     db.SyncCursors.Add(kursor);
+                    kursory[urzadzenie] = kursor;
                 }
 
                 foreach (var linia in tresc.Split('\n', StringSplitOptions.RemoveEmptyEntries))
