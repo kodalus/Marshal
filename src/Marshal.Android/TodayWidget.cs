@@ -93,7 +93,7 @@ public sealed class TodayWidget : AppWidgetProvider
     /// </remarks>
     private const string Ustawienia = "widget";
 
-    private static int Przesuniecie(Context kontekst, int widgetId) =>
+    internal static int Przesuniecie(Context kontekst, int widgetId) =>
         kontekst.GetSharedPreferences(Ustawienia, FileCreationMode.Private)
             ?.GetInt($"dzien-{widgetId}", 0) ?? 0;
 
@@ -265,6 +265,14 @@ public sealed class TodayWidget : AppWidgetProvider
         // planie kafelek zakrywa napis „nic nie zaplanowane", więc i on prowadzi tam samo.
         widok.SetOnClickPendingIntent(Resource.Id.korzen, OtworzIntent(context));
         widok.SetOnClickPendingIntent(Resource.Id.pusto, OtworzIntent(context));
+
+        // Wrzut otwiera aplikację, a nie pole tekstowe w widgecie: RemoteViews nie zna
+        // pola do wpisywania, a wszystko inne znaczy drugi ekran do utrzymywania.
+        //
+        // Wypadło przy przebudowie na listę i przez to przycisk nie robił nic — a nic
+        // nie robi też przycisk, którego zapomniano podpiąć, i przycisk zasłonięty przez
+        // cudze dotknięcie. Z zewnątrz wyglądają identycznie.
+        widok.SetOnClickPendingIntent(Resource.Id.wrzut, LaunchIntent(context));
 
         var doUslugi = new Intent(context, typeof(TodayWidgetService));
         doUslugi.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);

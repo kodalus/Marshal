@@ -291,6 +291,32 @@ public sealed partial class CalendarViewModel(
     /// <summary>Nazwy dni nad siatką miesiąca.</summary>
     public IReadOnlyList<string> MonthHeaders { get; } = DayNames;
 
+    /// <summary>
+    /// Czy okno jest wąskie — czyli czy patrzymy na to przez telefon.
+    /// </summary>
+    /// <remarks>
+    /// Liczone z szerokości oddanej na kolumny, a nie brane z modelu głównego. Ta sama
+    /// liczba rozstrzyga już o szerokości kolumn, więc kalendarz nie musi pytać nikogo
+    /// o coś, co i tak wie; a próg jest ten sam, co przy pasku nawigacji, żeby ekran
+    /// nie zmieniał się w dwóch miejscach przy dwóch różnych szerokościach.
+    ///
+    /// Zero znaczy „okno się jeszcze nie zmierzyło" i jest traktowane jak szerokie:
+    /// przy pierwszym rysowaniu lepiej pokazać za dużo niż schować coś na stałe.
+    /// </remarks>
+    private bool Waski => _doDyspozycji > 0 && _doDyspozycji < 720;
+
+    /// <summary>
+    /// Czy pokazywać linijkę „w bazie tyle, na tych dniach tyle".
+    /// </summary>
+    /// <remarks>
+    /// Na telefonie nie. Jest to linijka do diagnozy — rozdziela trzy przyczyny pustej
+    /// siatki, które wyglądają tak samo — a na wąskim ekranie zajmuje dwa wiersze nad
+    /// kalendarzem i odpowiada na pytanie, którego się przy telefonie nie zadaje.
+    /// Na komputerze zostaje, bo tam wysokość nie jest towarem deficytowym i bo to
+    /// tam się siada, gdy coś naprawdę nie gra.
+    /// </remarks>
+    public bool ShowSummary => !Waski;
+
     /// <summary>Ile wpisów mieści komórka, zanim reszta zamieni się w liczbę.</summary>
     /// <remarks>
     /// Cztery, bo przy sześciu tygodniach na ekranie telefonu tyle linijek daje się
@@ -392,7 +418,16 @@ public sealed partial class CalendarViewModel(
         }
 
         OnPropertyChanged(nameof(ColumnWidth));
-        Przelicz();
+        OnPropertyChanged(nameof(ShowSummary));
+
+        if (IsMonth)
+        {
+            PrzeliczMiesiac();
+        }
+        else
+        {
+            Przelicz();
+        }
     }
 
     public IReadOnlyList<string> HourLabels =>
@@ -937,7 +972,11 @@ public sealed partial class CalendarViewModel(
                 .Concat(dzien.Timed
                     .OrderBy(s => s.Entry.Start)
                     .Select(s => new MonthEntry(
-                        $"{s.Entry.Start.Hour:D2}:{s.Entry.Start.Minute:D2}",
+                        // Godzina tylko tam, gdzie jest na nią miejsce. W komórce szerokiej
+                        // na jedną siódmą ekranu telefonu „08:00" zabiera połowę wiersza
+                        // i z nazwy zostają dwa znaki — czyli wpis przestaje mówić, czego
+                        // dotyczy, żeby powiedzieć, o której. Od godzin jest widok dnia.
+                        Waski ? string.Empty : $"{s.Entry.Start.Hour:D2}:{s.Entry.Start.Minute:D2}",
                         s.Entry.Title,
                         s.Entry.TaskId,
                         s.Entry.IsDone,

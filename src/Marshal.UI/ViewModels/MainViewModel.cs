@@ -754,9 +754,16 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         var wybrane = FocusItems.Select(t => t.Id).ToHashSet();
+        // Zaplanowane **na dziś** nie są kandydatami do wzięcia na dziś. Stoją już na
+        // liście dnia wyżej, a wybór na dziś jest obietnicą daną sobie co do rzeczy,
+        // której dzień nie narzuca — branie na dziś czegoś, co i tak jest na dziś,
+        // niczego nie zmienia i zajmuje jedno z pięciu miejsc.
+        //
+        // Zaległe zostają: te mają dzień wcześniejszy i wzięcie ich na dziś jest
+        // prawdziwą decyzją, a nie powtórzeniem tego, co już wiadomo.
         var kandydaci = (await _tasks.ByStateAsync(TaskState.Next))
             .Concat(await _tasks.ByStateAsync(TaskState.Scheduled))
-            .Where(t => t.State == TaskState.Next || t.DoDate <= dzis)
+            .Where(t => t.State == TaskState.Next || t.DoDate < dzis)
             .ToList();
 
         // „Kiedyś-może" tylko na wyraźne życzenie. Wzięcie stamtąd czegoś na dziś

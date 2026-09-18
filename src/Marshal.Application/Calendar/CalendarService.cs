@@ -358,10 +358,13 @@ public sealed class CalendarSyncService(
         }
 
         var zlozone = 0;
+        var wszystkie = await tasks.AllAsync(ct);
 
         foreach (var grupa in powtorzone)
         {
-            foreach (var nadmiarowe in grupa.OrderBy(z => z.CreatedAt).ThenBy(z => z.Id).Skip(1))
+            var zostaje = grupa.OrderBy(z => z.CreatedAt).ThenBy(z => z.Id).First();
+
+            foreach (var nadmiarowe in grupa.Where(z => z.Id != zostaje.Id))
             {
                 nadmiarowe.MarkDeleted(hlc.Next());
 
@@ -369,6 +372,8 @@ public sealed class CalendarSyncService(
                 // już niepotrzebna, a policzona w „ile w bazie" myliłaby przy szukaniu
                 // dokładnie tej usterki.
                 await store.ForgetEventsAsync(nadmiarowe.Id, ct);
+
+                Przepnij(nadmiarowe.Id, zostaje.Id, wszystkie);
                 zlozone++;
             }
         }
@@ -376,6 +381,39 @@ public sealed class CalendarSyncService(
         await store.SaveChangesAsync(ct);
 
         return zlozone;
+    }
+
+    /// <summary>
+    /// Przepięcie tego, co wskazywało na odrzucone podłączenie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bez tego złożenie duplikatów zostawiało wiszące wskazania i objawiało się dopiero
+    /// przy zapisie: „tego kalendarza już nie ma na liście podłączonych" przy zadaniu,
+    /// którego nikt nie ruszał, w aplikacji pokazującej wszystkie kalendarze poprawnie.
+    /// Odczyt szedł przez to, co zostało, a zapis przez to, co zniknęło.
+    /// </para>
+    /// <para>
+    /// Przepięcie jest bezpieczne, bo obie strony wskazują <b>ten sam</b> kalendarz
+    /// u źródła — na tym polega bycie duplikatem. Identyfikator wydarzenia w Google
+    /// zostaje ten sam i dalej jest ważny.
+    /// </para>
+    /// </remarks>
+    private void Przepnij(Guid odrzucone, Guid zostaje, IReadOnlyList<TaskItem> zadania)
+    {
+        if (settings.MainCalendarId == odrzucone)
+        {
+            settings.SetMainCalendar(zostaje);
+        }
+
+        // Z identyfikatorem wydarzenia, bo bez niego nie ma czego przepinać: udostępnienie
+        // ustawia obie rzeczy naraz i jedna bez drugiej znaczy zadanie, którego w Google
+        // nie ma.
+        foreach (var zadanie in zadania.Where(
+            z => z.SharedCalendarId == odrzucone && z.SharedEventId is not null))
+        {
+            zadanie.Share(zostaje, zadanie.SharedEventId!, hlc.Next());
+        }
     }
 
     /// <summary>

@@ -258,6 +258,45 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Skladanie_duplikatow_przepina_to_co_wskazywalo_na_odrzucone()
+    {
+        // Bez przepięcia złożenie zostawiało wiszące wskazanie i objawiało się dopiero
+        // przy zapisie: „tego kalendarza już nie ma na liście podłączonych" przy zadaniu,
+        // którego nikt nie ruszał. Odczyt szedł przez to, co zostało, a zapis przez to,
+        // co zniknęło.
+        _zegar.Now = _zegar.Now.AddMinutes(1);
+
+        var mlodsze = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
+        _db.CalendarSources.Add(mlodsze);
+
+        var zadanie = TaskItem.Capture("Zebranie", _zegar.Now, _hlc.Next());
+        zadanie.Share(mlodsze.Id, "zewnetrzny-1", _hlc.Next());
+        _db.Tasks.Add(zadanie);
+        _db.SaveChanges();
+
+        var ustawienia = new Ustawienia();
+        ustawienia.SetMainCalendar(mlodsze.Id);
+
+        var usluga = new CalendarSyncService(
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, ustawienia, [_pisarz],
+            new ProjectRepository(_db), new AreaRepository(_db));
+
+        _kanal.Next = new FeedResult([], null, true);
+
+        (await usluga.RefreshAsync(force: true)).Folded.Should().Be(1);
+
+        // Obie strony wskazywały **ten sam** kalendarz u źródła — na tym polega bycie
+        // duplikatem — więc identyfikator wydarzenia zostaje ważny.
+        ustawienia.MainCalendarId.Should().Be(_zrodlo.Id);
+
+        var przepiete = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        przepiete.SharedCalendarId.Should().Be(_zrodlo.Id);
+        przepiete.SharedEventId.Should().Be("zewnetrzny-1");
+    }
+
+    [Fact]
     public async Task Skladanie_duplikatow_kasuje_kopie_odrzuconego_zrodla()
     {
         // Odrzucone źródło zostawiało po sobie wydarzenia: niewidoczne, bo źródła już

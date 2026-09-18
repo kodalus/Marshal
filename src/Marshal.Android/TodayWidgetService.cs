@@ -1,5 +1,7 @@
 using Android.App;
+using Android.Appwidget;
 using Android.Content;
+using Marshal.Application.Abstractions;
 using Android.Widget;
 using Marshal.Application.UseCases;
 using Marshal.UI;
@@ -26,7 +28,11 @@ namespace Marshal.Android;
 public sealed class TodayWidgetService : RemoteViewsService
 {
     public override IRemoteViewsFactory OnGetViewFactory(Intent? intent) =>
-        new Fabryka(ApplicationContext!);
+        new Fabryka(
+            ApplicationContext!,
+            intent?.GetIntExtra(
+                AppWidgetManager.ExtraAppwidgetId, AppWidgetManager.InvalidAppwidgetId)
+                ?? AppWidgetManager.InvalidAppwidgetId);
 
     /// <summary>
     /// Wiersze planu dnia dla listy.
@@ -44,7 +50,8 @@ public sealed class TodayWidgetService : RemoteViewsService
     /// się o co zakleszczyć. Robota i tak musi się skończyć, zanim ta metoda wróci.
     /// </para>
     /// </remarks>
-    private sealed class Fabryka(Context kontekst) : Java.Lang.Object, IRemoteViewsFactory
+    private sealed class Fabryka(Context kontekst, int widgetId)
+        : Java.Lang.Object, IRemoteViewsFactory
     {
         private IReadOnlyList<PozycjaPlanu> _wiersze = [];
 
@@ -66,7 +73,7 @@ public sealed class TodayWidgetService : RemoteViewsService
         {
             try
             {
-                _wiersze = WczytajAsync().GetAwaiter().GetResult();
+                _wiersze = WczytajAsync(kontekst, widgetId).GetAwaiter().GetResult();
             }
             catch (Exception e)
             {
@@ -112,13 +119,29 @@ public sealed class TodayWidgetService : RemoteViewsService
             return widok;
         }
 
-        private static async Task<IReadOnlyList<PozycjaPlanu>> WczytajAsync()
+        /// <summary>
+        /// Wiersze na dzień, który ogląda **ten** widget.
+        /// </summary>
+        /// <remarks>
+        /// Przesunięcie dnia czytane tutaj, a nie podane przy tworzeniu fabryki. Fabryka
+        /// powstaje raz i żyje dłużej niż jedno dotknięcie strzałki; wartość zapamiętana
+        /// przy jej powstaniu byłaby tą sprzed wszystkich przesunięć.
+        ///
+        /// Brak tego odczytu był całą usterką „przełączam na jutro, a widzę dzisiejsze":
+        /// nagłówek brał przesunięcie z ramy i zmieniał się poprawnie, a lista ładowała
+        /// zawsze dzisiaj. Wyglądało to na nieodświeżoną listę, a było listą, która
+        /// nigdy nie wiedziała, o który dzień pytać.
+        /// </remarks>
+        private static async Task<IReadOnlyList<PozycjaPlanu>> WczytajAsync(
+            Context kontekst, int widgetId)
         {
             await AppServices.ReadyAsync();
 
-            return await AppServices.Provider
-                .GetRequiredService<PlanDniaService>()
-                .DzisAsync();
+            var uslugi = AppServices.Provider;
+            var dzien = uslugi.GetRequiredService<IClock>().Today
+                .AddDays(TodayWidget.Przesuniecie(kontekst, widgetId));
+
+            return await uslugi.GetRequiredService<PlanDniaService>().DlaDniaAsync(dzien);
         }
 
         /// <summary>

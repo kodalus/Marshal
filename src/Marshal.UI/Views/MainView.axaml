@@ -68,13 +68,16 @@
 
     <!-- Pasek ikon: równe kwadraty, nie prostokąty wielkości znaku. Pięć przycisków
          o pięciu różnych szerokościach czytało się jak pięć różnych rzeczy. -->
+    <!-- Przełącznik rzadkiego pola. Szerokość z treści, nie kwadrat: odkąd niesie słowo,
+         a nie symbol, stała szerokość albo ucinałaby napis, albo musiałaby być liczona
+         pod najdłuższy z nich. -->
     <Style Selector="ToggleButton.ikona">
-      <Setter Property="Margin" Value="0,0,8,0" />
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="Width" Value="38" />
+      <Setter Property="Margin" Value="0,0,8,8" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="MinWidth" Value="0" />
       <Setter Property="Height" Value="38" />
       <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontSize" Value="13" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="Background" Value="{DynamicResource Pole}" />
@@ -855,8 +858,11 @@
                   Command="{Binding ShowMonthCommand}" Content="miesiąc" />
         </Grid>
         <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />
-        <!-- Pusta siatka ma trzy przyczyny wyglądające tak samo. Ta linijka je rozdziela. -->
-        <TextBlock Classes="hint" Margin="2,2,0,0" Text="{Binding Summary}" />
+        <!-- Pusta siatka ma trzy przyczyny wyglądające tak samo. Ta linijka je rozdziela.
+             Na telefonie schowana: to linijka do diagnozy, a tam zabiera dwa wiersze nad
+             kalendarzem i odpowiada na pytanie, którego się przy telefonie nie zadaje. -->
+        <TextBlock Classes="hint" Margin="2,2,0,0" Text="{Binding Summary}"
+                   IsVisible="{Binding ShowSummary}" />
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                    Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
 
@@ -1281,8 +1287,10 @@
               <DataTemplate x:DataType="dn:Note">
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
                   <!-- Przypięcie znakiem, nie kolorem: wizja i zasady mają się
-                       wyróżniać, a nie krzyczeć. -->
-                  <TextBlock Grid.Column="0" Text="📌" Margin="0,0,8,0"
+                       wyróżniać, a nie krzyczeć. Gwiazdka, nie pinezka: krój, którym
+                       pisze aplikacja, nie ma znaków emoji i na Androidzie zostawał
+                       po niej pusty kwadracik. -->
+                  <TextBlock Grid.Column="0" Text="★" Margin="0,0,8,0"
                              IsVisible="{Binding IsPinned}" VerticalAlignment="Center" />
                   <TextBlock Grid.Column="1" Text="{Binding Title}" TextWrapping="Wrap"
                              VerticalAlignment="Center" />
@@ -1588,7 +1596,7 @@
                w którym jeszcze jest — a drugie urządzenie potrzebuje tej samej. -->
           <ToggleButton Grid.Column="1" Classes="ikona" Margin="6,0,0,0"
                         IsChecked="{Binding ShowSecret}"
-                        Content="👁" ToolTip.Tip="Pokaż tajemnicę" />
+                        Content="pokaż" ToolTip.Tip="Pokaż tajemnicę" />
         </Grid>
 
         <CheckBox Margin="0,10,0,0" IsChecked="{Binding GoogleCalendar}"
@@ -2172,21 +2180,28 @@
                w dziewięciu zadaniach na dziesięć zostaje puste, jest w oknie kosztem,
                a nie możliwością. Podsumowanie obok, żeby zwinięte nie znaczyło
                „nie wiadomo, co tam jest". -->
-          <!-- Pasek ikon: każda odsłania swoją rzecz. Dopisanie terminu nie ma
-               wywlekać rytmu, wagi i energii, których się nie dotyka. Podpowiedzi
-               po najechaniu, bo dziesięć symboli do zapamiętania to za dużo przy
-               oknie otwieranym kilka razy dziennie. -->
+          <!-- Pasek przełączników: każdy odsłania swoją rzecz. Dopisanie terminu nie ma
+               wywlekać rytmu, wagi i energii, których się nie dotyka.
+
+               **Słowa, nie emoji.** Do dziś stały tu 📅 🔔 ❗ 🔋 🔁 i na Androidzie
+               nie pojawiało się nic: krój Inter, którym pisze cała aplikacja, nie ma
+               znaków emoji, a podstawienia innego kroju Avalonia tam nie robi. Zostawało
+               pięć pustych kwadracików bez żadnego objawu, że to brak czcionki.
+
+               Słowa są zresztą lepsze także tam, gdzie emoji się rysują: znaczenie
+               niosły dotąd podpowiedzi po najechaniu, a na telefonie nie ma czym
+               najechać — symbolu bez podpisu nie da się odgadnąć ani razu. -->
           <WrapPanel Margin="0,14,0,0">
             <ToggleButton Classes="ikona" IsChecked="{Binding ShowDeadline}"
-                          Content="📅" ToolTip.Tip="Termin" />
+                          Content="termin" ToolTip.Tip="Termin — fakt zewnętrzny" />
             <ToggleButton Classes="ikona" IsChecked="{Binding ShowReminder}"
-                          Content="🔔" ToolTip.Tip="Przypomnienie" />
+                          Content="przypomni" ToolTip.Tip="Przypomnienie" />
             <ToggleButton Classes="ikona" IsChecked="{Binding ShowPriority}"
-                          Content="❗" ToolTip.Tip="Waga" />
+                          Content="waga" ToolTip.Tip="Waga" />
             <ToggleButton Classes="ikona" IsChecked="{Binding ShowEnergy}"
-                          Content="🔋" ToolTip.Tip="Ile trzeba mieć w sobie" />
+                          Content="siły" ToolTip.Tip="Ile trzeba mieć w sobie" />
             <ToggleButton Classes="ikona" IsChecked="{Binding ShowRepeat}"
-                          Content="🔁" ToolTip.Tip="Rytm" />
+                          Content="rytm" ToolTip.Tip="Rytm" />
           </WrapPanel>
 
           <StackPanel>
