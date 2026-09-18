@@ -64,7 +64,16 @@ public sealed class InAppNotifier : INotifier
             {
                 _systemowe = value;
 
-                if (value is null || CzekajaceNaSystem.Count == 0)
+                if (value is null)
+                {
+                    // Odpięcie znaczy, że nie ma dokąd — a zaległość bez adresata to już
+                    // nie zabezpieczenie, tylko rosnąca lista. W aplikacji haczyk podpina
+                    // się raz na proces i nie odpina, więc dotyczy to wyłącznie sprzątania.
+                    CzekajaceNaSystem.Clear();
+                    return;
+                }
+
+                if (CzekajaceNaSystem.Count == 0)
                 {
                     return;
                 }
