@@ -16,12 +16,20 @@ namespace Marshal.Application.Calendar;
 /// więc powód jest tu jedyną rzeczą, z której da się cokolwiek zrobić.
 /// </remarks>
 public sealed record CalendarRefreshReport(
-    int Sources, int Events, int Failed, IReadOnlyList<string> Problems)
+    int Sources, int Events, int Failed, IReadOnlyList<string> Problems, int Folded = 0)
 {
     public CalendarRefreshReport(int sources, int events, int failed)
         : this(sources, events, failed, [])
     {
     }
+
+    /// <summary>Ile powtórzonych podłączeń tego samego kalendarza odrzucono po drodze.</summary>
+    /// <remarks>
+    /// Osobno od porażek, bo to nie jest porażka — ale musi być widać, że się zdarzyło.
+    /// Bez tego złożenie duplikatów byłoby cichym skasowaniem czegoś, co użytkownik
+    /// widział na liście kalendarzy.
+    /// </remarks>
+    public int Folded { get; init; } = Folded;
 }
 
 /// <summary>
@@ -251,6 +259,8 @@ public sealed class CalendarSyncService(
         var nieudane = 0;
         var powody = new List<string>();
 
+        var zlozone = await ZlozDuplikatyAsync(ct);
+
         foreach (var zrodlo in await store.SourcesAsync(ct))
         {
             var kursor = await store.CursorAsync(zrodlo.Id, ct);
@@ -306,7 +316,66 @@ public sealed class CalendarSyncService(
             }
         }
 
-        return new CalendarRefreshReport(odswiezone, wydarzen, nieudane, powody);
+        return new CalendarRefreshReport(odswiezone, wydarzen, nieudane, powody, zlozone);
+    }
+
+    /// <summary>
+    /// Odrzucenie powtórzonych podłączeń tego samego kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Skąd się biorą.</b> Podłączenie kalendarza jest decyzją, więc się synchronizuje;
+    /// same wydarzenia nie — każde urządzenie pobiera je sobie. Pilnowanie duplikatów
+    /// siedziało wyłącznie w <see cref="AddAsync"/>, czyli na drodze ręcznej. Telefon,
+    /// który podłączył swój kalendarz **zanim** doszło do niego podłączenie z komputera,
+    /// dostawał drugi wiersz na ten sam kalendarz — tą samą drogą, na której nikt nie
+    /// pytał, czy taki już jest.
+    /// </para>
+    /// <para>
+    /// Objaw nie wyglądał na duplikat źródła: odświeżanie przechodzi po źródłach, więc
+    /// ten sam kalendarz pobierał się dwa razy, a klucz kopii to para źródło–identyfikator
+    /// zewnętrzny. Każde wydarzenie miało więc dwa wiersze i siatka rysowała wszystko
+    /// podwójnie, obok siebie, w tych samych barwach. Wyglądało to na błąd rysowania.
+    /// </para>
+    /// <para>
+    /// Zostaje **najstarsze** podłączenie — po dacie założenia, a przy jej remisie po
+    /// identyfikatorze. Obie te rzeczy jadą razem ze źródłem, więc każde urządzenie
+    /// wybiera to samo bez uzgadniania; sam identyfikator by nie wystarczył, bo dwa
+    /// założone w tej samej milisekundzie są względem siebie nieuporządkowane.
+    /// Odrzucenie jest nagrobkiem, czyli dojdzie i do drugiej strony.
+    /// </para>
+    /// </remarks>
+    private async Task<int> ZlozDuplikatyAsync(CancellationToken ct)
+    {
+        var powtorzone = (await store.SourcesAsync(ct))
+            .GroupBy(z => (z.Kind, z.ExternalId))
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        if (powtorzone.Count == 0)
+        {
+            return 0;
+        }
+
+        var zlozone = 0;
+
+        foreach (var grupa in powtorzone)
+        {
+            foreach (var nadmiarowe in grupa.OrderBy(z => z.CreatedAt).ThenBy(z => z.Id).Skip(1))
+            {
+                nadmiarowe.MarkDeleted(hlc.Next());
+
+                // Kopia wydarzeń odrzuconego źródła do skasowania: jest lokalna i nikomu
+                // już niepotrzebna, a policzona w „ile w bazie" myliłaby przy szukaniu
+                // dokładnie tej usterki.
+                await store.ForgetEventsAsync(nadmiarowe.Id, ct);
+                zlozone++;
+            }
+        }
+
+        await store.SaveChangesAsync(ct);
+
+        return zlozone;
     }
 
     /// <summary>

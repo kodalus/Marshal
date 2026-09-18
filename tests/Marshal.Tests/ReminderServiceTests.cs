@@ -14,6 +14,7 @@ using Xunit;
 
 namespace Marshal.Tests;
 
+[Collection("Powiadomienia systemowe")]
 public sealed class ReminderServiceTests : IDisposable
 {
     private sealed class Zegar : IClock

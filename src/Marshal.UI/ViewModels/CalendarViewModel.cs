@@ -612,7 +612,8 @@ public sealed partial class CalendarViewModel(
 
         await log.RecordAsync(
             "Kalendarz: pobranie",
-            $"odświeżonych {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}",
+            $"odświeżonych {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}"
+                + (raport.Folded > 0 ? $", złożonych duplikatów {raport.Folded}" : string.Empty),
             raport.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
             string.Join(Environment.NewLine, raport.Problems.Distinct()));
 

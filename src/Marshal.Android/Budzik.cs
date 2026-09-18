@@ -202,11 +202,13 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
         {
             try
             {
-                await AppServices.ReadyAsync();
-
-                // Powiadomienia podpinane tutaj, bo proces obudzony budzikiem nie ma
-                // okna — a to okno je dotąd podpinało.
+                // Powiadomienia podpinane **przed** składaniem zależności, bo proces
+                // obudzony budzikiem nie ma okna — a samo składanie nadrabia zaległe
+                // przypomnienia. Podpięte po nim znaczyło, że to, po co budzik przyszedł,
+                // zostawało zapisane jako pokazane i nie pokazywało się nigdzie.
                 Powiadomienia.Podepnij(kontekst);
+
+                await AppServices.ReadyAsync();
 
                 if (intent?.Action == Budzik.AkcjaSynchronizacji)
                 {
@@ -296,6 +298,10 @@ internal sealed class OdbiorcaStartu : BroadcastReceiver
         {
             try
             {
+                // Jak wyżej: składanie nadrabia zaległe przypomnienia, więc haczyk
+                // musi już być. Po starcie telefonu zaległych bywa najwięcej.
+                Powiadomienia.Podepnij(kontekst);
+
                 await AppServices.ReadyAsync();
                 await Budzik.Zapisz("Przypomnienia: start telefonu", "budziki nastawione od nowa");
                 OdbiorcaBudzika.Obudz(kontekst);

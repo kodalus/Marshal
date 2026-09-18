@@ -225,6 +225,66 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Ten_sam_kalendarz_podlaczony_dwa_razy_rysuje_sie_raz()
+    {
+        // Tak to wygląda naprawdę: telefon podłącza swój kalendarz, a chwilę później
+        // dochodzi do niego podłączenie z komputera — to samo, tylko z innym
+        // identyfikatorem wiersza. Pilnowanie duplikatów siedziało wyłącznie na drodze
+        // ręcznej, więc synchronizacja obchodziła je bokiem.
+        // Minuta później, żeby „najstarsze" miało jednoznaczne znaczenie: dwa wiersze
+        // założone w tej samej milisekundzie rozstrzyga dopiero identyfikator, a te są
+        // wtedy względem siebie nieuporządkowane.
+        _zegar.Now = _zegar.Now.AddMinutes(1);
+
+        var zDrugiegoUrzadzenia = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
+        _db.CalendarSources.Add(zDrugiegoUrzadzenia);
+        _db.SaveChanges();
+
+        _kanal.Next = new FeedResult([Wydarzenie("a", "Zebranie", "2026-09-17", 17, 18)], null, true);
+
+        var raport = await _usluga.RefreshAsync(force: true);
+
+        raport.Folded.Should().Be(1, "zostaje najstarsze podłączenie, reszta odpada");
+
+        // Sedno: wydarzenie ma być jedno. Dwa źródła znaczyły dwa pobrania tego samego
+        // kanału, a klucz kopii to para źródło–identyfikator — więc siatka rysowała
+        // każde wydarzenie podwójnie, obok siebie, w tych samych barwach.
+        _db.CalendarEvents.Should().ContainSingle();
+
+        var zostale = await _sklad.SourcesAsync();
+        zostale.Should().ContainSingle().Which.Id.Should().Be(_zrodlo.Id);
+    }
+
+    [Fact]
+    public async Task Skladanie_duplikatow_kasuje_kopie_odrzuconego_zrodla()
+    {
+        // Odrzucone źródło zostawiało po sobie wydarzenia: niewidoczne, bo źródła już
+        // nie ma, ale policzone w „ile w bazie" — czyli mylące dokładnie w tym miejscu,
+        // w którym się patrzy, szukając duplikatów.
+        _zegar.Now = _zegar.Now.AddMinutes(1);
+
+        var drugie = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
+        _db.CalendarSources.Add(drugie);
+        _db.CalendarEvents.Add(new CalendarEvent(
+            drugie.Id, "a", "Zebranie",
+            new DateTimeOffset(2026, 9, 17, 17, 0, 0, TimeSpan.FromHours(2)),
+            new DateTimeOffset(2026, 9, 17, 18, 0, 0, TimeSpan.FromHours(2)),
+            false));
+        _db.SaveChanges();
+
+        _kanal.Next = new FeedResult([], null, true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        _db.CalendarEvents.Should().BeEmpty();
+        (await _sklad.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task Ponowne_pobranie_aktualizuje_zamiast_dublowac()
     {
         // Klucz to para źródło–identyfikator zewnętrzny, więc to samo wydarzenie

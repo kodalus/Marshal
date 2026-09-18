@@ -139,7 +139,7 @@ public sealed class TodayWidget : AppWidgetProvider
             {
                 if (Guid.TryParse(id, out var zadanie))
                 {
-                    var services = await ServicesAsync();
+                    var services = await ServicesAsync(okno.ApplicationContext ?? okno);
                     await services.GetRequiredService<TaskEditService>().CompleteAsync(zadanie);
                 }
 
@@ -160,7 +160,7 @@ public sealed class TodayWidget : AppWidgetProvider
 
     private static async Task<RemoteViews> BuildAsync(Context context)
     {
-        var services = await ServicesAsync();
+        var services = await ServicesAsync(context.ApplicationContext ?? context);
         var clock = services.GetRequiredService<IClock>();
 
         var wybrane = await services.GetRequiredService<ITaskRepository>()
@@ -231,8 +231,14 @@ public sealed class TodayWidget : AppWidgetProvider
     /// widget na świeżo zainstalowanej aplikacji sięgałby do bazy, której nikt jeszcze
     /// nie założył.
     /// </remarks>
-    private static async Task<IServiceProvider> ServicesAsync()
+    private static async Task<IServiceProvider> ServicesAsync(Context kontekst)
     {
+        // Haczyk na dymki **przed** składaniem: składanie nadrabia zaległe przypomnienia,
+        // a widget potrafi być pierwszy w procesie i jedyny. Bez tego odświeżenie widgetu
+        // o siódmej rano zjadało przypomnienie ustawione na siódmą — zapisywało je jako
+        // pokazane i nie pokazywało.
+        Powiadomienia.Podepnij(kontekst);
+
         await AppServices.ReadyAsync();
         return AppServices.Provider;
     }

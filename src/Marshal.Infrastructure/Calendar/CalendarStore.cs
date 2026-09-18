@@ -118,6 +118,22 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
 
     public void AddSource(CalendarSource source) => db.CalendarSources.Add(source);
 
+    public async Task<int> ForgetEventsAsync(Guid sourceId, CancellationToken ct = default) =>
+        await _kolejka.WykonajAsync(
+            async () =>
+            {
+                var ile = await db.CalendarEvents
+                    .Where(e => e.SourceId == sourceId)
+                    .ExecuteDeleteAsync(ct);
+
+                await db.CalendarCursors
+                    .Where(c => c.SourceId == sourceId)
+                    .ExecuteDeleteAsync(ct);
+
+                return ile;
+            },
+            ct);
+
     public Task SaveChangesAsync(CancellationToken ct = default) =>
         _kolejka.WykonajAsync(() => db.SaveChangesAsync(ct), ct);
 }

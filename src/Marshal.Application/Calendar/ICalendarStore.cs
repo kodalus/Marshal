@@ -41,5 +41,17 @@ public interface ICalendarStore
 
     void AddSource(CalendarSource source);
 
+    /// <summary>
+    /// Kasuje kopię wydarzeń i kursor odrzuconego źródła.
+    /// </summary>
+    /// <remarks>
+    /// Kasowanie, a nie nagrobek: wydarzenia są lokalną kopią cudzych danych i nie
+    /// podlegają synchronizacji, więc nie ma komu opowiadać, że zniknęły. Zostawione
+    /// leżałyby w bazie na zawsze — niewidoczne, bo źródło jest odrzucone, i policzone
+    /// w „ile w bazie", czyli mylące dokładnie tam, gdzie się patrzy przy szukaniu
+    /// duplikatów.
+    /// </remarks>
+    Task<int> ForgetEventsAsync(Guid sourceId, CancellationToken ct = default);
+
     Task SaveChangesAsync(CancellationToken ct = default);
 }

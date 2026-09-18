@@ -361,7 +361,10 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
 
             var podsumowanie =
-                $"Odświeżone {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}.";
+                $"Odświeżone {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}."
+                + (raport.Folded > 0
+                    ? $" Odrzucone powtórzone podłączenia: {raport.Folded}."
+                    : string.Empty);
 
             // Powody, nie sama liczba. „Nieudanych 6" wygląda tak samo przy braku zgody,
             // przy złym adresie kanału i przy padniętej sieci — a to trzy różne rzeczy
