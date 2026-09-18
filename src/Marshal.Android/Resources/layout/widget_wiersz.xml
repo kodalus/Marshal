@@ -6,15 +6,24 @@
 
   Dwie linijki, bo sama nazwa nie odpowiada na pytanie, po które się na plan patrzy:
   „czy mam teraz coś umówionego".
+
+  **Dwa dotknięcia obok siebie, nie jedno w drugim.** Wiersz ma dwa znaczenia:
+  odhaczyć i otworzyć. Pierwsza wersja dawała zamiar korzeniowi wiersza i przyciskowi
+  w jego środku — a w liście widgetu to, które z nich wygrywa, rozstrzyga launcher,
+  nie my. Odhaczenie po prostu nie działało: dotknięcie szło do wiersza i otwierało
+  aplikację. Teraz oba są rodzeństwem i każde odpowiada za swój kawałek szerokości.
+
+  Kwadracik odhaczenia ma czterdzieści osiem punktów na dotknięcie i dwadzieścia dwa
+  na wygląd — stąd obrys wsunięty w tło. Dwadzieścia dwa punkty to około trzech
+  i pół milimetra: mniej, niż ma opuszek, i mniej, niż wynosi próg, poniżej którego
+  Android każe nie schodzić.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
               android:id="@+id/wiersz"
               android:layout_width="match_parent"
               android:layout_height="wrap_content"
               android:orientation="horizontal"
-              android:gravity="center_vertical"
-              android:paddingTop="7dp"
-              android:paddingBottom="7dp">
+              android:gravity="center_vertical">
 
   <ImageView
       android:id="@+id/pasek"
@@ -24,10 +33,13 @@
       android:background="@color/akcent" />
 
   <LinearLayout
+      android:id="@+id/tresc"
       android:layout_width="0dp"
       android:layout_height="wrap_content"
       android:layout_weight="1"
-      android:orientation="vertical">
+      android:orientation="vertical"
+      android:paddingTop="7dp"
+      android:paddingBottom="7dp">
 
     <TextView
         android:id="@+id/tytul"
@@ -50,12 +62,11 @@
 
   <Button
       android:id="@+id/zrobione"
-      android:layout_width="22dp"
-      android:layout_height="22dp"
+      android:layout_width="48dp"
+      android:layout_height="48dp"
       android:minWidth="0dp"
       android:minHeight="0dp"
-      android:layout_marginStart="10dp"
-      android:layout_marginEnd="2dp"
+      android:padding="0dp"
       android:background="@drawable/kwadracik_widgetu"
       android:text="" />
 

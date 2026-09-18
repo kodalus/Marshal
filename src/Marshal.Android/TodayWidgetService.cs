@@ -108,13 +108,15 @@ public sealed class TodayWidgetService : RemoteViewsService
 
             widok.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
 
-            // Dotknięcie wiersza poza kwadracikiem otwiera aplikację. Bez tego klik
-            // w treść wiersza nie robi nic, a lista zajmuje prawie cały kafelek —
-            // czyli „dotknięcie widgetu" trafiałoby w martwe pole.
+            // Treść wiersza otwiera aplikację. **Rodzeństwo kwadracika, nie jego rodzic:**
+            // pierwsza wersja dawała ten zamiar korzeniowi wiersza, czyli czemuś, co
+            // zawiera w sobie kwadracik — a wtedy o to, które dotknięcie wygrywa,
+            // rozstrzyga launcher. Odhaczenie po prostu nie działało: dotknięcie szło
+            // do wiersza i otwierało aplikację.
             var otwarcie = new Intent();
             otwarcie.PutExtra(TodayWidget.CoOtworzExtra, TodayWidget.CoOtworz);
 
-            widok.SetOnClickFillInIntent(Resource.Id.wiersz, otwarcie);
+            widok.SetOnClickFillInIntent(Resource.Id.tresc, otwarcie);
 
             return widok;
         }
