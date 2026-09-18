@@ -473,13 +473,94 @@ public sealed partial class CalendarViewModel(
     /// <summary>Pole wyboru zakresu — na wąskim, gdzie przyciski się nie mieszczą.</summary>
     public bool ShowRangePicker => Waski;
 
-    /// <summary>Ile wpisów mieści komórka, zanim reszta zamieni się w liczbę.</summary>
+    /// <summary>
+    /// Ile wpisów mieści komórka, gdy nie wiadomo jeszcze, jak wysoka jest siatka.
+    /// </summary>
     /// <remarks>
-    /// Cztery, bo przy sześciu tygodniach na ekranie telefonu tyle linijek daje się
-    /// przeczytać bez mrużenia oczu. Piąta zabiera wysokość wszystkim komórkom,
-    /// także tym pustym.
+    /// Zero wysokości znaczy „okno się jeszcze nie zmierzyło", a nie „nie ma miejsca".
+    /// Cztery to tyle, ile komórka mieściła, zanim liczyliśmy to z wysokości — czyli
+    /// najgorszy przypadek jest równy temu, co było, a nie gorszy od niego.
     /// </remarks>
-    private const int WMiesiacu = 4;
+    private const int WMiesiacuZapasowo = 4;
+
+    /// <summary>Margines, ramka i wyściółka komórki razem. Odpowiednik stylu w XAML-u.</summary>
+    /// <remarks>
+    /// Marginesy po 1, ramka po 1, wyściółka po 4 — z góry i z dołu, więc dwanaście.
+    /// Liczone tu, a nie mierzone w oknie: mierzenie wymagałoby chodzenia po drzewie
+    /// kontrolek przy każdym układzie, a te liczby stoją w stylu obok i zmieniają się
+    /// razem z nim.
+    /// </remarks>
+    private const double ObramowanieKomorki = 12;
+
+    /// <summary>Wiersz z numerem dnia i licznikiem nadmiaru.</summary>
+    private const double NumerDnia = 20;
+
+    /// <summary>
+    /// Wysokość jednego wpisu w komórce.
+    /// </summary>
+    /// <remarks>
+    /// Napis jedenastopunktowy z odstępem po punkcie z góry i z dołu wychodzi poniżej
+    /// siedemnastu. Zaokrąglone <b>w górę</b> i to jest cała ostrożność tej liczby:
+    /// przeszacowanie kosztuje czasem jedną linijkę miejsca, niedoszacowanie przycina
+    /// wpis, którego licznik nadmiaru już nie policzył — czyli komórka chowa coś
+    /// i o tym nie mówi. Z tych dwóch pomyłek tylko jedna jest cicha.
+    /// </remarks>
+    private const double WysokoscWpisu = 18;
+
+    /// <summary>Wysokość, jaką okno oddaje na tygodnie miesiąca. Zero, dopóki nie zmierzy.</summary>
+    private double _wysokoscTygodni;
+
+    /// <summary>
+    /// Wysokość siatki tygodni — stąd wiadomo, ile wpisów mieści komórka.
+    /// </summary>
+    /// <remarks>
+    /// Podawana przez widok, tak samo i z tego samego powodu co szerokość: model widoku
+    /// nie pyta okna o rozmiar, dostaje go i przelicza, co z niego wynika.
+    /// </remarks>
+    public void SetMonthHeight(double wysokosc)
+    {
+        var nowa = Math.Max(0, wysokosc);
+
+        if (Math.Abs(nowa - _wysokoscTygodni) < 1)
+        {
+            return;
+        }
+
+        _wysokoscTygodni = nowa;
+
+        if (IsMonth)
+        {
+            PrzeliczMiesiac();
+        }
+    }
+
+    /// <summary>
+    /// Ile wpisów mieści komórka przy tylu tygodniach na siatce.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stała czwórka była tu podwójnie nietrafiona. Na komputerze komórka ma wysokość
+    /// na sześć czy siedem linijek i chowała za licznikiem rzeczy, na które było
+    /// miejsce. Na telefonie przy sześciu tygodniach bywa odwrotnie: czwarta linijka
+    /// już się nie mieści, a komórka jest przycięta — więc licznik mówił „+1", gdy
+    /// niewidoczne były dwie. Ta druga pomyłka jest gorsza, bo cicha.
+    /// </para>
+    /// <para>
+    /// Co najmniej jeden wpis zawsze, nawet gdy nie mieści się i on. Komórka, w której
+    /// nie widać niczego poza liczbą, nie mówi już nic o tym, czym dzień jest zajęty.
+    /// </para>
+    /// </remarks>
+    private int MiescieSieWKomorce(int tygodni)
+    {
+        if (_wysokoscTygodni <= 0 || tygodni <= 0)
+        {
+            return WMiesiacuZapasowo;
+        }
+
+        var naWpisy = (_wysokoscTygodni / tygodni) - ObramowanieKomorki - NumerDnia;
+
+        return Math.Clamp((int)Math.Floor(naWpisy / WysokoscWpisu), 1, 20);
+    }
 
     public double GridHeight => 24 * HourHeight;
 
@@ -1159,6 +1240,10 @@ public sealed partial class CalendarViewModel(
         var miesiac = kotwica.Month;
         var komorki = new List<MonthCell>(dni.Count);
 
+        // Pojemność liczona raz na siatkę, nie raz na komórkę: wszystkie mają tę samą
+        // wysokość, bo siatka o jednej kolumnie dzieli swoją równo między tygodnie.
+        var miejsca = MiescieSieWKomorce(dni.Count / 7);
+
         foreach (var dzien in dni)
         {
             // Całodniowe przed godzinowymi, godzinowe po godzinie. Ten sam porządek,
@@ -1180,7 +1265,7 @@ public sealed partial class CalendarViewModel(
                         s.Entry.Color)))
                 .ToList();
 
-            var widoczne = wpisy.Count > WMiesiacu ? wpisy.Take(WMiesiacu).ToList() : wpisy;
+            var widoczne = wpisy.Count > miejsca ? wpisy.Take(miejsca).ToList() : wpisy;
 
             komorki.Add(new MonthCell(
                 dzien.Date,

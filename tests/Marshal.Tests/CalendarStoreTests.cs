@@ -1921,6 +1921,69 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Komorka_miesiaca_miesci_tyle_wpisow_ile_ma_wysokosci()
+    {
+        // Stała czwórka była nietrafiona w obie strony: na komputerze chowała za
+        // licznikiem rzeczy, na które było miejsce, a na telefonie przy sześciu
+        // tygodniach czwarta linijka i tak się nie mieściła — więc licznik mówił „+1",
+        // gdy niewidoczne były dwie.
+        _kanal.Next = new FeedResult(
+            [
+                Wydarzenie("a", "Pierwsze", "2026-09-17", 8, 9),
+                Wydarzenie("b", "Drugie", "2026-09-17", 10, 11),
+                Wydarzenie("c", "Trzecie", "2026-09-17", 12, 13),
+                Wydarzenie("d", "Czwarte", "2026-09-17", 14, 15),
+                Wydarzenie("e", "Piąte", "2026-09-17", 16, 17),
+                Wydarzenie("f", "Szóste", "2026-09-17", 18, 19),
+            ],
+            null,
+            true);
+
+        await _usluga.RefreshAsync();
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+        await model.ShowMonthCommand.ExecuteAsync(null);
+
+        // Siatka na tyle wysoka, że w komórce mieści się wszystko sześć.
+        model.SetMonthHeight(1200);
+
+        var dzien = Komorka(model, new DateOnly(2026, 9, 17));
+        dzien.Entries.Should().HaveCount(6);
+        dzien.Overflow.Should().Be(0);
+
+        // Ta sama siatka na telefonie: mieści mniej i mówi, ile schowała.
+        model.SetMonthHeight(420);
+
+        var ciasno = Komorka(model, new DateOnly(2026, 9, 17));
+        ciasno.Entries.Should().HaveCountLessThan(6);
+        ciasno.Overflow.Should().Be(6 - ciasno.Entries.Count);
+    }
+
+    [Fact]
+    public async Task Komorka_pokazuje_zawsze_choc_jeden_wpis()
+    {
+        // Komórka, w której nie widać niczego poza liczbą, przestaje mówić cokolwiek
+        // o tym, czym dzień jest zajęty — a po to się na miesiąc patrzy.
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("a", "Jedyne", "2026-09-17", 8, 9)], null, true);
+
+        await _usluga.RefreshAsync();
+
+        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        await model.LoadAsync();
+        await model.ShowMonthCommand.ExecuteAsync(null);
+
+        // Wysokość, przy której nie mieści się nawet jeden wiersz.
+        model.SetMonthHeight(60);
+
+        Komorka(model, new DateOnly(2026, 9, 17)).Entries.Should().ContainSingle();
+    }
+
+    private static MonthCell Komorka(CalendarViewModel model, DateOnly dzien) =>
+        model.MonthWeeks.SelectMany(t => t.Cells).Single(k => k.Date == dzien);
+
+    [Fact]
     public void Wpis_miesiaca_stoi_na_tle_w_barwie_swojego_obszaru()
     {
         // Miesiąc czyta się wzrokiem, nie literami: cztery jednakowe linijki w komórce

@@ -1380,7 +1380,12 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
-          <ItemsControl Grid.Row="1" ItemsSource="{Binding MonthWeeks}">
+          <!-- Wysokość siatki idzie do modelu widoku: z niej wychodzi, ile wpisów mieści
+               komórka. Stała czwórka chowała na komputerze rzeczy, na które było miejsce,
+               a na telefonie przy sześciu tygodniach przycinała czwartą, której licznik
+               nadmiaru już nie policzył. -->
+          <ItemsControl Grid.Row="1" ItemsSource="{Binding MonthWeeks}"
+                        Loaded="SiatkaMiesiacaGotowa">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <UniformGrid Columns="1" />
@@ -1423,6 +1428,7 @@
                                         PointerReleased="NaWpisieMiesiaca">
                                   <Grid ColumnDefinitions="Auto,*">
                                     <TextBlock Grid.Column="0" Classes="hint" Margin="0,0,4,0"
+                                               FontSize="11"
                                                Text="{Binding Time}" IsVisible="{Binding HasTime}" />
                                     <TextBlock Grid.Column="1" Text="{Binding Label}"
                                                TextTrimming="CharacterEllipsis" FontSize="11" />

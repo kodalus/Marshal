@@ -132,6 +132,15 @@ public partial class MainView : UserControl
             // podstawieniem modelu, a wtedy siatka zostałaby na szerokości zapasowej.
             Szerokosc(_siatka.Bounds.Width);
         }
+
+        // To samo dla wysokości miesiąca. Siatka tygodni zgłasza się przy wczytaniu,
+        // a to bywa **przed** podstawieniem modelu — wtedy jej meldunek trafiał donikąd
+        // i komórka zostawała przy pojemności zapasowej do pierwszej zmiany rozmiaru
+        // okna. Na telefonie, gdzie okna się nie zmienia, znaczyło to „nigdy".
+        if (_siatkaMiesiaca is { Bounds.Height: > 0 } tygodnie)
+        {
+            _kalendarz.SetMonthHeight(tygodnie.Bounds.Height);
+        }
     }
 
     /// <summary>Model szczegółu zadania. Podstawiany razem z resztą, przy zmianie kontekstu.</summary>
@@ -250,6 +259,43 @@ public partial class MainView : UserControl
         _podgladPrzed = this.FindControl<Panel>("PodgladPrzed");
         _podgladPo = this.FindControl<Panel>("PodgladPo");
     }
+
+    /// <summary>
+    /// Siatka tygodni miesiąca melduje swoją wysokość.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Na rozmiarze, nie na układzie. Układ przychodzi przy każdym przebiegu i chodzenie
+    /// wtedy po drzewie kontrolek kosztowałoby przy sześciu tygodniach po siedem komórek
+    /// za każdym razem; rozmiar przychodzi wtedy, kiedy jest o czym mówić — czyli gdy
+    /// okno albo liczba tygodni naprawdę się zmieniły.
+    /// </para>
+    /// <para>
+    /// Pierwsze podanie tutaj, bo zdarzenie rozmiaru potrafi wypaść przed podstawieniem
+    /// modelu — dokładnie tak samo jak przy szerokości siatki godzinowej, gdzie ten sam
+    /// brak zostawiał kolumny na szerokości zapasowej.
+    /// </para>
+    /// </remarks>
+    private void SiatkaMiesiacaGotowa(object? nadawca, RoutedEventArgs e)
+    {
+        if (nadawca is not Control siatka)
+        {
+            return;
+        }
+
+        _siatkaMiesiaca = siatka;
+
+        siatka.SizeChanged -= NaZmianieWysokosciMiesiaca;
+        siatka.SizeChanged += NaZmianieWysokosciMiesiaca;
+
+        _kalendarz?.SetMonthHeight(siatka.Bounds.Height);
+    }
+
+    /// <summary>Siatka tygodni miesiąca. Trzymana, żeby podać jej wysokość po modelu.</summary>
+    private Control? _siatkaMiesiaca;
+
+    private void NaZmianieWysokosciMiesiaca(object? nadawca, SizeChangedEventArgs e) =>
+        _kalendarz?.SetMonthHeight(e.NewSize.Height);
 
     /// <summary>Podglądy sąsiednich zakresów. Widoczne wyłącznie w trakcie przejechania.</summary>
     private Panel? _podgladPrzed;
