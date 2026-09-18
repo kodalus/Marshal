@@ -1,3 +1,4 @@
+using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Domain.Calendar;
 using Marshal.Infrastructure.Data;
@@ -5,8 +6,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Calendar;
 
-public sealed class CalendarStore(MarshalDbContext db) : ICalendarStore
+public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+    : ICalendarStore
 {
+    // Ten sam wspólny kontekst, co wszędzie — a odświeżenie kalendarza chodzi po sieci
+    // między odczytem a zapisem. To jest dokładnie ta szczelina, w którą potrafi wejść
+    // synchronizacja ruszająca sama, więc zapis idzie przez tę samą bramę.
+    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+
     public async Task<IReadOnlyList<CalendarSource>> SourcesAsync(CancellationToken ct = default) =>
         await db.CalendarSources
             .Where(s => !s.Deleted)
@@ -111,5 +118,6 @@ public sealed class CalendarStore(MarshalDbContext db) : ICalendarStore
 
     public void AddSource(CalendarSource source) => db.CalendarSources.Add(source);
 
-    public Task SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
+    public Task SaveChangesAsync(CancellationToken ct = default) =>
+        _kolejka.WykonajAsync(() => db.SaveChangesAsync(ct), ct);
 }

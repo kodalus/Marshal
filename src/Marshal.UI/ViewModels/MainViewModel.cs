@@ -61,6 +61,36 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly DayRolloverService _przejscieDnia;
 
     /// <summary>
+    /// Czy od ostatniego przebiegu coś zapisano w oknie.
+    /// </summary>
+    /// <remarks>
+    /// Podnoszone spoza wątku okna — zapis kończy się tam, gdzie skończyła się baza —
+    /// więc czytane i zerowane przez <see cref="Interlocked"/>. Zwykłe pole
+    /// <c>bool</c> wystarczyłoby do odczytu, ale nie do „sprawdź i wyzeruj" jednym
+    /// ruchem: między sprawdzeniem a zerowaniem zmieściłby się kolejny zapis i wypadłby
+    /// z rachunku.
+    /// </remarks>
+    private int _zmiana;
+
+    /// <summary>Kiedy ostatni przebieg się skończył. Do odmierzania przerwy.</summary>
+    private DateTimeOffset _ostatniaSynchronizacja = DateTimeOffset.MinValue;
+
+    /// <summary>Czy przebieg właśnie trwa.</summary>
+    /// <remarks>
+    /// Przebieg bywa dłuższy od minuty — sieć, logowanie, kilka odcinków — a minutnik
+    /// nie czeka. Bez tej blokady wolna synchronizacja prosiłaby sama siebie o drugą.
+    /// </remarks>
+    private bool _trwaSynchronizacja;
+
+    /// <summary>Co ile sprawdzać Dysk, gdy nic się nie zmieniło.</summary>
+    /// <remarks>
+    /// Po to, żeby zobaczyć **cudze** zmiany: to, co dopisał telefon, przychodzi tylko
+    /// przez odczyt. Pięć minut, bo tyle znosi się jako opóźnienie, a częściej znaczy
+    /// kilkadziesiąt zapytań do Dysku na godzinę bez powodu.
+    /// </remarks>
+    private static readonly TimeSpan Przerwa = TimeSpan.FromMinutes(5);
+
+    /// <summary>
     /// Dzień, na którym stanęło okno. Do wykrycia północy przy otwartej aplikacji.
     /// </summary>
     /// <remarks>
@@ -97,7 +127,8 @@ public sealed partial class MainViewModel : ObservableObject
         CalendarSyncService kalendarze,
         ReminderService przypomnienia,
         GoogleSyncService dysk,
-        DayRolloverService przejscieDnia)
+        DayRolloverService przejscieDnia,
+        ISygnalZapisu sygnal)
     {
         _inbox = inbox;
         _szkielet = szkielet;
@@ -106,6 +137,10 @@ public sealed partial class MainViewModel : ObservableObject
         _przypomnienia = przypomnienia;
         _dysk = dysk;
         _przejscieDnia = przejscieDnia;
+
+        // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
+        // dokładnie jedno: odłożyć notatkę. Przebieg rusza z minutnika, czyli z okna.
+        sygnal.Zapisano += () => Interlocked.Exchange(ref _zmiana, 1);
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -413,14 +448,6 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Odbiera to, co uzbierała usługa przypomnień przy starcie.
-    /// </summary>
-    /// <remarks>
-    /// Przypomnienia odpalają się w <c>PrepareAsync</c>, zanim okno ma cokolwiek
-    /// wczytane. Zbieranie ich do odebrania, zamiast pokazywania od razu, jest tym,
-    /// co pozwala im przetrwać tę chwilę.
-    /// </remarks>
-    /// <summary>
     /// Sprawdzenie przypomnień. Wołane co minutę z okna.
     /// </summary>
     /// <remarks>
@@ -438,6 +465,51 @@ public sealed partial class MainViewModel : ObservableObject
         {
             CollectReminders();
         }
+
+        // Osobno zabezpieczona: nieudany przebieg do Dysku nie ma prawa zabrać ze sobą
+        // przypomnień, które właśnie się policzyły.
+        await Probuj("Synchronizacja sama", SynchronizujSamaAsync);
+    }
+
+    /// <summary>
+    /// Synchronizacja bez klikania. Sprawdzana minutnikiem razem z przypomnieniami.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Do dziś jedyną drogą na Dysk był przycisk „Zapisz i zsynchronizuj" — czyli
+    /// każda zmiana wymagała pamiętania o niej. Przy dwóch urządzeniach znaczyło to,
+    /// że telefon pokazywał stan sprzed ostatniego kliknięcia, a nie stan rzeczy.
+    /// </para>
+    /// <para>
+    /// Dwa powody na przebieg, bo synchronizacja ma dwie strony. <b>Zmiana</b> jest
+    /// powodem do wysłania: zapis z okna podnosi znak i najbliższa minuta go zabiera.
+    /// <b>Przerwa</b> jest powodem do odczytu: to, co dopisał telefon, nie zapowiada
+    /// się niczym po tej stronie, więc trzeba po prostu zajrzeć.
+    /// </para>
+    /// <para>
+    /// Z minutnika, a nie z własnego odliczania: to ta sama odpowiedź na upływ czasu,
+    /// co przypomnienia i północ, i idzie wątkiem okna. Sam znak przychodzi spoza tego
+    /// wątku i dlatego nie robi nic poza podniesieniem się.
+    /// </para>
+    /// </remarks>
+    private async Task SynchronizujSamaAsync()
+    {
+        // Najpierw blokada, dopiero potem znak: przebieg bywa dłuższy od minuty,
+        // a zabranie znaku teraz znaczyłoby zgubienie zmiany, która czeka na wysłanie.
+        if (_trwaSynchronizacja)
+        {
+            return;
+        }
+
+        var zmiana = Interlocked.Exchange(ref _zmiana, 0) == 1;
+        var przerwa = _clock.Now - _ostatniaSynchronizacja >= Przerwa;
+
+        if (!zmiana && !przerwa)
+        {
+            return;
+        }
+
+        await PrzebiegAsync(zmiana ? "Synchronizacja po zmianie" : "Synchronizacja co jakiś czas", cicha: true);
     }
 
     /// <summary>
@@ -487,6 +559,14 @@ public sealed partial class MainViewModel : ObservableObject
         await ReloadAsync();
     }
 
+    /// <summary>
+    /// Odbiera to, co uzbierała usługa przypomnień przy starcie.
+    /// </summary>
+    /// <remarks>
+    /// Przypomnienia odpalają się w <c>PrepareAsync</c>, zanim okno ma cokolwiek
+    /// wczytane. Zbieranie ich do odebrania, zamiast pokazywania od razu, jest tym,
+    /// co pozwala im przetrwać tę chwilę.
+    /// </remarks>
     private void CollectReminders()
     {
         foreach (var przypomnienie in _notifier.Drain())
@@ -504,7 +584,6 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasReminders));
     }
 
-    /// <summary>Przeładowuje bieżący ekran — po zapisie, który mógł zmienić przynależność.</summary>
     /// <summary>
     /// Robota wywołana zdarzeniem, z której wyjątek ma dokąd trafić.
     /// </summary>
@@ -531,15 +610,6 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Przeliczenie ekranu po zmianie danych.
-    /// </summary>
-    /// <remarks>
-    /// Skrzynka i bieżący ekran osobno, każde z własnym zabezpieczeniem. Do dziś szły
-    /// jednym ciągiem: wywrotka przy liczeniu skrzynki zabierała ze sobą odświeżenie
-    /// ekranu, na którym akurat się było, i nic się nie przerysowywało — po zapisie,
-    /// który się udał. Jedno popsute miejsce ma psuć jedno miejsce.
-    /// </remarks>
-    /// <summary>
     /// Przebieg w tle przy starcie. Cicho, ale nie po cichu: wynik idzie do dziennika.
     /// </summary>
     /// <remarks>
@@ -547,19 +617,51 @@ public sealed partial class MainViewModel : ObservableObject
     /// logowanie chciałoby otworzyć przeglądarkę — przy starcie aplikacji byłoby to
     /// okno wyskakujące bez powodu, zanim zdążysz cokolwiek zrobić.
     /// </remarks>
-    private async Task SynchronizujCichoAsync()
+    private Task SynchronizujCichoAsync() => PrzebiegAsync("Synchronizacja przy starcie");
+
+    /// <summary>
+    /// Jeden przebieg do Dysku wywołany nie przez rękę.
+    /// </summary>
+    /// <param name="co">Nazwa do dziennika — mówi, co go wywołało.</param>
+    /// <param name="cicha">
+    /// Czy pomijać wpis w dzienniku, gdy przebieg się udał i nic nie przeniósł.
+    /// Przebieg co pięć minut to blisko trzysta wpisów na dobę, a dziennik trzyma
+    /// pięćset — bez tego zjadłby sam siebie i nie byłoby w nim widać niczego innego.
+    /// Awarie i przebiegi, które coś przeniosły, zostają zawsze.
+    /// </param>
+    private async Task PrzebiegAsync(string co, bool cicha = false)
     {
         if (!_dysk.HasCredentials || !Directory.Exists(_dysk.TokenFolder))
         {
             return;
         }
 
-        var wynik = await _dysk.SyncAsync();
+        _trwaSynchronizacja = true;
 
-        await _dziennik.RecordAsync(
-            "Synchronizacja przy starcie",
-            wynik.Ok ? $"wysłane {wynik.Sent}, przyjęte {wynik.Applied}" : wynik.Message,
-            wynik.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
+        SyncOutcome wynik;
+
+        try
+        {
+            wynik = await _dysk.SyncAsync();
+        }
+        finally
+        {
+            // Także po wywrotce: inaczej jedna awaria zatrzymywałaby automat na zawsze.
+            // Przerwa liczona od końca przebiegu, nie od początku — długi przebieg nie
+            // ma się kończyć w chwili, w której należy się następny.
+            _trwaSynchronizacja = false;
+            _ostatniaSynchronizacja = _clock.Now;
+        }
+
+        var niemo = cicha && wynik is { Ok: true, Sent: 0, Applied: 0 };
+
+        if (!niemo)
+        {
+            await _dziennik.RecordAsync(
+                co,
+                wynik.Ok ? $"wysłane {wynik.Sent}, przyjęte {wynik.Applied}" : wynik.Message,
+                wynik.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
+        }
 
         // Przeliczenie tylko wtedy, gdy coś przyszło: przerysowanie ekranu pod ręką,
         // która właśnie coś na nim robi, jest kosztem bez pożytku.
@@ -569,6 +671,15 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Przeliczenie ekranu po zmianie danych — po zapisie, który mógł zmienić przynależność.
+    /// </summary>
+    /// <remarks>
+    /// Skrzynka i bieżący ekran osobno, każde z własnym zabezpieczeniem. Do dziś szły
+    /// jednym ciągiem: wywrotka przy liczeniu skrzynki zabierała ze sobą odświeżenie
+    /// ekranu, na którym akurat się było, i nic się nie przerysowywało — po zapisie,
+    /// który się udał. Jedno popsute miejsce ma psuć jedno miejsce.
+    /// </remarks>
     private async Task ReloadAsync()
     {
         await Probuj("Ekran: przeliczenie skrzynki", RefreshInboxAsync);

@@ -1170,8 +1170,47 @@ zdalnej zmiany zapisałoby ją jako zmianę lokalną, wysyłka odesłałaby ją 
 i dwa urządzenia odbijałyby sobie te same wpisy bez końca — przy czym każdy obieg
 z osobna wyglądałby na poprawny.
 
-Wyzwalacze: start aplikacji, powrót z tła, co 5 minut przy aktywnym oknie, ręcznie.
-Nigdy w tle przy wyłączonej aplikacji.
+Wyzwalacze: start aplikacji, powrót z tła, **zapis z okna**, co 5 minut przy aktywnym
+oknie, ręcznie. Na Androidzie dodatkowo budzik — tam wyłączona aplikacja nie znaczy
+wyłączonego urządzenia.
+
+Zapis i przerwa to dwa różne powody, bo synchronizacja ma dwie strony. Zapis jest
+powodem do **wysłania**: jest to jedyna chwila, w której wiadomo, że jest co wysyłać.
+Przerwa jest powodem do **odczytu**: to, co dopisało drugie urządzenie, nie zapowiada
+się po tej stronie niczym, więc trzeba po prostu zajrzeć.
+
+Zapis zgłasza się znakiem podnoszonym przez jednostkę pracy — tamtędy przechodzi każdy
+zapis z okna, więc jedno miejsce wystarcza. Znak przychodzi z wątku, na którym skończyła
+się baza, i dlatego nie robi nic poza podniesieniem się; sam przebieg rusza z minutnika
+okna. Zapisy samej synchronizacji znaku nie podnoszą — inaczej każdy przyjęty odcinek
+prosiłby o kolejny przebieg i pętla nie miałaby końca.
+
+### 9.5.1 Brama na bazę
+
+Kontekst bazy jest pojedynczy na cały proces i nie jest bezpieczny dla dwóch rzeczy
+naraz. Dopóki wszystko działo się z okna, wystarczało to samo z siebie: okno ma jeden
+wątek. Odkąd synchronizacja rusza sama, druga strona pojawiła się naprawdę — pierwszym
+objawem był błąd o dwóch instancjach tego samego znacznika pola, wyskakujący przy
+zapisie zadania, który z zadaniem nie miał nic wspólnego.
+
+Dlatego każde dotknięcie bazy przez synchronizację, jednostkę pracy i składnicę
+kalendarza przechodzi przez jedną bramę przepuszczającą jedną pracę naraz. Brama jest
+trzymana przez **całość** czynności, łącznie z jej oczekiwaniami: puszczona na czas
+oczekiwania wpuszczałaby drugą pracę dokładnie w tę szczelinę, którą ma zamykać.
+
+Z tego wynika kolejność w scalaniu: najpierw ściągnąć z sieci **wszystkie** potrzebne
+porcje, dopiero potem nałożyć je jednym blokiem za bramą. Nakładanie przeplatane
+pobieraniem trzymałoby bramę tak długo, jak długo trwa sieć — czyli zatrzymywałoby okno
+na cały przebieg.
+
+Brama nie obejmuje odczytów, które repozytoria robią wprost na kontekście. Zapisy są
+ujęte w całości, a odczyt trwa milisekundy i nie zmienia stanu śledzenia, więc zderzenie
+jest możliwe, ale rzadkie. Domknięcie tego znaczy przeprowadzenie każdego zapytania przez
+tę samą bramę — praca do zrobienia wtedy, gdy okaże się potrzebna, a nie na zapas.
+
+Przebiegi automatyczne, które się udały i nic nie przeniosły, **nie trafiają do
+dziennika**: przebieg co pięć minut to blisko trzysta wpisów na dobę, a dziennik trzyma
+pięćset. Awarie i przebiegi, które coś przeniosły, zostają zawsze.
 
 ### 9.6 Tożsamość urządzenia i ciągłość zegara
 

@@ -12,10 +12,12 @@ public sealed record SyncOutcome(bool Ok, string Message, int Sent = 0, int Appl
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Ręcznie, nie w tle.</b> Pierwsze przebiegi na żywym koncie mają być wywołane
-/// świadomie i mieć widoczny wynik — synchronizacja uruchamiana po cichu przy starcie
-/// znaczy, że pierwszy błąd zobaczysz jako brakujące zadania, a nie jako komunikat.
-/// Automat dochodzi dopiero wtedy, gdy wiadomo, że droga działa.
+/// <b>Sama, ale z bramą.</b> Przebieg rusza teraz również bez kliknięcia — chwilę po
+/// zmianie i co kilka minut przy otwartej aplikacji. Dlatego cała jego praca na bazie
+/// idzie przez <see cref="IKolejkaBazy"/>: kontekst bazy jest w tej aplikacji jeden
+/// na proces, a dwie rzeczy naraz na jednym kontekście to nie rzadki pech, tylko
+/// awaria na żądanie. Wynik ręcznego przebiegu nadal widać w oknie; automat milczy,
+/// dopóki się udaje.
 /// </para>
 /// <para>
 /// Połączenie zakładane na czas przebiegu i zamykane po nim. Żeton odświeżalny leży
@@ -29,8 +31,13 @@ public sealed class GoogleSyncService(
     ISettings settings,
     IHlcSource hlc,
     IDeviceIdentity device,
-    string databasePath)
+    string databasePath,
+    IKolejkaBazy? kolejka = null)
 {
+    // Brama na bazę. Domyślnie wprost, żeby testy i wywołania ręczne nie musiały
+    // jej podawać — ale w złożonej aplikacji jest zawsze ta jedna, wspólna z oknem.
+    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+
     /// <summary>Czy w ogóle jest czym się logować.</summary>
     public bool HasCredentials =>
         !string.IsNullOrWhiteSpace(settings.GoogleClientId)
@@ -93,7 +100,7 @@ public sealed class GoogleSyncService(
             settings.GoogleCalendarEnabled,
             ct);
 
-        var silnik = new SyncEngine(db, polaczenie.Transport, hlc, device.Id);
+        var silnik = new SyncEngine(db, polaczenie.Transport, hlc, device.Id, _kolejka);
         var raport = await silnik.SyncAsync(ct);
 
         return new SyncOutcome(

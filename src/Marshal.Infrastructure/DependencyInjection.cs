@@ -84,6 +84,11 @@ public static class DependencyInjection
         services.AddSingleton<INoteRepository, NoteRepository>();
         services.AddSingleton<IAttachmentRepository, AttachmentRepository>();
         services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
+        // Brama na bazę przed jednostką pracy, bo to ona przez nią przechodzi.
+        // Jedna na proces — dwie bramy to brak bramy.
+        services.AddSingleton<IKolejkaBazy, KolejkaBazy>();
+        // Znak zapisu: jeden na proces, bo podnosi go jednostka pracy, a nasłuchuje okno.
+        services.AddSingleton<ISygnalZapisu, SygnalZapisu>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
         // Dziennik bierze same opcje, nie wspólny kontekst: zapis w środku cudzej
@@ -160,7 +165,8 @@ public static class DependencyInjection
             sp.GetRequiredService<ISettings>(),
             sp.GetRequiredService<IHlcSource>(),
             sp.GetRequiredService<IDeviceIdentity>(),
-            databasePath));
+            databasePath,
+            sp.GetRequiredService<IKolejkaBazy>()));
         services.AddSingleton<InboxService>();
         services.AddSingleton<StructureEditService>();
         services.AddSingleton<TagService>();
