@@ -18,8 +18,23 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
     <!-- Praca okresowa w tle. Doszła po trzech podejściach do zrobienia tego samego
          budzikami: budzik jest narzędziem do „zrób coś o tej godzinie", a nie do
-         „zaglądaj co pół godziny". Zob. Budzik.cs i SynchronizacjaWorker.cs. -->
-    <PackageReference Include="Xamarin.AndroidX.Work.Runtime" Version="2.*" />
+         „zaglądaj co pół godziny". Zob. Budzik.cs i SynchronizacjaWorker.cs.
+
+         Wersja wpisana dokładnie, nie widełkami jak Avalonia. Ten pakiet ciągnie za
+         sobą kilkanaście bibliotek androidowych i to ich wzajemne wersje rozstrzygają,
+         czy aplikacja w ogóle się spakuje — a jedyny objaw niezgodności to zerwane
+         pakowanie z nazwą klasy, która nic nikomu nie mówi. Widełki znaczyłyby, że
+         budowanie potrafi się zepsuć bez żadnej zmiany w tym repozytorium. -->
+    <PackageReference Include="Xamarin.AndroidX.Work.Runtime" Version="2.11.2.1" />
+
+    <!-- Nie używamy go wprost i nie powinno go tu być.
+         Rozszerzenia kotlinowe biblioteki „core" mieszkały kiedyś w osobnym pakiecie
+         „core-ktx", a od wydania 1.16 są w „core". Stary „core-ktx" wciąż je jednak
+         niesie, więc gdy coś przyciągnie jego dawną wersję obok nowego „core", te same
+         klasy trafiają do pakowania dwa razy i D8 przerywa pracę. Wpisany wprost
+         w zgodnej wersji jest pusty i konflikt znika. Do usunięcia, gdy nic w drzewie
+         zależności nie będzie już o niego prosić. -->
+    <PackageReference Include="Xamarin.AndroidX.Core.Core.Ktx" Version="1.19.0.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Marshal.UI\Marshal.UI.csproj" />
