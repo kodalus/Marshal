@@ -9,7 +9,6 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
-using Avalonia.Media.Transformation;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -366,18 +365,38 @@ public partial class MainView : UserControl
     /// gest niesie.
     /// </para>
     /// <para>
+    /// Ruszane jest samo przesunięcie, nie własność panelu, która je trzyma. Pierwsza
+    /// wersja podawała pod animację panel i kazała jej ruszać <c>RenderTransform</c>
+    /// zapisanym jako operacje przekształcenia — i to wywracało aplikację przy
+    /// pierwszym przejechaniu: dla takiej własności nie ma domyślnego animatora,
+    /// a dowiadujemy się o tym dopiero przy pierwszej klatce, czyli w trakcie gestu.
+    /// Przesunięcie w bok jest zwykłą liczbą i ruszanie liczby biblioteka umie od zawsze.
+    /// </para>
+    /// <para>
     /// Przesunięcie rysowania, nie układu: siatka zostaje tam, gdzie była, więc nic
-    /// się nie przelicza i nic nie zmienia rozmiaru. Po dojechaniu zdejmowane, bo
-    /// przesunięcie zerowe to i tak przesunięcie — a kolejne odświeżenia mają
-    /// zastawać panel bez żadnego.
+    /// się nie przelicza i nic nie zmienia rozmiaru. Jedno na cały czas życia okna,
+    /// bo zakładane przy każdym przejechaniu zostawiałoby po sobie stos nieżywych.
+    /// </para>
+    /// <para>
+    /// Całość przez wspólne zabezpieczenie okna. To jest ozdoba — kalendarz przeskakuje
+    /// tak czy owak — a ozdoba nie ma prawa zamknąć aplikacji. Ta właśnie zamknęła,
+    /// i to w trakcie gestu, czyli w miejscu, gdzie wyjątek nie ma komu wypaść.
     /// </para>
     /// </remarks>
-    private void Zasun(bool zPrawej)
+    private TranslateTransform? _przesuniecieSiatki;
+
+    private void Zasun(bool zPrawej) =>
+        _ = Probuj("Kalendarz: przesunięcie", () => ZasunAsync(zPrawej));
+
+    private Task ZasunAsync(bool zPrawej)
     {
         if (_obszarKalendarza is not { Bounds.Width: > 0 } obszar)
         {
-            return;
+            return Task.CompletedTask;
         }
+
+        _przesuniecieSiatki ??= new TranslateTransform();
+        obszar.RenderTransform = _przesuniecieSiatki;
 
         var skad = zPrawej ? obszar.Bounds.Width : -obszar.Bounds.Width;
 
@@ -391,30 +410,17 @@ public partial class MainView : UserControl
                 new KeyFrame
                 {
                     Cue = new Cue(0d),
-                    Setters =
-                    {
-                        new Setter(
-                            Visual.RenderTransformProperty,
-                            TransformOperations.Parse(
-                                string.Create(
-                                    System.Globalization.CultureInfo.InvariantCulture,
-                                    $"translateX({skad:0.##}px)"))),
-                    },
+                    Setters = { new Setter(TranslateTransform.XProperty, skad) },
                 },
                 new KeyFrame
                 {
                     Cue = new Cue(1d),
-                    Setters =
-                    {
-                        new Setter(
-                            Visual.RenderTransformProperty,
-                            TransformOperations.Parse("translateX(0px)")),
-                    },
+                    Setters = { new Setter(TranslateTransform.XProperty, 0d) },
                 },
             },
         };
 
-        _ = animacja.RunAsync(obszar);
+        return animacja.RunAsync(_przesuniecieSiatki);
     }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
