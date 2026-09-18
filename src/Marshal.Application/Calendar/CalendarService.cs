@@ -338,6 +338,22 @@ public sealed class CalendarSyncService(
         return (zrodlo, pisarz);
     }
 
+    /// <summary>
+    /// Barwa wydarzenia: obszaru, do którego należy jego kalendarz, a w braku — kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// Obszar wygrywa, bo to on jest podziałem. Barwa kalendarza zostaje dla wszystkiego,
+    /// czego nikt do żadnego obszaru nie przypisał — świąt, wywiadówek, kanałów, które
+    /// się tylko czyta.
+    /// </remarks>
+    private static string? BarwaWydarzenia(
+        Guid sourceId,
+        IReadOnlyDictionary<Guid, Area> obszary,
+        IReadOnlyDictionary<Guid, string?> barwyZrodel) =>
+        obszary.TryGetValue(sourceId, out var obszar) && obszar.Color is { } barwa
+            ? barwa
+            : barwyZrodel.GetValueOrDefault(sourceId);
+
     /// <summary>Strefa, w której rysowana jest siatka. Na ekran, nie do liczenia.</summary>
     /// <remarks>
     /// Widoczna, bo „wszystkie godziny o dwie za wcześnie" i „pobrało się nie to"
@@ -619,6 +635,20 @@ public sealed class CalendarSyncService(
         var zrodla = await store.SourcesAsync(ct);
         var barwy = zrodla.ToDictionary(z => z.Id, z => z.Color);
 
+        // Obszary wczytane raz, na dwie rzeczy naraz: barwę zadań i przynależność
+        // wydarzeń. Kalendarz przypisany do obszaru **jest** tym obszarem, więc
+        // wydarzenie stamtąd ma wyglądać jak wszystko inne z tego obszaru — inaczej
+        // odbiór dziecka wpisany w Google i odbiór dziecka wpisany w Marshalu stałyby
+        // obok siebie w dwóch kolorach, choć są tą samą rzeczą z tej samej półki.
+        var wszystkieObszary = await areas.AllAsync(ct);
+
+        // Nagrobki odsiane, a przy sklejce zostaje pierwszy: przypisanie jest jeden
+        // do jednego, ale dwa nagrobki po przenoszeniu mogą wskazywać ten sam kalendarz.
+        var obszaryKalendarzy = wszystkieObszary
+            .Where(o => !o.Deleted && o.CalendarId is not null)
+            .GroupBy(o => o.CalendarId!.Value)
+            .ToDictionary(g => g.Key, g => g.First());
+
         // Do których kalendarzy umiemy pisać. Bez tego okno pokazywałoby pole wyboru
         // przy wydarzeniu z kanału iCal, czyli przycisk bez żadnego skutku.
         var zapisywalne = zrodla
@@ -675,7 +705,7 @@ public sealed class CalendarSyncService(
                     : TimeZoneInfo.ConvertTime(wydarzenie.EndsAt, strefa),
                 wydarzenie.IsAllDay,
                 AgendaKind.Event,
-                barwy.GetValueOrDefault(wydarzenie.SourceId),
+                BarwaWydarzenia(wydarzenie.SourceId, obszaryKalendarzy, barwy),
                 TaskId: null,
                 wydarzenie.SourceId,
                 wydarzenie.ExternalId,
@@ -686,8 +716,7 @@ public sealed class CalendarSyncService(
         // Barwy dziedziczone w dół: zadanie bierze swoją, a gdy jej nie ma — projektu,
         // a gdy i tego nie ma — obszaru. Ustawienie koloru raz na obszarze koloruje
         // więc wszystko, co do niego należy, bez dotykania pojedynczych zadań.
-        var barwyObszarow = (await areas.AllAsync(ct))
-            .ToDictionary(o => o.Id, o => o.Color);
+        var barwyObszarow = wszystkieObszary.ToDictionary(o => o.Id, o => o.Color);
         var barwyProjektow = BarwyProjektow(await projects.AllAsync(ct), barwyObszarow);
 
         foreach (var zadanie in zadania)

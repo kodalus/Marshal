@@ -982,6 +982,41 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Wydarzenie z przypisanego kalendarza ma barwę swojego obszaru.
+    /// </summary>
+    /// <remarks>
+    /// Kalendarz przypisany do obszaru jest tym obszarem, więc wydarzenie stamtąd
+    /// ma wyglądać jak wszystko inne z tej półki. Inaczej odbiór dziecka wpisany
+    /// w Google i odbiór dziecka wpisany w Marshalu stałyby obok siebie w dwóch
+    /// kolorach, choć są tą samą rzeczą.
+    /// </remarks>
+    [Fact]
+    public async Task Wydarzenie_bierze_barwe_obszaru_swojego_kalendarza()
+    {
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("s1", "Zebranie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        var dzieci = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dzieci", 0);
+        dzieci.SetColor("#FF8800", _hlc.Next());
+        dzieci.SetCalendar(_zrodlo.Id, _hlc.Next());
+        _db.Areas.Add(dzieci);
+        _db.SaveChanges();
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+            .Timed.Single().Entry.Color.Should().Be("#FF8800");
+
+        // Zdjęcie przypisania oddaje wydarzenie barwie samego kalendarza — tam wracają
+        // święta i wywiadówki, czyli wszystko, czego nikt do obszaru nie przypisał.
+        dzieci.SetCalendar(null, _hlc.Next());
+        _db.SaveChanges();
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+            .Timed.Single().Entry.Color.Should().NotBe("#FF8800");
+    }
+
+    /// <summary>
     /// Kalendarz stoi przy jednym obszarze naraz.
     /// </summary>
     /// <remarks>
