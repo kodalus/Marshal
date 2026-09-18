@@ -22,6 +22,9 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     /// <summary>Prośba z widgetu, żeby wejść od razu na kalendarz.</summary>
     public const string KalendarzExtra = "kalendarz";
 
+    /// <summary>Zadanie do otwarcia razem z kalendarzem. Puste, gdy dotknięto samego kafelka.</summary>
+    public const string ZadanieExtra = "zadanie-kalendarza";
+
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder).WithInterFont();
 
@@ -87,10 +90,17 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 
     private static void Rozpatrz(Intent? zamiar)
     {
-        if (zamiar?.GetBooleanExtra(KalendarzExtra, false) == true)
+        if (zamiar?.GetBooleanExtra(KalendarzExtra, false) != true)
         {
-            App.PoprosOKalendarz();
+            return;
         }
+
+        // Nieczytelny identyfikator traktowany jak jego brak: wejście na kalendarz jest
+        // wtedy nadal sensowną odpowiedzią, a odmowa całego wejścia — nie.
+        App.PoprosOKalendarz(
+            Guid.TryParse(zamiar.GetStringExtra(ZadanieExtra), out var zadanie)
+                ? zadanie
+                : null);
     }
 
     protected override void OnPause()

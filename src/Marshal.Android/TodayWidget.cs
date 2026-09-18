@@ -403,6 +403,15 @@ public sealed class TodayWidget : AppWidgetProvider
             var doOkna = new Intent(okno, typeof(MainActivity));
             doOkna.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
             doOkna.PutExtra(MainActivity.KalendarzExtra, true);
+
+            // Zadanie, jeśli dotknięto pozycji, a nie samego kafelka. Wejście „gdzieś
+            // w okolice" znaczyło szukanie wzrokiem po siatce tego, co przed chwilą
+            // stało pod palcem.
+            if (intent.GetStringExtra(TaskIdExtra) is { Length: > 0 } zadanie)
+            {
+                doOkna.PutExtra(MainActivity.ZadanieExtra, zadanie);
+            }
+
             okno.StartActivity(doOkna);
             return;
         }

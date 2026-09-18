@@ -115,6 +115,7 @@ public sealed class TodayWidgetService : RemoteViewsService
             // do wiersza i otwierało aplikację.
             var otwarcie = new Intent();
             otwarcie.PutExtra(TodayWidget.CoOtworzExtra, TodayWidget.CoOtworz);
+            otwarcie.PutExtra(TodayWidget.TaskIdExtra, pozycja.Id.ToString());
 
             widok.SetOnClickFillInIntent(Resource.Id.tresc, otwarcie);
 

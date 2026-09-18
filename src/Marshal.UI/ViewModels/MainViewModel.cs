@@ -194,6 +194,28 @@ public sealed partial class MainViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// Wejście z zewnątrz okna: kalendarz, a na nim wskazane zadanie.
+    /// </summary>
+    /// <remarks>
+    /// Kalendarz najpierw i bezwarunkowo, szczegół dopiero po nim. Odwrotna kolejność
+    /// otwierałaby szczegół nad ekranem, na którym akurat się stało — a po jego
+    /// zamknięciu zostawałby ten ekran, nie kalendarz. Z widgetu przychodzi się
+    /// **na kalendarz**, nawet gdy zadania już nie ma.
+    /// </remarks>
+    public void PokazKalendarz(Guid? zadanie)
+    {
+        Bezpiecznie("Kalendarz: wejście z widgetu", async () =>
+        {
+            await ShowCalendarAsync();
+
+            if (zadanie is { } identyfikator && await _tasks.FindAsync(identyfikator) is { } rzecz)
+            {
+                await Detail.LoadAsync(rzecz);
+            }
+        });
+    }
+
     public ClarifyViewModel Clarify { get; }
 
     public TaskDetailViewModel Detail { get; }

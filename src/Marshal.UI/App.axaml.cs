@@ -30,10 +30,13 @@ public partial class App : Avalonia.Application
     public static string? SladPlatformy { get; set; }
 
     /// <summary>Co okno umie zrobić na prośbę z zewnątrz. Puste, dopóki okna nie ma.</summary>
-    private static Action? _pokazKalendarz;
+    private static Action<Guid?>? _pokazKalendarz;
 
     /// <summary>Czy ktoś prosił o kalendarz, zanim było komu.</summary>
     private static bool _zadanoKalendarza;
+
+    /// <summary>Zadanie, o które proszono razem z kalendarzem. Puste, gdy o żadne.</summary>
+    private static Guid? _zadaneZadanie;
 
     /// <summary>
     /// Prośba spoza okna, żeby pokazać kalendarz — z widgetu na ekranie domowym.
@@ -50,19 +53,26 @@ public partial class App : Avalonia.Application
     /// z ikony, z powiadomienia, skądkolwiek — przerzucałoby na kalendarz.
     /// </para>
     /// </remarks>
-    public static void PoprosOKalendarz()
+    /// <param name="zadanie">
+    /// Zadanie do otwarcia razem z kalendarzem albo nic. Dotknięcie kafelka prowadzi na
+    /// kalendarz, a dotknięcie pozycji na nim — do tej jednej rzeczy, o którą chodziło.
+    /// Bez tego z widgetu dało się wejść tylko „gdzieś w okolice" i dalej trzeba było
+    /// szukać wzrokiem po siatce.
+    /// </param>
+    public static void PoprosOKalendarz(Guid? zadanie = null)
     {
         if (_pokazKalendarz is { } teraz)
         {
-            teraz();
+            teraz(zadanie);
             return;
         }
 
         _zadanoKalendarza = true;
+        _zadaneZadanie = zadanie;
     }
 
     /// <summary>Podpięcie okna. Spełnia prośbę, która przyszła, zanim okno powstało.</summary>
-    private static void PodepnijKalendarz(Action pokaz)
+    private static void PodepnijKalendarz(Action<Guid?> pokaz)
     {
         _pokazKalendarz = pokaz;
 
@@ -72,7 +82,11 @@ public partial class App : Avalonia.Application
         }
 
         _zadanoKalendarza = false;
-        pokaz();
+
+        var zadanie = _zadaneZadanie;
+        _zadaneZadanie = null;
+
+        pokaz(zadanie);
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -159,8 +173,8 @@ public partial class App : Avalonia.Application
                 await viewModel.InitializeAsync();
 
                 PodepnijKalendarz(
-                    () => Dispatcher.UIThread.Post(
-                        () => viewModel.ShowCalendarCommand.Execute(null)));
+                    zadanie => Dispatcher.UIThread.Post(
+                        () => viewModel.PokazKalendarz(zadanie)));
 
                 // Strefa w dzienniku przy każdym starcie: przesuwa wszystkie godziny
                 // naraz, a przesunięte wszystko wygląda tak samo jak źle pobrane dane.

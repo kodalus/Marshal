@@ -163,8 +163,7 @@ public partial class MainView : UserControl
     /// <para>
     /// Strzałki u góry zostają, bo na myszy są szybsze. Ale na telefonie cały widok
     /// jest o zakresie — tydzień, trzy dni, miesiąc — a jedyną drogą do sąsiedniego
-    /// było wycelowanie w przycisk szerokości kciuka. Przejechanie w bok jest tym,
-    /// czego się na tym ekranie próbuje pierwszym odruchem.
+    /// było wycelowanie w przycisk szerokości kciuka.
     /// </para>
     /// <para>
     /// <b>Podsłuchiwane w fazie opadania, nie podnoszenia.</b> Bloki na siatce są
@@ -172,6 +171,18 @@ public partial class MainView : UserControl
     /// go nie zobaczyła. W fazie opadającej zdarzenie idzie od okna w dół, czyli przez
     /// nas <b>przed</b> blokiem — i tylko wtedy, gdy ruch okazał się przejechaniem,
     /// oznaczamy je jako obsłużone, żeby blok się nie otworzył po drodze.
+    /// </para>
+    /// <para>
+    /// <b>Koniec ruchu bywa dwojaki i dlatego pilnujemy obu.</b> Pierwsza wersja czekała
+    /// wyłącznie na puszczenie i łapała mniej więcej co dziesiąty ruch: gdy przewijanie
+    /// uzna gest za swój, przejmuje wskaźnik, a wtedy puszczenie nie przychodzi wcale —
+    /// przychodzi porzucenie. Siatka godzinowa odrobiła tę lekcję wcześniej, przy
+    /// zakładaniu zadań, i tam jest osobna obsługa porzucenia; tutaj jej zabrakło.
+    /// </para>
+    /// <para>
+    /// Porzucenie nie niesie położenia, więc ruch jest próbkowany po drodze. To zresztą
+    /// wierniejsze: liczy się to, dokąd palec dojechał, a nie gdzie był w chwili, gdy
+    /// system uznał gest za skończony.
     /// </para>
     /// <para>
     /// Tylko palcem. Na myszy przeciąganie w bok należy do bloków i zabranie im go
@@ -186,52 +197,81 @@ public partial class MainView : UserControl
         }
 
         obszar.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
+        obszar.AddHandler(PointerMovedEvent, ObszarRuch, RoutingStrategies.Tunnel);
         obszar.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
+        obszar.AddHandler(PointerCaptureLostEvent, ObszarPorzucony, RoutingStrategies.Tunnel);
     }
 
     /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
     /// <remarks>
-    /// Osiemdziesiąt punktów to około jednej piątej szerokości telefonu: za dużo, żeby
+    /// Sześćdziesiąt punktów to około jednej szóstej szerokości telefonu: za dużo, żeby
     /// wyszło przy pionowym przewijaniu, za mało, żeby trzeba było brać rozmach.
     /// </remarks>
-    private const double ProgPrzejechania = 80;
+    private const double ProgPrzejechania = 60;
 
-    private (Point Skad, IPointer Wskaznik)? _przejechanie;
+    private (Point Skad, Point Dokad, IPointer Wskaznik)? _przejechanie;
 
     private void ObszarNacisniety(object? nadawca, PointerPressedEventArgs e)
     {
-        _przejechanie = e.Pointer.Type == PointerType.Touch && nadawca is Control obszar
-            ? (e.GetPosition(obszar), e.Pointer)
-            : null;
+        if (e.Pointer.Type != PointerType.Touch || nadawca is not Control obszar)
+        {
+            _przejechanie = null;
+            return;
+        }
+
+        var punkt = e.GetPosition(obszar);
+        _przejechanie = (punkt, punkt, e.Pointer);
+    }
+
+    private void ObszarRuch(object? nadawca, PointerEventArgs e)
+    {
+        if (_przejechanie is { } dotyk
+            && nadawca is Control obszar
+            && ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        {
+            _przejechanie = dotyk with { Dokad = e.GetPosition(obszar) };
+        }
     }
 
     private void ObszarPuszczony(object? nadawca, PointerReleasedEventArgs e)
     {
-        var start = _przejechanie;
-        _przejechanie = null;
-
-        // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, a nie zakres.
-        if (_przeciagam
-            || start is not { } dotyk
-            || nadawca is not Control obszar
-            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer)
-            || _kalendarz is null)
+        if (_przejechanie is { } dotyk
+            && nadawca is Control obszar
+            && ReferenceEquals(dotyk.Wskaznik, e.Pointer))
         {
-            return;
+            _przejechanie = dotyk with { Dokad = e.GetPosition(obszar) };
         }
 
-        var koniec = e.GetPosition(obszar);
-        var wBok = koniec.X - dotyk.Skad.X;
+        // Obsłużone tylko wtedy, gdy naprawdę przejechano — inaczej zwykłe dotknięcie
+        // bloku przestałoby go otwierać.
+        e.Handled = Rozstrzygnij();
+    }
+
+    /// <summary>Przewijanie przejęło wskaźnik — ruch skończył się, choć nikt nie puścił.</summary>
+    private void ObszarPorzucony(object? nadawca, PointerCaptureLostEventArgs e) =>
+        Rozstrzygnij();
+
+    /// <summary>Czy zapamiętany ruch był przejechaniem. Zużywa go niezależnie od wyniku.</summary>
+    private bool Rozstrzygnij()
+    {
+        var ruch = _przejechanie;
+        _przejechanie = null;
+
+        // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, nie zakres.
+        if (_przeciagam || ruch is not { } dotyk || _kalendarz is null)
+        {
+            return false;
+        }
+
+        var wBok = dotyk.Dokad.X - dotyk.Skad.X;
+        var wPion = dotyk.Dokad.Y - dotyk.Skad.Y;
 
         // W bok **wyraźnie bardziej** niż w pionie: ukośny ruch przy przewijaniu dnia
         // przeskakiwałby tydzień przy każdej próbie dojechania do wieczora.
-        if (Math.Abs(wBok) < ProgPrzejechania || Math.Abs(wBok) < 1.5 * Math.Abs(koniec.Y - dotyk.Skad.Y))
+        if (Math.Abs(wBok) < ProgPrzejechania || Math.Abs(wBok) < 1.5 * Math.Abs(wPion))
         {
-            return;
+            return false;
         }
-
-        // Obsłużone tutaj, żeby blok pod palcem nie otworzył się przy okazji.
-        e.Handled = true;
 
         // Palec w lewo odsłania to, co po prawej — czyli następny zakres. Tak samo
         // zachowuje się każda lista, po której się przejeżdża.
@@ -240,6 +280,8 @@ public partial class MainView : UserControl
             () => wBok < 0
                 ? _kalendarz.NextCommand.ExecuteAsync(null)
                 : _kalendarz.PreviousCommand.ExecuteAsync(null));
+
+        return true;
     }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
