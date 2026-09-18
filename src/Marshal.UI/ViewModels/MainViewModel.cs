@@ -165,6 +165,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             Interlocked.Exchange(ref _zmiana, 1);
             PoproszOWysylke();
+            PoproszOPrzeliczenie();
         };
         _tasks = tasks;
         _projects = projects;
@@ -539,6 +540,64 @@ public sealed partial class MainViewModel : ObservableObject
     /// wątku i dlatego nie robi nic poza podniesieniem się.
     /// </para>
     /// </remarks>
+    /// <summary>Ile czekać z przeliczeniem ekranu po zapisie zrobionym w tle.</summary>
+    /// <remarks>
+    /// Sekunda, bo tyle mniej więcej trwa wyprawa do Google — a to jest ten zapis,
+    /// o którym ekran nie ma jak wiedzieć.
+    /// </remarks>
+    private static readonly TimeSpan OdlozeniePrzeliczenia = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Przeliczenie ekranu po zapisie, który nie przyszedł z ekranu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Objaw, który to wywołał: wyrzucone zadanie zostawiało na siatce swoje odbicie
+    /// z Google — wpis wyglądający jak zadanie okrojone, bo zadania już nie było, a wpis
+    /// jeszcze był. Dane były w porządku sekundę później; nie był w porządku ekran.
+    /// </para>
+    /// <para>
+    /// Odbicie do kalendarza jest robione <b>po</b> kliknięciu, żeby odhaczenie nie
+    /// czekało na cudzy serwer. Siatka przeliczała się natomiast <b>od razu</b> po
+    /// wyrzuceniu — czyli dokładnie w chwili, gdy zadania już nie ma, a jego wydarzenia
+    /// jeszcze nikt nie zdjął. Rysowała więc stan prawdziwy, tyle że przejściowy,
+    /// i zostawała z nim, bo nic jej potem nie ruszało.
+    /// </para>
+    /// <para>
+    /// Zamiast łatać ten jeden przypadek: <b>ekran idzie za bazą</b>. Każdy zapis,
+    /// z którejkolwiek strony, prosi o przeliczenie. Zapisy z ekranu przeliczają go
+    /// i tak od razu, więc to jest drugie przeliczenie sekundę później — kilka odczytów
+    /// bez widocznej zmiany. Tyle kosztuje to, żeby żadna robota w tle nie kończyła się
+    /// widokiem nieodpowiadającym danym.
+    /// </para>
+    /// </remarks>
+    private CancellationTokenSource? _odlozonePrzeliczenie;
+
+    private void PoproszOPrzeliczenie() => Dispatcher.UIThread.Post(() =>
+    {
+        _odlozonePrzeliczenie?.Cancel();
+        _odlozonePrzeliczenie?.Dispose();
+
+        var zrodlo = new CancellationTokenSource();
+        _odlozonePrzeliczenie = zrodlo;
+
+        _ = PrzeliczZaChwileAsync(zrodlo.Token);
+    });
+
+    private async Task PrzeliczZaChwileAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(OdlozeniePrzeliczenia, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await Probuj("Ekran: przeliczenie po zapisie w tle", ReloadAsync);
+    }
+
     /// <summary>Odłożona wysyłka po zapisie. Kolejny zapis odsuwa ją, a nie dokłada.</summary>
     /// <remarks>
     /// Do dziś zapis czekał na najbliższy przebieg minutnika, czyli do minuty — a przy
