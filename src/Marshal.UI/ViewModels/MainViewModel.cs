@@ -58,6 +58,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly GoogleSyncService _dysk;
 
+    private readonly DayRolloverService _przejscieDnia;
+
+    /// <summary>Dzień, na którym stanęło okno. Do wykrycia północy przy otwartej aplikacji.</summary>
+    private DateOnly _dzien;
+
     public MainViewModel(
         InboxService inbox,
         ITaskRepository tasks,
@@ -83,7 +88,8 @@ public sealed partial class MainViewModel : ObservableObject
         TaskMirror odbicie,
         CalendarSyncService kalendarze,
         ReminderService przypomnienia,
-        GoogleSyncService dysk)
+        GoogleSyncService dysk,
+        DayRolloverService przejscieDnia)
     {
         _inbox = inbox;
         _szkielet = szkielet;
@@ -91,6 +97,8 @@ public sealed partial class MainViewModel : ObservableObject
         _kalendarze = kalendarze;
         _przypomnienia = przypomnienia;
         _dysk = dysk;
+        _przejscieDnia = przejscieDnia;
+        _dzien = clock.Today;
         _tasks = tasks;
         _projects = projects;
         _areas = areas;
@@ -417,10 +425,49 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     public async Task CheckRemindersAsync()
     {
+        await PrzejscieDniaAsync();
+
         if (await _przypomnienia.RunAsync() > 0)
         {
             CollectReminders();
         }
+    }
+
+    /// <summary>
+    /// Północ przy otwartej aplikacji.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przejście dnia i wygaszenie wyborów działy się wyłącznie przy starcie: aplikacja
+    /// zastawała różnicę dat i nadrabiała ją. Przy oknie otwartym przez dobę — a tak
+    /// wygląda praca na komputerze — nie zastawała jej nigdy.
+    /// </para>
+    /// <para>
+    /// Skutek widać było dopiero od czasu, gdy wybór na dziś zakłada wydarzenie
+    /// w Google: wczorajsze wybory zostawały tam do następnego uruchomienia, bo to
+    /// wygaszenie je stamtąd zdejmuje. Samo zadanie wracało do puli poprawnie —
+    /// wygaszenie zdejmuje z niego dzień wyboru i nie rusza stanu, więc następnego
+    /// dnia można je wziąć na nowo.
+    /// </para>
+    /// <para>
+    /// Sprawdzane minutnikiem razem z przypomnieniami: to ta sama odpowiedź na upływ
+    /// czasu, a drugi minutnik na tę samą minutę byłby drugim miejscem do zatrzymania.
+    /// </para>
+    /// </remarks>
+    private async Task PrzejscieDniaAsync()
+    {
+        if (_clock.Today == _dzien)
+        {
+            return;
+        }
+
+        _dzien = _clock.Today;
+
+        await _przejscieDnia.RunAsync();
+        await _focus.ExpireAsync();
+
+        await _dziennik.RecordAsync("Przejście dnia", $"nowy dzień: {_dzien:yyyy-MM-dd}");
+        await ReloadAsync();
     }
 
     private void CollectReminders()
