@@ -496,18 +496,6 @@ public sealed partial class CalendarViewModel(
             await log.RecordAsync(
                 "Kalendarz: przełożenie", $"{day:yyyy-MM-dd} {pora:HH}:{pora:mm}");
         }
-        catch (WydarzenieZniknelo e)
-        {
-            // Zdjęte z siatki przy odmowie, więc siatka musi się przeliczyć — inaczej
-            // duch zostaje na ekranie aż do najbliższego pełnego odczytu.
-            Problem = e.Message;
-            OnPropertyChanged(nameof(HasProblem));
-
-            await log.RecordAsync(co, blok.Title, ActivityLevel.Problem, e.Message);
-            await RefreshAsync();
-
-            return;
-        }
         catch (Exception e) when (e is not OperationCanceledException)
         {
             Problem = e.Message;
@@ -1090,6 +1078,18 @@ public sealed partial class CalendarViewModel(
         {
             await calendar.SetEventDoneAsync(zrodlo, zewnetrzny, !blok.IsDone);
             await log.RecordAsync(co, blok.Title);
+        }
+        catch (WydarzenieZniknelo e)
+        {
+            // Duch zdjęty z siatki przy odmowie, więc siatka musi się przeliczyć —
+            // inaczej zostaje na ekranie aż do najbliższego pełnego odczytu.
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(co, blok.Title, ActivityLevel.Problem, e.Message);
+            await RefreshAsync();
+
+            return;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
