@@ -880,6 +880,50 @@ public partial class MainView : UserControl
     /// nie da się odróżnić „trzymam za krótko" od „to w ogóle nie działa".
     /// </para>
     /// </remarks>
+    /// <summary>Rozpoznawacze przewijania uśpione na czas ciągnięcia, z ich stanem sprzed.</summary>
+    private readonly List<(ScrollGestureRecognizer Recognizer, bool Sideways, bool Vertical)> _paused = [];
+
+    /// <summary>
+    /// Uśpienie przewijania nad blokiem trzymanym w ręku.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przejęcie wskaźnika nie wystarcza. Rozpoznawacz przewijania liczy ruch osobno
+    /// i po przekroczeniu swojego progu <b>zabiera wskaźnik sobie</b> — a odebranie
+    /// przechwycenia kończy u nas chwyt. Widać to jako blok, który rusza się za palcem
+    /// przez ułamek sekundy i znika: tyle trwa droga do progu przewijania.
+    /// </para>
+    /// <para>
+    /// Usypiane są wszystkie po drodze od bloku w górę: siatka godzinowa przewija
+    /// w pionie, a panel z siatkami w poziomie. Stan sprzed zapamiętany, bo to te same
+    /// rozpoznawacze, które za chwilę mają znów działać — nie da się ich postawić
+    /// na sztywno, bo jeden z nich jest ustawiony przez nas, a drugi przez Avalonię.
+    /// </para>
+    /// </remarks>
+    private void PauseScrolling(Control block)
+    {
+        foreach (var element in block.GetSelfAndVisualAncestors().OfType<InputElement>())
+        {
+            foreach (var recognizer in element.GestureRecognizers.OfType<ScrollGestureRecognizer>())
+            {
+                _paused.Add((recognizer, recognizer.CanHorizontallyScroll, recognizer.CanVerticallyScroll));
+                recognizer.CanHorizontallyScroll = false;
+                recognizer.CanVerticallyScroll = false;
+            }
+        }
+    }
+
+    private void ResumeScrolling()
+    {
+        foreach (var (recognizer, sideways, vertical) in _paused)
+        {
+            recognizer.CanHorizontallyScroll = sideways;
+            recognizer.CanVerticallyScroll = vertical;
+        }
+
+        _paused.Clear();
+    }
+
     private void LongPressElapsed()
     {
         _dragAllowed = true;
@@ -890,12 +934,14 @@ public partial class MainView : UserControl
         }
 
         _pressedPointer?.Capture(block);
+        PauseScrolling(block);
         block.Opacity = 0.7;
     }
 
     private void ReleaseBlock()
     {
         _longPress?.Stop();
+        ResumeScrolling();
         _dragAllowed = true;
 
         if (_pressedBlock is { } block)
