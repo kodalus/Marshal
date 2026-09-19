@@ -89,6 +89,38 @@ public sealed class CalendarSource : Entity
     /// </remarks>
     public string? Account { get; private set; }
 
+    /// <summary>
+    /// Czy ten kalendarz wolno tylko czytać.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Google podaje to przy każdym kalendarzu jako poziom dostępu: czytelnik, piszący,
+    /// właściciel. Kalendarze świąteczne, fazy księżyca i cudze udostępnione bez prawa
+    /// zmian są czytelnikami — a wpisuje się je akurat po to, żeby je tylko czytać.
+    /// </para>
+    /// <para>
+    /// Zapisane u nas, nie odpytywane przy każdej czynności: pole „Obszar" musi wiedzieć
+    /// <b>zanim</b> ktoś je kliknie, czy ma być czynne. Dowiadywanie się z odmowy znaczy
+    /// odmowę po fakcie — a przy przenoszeniu wydarzenia po fakcie znaczy kopię
+    /// założoną w nowym kalendarzu, zanim odmowa przyszła ze starego.
+    /// </para>
+    /// <para>
+    /// Odświeżane przy każdym pobraniu, bo dostęp się zmienia: ktoś dopuszcza do
+    /// swojego kalendarza albo dostęp odbiera. Nierozpoznane znaczy „wolno pisać" —
+    /// zgadywanie w drugą stronę zablokowałoby zapis do kalendarza, do którego wolno.
+    /// </para>
+    /// </remarks>
+    public bool ReadOnly { get; private set; }
+
+    /// <summary>Zmiana poziomu dostępu. Bez znacznika zegara: to jest wiadomość od Google.</summary>
+    /// <remarks>
+    /// Nie jedzie synchronizacją i nie ma w niej znaczenia. To nie jest decyzja
+    /// użytkowniczki o danych, tylko odpowiedź Google na pytanie „czy mi wolno" —
+    /// a drugie urządzenie pyta o to samo i dostaje tę samą odpowiedź. Znacznik
+    /// zegara logicznego dokładałby tu rozstrzyganie sporu, którego nie ma.
+    /// </remarks>
+    public void SetReadOnly(bool readOnly) => ReadOnly = readOnly;
+
     public void Rename(string name, Hlc stamp)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);

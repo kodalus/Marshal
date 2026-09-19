@@ -21,6 +21,11 @@ public sealed class CalendarSourceConfiguration : IEntityTypeConfiguration<Calen
 
         // Adres pocztowy konta, z którego pochodzi kalendarz. Puste = konto główne.
         builder.Property(s => s.Account).HasMaxLength(320);
+
+        // Poziom dostępu z Google. Lokalny w znaczeniu „odpowiedź na pytanie, czy mi
+        // wolno", a nie decyzja o danych — jedzie jednak zwykłą drogą, bo to kolumna
+        // encji i wyjmowanie jej z dziennika zmian byłoby osobnym wyjątkiem do pilnowania.
+        builder.Property(s => s.ReadOnly).IsRequired();
         builder.Property(s => s.CreatedAt).IsRequired();
         builder.Property(s => s.UpdatedAt).IsRequired();
         builder.Property(s => s.Deleted).IsRequired();

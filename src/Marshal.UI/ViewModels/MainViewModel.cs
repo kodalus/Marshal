@@ -1570,7 +1570,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public async Task<IReadOnlyList<CalendarSource>> WritableCalendarsAsync() =>
         (await _kalendarze.SourcesAsync())
-            .Where(z => _kalendarze.CanWrite(z.Kind))
+            .Where(_kalendarze.CanWrite)
             .ToList();
 
     /// <summary>Kalendarz, w którym zadania lądują domyślnie.</summary>

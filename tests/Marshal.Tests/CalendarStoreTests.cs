@@ -1932,6 +1932,81 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Kalendarz_tylko_do_odczytu_odmawia_przed_czynnoscia_a_nie_po_niej()
+    {
+        // Odmowa po fakcie przy przenoszeniu wydarzenia znaczy kopię założoną w nowym
+        // kalendarzu, zanim odmowa przyszła ze starego. Poziom dostępu Google znamy
+        // z listy kalendarzy, więc da się odpowiedzieć, zanim cokolwiek się wydarzy.
+        _zrodlo.SetReadOnly(true);
+        await _db.SaveChangesAsync();
+
+        var proba = async () => await _usluga.SaveEventAsync(
+            _zrodlo.Id,
+            externalId: null,
+            new CalendarDraft("Cokolwiek", _zegar.Now, _zegar.Now.AddHours(1)));
+
+        (await proba.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*tylko do odczytu*");
+
+        // Nic nie poszło do źródła — o to właśnie chodzi w słowie „przed".
+        _pisarz.Wyslane.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Wydarzenie_z_kalendarza_do_odczytu_nie_ma_na_siatce_pola_wyboru()
+    {
+        // Pole wyboru przy wydarzeniu, którego nie da się odhaczyć, uczy nieufności
+        // do wszystkich pozostałych. To samo rozstrzyga o polu „Obszar" na karcie:
+        // czego nie wolno zmienić, tego się nie proponuje.
+        _zrodlo.SetReadOnly(true);
+        await _db.SaveChangesAsync();
+
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("a", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0]
+            .Timed.Single().Entry.CanWrite.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Poziom_dostepu_odswieza_sie_przy_kazdym_pobraniu()
+    {
+        // Dostęp się zmienia: ktoś dopuszcza do swojego kalendarza albo odbiera dostęp.
+        // Aplikacja, która pyta o to raz przy podłączaniu, myli się od tamtej chwili
+        // do końca.
+        _kanal.Next = new FeedResult([], null, true, Color: null, ReadOnly: true);
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.SourcesAsync()).Single(z => z.Id == _zrodlo.Id)
+            .ReadOnly.Should().BeTrue();
+
+        _zegar.Now = _zegar.Now.Add(CalendarSyncService.RefreshInterval).AddMinutes(1);
+        _kanal.Next = new FeedResult([], null, true, Color: null, ReadOnly: false);
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.SourcesAsync()).Single(z => z.Id == _zrodlo.Id)
+            .ReadOnly.Should().BeFalse("dostęp wrócił, więc pole „Obszar” ma znów być czynne");
+    }
+
+    [Fact]
+    public async Task Zrodlo_bez_zdania_o_dostepie_nie_nadpisuje_tego_co_wiemy()
+    {
+        // Kanał iCal nie zna pojęcia poziomu dostępu. Puste znaczy „nie mówię", a nie
+        // „wolno pisać" — inaczej pierwsze pobranie z kanału kasowałoby odpowiedź,
+        // którą podało Google.
+        _zrodlo.SetReadOnly(true);
+        await _db.SaveChangesAsync();
+
+        _kanal.Next = new FeedResult([], null, true);
+        await _usluga.RefreshAsync(force: true);
+
+        (await _usluga.SourcesAsync()).Single(z => z.Id == _zrodlo.Id)
+            .ReadOnly.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Nieudane_zdjecie_ze_starego_kalendarza_nie_zostawia_kopii_w_nowym()
     {
         // Przenoszenie wydarzenia u Google to założenie w nowym i skasowanie w starym.

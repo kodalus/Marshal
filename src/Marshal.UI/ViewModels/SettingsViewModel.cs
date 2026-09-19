@@ -400,7 +400,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         await DodajAsync(
-            CalendarKind.Google, kalendarz.Id, kalendarz.Name, kalendarz.Color, kalendarz.Account);
+            CalendarKind.Google, kalendarz.Id, kalendarz.Name, kalendarz.Color,
+            kalendarz.Account, kalendarz.ReadOnly);
     }
 
     [ObservableProperty]
@@ -493,11 +494,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         string externalId,
         string name,
         string? color = null,
-        string? konto = null)
+        string? konto = null,
+        bool tylkoOdczyt = false)
     {
         try
         {
-            await _kalendarze.AddAsync(kind, externalId, name, color, konto);
+            await _kalendarze.AddAsync(kind, externalId, name, color, konto, tylkoOdczyt);
 
             // Konto w dzienniku, bo ten sam kalendarz podłączony z dwóch kont daje dwa
             // wiersze o tej samej nazwie — i bez adresu nie widać, który jest który.
@@ -523,12 +525,14 @@ public sealed partial class SettingsViewModel : ObservableObject
             Calendars.Add(zrodlo);
         }
 
-        // Do wyboru tylko te, do których umiemy pisać. Kanał iCal jest do odczytu,
-        // więc postawienie go tu byłoby ustawieniem bez skutku.
+        // Do wyboru tylko te, do których umiemy i wolno nam pisać. Kanał iCal jest
+        // do odczytu, a kalendarz świąteczny albo fazy księżyca są udostępnione tylko
+        // do odczytu — postawienie któregokolwiek tutaj byłoby ustawieniem bez skutku,
+        // z odmową dopiero przy pierwszym zadaniu z godziną.
         MainCalendars.Clear();
         MainCalendars.Add(BezKalendarza);
 
-        foreach (var zrodlo in Calendars.Where(z => _kalendarze.CanWrite(z.Kind)))
+        foreach (var zrodlo in Calendars.Where(_kalendarze.CanWrite))
         {
             MainCalendars.Add(new MainCalendarChoice(zrodlo.Id, zrodlo.Name));
         }

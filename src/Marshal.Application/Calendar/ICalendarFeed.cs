@@ -28,7 +28,17 @@ public sealed record FeedEvent(
 /// coś, czego można wymagać od kogokolwiek.
 /// </param>
 public sealed record FeedResult(
-    IReadOnlyList<FeedEvent> Events, string? SyncToken, bool IsFull, string? Color = null);
+    IReadOnlyList<FeedEvent> Events, string? SyncToken, bool IsFull, string? Color = null,
+
+    /// <summary>
+    /// Czy do kalendarza wolno tylko czytać. Puste znaczy „źródło nie mówi".
+    /// </summary>
+    /// <remarks>
+    /// Puste nie znaczy „wolno pisać" — znaczy „nie zmieniaj tego, co zapisane".
+    /// Kanał iCal nie ma pojęcia poziomu dostępu i nie ma prawa nadpisywać nim
+    /// odpowiedzi, którą podał kto inny.
+    /// </remarks>
+    bool? ReadOnly = null);
 
 /// <summary>
 /// Odczyt kalendarza zewnętrznego (spec 10.1). Tylko odczyt — zapis jest świadomie

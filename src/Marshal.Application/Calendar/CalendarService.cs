@@ -51,6 +51,18 @@ public sealed class CalendarSyncService(
     public bool CanWrite(CalendarKind kind) => writers.Any(w => w.Kind == kind);
 
     /// <summary>
+    /// Czy do tego konkretnego podłączenia da się pisać.
+    /// </summary>
+    /// <remarks>
+    /// Rodzaj nie wystarcza: dwa kalendarze Google stoją obok siebie, jeden własny,
+    /// drugi świąteczny — i tylko do pierwszego wolno. Pytanie o sam rodzaj oddawało
+    /// prawdę dla obu, więc świąteczny dawało się wybrać na kalendarz główny albo
+    /// przypisać do obszaru; kończyło się to odmową przy pierwszym zadaniu z godziną.
+    /// </remarks>
+    public bool CanWrite(CalendarSource source) =>
+        source is { ReadOnly: false } && CanWrite(source.Kind);
+
+    /// <summary>
     /// Zapis wydarzenia u źródła i w naszej kopii (spec 10.2).
     /// </summary>
     /// <remarks>
@@ -189,7 +201,13 @@ public sealed class CalendarSyncService(
     /// <summary>Obszary, które mają przypisany kalendarz — razem z tym kalendarzem.</summary>
     public async Task<IReadOnlyList<Area>> AreasWithCalendarAsync(CancellationToken ct = default)
     {
-        var zywe = (await store.SourcesAsync(ct)).Select(z => z.Id).ToHashSet();
+        // Tylko te, do których wolno pisać: przeniesienie wydarzenia do obszaru znaczy
+        // założenie go w kalendarzu tego obszaru. Obszar wskazujący kalendarz świąteczny
+        // stałby na liście jako możliwy wybór i kończył się odmową po kliknięciu.
+        var zywe = (await store.SourcesAsync(ct))
+            .Where(CanWrite)
+            .Select(z => z.Id)
+            .ToHashSet();
 
         return (await areas.AllAsync(ct))
             .Where(o => !o.Deleted && o.IsActive && o.CalendarId is { } k && zywe.Contains(k))
@@ -476,6 +494,17 @@ public sealed class CalendarSyncService(
             ?? throw new InvalidOperationException(
                 $"Kalendarze rodzaju {zrodlo.Kind} są tylko do odczytu.");
 
+        // Odmowa **przed** czynnością, nie po niej. Google odpowiada na to samo swoim
+        // 403, ale dopiero po wykonaniu wszystkiego, co przed — a przy przenoszeniu
+        // wydarzenia „wszystko, co przed" znaczy kopię założoną w nowym kalendarzu.
+        if (zrodlo.ReadOnly)
+        {
+            throw new InvalidOperationException(
+                $"Kalendarz „{zrodlo.Name}” jest udostępniony tylko do odczytu — "
+                + "nie wolno w nim nic zmieniać ani kasować. Tak są ustawione kalendarze "
+                + "świąteczne, fazy księżyca i cudze udostępnione bez prawa zmian.");
+        }
+
         return (zrodlo, pisarz);
     }
 
@@ -522,6 +551,7 @@ public sealed class CalendarSyncService(
         string name,
         string? color = null,
         string? account = null,
+        bool readOnly = false,
         CancellationToken ct = default)
     {
         // Ten sam kalendarz dwa razy to zawsze pomyłka — najczęściej klikanie „Dodaj"
@@ -543,6 +573,12 @@ public sealed class CalendarSyncService(
 
         var zrodlo = new CalendarSource(
             Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, szukany, name, color, konto);
+
+        // Poziom dostępu znany już przy podłączaniu — lista kalendarzy z konta podaje
+        // go razem z nazwą i barwą. Bez tego kalendarz świąteczny wyglądałby na
+        // zapisywalny aż do pierwszego odświeżenia, czyli akurat przez te kilka chwil,
+        // w których człowiek go ogląda po dodaniu.
+        zrodlo.SetReadOnly(readOnly);
 
         store.AddSource(zrodlo);
         await store.SaveChangesAsync(ct);
@@ -640,6 +676,15 @@ public sealed class CalendarSyncService(
                 if (!string.IsNullOrWhiteSpace(wynik.Color) && wynik.Color != zrodlo.Color)
                 {
                     zrodlo.SetColor(wynik.Color, hlc.Next());
+                }
+
+                // Poziom dostępu przy każdym pobraniu, bo się zmienia: ktoś dopuszcza
+                // do swojego kalendarza albo dostęp odbiera. Puste znaczy „źródło nie
+                // mówi" — kanał iCal nie zna tego pojęcia i nie ma prawa nadpisywać
+                // odpowiedzi, którą podał kto inny.
+                if (wynik.ReadOnly is { } tylkoOdczyt && tylkoOdczyt != zrodlo.ReadOnly)
+                {
+                    zrodlo.SetReadOnly(tylkoOdczyt);
                 }
 
                 store.SaveCursor(zrodlo.Id, wynik.SyncToken, teraz);
@@ -811,10 +856,13 @@ public sealed class CalendarSyncService(
             .GroupBy(o => o.CalendarId!.Value)
             .ToDictionary(g => g.Key, g => g.First());
 
-        // Do których kalendarzy umiemy pisać. Bez tego okno pokazywałoby pole wyboru
-        // przy wydarzeniu z kanału iCal, czyli przycisk bez żadnego skutku.
+        // Do których kalendarzy umiemy i **wolno nam** pisać. Bez pierwszego okno
+        // pokazywałoby pole wyboru przy wydarzeniu z kanału iCal, czyli przycisk bez
+        // żadnego skutku. Bez drugiego pokazuje je przy wydarzeniu z kalendarza
+        // świątecznego albo faz księżyca — czyli przycisk, który kończy się odmową
+        // Google, a przy przenoszeniu kopią założoną, zanim odmowa przyszła.
         var zapisywalne = zrodla
-            .Where(z => writers.Any(w => w.Kind == z.Kind))
+            .Where(z => !z.ReadOnly && writers.Any(w => w.Kind == z.Kind))
             .Select(z => z.Id)
             .ToHashSet();
 

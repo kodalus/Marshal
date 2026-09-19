@@ -97,36 +97,65 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
         }
         while (!string.IsNullOrEmpty(strona));
 
-        return new FeedResult(wydarzenia, nowyZeton, pelny, await BarwaAsync(source, ct));
+        var wpis = await WpisAsync(source, ct);
+
+        return new FeedResult(wydarzenia, nowyZeton, pelny, wpis.Barwa, wpis.TylkoOdczyt);
     }
 
     /// <summary>
-    /// Barwa kalendarza z konta Google.
+    /// Barwa kalendarza i poziom dostępu — obie rzeczy z konta Google.
     /// </summary>
     /// <remarks>
-    /// Barwy nie ma w odpowiedzi z wydarzeniami — siedzi na liście kalendarzy konta,
-    /// stąd osobne zapytanie. Jedno na kalendarz na odświeżenie, a odświeżenie jest
-    /// ręczne albo raz na godzinę.
+    /// <para>
+    /// Żadnej z nich nie ma w odpowiedzi z wydarzeniami — siedzą na liście kalendarzy
+    /// konta, stąd osobne zapytanie. Jedno na kalendarz na odświeżenie, a odświeżenie
+    /// jest ręczne albo co pięć minut.
+    /// </para>
+    /// <para>
+    /// Poziom dostępu przy każdym pobraniu, a nie raz przy podłączaniu: dostęp się
+    /// zmienia. Ktoś dopuszcza do swojego kalendarza i wtedy zapis zaczyna być możliwy,
+    /// albo odbiera dostęp i wtedy przestaje — a aplikacja, która pyta o to raz, myli
+    /// się od tamtej chwili do końca.
+    /// </para>
     /// <para>
     /// Kalendarza, którego nie ma na liście konta (na przykład publicznego, dodanego
-    /// po samym identyfikatorze), da się czytać, ale barwy dla niego nie ma — i to
-    /// jest jedyny przypadek, w którym 404 nie jest tu błędem. Nie połykamy przez to
-    /// niczego innego: wszystkie pozostałe niepowodzenia idą dalej i lądują w raporcie.
+    /// po samym identyfikatorze), da się czytać, ale ani barwy, ani poziomu dostępu
+    /// dla niego nie ma — i to jest jedyny przypadek, w którym 404 nie jest tu błędem.
+    /// Nie połykamy przez to niczego innego: wszystkie pozostałe niepowodzenia idą
+    /// dalej i lądują w raporcie.
     /// </para>
     /// </remarks>
-    private async Task<string?> BarwaAsync(CalendarSource source, CancellationToken ct)
+    private async Task<(string? Barwa, bool? TylkoOdczyt)> WpisAsync(
+        CalendarSource source, CancellationToken ct)
     {
         try
         {
             var wpis = await service.CalendarList.Get(source.ExternalId).ExecuteAsync(ct);
 
-            return wpis.BackgroundColor;
+            return (wpis.BackgroundColor, TylkoOdczyt(wpis.AccessRole));
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.NotFound)
         {
-            return null;
+            return (null, null);
         }
     }
+
+    /// <summary>
+    /// Poziom dostępu Google na odpowiedź „czy wolno tu pisać".
+    /// </summary>
+    /// <remarks>
+    /// Google nazywa cztery: <c>owner</c>, <c>writer</c>, <c>reader</c>
+    /// i <c>freeBusyReader</c>. Pisać wolno dwóm pierwszym.
+    ///
+    /// Nierozpoznane znaczy „wolno" i to jest rozstrzygnięcie: nowa nazwa poziomu,
+    /// której jeszcze nie znamy, zablokowałaby zapis do kalendarza, do którego wolno,
+    /// a objawem byłoby pole, którego nie da się kliknąć, bez żadnego wyjaśnienia.
+    /// Odwrotna pomyłka kończy się odmową od Google — czyli zdaniem na ekranie.
+    /// </remarks>
+    private static bool? TylkoOdczyt(string? poziom) => poziom is { Length: > 0 }
+        ? !string.Equals(poziom, "owner", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(poziom, "writer", StringComparison.OrdinalIgnoreCase)
+        : null;
 
     private static FeedEvent? Convert(Google.Apis.Calendar.v3.Data.Event wydarzenie)
     {

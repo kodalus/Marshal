@@ -35,10 +35,24 @@ namespace Marshal.Infrastructure.Calendar;
 /// </remarks>
 /// <summary>Kalendarz z konta, do wyboru na ekranie.</summary>
 /// <param name="Account">Konto, z którego pochodzi. Puste znaczy konto główne.</param>
-public sealed record GoogleCalendarInfo(string Id, string Name, string? Color, string? Account = null)
+public sealed record GoogleCalendarInfo(
+    string Id, string Name, string? Color, string? Account = null,
+
+    /// <summary>Czy do tego kalendarza wolno tylko czytać — z poziomu dostępu Google.</summary>
+    bool ReadOnly = false)
 {
     /// <summary>Nazwa z kontem, gdy kont jest więcej niż jedno. Na listę wyboru.</summary>
-    public string Opis => Account is { Length: > 0 } konto ? $"{Name} — {konto}" : Name;
+    public string Opis
+    {
+        get
+        {
+            var nazwa = Account is { Length: > 0 } konto ? $"{Name} — {konto}" : Name;
+
+            // Dopisek przy nazwie, bo inaczej jedyną drogą do tej wiadomości jest
+            // kliknięcie „Obszar" przy wydarzeniu i przeczytanie odmowy.
+            return ReadOnly ? $"{nazwa} (tylko do odczytu)" : nazwa;
+        }
+    }
 }
 
 public sealed class GoogleCalendarGateway(ISettings settings, string databasePath)
@@ -112,7 +126,11 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
                 // Barwa prosto z konta: kalendarze rozpoznaje się po kolorze, który
                 // się w Google ustawiło, a nie po kolorze, który wylosuje aplikacja.
                 k.BackgroundColor,
-                Klucz(konto) is { Length: > 0 } nazwa ? nazwa : null))
+                Klucz(konto) is { Length: > 0 } nazwa ? nazwa : null,
+
+                // Poziom dostępu prosto z listy: świąteczne, fazy księżyca i cudze
+                // udostępnione bez prawa zmian są tu czytelnikami.
+                TylkoOdczyt(k.AccessRole)))
             .OrderBy(k => k.Name, StringComparer.CurrentCulture)
             .ToArray();
     }
@@ -465,6 +483,20 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         return await GoogleDriveFactory.AuthorizeCalendarAsync(
             settings.GoogleClientId!, settings.GoogleClientSecret!, katalog, kluczZetonu, ct);
     }
+
+    /// <summary>
+    /// Poziom dostępu Google na odpowiedź „czy wolno tu pisać".
+    /// </summary>
+    /// <remarks>
+    /// Google nazywa cztery: <c>owner</c>, <c>writer</c>, <c>reader</c>
+    /// i <c>freeBusyReader</c>. Pisać wolno dwóm pierwszym. Nierozpoznane znaczy
+    /// „wolno": nowa nazwa poziomu zablokowałaby zapis do kalendarza, do którego wolno,
+    /// a objawem byłoby pole nie do kliknięcia bez żadnego wyjaśnienia.
+    /// </remarks>
+    private static bool TylkoOdczyt(string? poziom) =>
+        poziom is { Length: > 0 }
+            && !string.Equals(poziom, "owner", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(poziom, "writer", StringComparison.OrdinalIgnoreCase);
 
     private static string Klucz(string? konto) =>
         string.IsNullOrWhiteSpace(konto) ? string.Empty : konto.Trim();
