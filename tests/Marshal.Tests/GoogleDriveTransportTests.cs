@@ -75,14 +75,14 @@ public sealed class GoogleDriveTransportTests
     [Fact]
     public async Task Zapisana_porcja_wraca_w_calosci()
     {
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwsza\ndruga\n");
+        await store.WriteSegmentAsync("biurko", "000001", "pierwsza\ndruga\n");
 
-        var porcje = await skladnica.ListSegmentsAsync();
-        porcje.Should().ContainSingle();
-        porcje[0].Should().Be(new LogSegment("biurko", "000001"));
-        (await skladnica.ReadSegmentAsync(porcje[0])).Should().Be("pierwsza\ndruga\n");
+        var chunks = await store.ListSegmentsAsync();
+        chunks.Should().ContainSingle();
+        chunks[0].Should().Be(new LogSegment("biurko", "000001"));
+        (await store.ReadSegmentAsync(chunks[0])).Should().Be("pierwsza\ndruga\n");
     }
 
     [Fact]
@@ -90,28 +90,28 @@ public sealed class GoogleDriveTransportTests
     {
         // Płaskie nazewnictwo to jedyne, co odróżnia urządzenia na Dysku — katalogów
         // na urządzenie nie ma celowo, bo nazwy katalogów nie są unikalne.
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000001", "z biurka\n");
-        await skladnica.WriteSegmentAsync("telefon", "000001", "z telefonu\n");
+        await store.WriteSegmentAsync("biurko", "000001", "z biurka\n");
+        await store.WriteSegmentAsync("telefon", "000001", "z telefonu\n");
 
-        (await skladnica.ListSegmentsAsync()).Should().Equal(
+        (await store.ListSegmentsAsync()).Should().Equal(
             new LogSegment("biurko", "000001"),
             new LogSegment("telefon", "000001"));
-        (await skladnica.ReadSegmentAsync(new LogSegment("telefon", "000001")))
+        (await store.ReadSegmentAsync(new LogSegment("telefon", "000001")))
             .Should().Be("z telefonu\n");
     }
 
     [Fact]
     public async Task Porcje_wracaja_w_porzadku_nazw()
     {
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000010", "dziesiąta\n");
-        await skladnica.WriteSegmentAsync("biurko", "000002", "druga\n");
-        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwsza\n");
+        await store.WriteSegmentAsync("biurko", "000010", "dziesiąta\n");
+        await store.WriteSegmentAsync("biurko", "000002", "druga\n");
+        await store.WriteSegmentAsync("biurko", "000001", "pierwsza\n");
 
-        (await skladnica.ListSegmentsAsync()).Select(s => s.Name)
+        (await store.ListSegmentsAsync()).Select(s => s.Name)
             .Should().ContainInOrder("000001", "000002", "000010");
     }
 
@@ -120,36 +120,36 @@ public sealed class GoogleDriveTransportTests
     {
         // Ponowienie zapisu po zerwanym połączeniu zostawia na Dysku dwa pliki o tej
         // samej nazwie. Treść jest ta sama, więc porcja ma się pojawić na liście raz.
-        var skladnica = Skladnica();
-        await skladnica.WriteSegmentAsync("biurko", "000001", "treść\n");
+        var store = Skladnica();
+        await store.WriteSegmentAsync("biurko", "000001", "treść\n");
         _dysk.Zdubluj("biurko.000001.jsonl");
 
-        (await skladnica.ListSegmentsAsync()).Should().ContainSingle();
+        (await store.ListSegmentsAsync()).Should().ContainSingle();
     }
 
     [Fact]
     public async Task Obcy_plik_w_katalogu_nie_jest_porcja()
     {
         // Katalog roboczy może dostać cokolwiek — choćby notatkę wrzuconą ręcznie.
-        var skladnica = Skladnica();
-        await skladnica.WriteSegmentAsync("biurko", "000001", "treść\n");
+        var store = Skladnica();
+        await store.WriteSegmentAsync("biurko", "000001", "treść\n");
         _dysk.PodrzucSmiec("notatka.txt");
         _dysk.PodrzucSmiec("bez-kropki.jsonl");
         _dysk.PodrzucSmiec("za.duzo.kropek.jsonl");
 
-        (await skladnica.ListSegmentsAsync()).Should().Equal(new LogSegment("biurko", "000001"));
+        (await store.ListSegmentsAsync()).Should().Equal(new LogSegment("biurko", "000001"));
     }
 
     [Fact]
     public async Task Zapisana_porcja_nie_daje_sie_nadpisac()
     {
-        var skladnica = Skladnica();
-        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwotna\n");
+        var store = Skladnica();
+        await store.WriteSegmentAsync("biurko", "000001", "pierwotna\n");
 
-        var ponownie = async () =>
-            await skladnica.WriteSegmentAsync("biurko", "000001", "podmieniona\n");
+        var again = async () =>
+            await store.WriteSegmentAsync("biurko", "000001", "podmieniona\n");
 
-        await ponownie.Should().ThrowAsync<InvalidOperationException>();
+        await again.Should().ThrowAsync<InvalidOperationException>();
         _dysk.Zapisow.Should().Be(1);
     }
 
@@ -165,11 +165,11 @@ public sealed class GoogleDriveTransportTests
     {
         // Każde szukanie katalogu to osobne odpytanie sieci. Przy synchronizacji
         // wołanej co kilka minut na telefonie to nie jest kosmetyka.
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000001", "a\n");
-        await skladnica.ListSegmentsAsync();
-        await skladnica.ReadSegmentAsync(new LogSegment("biurko", "000001"));
+        await store.WriteSegmentAsync("biurko", "000001", "a\n");
+        await store.ListSegmentsAsync();
+        await store.ReadSegmentAsync(new LogSegment("biurko", "000001"));
 
         _dysk.SzukanKatalogu.Should().Be(1);
     }
@@ -180,12 +180,12 @@ public sealed class GoogleDriveTransportTests
     [InlineData("z kropką.")]
     [InlineData("kropka.w.srodku")]
     [InlineData("")]
-    public async Task Identyfikator_psujacy_nazwe_jest_odrzucany(string urzadzenie)
+    public async Task Identyfikator_psujacy_nazwe_jest_odrzucany(string device)
     {
         // Kropka rozdziela człony nazwy, więc kropka w identyfikatorze rozsypałaby
         // odczyt: „a.b.000001.jsonl" przeczytałoby się jako urządzenie „a".
         var zapisz = async () =>
-            await Skladnica().WriteSegmentAsync(urzadzenie, "000001", "cokolwiek\n");
+            await Skladnica().WriteSegmentAsync(device, "000001", "cokolwiek\n");
 
         await zapisz.Should().ThrowAsync<ArgumentException>();
     }

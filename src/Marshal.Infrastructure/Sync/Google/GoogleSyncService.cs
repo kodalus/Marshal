@@ -36,7 +36,7 @@ public sealed class GoogleSyncService(
 {
     // Brama na bazę. Domyślnie wprost, żeby testy i wywołania ręczne nie musiały
     // jej podawać — ale w złożonej aplikacji jest zawsze ta jedna, wspólna z oknem.
-    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
+    private readonly IDbQueue _queue = queue ?? new DirectQueue();
 
     /// <summary>Czy w ogóle jest czym się logować.</summary>
     public bool HasCredentials =>
@@ -58,7 +58,7 @@ public sealed class GoogleSyncService(
 
         try
         {
-            return await PrzebiegAsync(ct);
+            return await RunAsync(ct);
         }
         catch (TokenResponseException e) when (e.Error?.Error == "invalid_grant")
         {
@@ -75,11 +75,11 @@ public sealed class GoogleSyncService(
                     Directory.Delete(TokenFolder, recursive: true);
                 }
 
-                return await PrzebiegAsync(ct);
+                return await RunAsync(ct);
             }
-            catch (Exception ponownie) when (ponownie is not OperationCanceledException)
+            catch (Exception again) when (again is not OperationCanceledException)
             {
-                return new SyncOutcome(false, ponownie.Message);
+                return new SyncOutcome(false, again.Message);
             }
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -91,22 +91,22 @@ public sealed class GoogleSyncService(
         }
     }
 
-    private async Task<SyncOutcome> PrzebiegAsync(CancellationToken ct)
+    private async Task<SyncOutcome> RunAsync(CancellationToken ct)
     {
-        using var polaczenie = await GoogleDriveFactory.ConnectAsync(
+        using var connection = await GoogleDriveFactory.ConnectAsync(
             settings.GoogleClientId!,
             settings.GoogleClientSecret!,
             TokenFolder,
             settings.GoogleCalendarEnabled,
             ct);
 
-        var silnik = new SyncEngine(db, polaczenie.Transport, hlc, device.Id, _kolejka);
-        var raport = await silnik.SyncAsync(ct);
+        var engine = new SyncEngine(db, connection.Transport, hlc, device.Id, _queue);
+        var report = await engine.SyncAsync(ct);
 
         return new SyncOutcome(
             true,
-            $"Wysłane {raport.Sent}, przyjęte {raport.Applied}.",
-            raport.Sent,
-            raport.Applied);
+            $"Wysłane {report.Sent}, przyjęte {report.Applied}.",
+            report.Sent,
+            report.Applied);
     }
 }

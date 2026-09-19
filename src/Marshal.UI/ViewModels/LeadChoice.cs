@@ -20,10 +20,10 @@ public sealed partial class LeadChoice(int minutes) : ObservableObject
     [ObservableProperty]
     public partial bool IsChecked { get; set; }
 
-    public string Label => Nazwa(Minutes);
+    public string Label => Name(Minutes);
 
     /// <summary>Wyprzedzenie po ludzku: „o czasie", „15 min wcześniej", „dzień wcześniej".</summary>
-    public static string Nazwa(int minutes)
+    public static string Name(int minutes)
     {
         if (minutes <= 0)
         {

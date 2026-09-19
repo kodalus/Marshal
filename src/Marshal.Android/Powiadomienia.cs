@@ -61,7 +61,7 @@ internal static class Powiadomienia
         }
         catch (Exception e)
         {
-            InAppNotifier.StanSystemowych = $"{e.GetType().Name}: {e.Message}";
+            InAppNotifier.SystemStatus = $"{e.GetType().Name}: {e.Message}";
         }
     }
 
@@ -80,7 +80,7 @@ internal static class Powiadomienia
         {
             if (kontekst.GetSystemService(Context.NotificationService) is not NotificationManager menedzer)
             {
-                InAppNotifier.StanSystemowych = "system nie dał menedżera powiadomień";
+                InAppNotifier.SystemStatus = "system nie dał menedżera powiadomień";
                 return;
             }
 
@@ -90,18 +90,18 @@ internal static class Powiadomienia
                     Description = "Zadania, o których Marshal ma się odezwać.",
                 });
 
-            InAppNotifier.Systemowe = (przypomnienie, _) =>
+            InAppNotifier.SystemSink = (reminder, _) =>
             {
-                Pokaz(kontekst, menedzer, przypomnienie);
+                Pokaz(kontekst, menedzer, reminder);
                 return Task.CompletedTask;
             };
 
-            InAppNotifier.StanSystemowych = "podpięte";
+            InAppNotifier.SystemStatus = "podpięte";
         }
         catch (Exception e)
         {
             // Bez powiadomień systemowych. Pasek w oknie zostaje i działa jak dotąd.
-            InAppNotifier.StanSystemowych = $"{e.GetType().Name}: {e.Message}";
+            InAppNotifier.SystemStatus = $"{e.GetType().Name}: {e.Message}";
         }
     }
 
@@ -125,7 +125,7 @@ internal static class Powiadomienia
     private static void Pokaz(
         Context kontekst,
         NotificationManager menedzer,
-        Przypomnienie przypomnienie)
+        Przypomnienie reminder)
     {
         // Dotknięcie otwiera aplikację, a nie nic. SingleTop, więc wraca do okna,
         // które już stoi, zamiast zakładać drugie.
@@ -137,8 +137,8 @@ internal static class Powiadomienia
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
         var powiadomienie = new Notification.Builder(kontekst, Kanal)
-            .SetContentTitle(przypomnienie.Title)
-            .SetContentText(przypomnienie.Body ?? string.Empty)
+            .SetContentTitle(reminder.Title)
+            .SetContentText(reminder.Body ?? string.Empty)
             .SetSmallIcon(Resource.Drawable.znak_powiadomienia)
             .SetContentIntent(zamiar)
             .SetAutoCancel(true)
@@ -148,6 +148,6 @@ internal static class Powiadomienia
         // swoje powiadomienie, a nie układać ich stos. Zgaszony bit znaku, a nie
         // wartość bezwzględna — ta na najmniejszej liczbie całkowitej rzuca wyjątkiem,
         // a skrót może ją zwrócić.
-        menedzer.Notify(przypomnienie.TaskId.GetHashCode() & 0x7FFFFFFF, powiadomienie);
+        menedzer.Notify(reminder.TaskId.GetHashCode() & 0x7FFFFFFF, powiadomienie);
     }
 }

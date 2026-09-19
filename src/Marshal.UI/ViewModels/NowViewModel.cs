@@ -47,7 +47,7 @@ public sealed record EnergyChoice(Energy Value, string Label)
 public sealed partial class NowViewModel(NowService now, TaskEditService edit) : ObservableObject
 {
     /// <summary>Czas i energia przełącza się obok siebie, a kontekst bazy jest jeden.</summary>
-    private readonly LatestOnly _kolejka = new();
+    private readonly LatestOnly _queue = new();
 
     [ObservableProperty]
     public partial MinutesChoice SelectedMinutes { get; set; } = MinutesChoice.All[1];
@@ -108,7 +108,7 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
     }
 
     [RelayCommand]
-    private Task RefreshAsync() => _kolejka.RunAsync(OdswiezAsync);
+    private Task RefreshAsync() => _queue.RunAsync(OdswiezAsync);
 
     private async Task OdswiezAsync()
     {

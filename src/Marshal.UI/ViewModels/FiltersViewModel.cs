@@ -38,7 +38,7 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// <summary>Wstrzymuje przeliczanie na czas wypełniania pól z zapisanego widoku.</summary>
     private bool _wczytywanie;
 
-    private readonly LatestOnly _kolejka = new();
+    private readonly LatestOnly _queue = new();
 
     public FiltersViewModel(
         FilterService filters,
@@ -224,7 +224,7 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// Przeliczenie wyników. Jeden przebieg naraz — zob. <see cref="LatestOnly"/>.
     /// </summary>
     [RelayCommand]
-    private Task RunAsync() => _wczytywanie ? Task.CompletedTask : _kolejka.RunAsync(RunAsync);
+    private Task RunAsync() => _wczytywanie ? Task.CompletedTask : _queue.RunAsync(RunAsync);
 
     private async Task RunAsync()
     {
@@ -250,7 +250,7 @@ public sealed partial class FiltersViewModel : ObservableObject
             return;
         }
 
-        if (filter.Query is not { } zapytanie)
+        if (filter.Query is not { } query)
         {
             // Widok zapisany w wersji, której ta nie rozumie. Zostaje w Ulubionych
             // z nazwą — ale kliknięcie musi powiedzieć, dlaczego nic się nie stało,
@@ -270,7 +270,7 @@ public sealed partial class FiltersViewModel : ObservableObject
         OpenId = filter.Id;
         Name = filter.Name;
 
-        foreach (var warunek in zapytanie.Conditions)
+        foreach (var warunek in query.Conditions)
         {
             Zastosuj(warunek);
         }
@@ -284,20 +284,20 @@ public sealed partial class FiltersViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
-        var zapytanie = Build();
+        var query = Build();
 
-        if (zapytanie.IsEmpty || string.IsNullOrWhiteSpace(Name))
+        if (query.IsEmpty || string.IsNullOrWhiteSpace(Name))
         {
             return;
         }
 
         if (OpenId == Guid.Empty)
         {
-            OpenId = (await _filters.SaveAsync(Name, zapytanie)).Id;
+            OpenId = (await _filters.SaveAsync(Name, query)).Id;
         }
         else
         {
-            await _filters.UpdateAsync(OpenId, Name, zapytanie);
+            await _filters.UpdateAsync(OpenId, Name, query);
         }
 
         OnPropertyChanged(nameof(IsSaved));
@@ -433,9 +433,9 @@ public sealed partial class FiltersViewModel : ObservableObject
     private void Fill(
         ObservableCollection<FilterToggle> where, IEnumerable<(string Value, string Label)> co)
     {
-        foreach (var (wartosc, etykieta) in co)
+        foreach (var (value, etykieta) in co)
         {
-            Dodaj(where, wartosc, etykieta);
+            Dodaj(where, value, etykieta);
         }
     }
 
@@ -445,9 +445,9 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// żeby je podpiąć — a zapomnienie nie daje żadnego objawu poza listą, która
     /// milczy.
     /// </summary>
-    private void Dodaj(ObservableCollection<FilterToggle> where, string wartosc, string etykieta)
+    private void Dodaj(ObservableCollection<FilterToggle> where, string value, string etykieta)
     {
-        var przelacznik = new FilterToggle(etykieta, wartosc);
+        var przelacznik = new FilterToggle(etykieta, value);
         przelacznik.PropertyChanged += async (_, _) => await RunAsync();
         where.Add(przelacznik);
     }

@@ -620,7 +620,7 @@
         </Grid>
 
         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-          <k:WyborDaty Grid.Column="0" Wartosc="{Binding ScheduledFor}" />
+          <k:WyborDaty Grid.Column="0" Value="{Binding ScheduledFor}" />
           <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
                   Command="{Binding ScheduleCommand}" Content="Zaplanuj" />
         </Grid>
@@ -1573,10 +1573,10 @@
           <TextBlock Classes="hint" Text="{Binding Opened.DayText}" />
 
           <Grid ColumnDefinitions="*,Auto,*">
-            <k:WyborGodziny Grid.Column="0" Wartosc="{Binding OpenedStart}"
+            <k:WyborGodziny Grid.Column="0" Value="{Binding OpenedStart}"
                             IsEnabled="{Binding CanEditOpened}" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <k:WyborGodziny Grid.Column="2" Wartosc="{Binding OpenedEnd}"
+            <k:WyborGodziny Grid.Column="2" Value="{Binding OpenedEnd}"
                             IsEnabled="{Binding CanEditOpened}" />
           </Grid>
 
@@ -2156,7 +2156,7 @@
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                   <!-- Opis, nie sama nazwa: „Prywatny" bywa na obu kontach i bez adresu
                        nie widać, który wiersz jest który. -->
-                  <TextBlock Text="{Binding Opis}" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Description}" TextWrapping="Wrap" />
                   <TextBlock Classes="hint" Text="{Binding Id}" TextWrapping="Wrap" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Podłącz" Padding="10,4" VerticalAlignment="Center"
@@ -2625,13 +2625,13 @@
           </ComboBox>
 
           <TextBlock Classes="label" Text="Dzień wykonania — obietnica dana sobie" />
-          <k:WyborDaty Wartosc="{Binding DoDate}" />
+          <k:WyborDaty Value="{Binding DoDate}" />
 
           <TextBlock Classes="label" Text="Od której do której" />
           <Grid ColumnDefinitions="*,Auto,*">
-            <k:WyborGodziny Grid.Column="0" Wartosc="{Binding DoTime}" />
+            <k:WyborGodziny Grid.Column="0" Value="{Binding DoTime}" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <k:WyborGodziny Grid.Column="2" Wartosc="{Binding EndTime}" />
+            <k:WyborGodziny Grid.Column="2" Value="{Binding EndTime}" />
           </Grid>
           <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                      Text="Bez godziny zadanie idzie na pasek całodniowy. Bez godziny końca trwa pół godziny." />
@@ -2681,7 +2681,7 @@
           <StackPanel>
           <StackPanel IsVisible="{Binding ShowDeadline}">
             <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
-            <k:WyborDaty Wartosc="{Binding Deadline}" />
+            <k:WyborDaty Value="{Binding Deadline}" />
           </StackPanel>
 
           <StackPanel IsVisible="{Binding ShowReminder}">
@@ -2725,8 +2725,8 @@
                ma własny dzień i porę. -->
           <StackPanel IsVisible="{Binding !HasTime}">
             <Grid ColumnDefinitions="*,Auto">
-              <k:WyborDaty Grid.Column="0" Wartosc="{Binding ReminderDay}" />
-              <k:WyborGodziny Grid.Column="1" Margin="6,0,0,0" Wartosc="{Binding ReminderTime}" />
+              <k:WyborDaty Grid.Column="0" Value="{Binding ReminderDay}" />
+              <k:WyborGodziny Grid.Column="1" Margin="6,0,0,0" Value="{Binding ReminderTime}" />
             </Grid>
             <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                        Text="Bez godziny znaczy rano. Sama godzina bez dnia nie znaczy nic." />

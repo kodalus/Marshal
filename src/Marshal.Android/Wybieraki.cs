@@ -91,21 +91,21 @@ internal static class Wybieraki
     /// </remarks>
     private static Task<T> PokazAsync<T>(Activity okno, Action<Action<T>> pokaz)
     {
-        var odpowiedz = new TaskCompletionSource<T>(
+        var response = new TaskCompletionSource<T>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
         okno.RunOnUiThread(() =>
         {
             try
             {
-                pokaz(result => odpowiedz.TrySetResult(result));
+                pokaz(result => response.TrySetResult(result));
             }
             catch (Exception e)
             {
-                odpowiedz.TrySetException(e);
+                response.TrySetException(e);
             }
         });
 
-        return odpowiedz.Task;
+        return response.Task;
     }
 }

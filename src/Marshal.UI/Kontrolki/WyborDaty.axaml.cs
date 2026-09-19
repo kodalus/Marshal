@@ -24,14 +24,14 @@ namespace Marshal.UI.Kontrolki;
 /// </remarks>
 public partial class WyborDaty : UserControl
 {
-    public static readonly StyledProperty<DateTimeOffset?> WartoscProperty =
+    public static readonly StyledProperty<DateTimeOffset?> ValueProperty =
         AvaloniaProperty.Register<WyborDaty, DateTimeOffset?>(
-            nameof(Wartosc), defaultBindingMode: BindingMode.TwoWay);
+            nameof(Value), defaultBindingMode: BindingMode.TwoWay);
 
-    public DateTimeOffset? Wartosc
+    public DateTimeOffset? Value
     {
-        get => GetValue(WartoscProperty);
-        set => SetValue(WartoscProperty, value);
+        get => GetValue(ValueProperty);
+        set => SetValue(ValueProperty, value);
     }
 
     private readonly Button _otwarcie;
@@ -59,7 +59,7 @@ public partial class WyborDaty : UserControl
                 return;
             }
 
-            Wartosc = _miesiac.SelectedDate is { } day
+            Value = _miesiac.SelectedDate is { } day
                 ? new DateTimeOffset(day.Date, TimeSpan.Zero)
                 : null;
 
@@ -76,18 +76,18 @@ public partial class WyborDaty : UserControl
             }
 
             var wybrana = await zapytaj(
-                Wartosc is { } now ? DateOnly.FromDateTime(now.Date) : null);
+                Value is { } now ? DateOnly.FromDateTime(now.Date) : null);
 
-            Wartosc = wybrana is { } day
+            Value = wybrana is { } day
                 ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
                 : null;
         };
 
-        Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Wartosc = null;
+        Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Value = null;
 
         // Rozstrzygnięcie dopiero tutaj — do tej chwili okienka systemu mogły się
         // jeszcze nie podpiąć.
-        AttachedToVisualTree += (_, _) => Rozstrzygnij();
+        AttachedToVisualTree += (_, _) => Resolve();
 
         Odswiez();
     }
@@ -96,15 +96,15 @@ public partial class WyborDaty : UserControl
     {
         base.OnPropertyChanged(change);
 
-        if (change.Property == WartoscProperty)
+        if (change.Property == ValueProperty)
         {
             Odswiez();
         }
     }
 
     /// <summary>Kalendarz własny albo systemowy — jedno albo drugie, nigdy oba.</summary>
-    private void Rozstrzygnij() =>
-        _otwarcie.Flyout = Pickery.Systemowe ? null : _rozwiniecie;
+    private void Resolve() =>
+        _otwarcie.Flyout = Pickery.SystemSink ? null : _rozwiniecie;
 
     private void Odswiez()
     {
@@ -121,9 +121,9 @@ public partial class WyborDaty : UserControl
 
         try
         {
-            _miesiac.SelectedDate = Wartosc?.Date;
+            _miesiac.SelectedDate = Value?.Date;
 
-            if (Wartosc is { } day)
+            if (Value is { } day)
             {
                 // Otwieraj na miesiącu, który jest wybrany, a nie na bieżącym.
                 _miesiac.DisplayDate = day.Date;
@@ -136,7 +136,7 @@ public partial class WyborDaty : UserControl
 
         // „Wybierz", nie pusty przycisk: pusty wygląda na zepsuty, a kreska nie mówi,
         // co się stanie po dotknięciu.
-        _otwarcie.Content = Wartosc is { } data ? $"{data:yyyy-MM-dd}" : "wybierz";
+        _otwarcie.Content = Value is { } data ? $"{data:yyyy-MM-dd}" : "wybierz";
     }
 
     /// <summary>

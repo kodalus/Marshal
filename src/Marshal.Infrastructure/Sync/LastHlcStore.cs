@@ -25,38 +25,38 @@ internal static class LastHlcStore
 {
     public static Hlc? Read(DbContext db, string deviceId)
     {
-        var zapisany = db.Set<LocalSetting>()
+        var saved = db.Set<LocalSetting>()
             .AsNoTracking()
             .FirstOrDefault(s => s.Key == LocalSetting.LastHlcKey);
 
-        if (zapisany is null || !Hlc.TryParse(zapisany.Value, out var znacznik))
+        if (saved is null || !Hlc.TryParse(saved.Value, out var stamp))
         {
             return null;
         }
 
         // Znacznik innego urządzenia oznacza przeniesioną bazę. Wznowienie z niego
         // byłoby błędem — zegar jest zegarem tego urządzenia i tylko jego.
-        return znacznik.DeviceId == deviceId ? znacznik : null;
+        return stamp.DeviceId == deviceId ? stamp : null;
     }
 
     /// <summary>Dopisuje wartość do kontekstu; zapis do bazy robi wołający.</summary>
-    public static void Stage(DbContext db, Hlc znacznik)
+    public static void Stage(DbContext db, Hlc stamp)
     {
-        var tekst = znacznik.ToString();
+        var text = stamp.ToString();
 
-        var istniejacy = db.ChangeTracker.Entries<LocalSetting>()
+        var existing = db.ChangeTracker.Entries<LocalSetting>()
                 .Select(e => e.Entity)
                 .FirstOrDefault(s => s.Key == LocalSetting.LastHlcKey)
             ?? db.Set<LocalSetting>().FirstOrDefault(s => s.Key == LocalSetting.LastHlcKey);
 
-        if (istniejacy is null)
+        if (existing is null)
         {
-            db.Add(new LocalSetting(LocalSetting.LastHlcKey, tekst));
+            db.Add(new LocalSetting(LocalSetting.LastHlcKey, text));
         }
-        else if (string.CompareOrdinal(tekst, istniejacy.Value) > 0)
+        else if (string.CompareOrdinal(text, existing.Value) > 0)
         {
             // Nigdy w tył: znacznik zapisany jest górną granicą tego, co wydaliśmy.
-            istniejacy.Set(tekst);
+            existing.Set(text);
         }
     }
 }

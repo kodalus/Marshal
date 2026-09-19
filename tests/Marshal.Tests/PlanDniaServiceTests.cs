@@ -86,9 +86,9 @@ public sealed class PlanDniaServiceTests : IDisposable
         Dodaj("Zebranie", time: new TimeOnly(16, 0));
         Dodaj("Zakupy", time: new TimeOnly(8, 0));
 
-        var wiersze = await _plan.TodayAsync();
+        var rows = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Title).Should().Equal("Zakupy", "Zebranie", "Bez godziny");
+        rows.Select(w => w.Title).Should().Equal("Zakupy", "Zebranie", "Bez godziny");
     }
 
     [Fact]
@@ -101,9 +101,9 @@ public sealed class PlanDniaServiceTests : IDisposable
 
         Dodaj("Zebranie", time: new TimeOnly(16, 0));
 
-        var wiersze = await _plan.TodayAsync();
+        var rows = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Title).Should().Equal("Zebranie");
+        rows.Select(w => w.Title).Should().Equal("Zebranie");
     }
 
     [Fact]
@@ -119,10 +119,10 @@ public sealed class PlanDniaServiceTests : IDisposable
         _db.Tasks.Add(samWybor);
         _db.SaveChanges();
 
-        var wiersze = await _plan.TodayAsync();
+        var rows = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Title).Should().Equal("Zebranie", "Zadzwonić");
-        wiersze.Single(w => w.Title == "Zadzwonić").Caption.Should().Be("wzięte na dziś");
+        rows.Select(w => w.Title).Should().Equal("Zebranie", "Zadzwonić");
+        rows.Single(w => w.Title == "Zadzwonić").Caption.Should().Be("wzięte na dziś");
     }
 
     [Fact]
@@ -133,10 +133,10 @@ public sealed class PlanDniaServiceTests : IDisposable
         Dodaj("Rozliczenie", day: Dzis.AddDays(-3), time: new TimeOnly(7, 0));
         Dodaj("Zebranie", time: new TimeOnly(16, 0));
 
-        var wiersze = await _plan.TodayAsync();
+        var rows = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Title).Should().Equal("Zebranie", "Rozliczenie");
-        wiersze.Single(w => w.Title == "Rozliczenie").Caption.Should().StartWith("zaległe z 15.09");
+        rows.Select(w => w.Title).Should().Equal("Zebranie", "Rozliczenie");
+        rows.Single(w => w.Title == "Rozliczenie").Caption.Should().StartWith("zaległe z 15.09");
     }
 
     [Fact]
@@ -146,9 +146,9 @@ public sealed class PlanDniaServiceTests : IDisposable
         task.SetEstimate(30, Energy.Medium, _hlc.Next());
         _db.SaveChanges();
 
-        var wiersz = (await _plan.TodayAsync()).Single();
+        var row = (await _plan.TodayAsync()).Single();
 
-        wiersz.Caption.Should().Be("16:00 – 16:30 / Dom");
+        row.Caption.Should().Be("16:00 – 16:30 / Dom");
     }
 
     [Fact]

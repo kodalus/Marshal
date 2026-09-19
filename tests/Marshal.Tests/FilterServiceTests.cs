@@ -130,12 +130,12 @@ public sealed class FilterServiceTests : IDisposable
             FilterCondition.Estimate(15),
         ]);
 
-        var zapisany = await _usluga.SaveAsync("Kwadrans", filter);
+        var saved = await _usluga.SaveAsync("Kwadrans", filter);
 
         var ulubione = await _usluga.FavouritesAsync();
         ulubione.Should().ContainSingle();
         ulubione[0].Name.Should().Be("Kwadrans");
-        ulubione[0].Id.Should().Be(zapisany.Id);
+        ulubione[0].Id.Should().Be(saved.Id);
         ulubione[0].Query.Should().NotBeNull();
         ulubione[0].Query!.Conditions.Should().HaveCount(2);
     }
@@ -154,20 +154,20 @@ public sealed class FilterServiceTests : IDisposable
     [Fact]
     public async Task Widoku_bez_warunkow_nie_da_sie_zapisac()
     {
-        var zapis = async () => await _usluga.SaveAsync("Pusty", FilterQuery.Empty);
-        await zapis.Should().ThrowAsync<ArgumentException>();
+        var patch = async () => await _usluga.SaveAsync("Pusty", FilterQuery.Empty);
+        await patch.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
     public async Task Skasowany_widok_znika_z_ulubionych_ale_zostaje_nagrobek()
     {
-        var zapisany = await _usluga.SaveAsync(
+        var saved = await _usluga.SaveAsync(
             "Do skasowania", new FilterQuery([FilterCondition.States(TaskState.Next)]));
 
-        await _usluga.DeleteAsync(zapisany.Id);
+        await _usluga.DeleteAsync(saved.Id);
 
         (await _usluga.FavouritesAsync()).Should().BeEmpty();
-        (await _usluga.FindAsync(zapisany.Id)).Should().BeNull();
+        (await _usluga.FindAsync(saved.Id)).Should().BeNull();
 
         // Usunięcia fizycznego nie ma (spec 5.1) — inaczej drugie urządzenie
         // wskrzesiłoby widok przy najbliższym scaleniu.
@@ -177,11 +177,11 @@ public sealed class FilterServiceTests : IDisposable
     [Fact]
     public async Task Zmiana_widoku_zapisuje_sie_bez_tworzenia_drugiego()
     {
-        var zapisany = await _usluga.SaveAsync(
+        var saved = await _usluga.SaveAsync(
             "Kwadrans", new FilterQuery([FilterCondition.Estimate(15)]));
 
         await _usluga.UpdateAsync(
-            zapisany.Id, "Pół godziny", new FilterQuery([FilterCondition.Estimate(30)]));
+            saved.Id, "Pół godziny", new FilterQuery([FilterCondition.Estimate(30)]));
 
         var ulubione = await _usluga.FavouritesAsync();
         ulubione.Should().ContainSingle();
@@ -195,11 +195,11 @@ public sealed class FilterServiceTests : IDisposable
         // Cały filtr w jednej kolumnie znaczy jeden wpis w dzienniku — i to jest
         // powód, dla którego kolumna jest jedna: scalanie per pole nie ma jak złożyć
         // widoku z połówek dwóch różnych decyzji.
-        var zapisany = await _usluga.SaveAsync(
+        var saved = await _usluga.SaveAsync(
             "Kwadrans", new FilterQuery([FilterCondition.Estimate(15)]));
 
         await _usluga.UpdateAsync(
-            zapisany.Id, "Kwadrans", new FilterQuery([
+            saved.Id, "Kwadrans", new FilterQuery([
                 FilterCondition.Estimate(30),
                 FilterCondition.States(TaskState.Next),
             ]));
@@ -207,7 +207,7 @@ public sealed class FilterServiceTests : IDisposable
         // Dwa warunki więcej, a w dzienniku jedno pole zmienione — cały filtr jedzie
         // razem albo wcale.
         _db.Changes
-            .Count(z => z.EntityId == zapisany.Id && z.Field == "DefinitionJson")
+            .Count(z => z.EntityId == saved.Id && z.Field == "DefinitionJson")
             .Should().Be(2);
     }
 

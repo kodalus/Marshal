@@ -333,9 +333,9 @@ public sealed partial class TaskDetailViewModel(
         var drzewko = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
 
         Placements.Clear();
-        foreach (var wiersz in drzewko)
+        foreach (var row in drzewko)
         {
-            Placements.Add(PlacementChoice.From(wiersz));
+            Placements.Add(PlacementChoice.From(row));
         }
     }
 
@@ -855,9 +855,9 @@ public sealed partial class TaskDetailViewModel(
             return juz;
         }
 
-        var pozycja = new LeadChoice(minutes);
-        Leads.Insert(Leads.Count(w => w.Minutes < minutes), pozycja);
-        return pozycja;
+        var item = new LeadChoice(minutes);
+        Leads.Insert(Leads.Count(w => w.Minutes < minutes), item);
+        return item;
     }
 
     /// <summary>

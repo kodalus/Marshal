@@ -30,5 +30,5 @@ public static class Pickery
     public static Func<TimeOnly?, Task<TimeOnly?>>? Hour { get; set; }
 
     /// <summary>Czy platforma ma własne okienka. Rozstrzyga, który wybierak jest widoczny.</summary>
-    public static bool Systemowe => Data is not null && Hour is not null;
+    public static bool SystemSink => Data is not null && Hour is not null;
 }

@@ -24,21 +24,21 @@ namespace Marshal.Infrastructure.Sync.Google;
 /// i nie ma jak się do niego dostać inaczej.
 /// </para>
 /// </remarks>
-public static class PowrotZgody
+public static class ConsentReturn
 {
-    private static readonly Lock Zamek = new();
+    private static readonly Lock Lock = new();
     private static TaskCompletionSource<string>? _waiting;
 
     /// <summary>Czy logowanie czeka właśnie na powrót z przeglądarki.</summary>
-    public static bool Czeka
+    public static bool Waiting
     {
-        get { lock (Zamek) { return _waiting is not null; } }
+        get { lock (Lock) { return _waiting is not null; } }
     }
 
     /// <summary>Zgłoszenie oczekiwania. Zwraca zadanie kończące się przepisanym adresem.</summary>
-    public static Task<string> Czekaj()
+    public static Task<string> Wait()
     {
-        lock (Zamek)
+        lock (Lock)
         {
             // Kontynuacje asynchronicznie: bez tego dalszy ciąg logowania pobiegłby
             // na wątku okna, prosto z obsługi kliknięcia.
@@ -50,9 +50,9 @@ public static class PowrotZgody
     }
 
     /// <summary>Koniec oczekiwania — niezależnie od tego, którą drogą przyszedł kod.</summary>
-    public static void Przestan()
+    public static void Stop()
     {
-        lock (Zamek)
+        lock (Lock)
         {
             _waiting = null;
         }
@@ -61,11 +61,11 @@ public static class PowrotZgody
     /// <summary>
     /// Podanie adresu z paska przeglądarki. Fałsz znaczy „nikt na to nie czeka".
     /// </summary>
-    public static bool Podaj(string adres)
+    public static bool Serve(string address)
     {
-        lock (Zamek)
+        lock (Lock)
         {
-            return _waiting?.TrySetResult(adres) ?? false;
+            return _waiting?.TrySetResult(address) ?? false;
         }
     }
 }

@@ -55,12 +55,12 @@ public sealed partial class JournalViewModel(IActivityLog log, IClock clock) : O
         var zone = clock.Now.Offset;
         var entries = await log.RecentAsync();
 
-        var widoczne = OnlyProblems
+        var visible = OnlyProblems
             ? entries.Where(w => w.Level == ActivityLevel.Problem).ToList()
             : entries;
 
         Rows.Clear();
-        foreach (var entry in widoczne)
+        foreach (var entry in visible)
         {
             Rows.Add(new JournalRow(
                 entry.At.ToOffset(zone).ToString("MM-dd HH:mm:ss"),

@@ -148,7 +148,7 @@ public sealed partial class MainViewModel : ObservableObject
         ReminderService przypomnienia,
         GoogleSyncService dysk,
         DayRolloverService przejscieDnia,
-        IWriteSignal sygnal)
+        IWriteSignal signal)
     {
         _inbox = inbox;
         _szkielet = szkielet;
@@ -161,7 +161,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
         // dokładnie dwie rzeczy: odłożyć notatkę i poprosić wątek okna o wysyłkę.
         // Sam przebieg rusza stamtąd, bo kończy się przerysowaniem list.
-        sygnal.Saved += () =>
+        signal.Saved += () =>
         {
             Interlocked.Exchange(ref _zmiana, 1);
             PoproszOWysylke();
@@ -711,9 +711,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     private async Task PobierzKalendarzeAsync()
     {
-        var raport = await _kalendarze.RefreshAsync();
+        var report = await _kalendarze.RefreshAsync();
 
-        if (raport.Events > 0 || raport.Folded > 0)
+        if (report.Events > 0 || report.Folded > 0)
         {
             await ReloadAsync();
         }
@@ -849,7 +849,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        await PrzebiegAsync("Synchronizacja po powrocie", cicha: true);
+        await RunAsync("Synchronizacja po powrocie", cicha: true);
 
         // Kalendarze też: powrót do okna jest chwilą, w której patrzy się na siatkę.
         await Probuj("Kalendarz: pobranie po powrocie", PobierzKalendarzeAsync);
@@ -872,7 +872,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        await PrzebiegAsync(change ? "Synchronizacja po zmianie" : "Synchronizacja co jakiś czas", cicha: true);
+        await RunAsync(change ? "Synchronizacja po zmianie" : "Synchronizacja co jakiś czas", cicha: true);
     }
 
     /// <summary>
@@ -974,7 +974,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// logowanie chciałoby otworzyć przeglądarkę — przy starcie aplikacji byłoby to
     /// okno wyskakujące bez powodu, zanim zdążysz cokolwiek zrobić.
     /// </remarks>
-    private Task SynchronizujCichoAsync() => PrzebiegAsync("Synchronizacja przy starcie");
+    private Task SynchronizujCichoAsync() => RunAsync("Synchronizacja przy starcie");
 
     /// <summary>
     /// Jeden przebieg do Dysku wywołany nie przez rękę.
@@ -986,7 +986,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// pięćset — bez tego zjadłby sam siebie i nie byłoby w nim widać niczego innego.
     /// Awarie i przebiegi, które coś przeniosły, zostają zawsze.
     /// </param>
-    private async Task PrzebiegAsync(string co, bool cicha = false)
+    private async Task RunAsync(string co, bool cicha = false)
     {
         if (!_dysk.HasCredentials || !Directory.Exists(_dysk.TokenFolder))
         {
@@ -1260,12 +1260,12 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Projects;
 
-        var zablokowane = (await _queries.BlockedProjectsAsync())
+        var blocked = (await _queries.BlockedProjectsAsync())
             .Select(p => p.ProjectId)
             .ToHashSet();
 
         var rows = ProjectTree.Build(
-            await _areas.ActiveAsync(), await _projects.ActiveAsync(), zablokowane);
+            await _areas.ActiveAsync(), await _projects.ActiveAsync(), blocked);
 
         // Równowaga obszarów wpisana w te same wiersze, a nie na osobnym ekranie.
         // Dwa ekrany na te same obiekty dawały różne możliwości w każdym z nich:
@@ -1291,9 +1291,9 @@ public sealed partial class MainViewModel : ObservableObject
         var czekajace = await _queries.WaitingAsync(Today());
 
         WaitingItems.Clear();
-        foreach (var pozycja in czekajace)
+        foreach (var item in czekajace)
         {
-            WaitingItems.Add(pozycja);
+            WaitingItems.Add(item);
         }
     }
 
@@ -1372,16 +1372,16 @@ public sealed partial class MainViewModel : ObservableObject
         // na dziś. Cisza obszarów (N10) **nigdy tu nie trafia** — to nie jest sprawa na
         // dziś, a codzienne przypominanie o niej zamieniłoby ją w szum (spec 6).
         var ponaglenia = (await _queries.WaitingAsync(today)).Where(w => w.NeedsNudge).ToList();
-        var zablokowane = await _queries.BlockedProjectsAsync();
+        var blocked = await _queries.BlockedProjectsAsync();
 
         Nudges.Clear();
-        foreach (var pozycja in ponaglenia)
+        foreach (var item in ponaglenia)
         {
-            Nudges.Add(pozycja);
+            Nudges.Add(item);
         }
 
         BlockedProjects.Clear();
-        foreach (var project in zablokowane)
+        foreach (var project in blocked)
         {
             BlockedProjects.Add(project);
         }
@@ -1810,10 +1810,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task RefreshInboxAsync()
     {
-        var wrzuty = await _inbox.ListAsync();
+        var inbox = await _inbox.ListAsync();
 
         InboxItems.Clear();
-        foreach (var item in wrzuty)
+        foreach (var item in inbox)
         {
             InboxItems.Add(item);
         }

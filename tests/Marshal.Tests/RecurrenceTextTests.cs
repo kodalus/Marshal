@@ -164,10 +164,10 @@ public sealed class RecurrenceTextTests
     [InlineData(1, "codziennie, jeszcze 1 raz")]
     [InlineData(3, "codziennie, jeszcze 3 razy")]
     [InlineData(7, "codziennie, jeszcze 7 razy")]
-    public void Liczba_pozostalych_wystapien_jest_w_zdaniu(int count, string oczekiwane)
+    public void Liczba_pozostalych_wystapien_jest_w_zdaniu(int count, string waiting)
     {
         RecurrenceText.Describe(new RecurrenceRule(RecurrenceKind.Daily, count: count))
-            .Should().Be(oczekiwane);
+            .Should().Be(waiting);
     }
 
     // --- etykiety stanu ------------------------------------------------------

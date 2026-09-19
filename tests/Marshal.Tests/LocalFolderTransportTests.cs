@@ -21,15 +21,15 @@ public sealed class LocalFolderTransportTests : IDisposable
     [Fact]
     public async Task Zapisana_porcja_wraca_w_calosci()
     {
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwsza\ndruga\n");
+        await store.WriteSegmentAsync("biurko", "000001", "pierwsza\ndruga\n");
 
-        var porcje = await skladnica.ListSegmentsAsync();
-        porcje.Should().ContainSingle();
-        porcje[0].DeviceId.Should().Be("biurko");
-        porcje[0].Name.Should().Be("000001");
-        (await skladnica.ReadSegmentAsync(porcje[0])).Should().Be("pierwsza\ndruga\n");
+        var chunks = await store.ListSegmentsAsync();
+        chunks.Should().ContainSingle();
+        chunks[0].DeviceId.Should().Be("biurko");
+        chunks[0].Name.Should().Be("000001");
+        (await store.ReadSegmentAsync(chunks[0])).Should().Be("pierwsza\ndruga\n");
     }
 
     [Fact]
@@ -37,11 +37,11 @@ public sealed class LocalFolderTransportTests : IDisposable
     {
         // Zapis i odczyt muszą chodzić tym samym kodowaniem. Rozjazd nie rzuca
         // wyjątku — daje zniekształcony tekst dopiero na drugim urządzeniu.
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000001", "zażółć gęślą jaźń\n");
+        await store.WriteSegmentAsync("biurko", "000001", "zażółć gęślą jaźń\n");
 
-        (await skladnica.ReadSegmentAsync(new LogSegment("biurko", "000001")))
+        (await store.ReadSegmentAsync(new LogSegment("biurko", "000001")))
             .Should().Be("zażółć gęślą jaźń\n");
     }
 
@@ -51,27 +51,27 @@ public sealed class LocalFolderTransportTests : IDisposable
         // Niezmienność porcji jest warunkiem poprawności kursora: skoro
         // „przeczytana zostaje przeczytana", to zmiana treści pod tą samą nazwą
         // przepadłaby na wszystkich urządzeniach, które ją już minęły.
-        var skladnica = Skladnica();
-        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwotna\n");
+        var store = Skladnica();
+        await store.WriteSegmentAsync("biurko", "000001", "pierwotna\n");
 
-        var ponownie = async () =>
-            await skladnica.WriteSegmentAsync("biurko", "000001", "podmieniona\n");
+        var again = async () =>
+            await store.WriteSegmentAsync("biurko", "000001", "podmieniona\n");
 
-        await ponownie.Should().ThrowAsync<InvalidOperationException>();
-        (await skladnica.ReadSegmentAsync(new LogSegment("biurko", "000001")))
+        await again.Should().ThrowAsync<InvalidOperationException>();
+        (await store.ReadSegmentAsync(new LogSegment("biurko", "000001")))
             .Should().Be("pierwotna\n");
     }
 
     [Fact]
     public async Task Porcje_wracaja_w_porzadku_nazw()
     {
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000010", "dziesiąta\n");
-        await skladnica.WriteSegmentAsync("biurko", "000002", "druga\n");
-        await skladnica.WriteSegmentAsync("biurko", "000001", "pierwsza\n");
+        await store.WriteSegmentAsync("biurko", "000010", "dziesiąta\n");
+        await store.WriteSegmentAsync("biurko", "000002", "druga\n");
+        await store.WriteSegmentAsync("biurko", "000001", "pierwsza\n");
 
-        (await skladnica.ListSegmentsAsync()).Select(s => s.Name)
+        (await store.ListSegmentsAsync()).Select(s => s.Name)
             .Should().ContainInOrder("000001", "000002", "000010");
     }
 
@@ -85,16 +85,16 @@ public sealed class LocalFolderTransportTests : IDisposable
     [Fact]
     public async Task Porcje_roznych_urzadzen_sa_rozlaczne()
     {
-        var skladnica = Skladnica();
+        var store = Skladnica();
 
-        await skladnica.WriteSegmentAsync("biurko", "000001", "z biurka\n");
-        await skladnica.WriteSegmentAsync("telefon", "000001", "z telefonu\n");
+        await store.WriteSegmentAsync("biurko", "000001", "z biurka\n");
+        await store.WriteSegmentAsync("telefon", "000001", "z telefonu\n");
 
-        var porcje = await skladnica.ListSegmentsAsync();
-        porcje.Should().HaveCount(2);
-        (await skladnica.ReadSegmentAsync(new LogSegment("biurko", "000001")))
+        var chunks = await store.ListSegmentsAsync();
+        chunks.Should().HaveCount(2);
+        (await store.ReadSegmentAsync(new LogSegment("biurko", "000001")))
             .Should().Be("z biurka\n");
-        (await skladnica.ReadSegmentAsync(new LogSegment("telefon", "000001")))
+        (await store.ReadSegmentAsync(new LogSegment("telefon", "000001")))
             .Should().Be("z telefonu\n");
     }
 
@@ -103,12 +103,12 @@ public sealed class LocalFolderTransportTests : IDisposable
     {
         // Przerwany zapis zostawia plik tymczasowy obok porcji. Gdyby trafił na
         // listę, drugie urządzenie przeczytałoby dziennik ucięty w pół wiersza.
-        var skladnica = Skladnica();
-        await skladnica.WriteSegmentAsync("biurko", "000001", "cała\n");
+        var store = Skladnica();
+        await store.WriteSegmentAsync("biurko", "000001", "cała\n");
         await File.WriteAllTextAsync(
             Path.Combine(_katalog, "log", "biurko", "000002.jsonl.tmp"), "urwana");
 
-        (await skladnica.ListSegmentsAsync()).Select(s => s.Name).Should().Equal("000001");
+        (await store.ListSegmentsAsync()).Select(s => s.Name).Should().Equal("000001");
     }
 
     [Theory]
@@ -116,10 +116,10 @@ public sealed class LocalFolderTransportTests : IDisposable
     [InlineData("a/b")]
     [InlineData("z kropką.")]
     [InlineData("")]
-    public async Task Identyfikator_psujacy_nazwe_pliku_jest_odrzucany(string urzadzenie)
+    public async Task Identyfikator_psujacy_nazwe_pliku_jest_odrzucany(string device)
     {
         var zapisz = async () =>
-            await Skladnica().WriteSegmentAsync(urzadzenie, "000001", "cokolwiek\n");
+            await Skladnica().WriteSegmentAsync(device, "000001", "cokolwiek\n");
 
         await zapisz.Should().ThrowAsync<ArgumentException>();
     }

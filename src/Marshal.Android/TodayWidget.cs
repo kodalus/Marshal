@@ -109,7 +109,7 @@ public sealed class TodayWidget : AppWidgetProvider
 
     private static void Przesun(Context kontekst, int widgetId, int delta)
     {
-        if (kontekst.GetSharedPreferences(Ustawienia, FileCreationMode.Private) is not { } zapis)
+        if (kontekst.GetSharedPreferences(Ustawienia, FileCreationMode.Private) is not { } patch)
         {
             return;
         }
@@ -122,7 +122,7 @@ public sealed class TodayWidget : AppWidgetProvider
         // dwóch tygodniach druga strzałka już nic by nie robiła.
         fresh = Math.Clamp(fresh, -366, 366);
 
-        zapis.Edit()?.PutInt($"dzien-{widgetId}", fresh)?.Apply();
+        patch.Edit()?.PutInt($"dzien-{widgetId}", fresh)?.Apply();
     }
 
     /// <summary>Zapomnienie ustawienia widgetu, który zdjęto z ekranu.</summary>
@@ -130,13 +130,13 @@ public sealed class TodayWidget : AppWidgetProvider
     {
         base.OnDeleted(context, appWidgetIds);
 
-        if (context?.GetSharedPreferences(Ustawienia, FileCreationMode.Private) is not { } zapis
+        if (context?.GetSharedPreferences(Ustawienia, FileCreationMode.Private) is not { } patch
             || appWidgetIds is null)
         {
             return;
         }
 
-        var edycja = zapis.Edit();
+        var edycja = patch.Edit();
 
         foreach (var id in appWidgetIds)
         {
@@ -197,7 +197,7 @@ public sealed class TodayWidget : AppWidgetProvider
         // w fabryce i oddaje je, dopóki nikt jej nie powie, że są nieaktualne.
         // Bez tego drugiego wywołania odhaczone zadanie zostawało na liście.
 #pragma warning disable CA1422
-        manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.lista);
+        manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.list);
 #pragma warning restore CA1422
 
         var zamiar = new Intent(context, typeof(TodayWidget));
@@ -308,7 +308,7 @@ public sealed class TodayWidget : AppWidgetProvider
         var przesuniecie = Przesuniecie(context, widgetId);
         var ogladany = today.AddDays(przesuniecie);
 
-        widok.SetTextViewText(Resource.Id.naglowek, Miesiac(ogladany, today));
+        widok.SetTextViewText(Resource.Id.heading, Miesiac(ogladany, today));
 
         // Strzałki po tygodniu, bo pasek pokazuje tydzień. Przesuwanie o dzień przy
         // widocznym tygodniu znaczyłoby, że pierwsze dotknięcie prawie nic nie zmienia
@@ -344,14 +344,14 @@ public sealed class TodayWidget : AppWidgetProvider
         // bazę — jest zamiennikiem dla listy krótkiej i znanej z góry. Nadal działa
         // i nadal jest jedyną drogą dla listy budowanej po stronie aplikacji.
 #pragma warning disable CA1422
-        widok.SetRemoteAdapter(Resource.Id.lista, doUslugi);
+        widok.SetRemoteAdapter(Resource.Id.list, doUslugi);
 #pragma warning restore CA1422
 
         // Napis zamiast pustej listy — system podmienia je sam, więc nie trzeba
         // zgadywać, czy plan jest pusty, zanim lista go wczyta.
-        widok.SetEmptyView(Resource.Id.lista, Resource.Id.pusto);
+        widok.SetEmptyView(Resource.Id.list, Resource.Id.pusto);
 
-        widok.SetPendingIntentTemplate(Resource.Id.lista, WzorzecWiersza(context));
+        widok.SetPendingIntentTemplate(Resource.Id.list, WzorzecWiersza(context));
 
         return widok;
     }
@@ -422,7 +422,7 @@ public sealed class TodayWidget : AppWidgetProvider
             widok.SetInt(
                 Numery[i],
                 "setTextColor",
-                context.GetColor(day == today ? Resource.Color.akcent : Resource.Color.tekst));
+                context.GetColor(day == today ? Resource.Color.akcent : Resource.Color.text));
 
             widok.SetInt(
                 Kropki[i],
@@ -597,7 +597,7 @@ public sealed class TodayWidget : AppWidgetProvider
             Przerysuj(okno, menedzer, [widgetId]);
 
 #pragma warning disable CA1422
-            menedzer.NotifyAppWidgetViewDataChanged(new[] { widgetId }, Resource.Id.lista);
+            menedzer.NotifyAppWidgetViewDataChanged(new[] { widgetId }, Resource.Id.list);
 #pragma warning restore CA1422
             return;
         }

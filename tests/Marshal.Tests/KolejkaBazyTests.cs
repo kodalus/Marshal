@@ -47,7 +47,7 @@ public sealed class KolejkaBazyTests : IDisposable
         // puszczała na czas oczekiwania, wpuszczałaby drugą pracę dokładnie w tę
         // szczelinę, którą ma zamykać — a to jest ta szczelina, w którą wchodzi
         // synchronizacja ruszająca sama.
-        var queue = new KolejkaBazy();
+        var queue = new DbQueue();
         var wewnatrz = 0;
         var najwiecejNaraz = 0;
 
@@ -70,7 +70,7 @@ public sealed class KolejkaBazyTests : IDisposable
     public async Task Brama_puszcza_po_wywrotce()
     {
         // Bez tego jedna awaria zamykałaby bazę do końca działania aplikacji.
-        var queue = new KolejkaBazy();
+        var queue = new DbQueue();
 
         // Jawny typ, bo samo „rzuć" pasuje do obu przeciążeń bramy naraz.
         Func<Task> wywrotka = () => Task.FromException(new InvalidOperationException("celowo"));
@@ -101,7 +101,7 @@ public sealed class KolejkaBazyTests : IDisposable
         // że znacznik „jestem w środku" **dojeżdża** do niej razem z przepływem
         // wywołania. Ustawiony po odpaleniu pracy nie dojechałby, a objawem byłoby
         // dokładnie to zawiśnięcie.
-        var queue = new KolejkaBazy();
+        var queue = new DbQueue();
         var doszlo = false;
 
         // Z ogranicznikiem czasu, bo objawem tej usterki jest zawiśnięcie, a test,
@@ -135,7 +135,7 @@ public sealed class KolejkaBazyTests : IDisposable
         // Brama pilnująca samych zapisów przepuszczała odczyty wprost na kontekst
         // i stąd brał się błąd o drugiej operacji zaczętej przed końcem pierwszej.
         // Sprawdzenie wprost: praca trzyma bramę, odczyt z repozytorium ma stać.
-        var queue = new KolejkaBazy();
+        var queue = new DbQueue();
         var tasks = new TaskRepository(_db, queue);
 
         var puscic = new TaskCompletionSource();
@@ -159,11 +159,11 @@ public sealed class KolejkaBazyTests : IDisposable
     [Fact]
     public async Task Zapis_z_okna_podnosi_znak()
     {
-        var sygnal = new SygnalZapisu();
+        var signal = new WriteSignal();
         var podniesiony = 0;
-        sygnal.Saved += () => podniesiony++;
+        signal.Saved += () => podniesiony++;
 
-        var work = new UnitOfWork(_db, new KolejkaBazy(), sygnal);
+        var work = new UnitOfWork(_db, new DbQueue(), signal);
 
         var hlc = new HlcSource(new Zegar(), "testy");
         _db.Areas.Add(new Area(Guid.CreateVersion7(), new Zegar().Now, hlc.Next(), "Dom", 0));
@@ -177,18 +177,18 @@ public sealed class KolejkaBazyTests : IDisposable
     {
         // Odświeżenia i zapisy „na wszelki wypadek" zdarzają się często. Gdyby każdy
         // z nich prosił o przebieg, aplikacja chodziłaby po Dysku bez treści.
-        var sygnal = new SygnalZapisu();
+        var signal = new WriteSignal();
         var podniesiony = 0;
-        sygnal.Saved += () => podniesiony++;
+        signal.Saved += () => podniesiony++;
 
-        var work = new UnitOfWork(_db, new KolejkaBazy(), sygnal);
+        var work = new UnitOfWork(_db, new DbQueue(), signal);
 
         await work.SaveChangesAsync();
 
         podniesiony.Should().Be(0);
     }
 
-    private static void InterlockedMax(ref int cel, int wartosc)
+    private static void InterlockedMax(ref int cel, int value)
     {
         int stary;
 
@@ -196,11 +196,11 @@ public sealed class KolejkaBazyTests : IDisposable
         {
             stary = Volatile.Read(ref cel);
 
-            if (stary >= wartosc)
+            if (stary >= value)
             {
                 return;
             }
         }
-        while (Interlocked.CompareExchange(ref cel, wartosc, stary) != stary);
+        while (Interlocked.CompareExchange(ref cel, value, stary) != stary);
     }
 }

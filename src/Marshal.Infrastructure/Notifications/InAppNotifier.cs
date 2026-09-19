@@ -33,7 +33,7 @@ namespace Marshal.Infrastructure.Notifications;
 public sealed class InAppNotifier : INotifier
 {
     private readonly Lock _gate = new();
-    private readonly List<Notification> _oczekujace = [];
+    private readonly List<Notification> _pending = [];
 
     /// <summary>
     /// Wyjście na powiadomienia systemowe, podstawiane przez warstwę platformy.
@@ -52,46 +52,46 @@ public sealed class InAppNotifier : INotifier
     /// dalej i jest prawdziwym przypomnieniem, gdy siedzisz przy komputerze.
     /// </para>
     /// </remarks>
-    public static Func<Notification, CancellationToken, Task>? Systemowe
+    public static Func<Notification, CancellationToken, Task>? SystemSink
     {
-        get => _systemowe;
+        get => _systemSink;
 
         set
         {
-            List<Notification> zaleglosc;
+            List<Notification> backlog;
 
             lock (SystemGate)
             {
-                _systemowe = value;
+                _systemSink = value;
 
                 if (value is null)
                 {
                     // Odpięcie znaczy, że nie ma dokąd — a zaległość bez adresata to już
                     // nie zabezpieczenie, tylko rosnąca lista. W aplikacji haczyk podpina
                     // się raz na proces i nie odpina, więc dotyczy to wyłącznie sprzątania.
-                    CzekajaceNaSystem.Clear();
+                    WaitingForSystem.Clear();
                     return;
                 }
 
-                if (CzekajaceNaSystem.Count == 0)
+                if (WaitingForSystem.Count == 0)
                 {
                     return;
                 }
 
-                zaleglosc = [.. CzekajaceNaSystem];
-                CzekajaceNaSystem.Clear();
+                backlog = [.. WaitingForSystem];
+                WaitingForSystem.Clear();
             }
 
             // Poza blokadą: pokazanie dymka woła system, a trzymanie przy tym zamka
             // blokowałoby każde kolejne przypomnienie.
-            foreach (var przypomnienie in zaleglosc)
+            foreach (var reminder in backlog)
             {
-                _ = Wypusc(value, przypomnienie);
+                _ = Emit(value, reminder);
             }
         }
     }
 
-    private static Func<Notification, CancellationToken, Task>? _systemowe;
+    private static Func<Notification, CancellationToken, Task>? _systemSink;
 
     private static readonly Lock SystemGate = new();
 
@@ -103,20 +103,20 @@ public sealed class InAppNotifier : INotifier
     /// końca zamieniłaby jedną usterkę w drugą, gorszą. Pięćdziesiąt to i tak więcej,
     /// niż da się przeczytać naraz.
     /// </remarks>
-    private static readonly List<Notification> CzekajaceNaSystem = [];
+    private static readonly List<Notification> WaitingForSystem = [];
 
-    private const int Zapas = 50;
+    private const int Capacity = 50;
 
-    private static async Task Wypusc(
-        Func<Notification, CancellationToken, Task> systemowe, Notification przypomnienie)
+    private static async Task Emit(
+        Func<Notification, CancellationToken, Task> systemSink, Notification reminder)
     {
         try
         {
-            await systemowe(przypomnienie, CancellationToken.None);
+            await systemSink(reminder, CancellationToken.None);
         }
         catch (Exception e)
         {
-            StanSystemowych = $"zaległe nie wyszło: {e.GetType().Name}: {e.Message}";
+            SystemStatus = $"zaległe nie wyszło: {e.GetType().Name}: {e.Message}";
         }
     }
 
@@ -129,7 +129,7 @@ public sealed class InAppNotifier : INotifier
     /// czego pokazać. Pierwsza jest do naprawienia w kodzie, druga po stronie systemu,
     /// trzecia nie jest usterką — a z samego braku dymka nie da się ich rozróżnić.
     /// </remarks>
-    public static string StanSystemowych { get; set; } = "nie podpięto";
+    public static string SystemStatus { get; set; } = "nie podpięto";
 
     public event EventHandler<Notification>? Shown;
 
@@ -137,7 +137,7 @@ public sealed class InAppNotifier : INotifier
     {
         lock (_gate)
         {
-            _oczekujace.Add(notification);
+            _pending.Add(notification);
         }
 
         Shown?.Invoke(this, notification);
@@ -145,17 +145,17 @@ public sealed class InAppNotifier : INotifier
         // Sprawdzenie i odłożenie **pod jednym zamkiem**, bo inaczej zostaje szczelina:
         // haczyk podpięty między odczytem a odłożeniem wypuściłby zaległość bez tego
         // przypomnienia, a ono dołączyłoby do niej już po wszystkim i zostało tam na zawsze.
-        Func<Notification, CancellationToken, Task>? systemowe;
+        Func<Notification, CancellationToken, Task>? systemSink;
 
         lock (SystemGate)
         {
-            systemowe = _systemowe;
+            systemSink = _systemSink;
 
-            if (systemowe is null)
+            if (systemSink is null)
             {
-                if (CzekajaceNaSystem.Count < Zapas)
+                if (WaitingForSystem.Count < Capacity)
                 {
-                    CzekajaceNaSystem.Add(notification);
+                    WaitingForSystem.Add(notification);
                 }
 
                 return;
@@ -167,12 +167,12 @@ public sealed class InAppNotifier : INotifier
         // brak skrótu w menu Start, wyłączone powiadomienia, tryb skupienia.
         try
         {
-            await systemowe(notification, ct);
+            await systemSink(notification, ct);
         }
         catch (Exception e)
         {
             // Zostaje pasek w oknie.
-            StanSystemowych = $"pokazanie nie udało się: {e.GetType().Name}: {e.Message}";
+            SystemStatus = $"pokazanie nie udało się: {e.GetType().Name}: {e.Message}";
         }
     }
 
@@ -181,9 +181,9 @@ public sealed class InAppNotifier : INotifier
     {
         lock (_gate)
         {
-            var kopia = _oczekujace.ToList();
-            _oczekujace.Clear();
-            return kopia;
+            var copy = _pending.ToList();
+            _pending.Clear();
+            return copy;
         }
     }
 }

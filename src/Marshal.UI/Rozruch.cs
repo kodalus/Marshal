@@ -87,7 +87,7 @@ public static class Rozruch
         _ostatnieBicie = now;
     }
 
-    public static string Opis =>
+    public static string Description =>
         $"postawienie {Platforma} ms, reszta okna {Okno - Platforma} ms, "
         + $"do wczytywania {Model - Okno} ms, "
         + $"najdłuższa przerwa {NajdluzszaPrzerwa} ms (minęła w {PrzerwaMinela} ms)";

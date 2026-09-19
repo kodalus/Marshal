@@ -36,7 +36,7 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     private TimeZoneInfo? _zone;
 
-    private string? _klopotZeStrefa;
+    private string? _zoneTrouble;
 
     private ThemeChoice? _theme;
 
@@ -46,7 +46,7 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     private bool? _googleCalendar;
 
-    private string? _glownyKalendarz;
+    private string? _primaryCalendar;
 
     public TimeZoneInfo Zone
     {
@@ -69,7 +69,7 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
                 // o kłopot przed pierwszym użyciem zegara zawsze dawałoby „nie ma".
                 _ = _zone ??= Resolve(Read(ZoneKey) ?? DefaultZoneId);
 
-                return _klopotZeStrefa;
+                return _zoneTrouble;
             }
         }
     }
@@ -80,8 +80,8 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         {
             lock (_gate)
             {
-                return _theme ??= Enum.TryParse<ThemeChoice>(Read(ThemeKey), out var wybor)
-                    ? wybor
+                return _theme ??= Enum.TryParse<ThemeChoice>(Read(ThemeKey), out var choice)
+                    ? choice
                     : ThemeChoice.System;
             }
         }
@@ -108,9 +108,9 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         {
             lock (_gate)
             {
-                _glownyKalendarz ??= Read(MainCalendarKey) ?? string.Empty;
+                _primaryCalendar ??= Read(MainCalendarKey) ?? string.Empty;
 
-                return Guid.TryParse(_glownyKalendarz, out var id) ? id : null;
+                return Guid.TryParse(_primaryCalendar, out var id) ? id : null;
             }
         }
     }
@@ -119,15 +119,15 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     {
         lock (_gate)
         {
-            var zapis = calendarId?.ToString() ?? string.Empty;
-            Write(MainCalendarKey, zapis);
-            _glownyKalendarz = zapis;
+            var patch = calendarId?.ToString() ?? string.Empty;
+            Write(MainCalendarKey, patch);
+            _primaryCalendar = patch;
         }
     }
 
     public const string CalendarAccountsKey = "calendar-accounts";
 
-    private string? _konta;
+    private string? _accounts;
 
     /// <summary>
     /// Dodatkowe konta Google. Adresy rozdzielone znakiem nowej linii.
@@ -144,9 +144,9 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         {
             lock (_gate)
             {
-                _konta ??= Read(CalendarAccountsKey) ?? string.Empty;
+                _accounts ??= Read(CalendarAccountsKey) ?? string.Empty;
 
-                return _konta
+                return _accounts
                     .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList();
             }
@@ -159,7 +159,7 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
         lock (_gate)
         {
-            var adres = email.Trim();
+            var address = email.Trim();
 
             var now = (Read(CalendarAccountsKey) ?? string.Empty)
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -167,12 +167,12 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
             // Powtórzenie nie jest błędem: ponowne dodanie konta to najczęstsza reakcja
             // na „chyba nie zadziałało" i ma po prostu odświeżyć żeton.
-            if (!now.Contains(adres, StringComparer.OrdinalIgnoreCase))
+            if (!now.Contains(address, StringComparer.OrdinalIgnoreCase))
             {
-                now.Add(adres);
+                now.Add(address);
             }
 
-            Zapisz(now);
+            Save(now);
         }
     }
 
@@ -185,15 +185,15 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
                 .Where(k => !string.Equals(k, email?.Trim(), StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            Zapisz(now);
+            Save(now);
         }
     }
 
-    private void Zapisz(IEnumerable<string> konta)
+    private void Save(IEnumerable<string> accounts)
     {
-        var zapis = string.Join('\n', konta);
-        Write(CalendarAccountsKey, zapis);
-        _konta = zapis;
+        var patch = string.Join('\n', accounts);
+        Write(CalendarAccountsKey, patch);
+        _accounts = patch;
     }
 
     public void SetGoogleCalendarEnabled(bool enabled)
@@ -213,13 +213,13 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
             // wiersza, a wtedy logowanie odbija się komunikatem o złym kliencie —
             // i nie ma po nim jak poznać, że chodziło o jeden znak.
             var id = clientId?.Trim() ?? string.Empty;
-            var tajemnica = clientSecret?.Trim() ?? string.Empty;
+            var secret = clientSecret?.Trim() ?? string.Empty;
 
             Write(GoogleClientIdKey, id);
-            Write(GoogleClientSecretKey, tajemnica);
+            Write(GoogleClientSecretKey, secret);
 
             _googleId = id;
-            _googleSecret = tajemnica;
+            _googleSecret = secret;
         }
     }
 
@@ -227,7 +227,7 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     {
         // Wybranie strefy ręcznie kasuje poprzedni kłopot: jeśli nowa się rozstrzyga,
         // ostrzeżenie o starej byłoby już nieprawdą.
-        _klopotZeStrefa = null;
+        _zoneTrouble = null;
 
         var zone = Resolve(id);
 
@@ -277,15 +277,15 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         {
             if (id != DefaultZoneId)
             {
-                var zastepcza = Resolve(DefaultZoneId);
+                var fallback = Resolve(DefaultZoneId);
 
-                _klopotZeStrefa =
-                    $"Ten system nie zna strefy „{id}”. Godziny liczone są w „{zastepcza.Id}”.";
+                _zoneTrouble =
+                    $"Ten system nie zna strefy „{id}”. Godziny liczone są w „{fallback.Id}”.";
 
-                return zastepcza;
+                return fallback;
             }
 
-            _klopotZeStrefa =
+            _zoneTrouble =
                 $"Ten system nie zna strefy „{id}”. Godziny liczone są w czasie uniwersalnym, "
                 + "czyli o godzinę lub dwie wcześniej niż w Polsce. Wybierz strefę w ustawieniach.";
 

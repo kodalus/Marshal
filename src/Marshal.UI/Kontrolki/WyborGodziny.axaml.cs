@@ -9,14 +9,14 @@ namespace Marshal.UI.Kontrolki;
 /// <summary>Pole godziny: okrągła tarcza systemu tam, gdzie jest, wybierak Avalonii gdzie indziej.</summary>
 public partial class WyborGodziny : UserControl
 {
-    public static readonly StyledProperty<TimeSpan?> WartoscProperty =
+    public static readonly StyledProperty<TimeSpan?> ValueProperty =
         AvaloniaProperty.Register<WyborGodziny, TimeSpan?>(
-            nameof(Wartosc), defaultBindingMode: BindingMode.TwoWay);
+            nameof(Value), defaultBindingMode: BindingMode.TwoWay);
 
-    public TimeSpan? Wartosc
+    public TimeSpan? Value
     {
-        get => GetValue(WartoscProperty);
-        set => SetValue(WartoscProperty, value);
+        get => GetValue(ValueProperty);
+        set => SetValue(ValueProperty, value);
     }
 
     private bool _wlasneWpisanie;
@@ -39,13 +39,13 @@ public partial class WyborGodziny : UserControl
         // wcześniej niż podpięcie okienek systemu, a pole, które zapytało za wcześnie,
         // zostawało przy wybieraku wbudowanym na całe uruchomienie — bez śladu, bo oba
         // wyglądają jak pole godziny.
-        AttachedToVisualTree += (_, _) => Rozstrzygnij();
+        AttachedToVisualTree += (_, _) => Resolve();
 
         _wbudowany.PropertyChanged += (_, e) =>
         {
             if (e.Property == TimePicker.SelectedTimeProperty && !_wlasneWpisanie)
             {
-                Wartosc = _wbudowany.SelectedTime;
+                Value = _wbudowany.SelectedTime;
             }
         };
 
@@ -57,14 +57,14 @@ public partial class WyborGodziny : UserControl
             }
 
             var wybrana = await zapytaj(
-                Wartosc is { } now ? TimeOnly.FromTimeSpan(now) : null);
+                Value is { } now ? TimeOnly.FromTimeSpan(now) : null);
 
-            Wartosc = wybrana?.ToTimeSpan();
+            Value = wybrana?.ToTimeSpan();
         };
 
-        Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Wartosc = null;
+        Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Value = null;
 
-        Rozstrzygnij();
+        Resolve();
         Odswiez();
     }
 
@@ -72,17 +72,17 @@ public partial class WyborGodziny : UserControl
     {
         base.OnPropertyChanged(change);
 
-        if (change.Property == WartoscProperty)
+        if (change.Property == ValueProperty)
         {
             Odswiez();
         }
     }
 
     /// <summary>Tarcza systemu albo wybierak wbudowany — jedno albo drugie, nigdy oba.</summary>
-    private void Rozstrzygnij()
+    private void Resolve()
     {
-        _wbudowany.IsVisible = !Pickery.Systemowe;
-        _systemowy.IsVisible = Pickery.Systemowe;
+        _wbudowany.IsVisible = !Pickery.SystemSink;
+        _systemowy.IsVisible = Pickery.SystemSink;
     }
 
     private void Odswiez()
@@ -100,7 +100,7 @@ public partial class WyborGodziny : UserControl
 
         try
         {
-            _wbudowany.SelectedTime = Wartosc;
+            _wbudowany.SelectedTime = Value;
         }
         finally
         {
@@ -109,7 +109,7 @@ public partial class WyborGodziny : UserControl
 
         // Doba, nie dwunastka z dopiskiem: kalendarz obok liczy godziny tak samo,
         // a dwa zapisy tej samej godziny w jednym oknie to jeden za dużo.
-        _otwarcie.Content = Wartosc is { } time
+        _otwarcie.Content = Value is { } time
             ? time.ToString(@"hh\:mm", CultureInfo.InvariantCulture)
             : "wybierz";
     }

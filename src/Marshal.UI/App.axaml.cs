@@ -185,8 +185,8 @@ public partial class App : Avalonia.Application
 
                 // Motyw przestawia aplikacja, bo dotyczy całego okna, a nie ekranu
                 // ustawień. Zapisany motyw leży w bazie, więc dopiero teraz.
-                viewModel.Settings.ThemeChanged += (_, wybor) =>
-                    RequestedThemeVariant = Variant(wybor);
+                viewModel.Settings.ThemeChanged += (_, choice) =>
+                    RequestedThemeVariant = Variant(choice);
 
                 RequestedThemeVariant = Variant(
                     services.GetRequiredService<ISettings>().Theme);
@@ -222,14 +222,14 @@ public partial class App : Avalonia.Application
                     "Start",
                     $"strefa {ustawienia.Zone.Id}, teraz {zegar.Now:yyyy-MM-dd HH:mm zzz}, "
                         + $"wydanie {Wydanie()}, "
-                        + $"powiadomienia systemowe: {InAppNotifier.StanSystemowych}, "
+                        + $"powiadomienia systemowe: {InAppNotifier.SystemStatus}, "
                         + $"kalendarz główny: {ustawienia.MainCalendarId?.ToString() ?? "nieustawiony"}, "
 
                         // Czasy startu w dzienniku, bo „aplikacja się zawiesza przy
                         // otwarciu" nie mówi, co ją trzyma — a trzy liczby mówią.
                         + $"start: przygotowanie {przygotowanie} ms, "
                         + $"złożenie {zlozenie} ms, wczytanie {wczytanie} ms"
-                        + (Rozruch.Zmierzony ? $", {Rozruch.Opis}" : string.Empty),
+                        + (Rozruch.Zmierzony ? $", {Rozruch.Description}" : string.Empty),
                     ustawienia.ZoneProblem is null && SladPlatformy is null
                         ? ActivityLevel.Ok : ActivityLevel.Problem,
                     string.Join("\n\n", new[] { ustawienia.ZoneProblem, SladPlatformy }
@@ -296,7 +296,7 @@ public partial class App : Avalonia.Application
         return string.IsNullOrWhiteSpace(wersja) ? "nieznane" : wersja;
     }
 
-    private static ThemeVariant Variant(ThemeChoice wybor) => wybor switch
+    private static ThemeVariant Variant(ThemeChoice choice) => choice switch
     {
         ThemeChoice.Light => ThemeVariant.Light,
         ThemeChoice.Dark => ThemeVariant.Dark,

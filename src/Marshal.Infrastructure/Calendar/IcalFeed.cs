@@ -51,23 +51,23 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
     /// </remarks>
     public static string? ParseColor(string content)
     {
-        foreach (var linia in content.Split('\n'))
+        foreach (var line in content.Split('\n'))
         {
-            var oczyszczona = linia.Trim();
+            var cleaned = line.Trim();
 
-            if (!oczyszczona.StartsWith("X-APPLE-CALENDAR-COLOR", StringComparison.OrdinalIgnoreCase))
+            if (!cleaned.StartsWith("X-APPLE-CALENDAR-COLOR", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            var dwukropek = oczyszczona.IndexOf(':', StringComparison.Ordinal);
+            var colon = cleaned.IndexOf(':', StringComparison.Ordinal);
 
-            if (dwukropek < 0)
+            if (colon < 0)
             {
                 continue;
             }
 
-            var color = oczyszczona[(dwukropek + 1)..].Trim();
+            var color = cleaned[(colon + 1)..].Trim();
 
             return string.IsNullOrEmpty(color) ? null : color;
         }
@@ -84,18 +84,18 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
         var calendarId = Ical.Net.Calendar.Load(content);
         var result = new List<FeedEvent>();
 
-        var wystapienia = calendarId.GetOccurrences(
+        var occurrences = calendarId.GetOccurrences(
             now.AddMonths(-WindowMonths), now.AddMonths(WindowMonths));
 
-        foreach (var wystapienie in wystapienia)
+        foreach (var occurrence in occurrences)
         {
-            if (wystapienie.Source is not IcalEvent ev)
+            if (occurrence.Source is not IcalEvent ev)
             {
                 continue;
             }
 
-            var start = wystapienie.Period.StartTime.AsDateTimeOffset;
-            var end = wystapienie.Period.EndTime?.AsDateTimeOffset ?? start.AddHours(1);
+            var start = occurrence.Period.StartTime.AsDateTimeOffset;
+            var end = occurrence.Period.EndTime?.AsDateTimeOffset ?? start.AddHours(1);
 
             result.Add(new FeedEvent(
                 // Identyfikator musi rozróżniać wystąpienia serii: wszystkie mają ten sam

@@ -41,7 +41,7 @@ internal static class Program
 #if DYMKI
         if (!OperatingSystem.IsWindows())
         {
-            InAppNotifier.StanSystemowych = "ten system nie ma dymków Windowsa";
+            InAppNotifier.SystemStatus = "ten system nie ma dymków Windowsa";
             return;
         }
 
@@ -51,27 +51,27 @@ internal static class Program
                 WindowsApplicationContext.FromCurrentProcess("Marshal"));
 
             menedzer.Initialize().GetAwaiter().GetResult();
-            InAppNotifier.StanSystemowych = "podpięte";
+            InAppNotifier.SystemStatus = "podpięte";
 
             // Drugi parametr to chwila wygaśnięcia i jest wymagany. Puste znaczy
             // „niech zostanie w centrum powiadomień" — przypomnienie, które znika samo
             // po minucie, jest bezużyteczne dokładnie wtedy, gdy się go nie widziało.
-            InAppNotifier.Systemowe = (przypomnienie, _) =>
+            InAppNotifier.SystemSink = (reminder, _) =>
                 menedzer.ShowNotification(
                     new Notification
                     {
-                        Title = przypomnienie.Title,
-                        Body = przypomnienie.Body ?? string.Empty,
+                        Title = reminder.Title,
+                        Body = reminder.Body ?? string.Empty,
                     },
                     expirationTime: null);
         }
         catch (Exception e)
         {
             // Bez powiadomień systemowych. Pasek w oknie zostaje i działa jak dotąd.
-            InAppNotifier.StanSystemowych = $"{e.GetType().Name}: {e.Message}";
+            InAppNotifier.SystemStatus = $"{e.GetType().Name}: {e.Message}";
         }
 #else
-        InAppNotifier.StanSystemowych = "zbudowane bez obsługi dymków Windowsa";
+        InAppNotifier.SystemStatus = "zbudowane bez obsługi dymków Windowsa";
 #endif
     }
 

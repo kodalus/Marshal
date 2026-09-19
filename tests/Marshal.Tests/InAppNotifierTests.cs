@@ -24,13 +24,13 @@ namespace Marshal.Tests;
 [Collection("Powiadomienia systemowe")]
 public sealed class InAppNotifierTests : IDisposable
 {
-    public void Dispose() => InAppNotifier.Systemowe = null;
+    public void Dispose() => InAppNotifier.SystemSink = null;
 
     [Fact]
     public async Task Pokazane_przed_podpieciem_czeka_i_wychodzi_po_podpieciu()
     {
         // Jak wyżej: zerowanie zabiera to, co zostawiły inne klasy w tym samym procesie.
-        InAppNotifier.Systemowe = null;
+        InAppNotifier.SystemSink = null;
 
         var powiadamiacz = new InAppNotifier();
         var wyszly = new List<string>();
@@ -39,7 +39,7 @@ public sealed class InAppNotifierTests : IDisposable
 
         wyszly.Should().BeEmpty("haczyka jeszcze nie ma");
 
-        InAppNotifier.Systemowe = (p, _) =>
+        InAppNotifier.SystemSink = (p, _) =>
         {
             lock (wyszly)
             {
@@ -62,11 +62,11 @@ public sealed class InAppNotifierTests : IDisposable
         // Zaległość jest statyczna, bo statyczny jest haczyk — a proces testów jest
         // jeden i inne klasy zdążyły już coś w niej zostawić. Odpięcie ją zapomina,
         // więc to zerowanie jest zarazem czyszczeniem stanowiska.
-        InAppNotifier.Systemowe = null;
+        InAppNotifier.SystemSink = null;
 
         var wyszly = new List<string>();
 
-        InAppNotifier.Systemowe = (p, _) =>
+        InAppNotifier.SystemSink = (p, _) =>
         {
             lock (wyszly)
             {
@@ -83,8 +83,8 @@ public sealed class InAppNotifierTests : IDisposable
 
         // Powtórne podpięcie — na przykład drugie wejście do okna — nie ma wypuszczać
         // po raz drugi czegoś, co już wyszło.
-        var tenSam = InAppNotifier.Systemowe;
-        InAppNotifier.Systemowe = tenSam;
+        var tenSam = InAppNotifier.SystemSink;
+        InAppNotifier.SystemSink = tenSam;
         await Poczekaj(() => false, TimeSpan.FromMilliseconds(120));
 
         wyszly.Should().Equal("po");

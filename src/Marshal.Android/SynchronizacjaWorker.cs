@@ -48,7 +48,7 @@ public sealed class SynchronizacjaWorker : Worker
     /// Po niej system rozpoznaje, że to wciąż to samo zlecenie, i nie zakłada drugiego
     /// przy każdym otwarciu aplikacji.
     /// </remarks>
-    private const string Nazwa = "marshal-synchronizacja";
+    private const string Name = "marshal-synchronizacja";
 
     /// <summary>Co ile zaglądać. Kwadrans to dolna granica narzucona przez system.</summary>
     private const long Minut = 30;
@@ -85,7 +85,7 @@ public sealed class SynchronizacjaWorker : Worker
             budowniczy.SetConstraints(warunki!);
 
             WorkManager.GetInstance(kontekst).EnqueueUniquePeriodicWork(
-                Nazwa,
+                Name,
                 ExistingPeriodicWorkPolicy.Keep!,
                 (PeriodicWorkRequest)budowniczy.Build());
         }
@@ -111,7 +111,7 @@ public sealed class SynchronizacjaWorker : Worker
             // przypomnienia, a tu nie ma okna, które by je odebrało.
             Powiadomienia.Podepnij(ApplicationContext!);
 
-            return PrzebiegAsync().GetAwaiter().GetResult();
+            return RunAsync().GetAwaiter().GetResult();
         }
         catch (Exception e)
         {
@@ -123,7 +123,7 @@ public sealed class SynchronizacjaWorker : Worker
         }
     }
 
-    private async Task<Result> PrzebiegAsync()
+    private async Task<Result> RunAsync()
     {
         await AppServices.ReadyAsync();
 
@@ -134,9 +134,9 @@ public sealed class SynchronizacjaWorker : Worker
             // Ze śladem, bo to jedyna droga, na której przebieg odpala się poprawnie
             // i nie robi nic. Bez wpisu wygląda identycznie jak przebieg, który nie
             // ruszył — a to dwie różne rzeczy do naprawienia.
-            await Budzik.Zapisz(
+            await Budzik.Save(
                 "Synchronizacja w tle", "brak poświadczeń albo żetonu",
-                poziom: ActivityLevel.Problem);
+                level: ActivityLevel.Problem);
 
             return Result.InvokeSuccess()!;
         }
@@ -145,8 +145,8 @@ public sealed class SynchronizacjaWorker : Worker
 
         if (!result.Ok)
         {
-            await Budzik.Zapisz(
-                "Synchronizacja w tle", result.Message, poziom: ActivityLevel.Problem);
+            await Budzik.Save(
+                "Synchronizacja w tle", result.Message, level: ActivityLevel.Problem);
 
             return Result.InvokeRetry()!;
         }
@@ -160,7 +160,7 @@ public sealed class SynchronizacjaWorker : Worker
                 .GetRequiredService<ReminderService>()
                 .RunAsync();
 
-            await Budzik.Zapisz(
+            await Budzik.Save(
                 "Synchronizacja w tle",
                 $"przyjęte {result.Applied}"
                     + (count > 0 ? $", przypomnienia pokazane: {count}" : string.Empty));

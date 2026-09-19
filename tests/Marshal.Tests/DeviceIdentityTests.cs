@@ -92,9 +92,9 @@ public sealed class DeviceIdentityTests : IDisposable
 
         using var drugie = Baza();
         var id2 = new DeviceIdentity(drugie).Id;
-        var wznowiony = new HlcSource(zegar, id2, LastHlcStore.Read(drugie, id2));
+        var resumed = new HlcSource(zegar, id2, LastHlcStore.Read(drugie, id2));
 
-        wznowiony.Next().Should().BeGreaterThan(last);
+        resumed.Next().Should().BeGreaterThan(last);
     }
 
     [Fact]

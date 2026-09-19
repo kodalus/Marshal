@@ -28,9 +28,9 @@ public sealed class LocalFolderFileTransport(string root) : IFileTransport
         // Zapis do pliku tymczasowego i przeniesienie: przerwane wgranie zostawia
         // plik tymczasowy, a nie połowę zdjęcia pod adresem, który obiecuje całość.
         var temp = path + ".tmp";
-        await using (var docelowy = File.Create(temp))
+        await using (var target = File.Create(temp))
         {
-            await content.CopyToAsync(docelowy, ct);
+            await content.CopyToAsync(target, ct);
         }
 
         File.Move(temp, path, overwrite: false);

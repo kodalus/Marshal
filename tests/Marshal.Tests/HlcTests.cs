@@ -108,13 +108,13 @@ public class HlcTests
     [Fact]
     public void Porzadek_jestDeterministycznyNiezaleznieOdKolejnosci()
     {
-        var znaczniki = new[]
+        var stamps = new[]
         {
             new Hlc(2, 0, "b"), new Hlc(1, 5, "a"), new Hlc(2, 0, "a"), new Hlc(1, 5, "b"),
         };
 
-        var rosnaco = znaczniki.Order().ToArray();
-        var odwrotnie = znaczniki.Reverse().Order().ToArray();
+        var rosnaco = stamps.Order().ToArray();
+        var odwrotnie = stamps.Reverse().Order().ToArray();
 
         rosnaco.Should().Equal(odwrotnie);
         rosnaco.Should().Equal(
@@ -140,9 +140,9 @@ public class HlcTests
     [InlineData("-1.7.a3f1")]
     [InlineData("abc.7.a3f1")]
     [InlineData("1757942400123.x.a3f1")]
-    public void TryParse_odrzucaNiepoprawnePostacie(string tekst)
+    public void TryParse_odrzucaNiepoprawnePostacie(string text)
     {
-        Hlc.TryParse(tekst, out _).Should().BeFalse();
+        Hlc.TryParse(text, out _).Should().BeFalse();
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public class HlcTests
         // Kolumna w SQLite jest tekstowa i sortuje się leksykograficznie. Bez
         // uzupełniania zerami „999" wypadłoby po „1000" i porządek zdarzeń
         // rozjechałby się po cichu, bez żadnego błędu.
-        var znaczniki = new[]
+        var stamps = new[]
         {
             new Hlc(10_000, 0, "a"),
             new Hlc(1_000, 12, "a"),
@@ -160,8 +160,8 @@ public class HlcTests
             new Hlc(1_000, 7, "a"),
         };
 
-        var logicznie = znaczniki.Order().ToArray();
-        var tekstowo = znaczniki.OrderBy(h => h.ToString(), StringComparer.Ordinal).ToArray();
+        var logicznie = stamps.Order().ToArray();
+        var tekstowo = stamps.OrderBy(h => h.ToString(), StringComparer.Ordinal).ToArray();
 
         tekstowo.Should().Equal(logicznie);
     }

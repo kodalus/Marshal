@@ -73,7 +73,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         // Druga droga powrotu, na wypadek gdyby pierwsza nie doszła: adres przepisany
         // z paska przeglądarki. Zgłoszona **przed** otwarciem przeglądarki, żeby okno
         // ustawień miało co pokazać od pierwszej chwili.
-        var reczny = PowrotZgody.Czekaj();
+        var reczny = ConsentReturn.Wait();
 
         // Usługa pierwszoplanowa na czas czekania: bez niej proces idzie do zamrażarki,
         // gdy przeglądarka go przykryje, i powrót ze zgody nie ma kogo obudzić.
@@ -116,7 +116,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         finally
         {
             UslugaLogowania.Pilnuj(kontekst, wlacz: false);
-            PowrotZgody.Przestan();
+            ConsentReturn.Stop();
             nasluch.Stop();
         }
     }
@@ -127,15 +127,15 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
     {
         while (true)
         {
-            using var polaczenie = await nasluch.AcceptTcpClientAsync(ct);
-            var strumien = polaczenie.GetStream();
+            using var connection = await nasluch.AcceptTcpClientAsync(ct);
+            var strumien = connection.GetStream();
 
-            if (await TaskId(strumien, ct) is not { } adres)
+            if (await TaskId(strumien, ct) is not { } address)
             {
                 continue;
             }
 
-            var pola = Pola(adres);
+            var pola = Pola(address);
 
             // Przeglądarka pyta też o inne rzeczy, choćby o ikonę strony.
             // Żądanie bez kodu i bez błędu nie jest powrotem ze zgody.
@@ -172,9 +172,9 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         return port;
     }
 
-    private void Otworz(Uri adres)
+    private void Otworz(Uri address)
     {
-        var zamiar = new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(adres.ToString()));
+        var zamiar = new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(address.ToString()));
 
         // Nowe zadanie, bo kontekst jest aplikacji, a nie okna. Bez tego system odmawia.
         zamiar.AddFlags(ActivityFlags.NewTask);
@@ -199,22 +199,22 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
             return null;
         }
 
-        var wiersz = Encoding.UTF8.GetString(buffer, 0, count).Split('\n')[0].Split(' ');
+        var row = Encoding.UTF8.GetString(buffer, 0, count).Split('\n')[0].Split(' ');
 
         // „GET /authorize/?code=… HTTP/1.1"
-        return wiersz.Length >= 2 ? wiersz[1] : null;
+        return row.Length >= 2 ? row[1] : null;
     }
 
-    private static Dictionary<string, string> Pola(string adres)
+    private static Dictionary<string, string> Pola(string address)
     {
-        var pytajnik = adres.IndexOf('?');
+        var pytajnik = address.IndexOf('?');
 
         if (pytajnik < 0)
         {
             return new Dictionary<string, string>();
         }
 
-        return adres[(pytajnik + 1)..]
+        return address[(pytajnik + 1)..]
             .Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Select(para => para.Split('=', 2))
             .ToDictionary(
@@ -224,18 +224,18 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
 
     private static async Task Odpisz(NetworkStream strumien, string content, CancellationToken ct)
     {
-        var strona = $"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\">"
+        var page = $"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\">"
             + "<title>Marshal</title>"
             + "<body style=\"background:#121729;color:#fff;font-family:sans-serif;"
             + $"display:flex;align-items:center;justify-content:center;height:100vh\">{content}</body></html>";
 
-        var bajty = Encoding.UTF8.GetBytes(strona);
+        var bajty = Encoding.UTF8.GetBytes(page);
 
-        var naglowek = Encoding.UTF8.GetBytes(
+        var heading = Encoding.UTF8.GetBytes(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
             + $"Content-Length: {bajty.Length}\r\nConnection: close\r\n\r\n");
 
-        await strumien.WriteAsync(naglowek, ct);
+        await strumien.WriteAsync(heading, ct);
         await strumien.WriteAsync(bajty, ct);
         await strumien.FlushAsync(ct);
     }

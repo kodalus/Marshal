@@ -78,9 +78,9 @@ public sealed class DayRolloverServiceTests : IDisposable
     {
         var id = Dodaj("Zadzwonić", "2026-09-10").Id;
 
-        var raport = await _usluga.RunAsync();
+        var report = await _usluga.RunAsync();
 
-        raport.Moved.Should().Be(1);
+        report.Moved.Should().Be(1);
         _db.Tasks.Single(t => t.Id == id).DoDate.Should().Be(D("2026-09-16"));
     }
 
@@ -115,9 +115,9 @@ public sealed class DayRolloverServiceTests : IDisposable
         Dodaj("Trening", "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
 
-        var raport = await _usluga.RunAsync();
+        var report = await _usluga.RunAsync();
 
-        raport.Spawned.Should().Be(7);
+        report.Spawned.Should().Be(7);
 
         // Jedno umówione na dziś i siedem zaległości bez dnia — a nie osiem pozycji
         // stłoczonych na dzisiaj, co wyszłoby z dosłownego czytania 8.7.
@@ -134,9 +134,9 @@ public sealed class DayRolloverServiceTests : IDisposable
         Dodaj("Wynieść śmieci", "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
 
-        var raport = await _usluga.RunAsync();
+        var report = await _usluga.RunAsync();
 
-        raport.Spawned.Should().Be(1);
+        report.Spawned.Should().Be(1);
         _db.Tasks.Count(t => t.State == TaskState.Scheduled).Should().Be(1);
         _db.Tasks.Count(t => t.State == TaskState.Trashed).Should().Be(1);
     }

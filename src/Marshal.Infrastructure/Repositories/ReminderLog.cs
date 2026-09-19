@@ -9,7 +9,7 @@ namespace Marshal.Infrastructure.Repositories;
 public sealed class ReminderLog(MarshalDbContext db, IDbQueue? queue = null)
     : IReminderLog
 {
-    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
+    private readonly IDbQueue _queue = queue ?? new DirectQueue();
 
     /// <summary>
     /// Czy ta konkretna chwila już się odezwała.
@@ -21,7 +21,7 @@ public sealed class ReminderLog(MarshalDbContext db, IDbQueue? queue = null)
     /// </remarks>
     public Task<bool> WasShownAsync(
         Guid taskId, DateTimeOffset reminderAt, CancellationToken ct = default) =>
-        _kolejka.RunAsync(async () =>
+        _queue.RunAsync(async () =>
             db.ChangeTracker.Entries<ReminderShown>()
                 .Select(e => e.Entity)
                 .Any(r => r.TaskId == taskId && r.ReminderAt == reminderAt)

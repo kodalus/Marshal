@@ -120,9 +120,9 @@ public sealed partial class ClarifyViewModel(
         var drzewko = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
 
         Areas.Clear();
-        foreach (var wiersz in drzewko)
+        foreach (var row in drzewko)
         {
-            Areas.Add(PlacementChoice.From(wiersz));
+            Areas.Add(PlacementChoice.From(row));
         }
 
         await NextAsync();

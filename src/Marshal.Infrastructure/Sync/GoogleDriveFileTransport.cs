@@ -38,21 +38,21 @@ public sealed class GoogleDriveFileTransport(IDriveClient drive, string folderNa
             return;
         }
 
-        using var czytnik = new StreamReader(content);
+        using var reader = new StreamReader(content);
         await drive.CreateAsync(
-            await FolderAsync(ct), sha256, await czytnik.ReadToEndAsync(ct), ct);
+            await FolderAsync(ct), sha256, await reader.ReadToEndAsync(ct), ct);
     }
 
     public async Task<Stream?> OpenAsync(string sha256, CancellationToken ct = default)
     {
         Validate(sha256);
 
-        if (await FindAsync(sha256, ct) is not { } plik)
+        if (await FindAsync(sha256, ct) is not { } file)
         {
             return null;
         }
 
-        var content = await drive.DownloadAsync(plik.Id, ct);
+        var content = await drive.DownloadAsync(file.Id, ct);
         return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));
     }
 

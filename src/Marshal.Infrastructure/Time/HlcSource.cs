@@ -41,17 +41,17 @@ public sealed class HlcSource : IHlcSource
 
     public string DeviceId
     {
-        get { lock (_gate) { Rozstrzygnij(); return _id!; } }
+        get { lock (_gate) { Resolve(); return _id!; } }
     }
 
     /// <summary>Ostatni wydany znacznik — do zapisania przy zamykaniu aplikacji.</summary>
     public Hlc Last
     {
-        get { lock (_gate) { Rozstrzygnij(); return _last; } }
+        get { lock (_gate) { Resolve(); return _last; } }
     }
 
     /// <summary>Wołane wyłącznie pod blokadą.</summary>
-    private void Rozstrzygnij()
+    private void Resolve()
     {
         if (_id is not null)
         {
@@ -59,15 +59,15 @@ public sealed class HlcSource : IHlcSource
         }
 
         var id = _deviceId();
-        var wznowiony = _resumeFrom();
+        var resumed = _resumeFrom();
 
-        if (wznowiony is { } znacznik && znacznik.DeviceId != id)
+        if (resumed is { } stamp && stamp.DeviceId != id)
         {
             throw new InvalidOperationException(
-                $"Wznowiony znacznik należy do urządzenia '{znacznik.DeviceId}', nie '{id}'.");
+                $"Wznowiony znacznik należy do urządzenia '{stamp.DeviceId}', nie '{id}'.");
         }
 
-        _last = wznowiony ?? Hlc.Zero(id);
+        _last = resumed ?? Hlc.Zero(id);
         _id = id;
     }
 
@@ -75,7 +75,7 @@ public sealed class HlcSource : IHlcSource
     {
         lock (_gate)
         {
-            Rozstrzygnij();
+            Resolve();
             _last = Hlc.Next(_last, PhysicalNowMs());
             return _last;
         }
@@ -85,7 +85,7 @@ public sealed class HlcSource : IHlcSource
     {
         lock (_gate)
         {
-            Rozstrzygnij();
+            Resolve();
             _last = Hlc.Merge(_last, remote, PhysicalNowMs());
             return _last;
         }

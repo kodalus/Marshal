@@ -371,8 +371,8 @@ public sealed class TaskMirror(
         // jest wyłączny — ten sam dzień w obu polach daje wydarzenie zerowej długości.
         if (task.DoTime is not { } time)
         {
-            var start = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-            return new CalendarDraft(name, start, start.AddDays(1), AllDay: true);
+            var dayStart = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            return new CalendarDraft(name, dayStart, dayStart.AddDays(1), AllDay: true);
         }
 
         var local = day.ToDateTime(time);

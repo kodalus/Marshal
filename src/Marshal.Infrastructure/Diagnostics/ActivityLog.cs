@@ -34,9 +34,9 @@ public sealed class ActivityLog(DbContextOptions<MarshalDbContext> options, IClo
     /// <remarks>Zapas po to, żeby kasowanie szło raz na sto wpisów, a nie przy każdym.</remarks>
     private const int Slack = 100;
 
-    private int _zgubione;
+    private int _lost;
 
-    public int Dropped => Volatile.Read(ref _zgubione);
+    public int Dropped => Volatile.Read(ref _lost);
 
     public async Task RecordAsync(
         string operation,
@@ -53,11 +53,11 @@ public sealed class ActivityLog(DbContextOptions<MarshalDbContext> options, IClo
                 Guid.CreateVersion7(), clock.Now, operation, outcome, level, detail));
 
             await db.SaveChangesAsync(ct);
-            await PrzytnijAsync(db, ct);
+            await TrimAsync(db, ct);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            Interlocked.Increment(ref _zgubione);
+            Interlocked.Increment(ref _lost);
         }
     }
 
@@ -80,7 +80,7 @@ public sealed class ActivityLog(DbContextOptions<MarshalDbContext> options, IClo
         await db.ActivityEntries.ExecuteDeleteAsync(ct);
     }
 
-    private static async Task PrzytnijAsync(MarshalDbContext db, CancellationToken ct)
+    private static async Task TrimAsync(MarshalDbContext db, CancellationToken ct)
     {
         if (await db.ActivityEntries.CountAsync(ct) <= Limit + Slack)
         {
@@ -91,7 +91,7 @@ public sealed class ActivityLog(DbContextOptions<MarshalDbContext> options, IClo
         // milisekundzie ma jedną datę, a kasowanie „wszystkiego od granicy w dół"
         // zabrałoby wtedy cały dziennik naraz. Lista ma najwyżej sto pozycji, bo
         // sprzątanie rusza dopiero po przekroczeniu limitu o tyle.
-        var doUsuniecia = await db.ActivityEntries
+        var toDelete = await db.ActivityEntries
             .OrderByDescending(w => w.At)
             .ThenByDescending(w => w.Id)
             .Skip(Limit)
@@ -99,7 +99,7 @@ public sealed class ActivityLog(DbContextOptions<MarshalDbContext> options, IClo
             .ToListAsync(ct);
 
         await db.ActivityEntries
-            .Where(w => doUsuniecia.Contains(w.Id))
+            .Where(w => toDelete.Contains(w.Id))
             .ExecuteDeleteAsync(ct);
     }
 }

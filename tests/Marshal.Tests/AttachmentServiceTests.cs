@@ -61,8 +61,8 @@ public sealed class AttachmentServiceTests : IDisposable
         await using var strumien = await _usluga.OpenAsync(attachment);
         strumien.Should().NotBeNull();
 
-        using var czytnik = new StreamReader(strumien!);
-        (await czytnik.ReadToEndAsync()).Should().Be("zawartość");
+        using var reader = new StreamReader(strumien!);
+        (await reader.ReadToEndAsync()).Should().Be("zawartość");
     }
 
     [Fact]
@@ -155,9 +155,9 @@ public sealed class AttachmentServiceTests : IDisposable
     [InlineData("krótki")]
     [InlineData("ZDUZYCH1234567890123456789012345678901234567890123456789012345678")]
     [InlineData("../../ucieczka")]
-    public async Task Skladnica_odrzuca_adres_ktory_nie_jest_skrotem(string adres)
+    public async Task Skladnica_odrzuca_adres_ktory_nie_jest_skrotem(string address)
     {
-        var otworz = async () => await _skladnica.ExistsAsync(adres);
+        var otworz = async () => await _skladnica.ExistsAsync(address);
 
         await otworz.Should().ThrowAsync<ArgumentException>();
     }
@@ -169,8 +169,8 @@ public sealed class AttachmentServiceTests : IDisposable
         await _skladnica.PutAsync(attachment.Sha256, Plik("treść"));
 
         await using var strumien = await _skladnica.OpenAsync(attachment.Sha256);
-        using var czytnik = new StreamReader(strumien!);
-        (await czytnik.ReadToEndAsync()).Should().Be("treść");
+        using var reader = new StreamReader(strumien!);
+        (await reader.ReadToEndAsync()).Should().Be("treść");
     }
 
     public void Dispose()

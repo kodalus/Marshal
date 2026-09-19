@@ -29,10 +29,10 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
     };
 
     /// <summary>Czy wiersz cokolwiek zmienił. Fałsz znaczy „przegrał" albo „nieznany".</summary>
-    public bool Apply(ChangeLine wiersz)
+    public bool Apply(ChangeLine row)
     {
         var typ = db.Model.GetEntityTypes()
-            .FirstOrDefault(t => t.GetTableName() == wiersz.Entity);
+            .FirstOrDefault(t => t.GetTableName() == row.Entity);
 
         // Nieznana tabela albo tabela lokalna: wpis z nowszej wersji aplikacji.
         // Pomijamy, zamiast przerywać — reszta pliku może być zrozumiała.
@@ -41,46 +41,46 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
             return false;
         }
 
-        if (!Guid.TryParse(wiersz.Id, out var id) || !Hlc.TryParse(wiersz.Hlc, out var zdalny))
+        if (!Guid.TryParse(row.Id, out var id) || !Hlc.TryParse(row.Hlc, out var remote))
         {
             return false;
         }
 
         // Podniesienie zegara lokalnego ponad wszystko, co widzieliśmy, żeby kolejna
         // zmiana na tym urządzeniu była późniejsza od zdalnej (spec 3.5).
-        hlc.Observe(zdalny);
+        hlc.Observe(remote);
 
-        var encja = db.Find(typ.ClrType, id);
+        var entity = db.Find(typ.ClrType, id);
 
-        if (encja is null)
+        if (entity is null)
         {
-            encja = Activator.CreateInstance(typ.ClrType, nonPublic: true)
+            entity = Activator.CreateInstance(typ.ClrType, nonPublic: true)
                 ?? throw new InvalidOperationException($"Nie da się utworzyć {typ.ClrType}.");
 
-            db.Add(encja);
-            db.Entry(encja).Property("Id").CurrentValue = id;
+            db.Add(entity);
+            db.Entry(entity).Property("Id").CurrentValue = id;
         }
 
-        var entry = db.Entry(encja);
-        var cokolwiek = false;
+        var entry = db.Entry(entity);
+        var anything = false;
 
-        foreach (var (pole, wartosc) in wiersz.Fields)
+        foreach (var (pole, value) in row.Fields)
         {
-            var wlasciwosc = typ.FindProperty(pole);
+            var property = typ.FindProperty(pole);
 
-            if (wlasciwosc is null || wlasciwosc.IsPrimaryKey())
+            if (property is null || property.IsPrimaryKey())
             {
                 continue;
             }
 
-            if (!Nowszy(wiersz.Entity, id, pole, zdalny))
+            if (!Newer(row.Entity, id, pole, remote))
             {
                 continue;
             }
 
             try
             {
-                entry.Property(pole).CurrentValue = Decode(wartosc, wlasciwosc);
+                entry.Property(pole).CurrentValue = Decode(value, property);
             }
             catch (Exception e) when (e is JsonException or NotSupportedException
                                       or InvalidCastException or FormatException
@@ -95,11 +95,11 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
                 continue;
             }
 
-            Stamp(wiersz.Entity, id, pole, wiersz.Hlc);
-            cokolwiek = true;
+            Stamp(row.Entity, id, pole, row.Hlc);
+            anything = true;
         }
 
-        return cokolwiek;
+        return anything;
     }
 
     /// <summary>
@@ -110,21 +110,21 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
     /// zmiana tytułu na jednym urządzeniu unieważniałaby zmianę wagi na drugim,
     /// mimo że dotyczą różnych rzeczy i obie są poprawne.
     /// </remarks>
-    private bool Nowszy(string tabela, Guid id, string pole, Hlc zdalny)
+    private bool Newer(string table, Guid id, string pole, Hlc remote)
     {
-        var local = Znacznik(tabela, id, pole);
-        return local is null || zdalny > Hlc.Parse(local.Hlc);
+        var local = Stamp(table, id, pole);
+        return local is null || remote > Hlc.Parse(local.Hlc);
     }
 
-    private void Stamp(string tabela, Guid id, string pole, string znacznik)
+    private void Stamp(string table, Guid id, string pole, string stamp)
     {
-        if (Znacznik(tabela, id, pole) is { } istniejacy)
+        if (Stamp(table, id, pole) is { } existing)
         {
-            istniejacy.Update(znacznik);
+            existing.Update(stamp);
         }
         else
         {
-            db.Add(new FieldStamp(tabela, id, pole, znacznik));
+            db.Add(new FieldStamp(table, id, pole, stamp));
         }
     }
 
@@ -136,28 +136,28 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
     /// samego pola, a świeżo dodany znacznik nie jest jeszcze zapisany, więc zapytanie
     /// do bazy by go nie zobaczyło i starszy wiersz nadpisałby nowszy.
     /// </remarks>
-    private FieldStamp? Znacznik(string tabela, Guid id, string pole) =>
+    private FieldStamp? Stamp(string table, Guid id, string pole) =>
         db.ChangeTracker.Entries<FieldStamp>()
             .Select(e => e.Entity)
-            .FirstOrDefault(s => s.EntityType == tabela && s.EntityId == id && s.Field == pole)
+            .FirstOrDefault(s => s.EntityType == table && s.EntityId == id && s.Field == pole)
         ?? db.FieldStamps.FirstOrDefault(
-            s => s.EntityType == tabela && s.EntityId == id && s.Field == pole);
+            s => s.EntityType == table && s.EntityId == id && s.Field == pole);
 
     /// <summary>
     /// Z postaci bazodanowej na typ właściwości. Droga odwrotna do tej, którą wartość
     /// przeszła przy zapisie do dziennika, więc przechodzi przez ten sam konwerter.
     /// </summary>
-    private static object? Decode(JsonNode? wartosc, IProperty wlasciwosc)
+    private static object? Decode(JsonNode? value, IProperty property)
     {
-        if (wartosc is null)
+        if (value is null)
         {
             return null;
         }
 
-        var konwerter = wlasciwosc.GetValueConverter();
-        var typDocelowy = konwerter?.ProviderClrType ?? wlasciwosc.ClrType;
-        var surowa = wartosc.Deserialize(Nullable.GetUnderlyingType(typDocelowy) ?? typDocelowy, Json);
+        var converter = property.GetValueConverter();
+        var targetType = converter?.ProviderClrType ?? property.ClrType;
+        var raw = value.Deserialize(Nullable.GetUnderlyingType(targetType) ?? targetType, Json);
 
-        return konwerter is null ? surowa : konwerter.ConvertFromProvider(surowa);
+        return converter is null ? raw : converter.ConvertFromProvider(raw);
     }
 }

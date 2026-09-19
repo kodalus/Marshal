@@ -89,14 +89,14 @@ public sealed class ReminderServiceTests : IDisposable
     private static DateTimeOffset Moment(string iso) =>
         DateTimeOffset.Parse(iso + "+02:00");
 
-    private TaskItem Dodaj(string title, string? przypomnienie)
+    private TaskItem Dodaj(string title, string? reminder)
     {
         var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
         task.MakeNext(_obszar, _hlc.Next());
 
-        if (przypomnienie is not null)
+        if (reminder is not null)
         {
-            task.SetReminder(Moment(przypomnienie), _hlc.Next());
+            task.SetReminder(Moment(reminder), _hlc.Next());
         }
 
         _db.Tasks.Add(task);

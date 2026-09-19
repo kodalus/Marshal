@@ -96,9 +96,9 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
             .ToDictionary(s => (s.EntityType, s.EntityId, s.Field));
 
         // Zapytanie oddaje też te już śledzone — stąd TryAdd, a nie Add.
-        foreach (var zBazy in context.Set<FieldStamp>().Where(s => ids.Contains(s.EntityId)))
+        foreach (var fromDb in context.Set<FieldStamp>().Where(s => ids.Contains(s.EntityId)))
         {
-            stamps.TryAdd((zBazy.EntityType, zBazy.EntityId, zBazy.Field), zBazy);
+            stamps.TryAdd((fromDb.EntityType, fromDb.EntityId, fromDb.Field), fromDb);
         }
 
         foreach (var entry in entries)
@@ -132,9 +132,9 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
                 }
                 else
                 {
-                    var swiezy = new FieldStamp(entityType, id, name, hlc);
-                    context.Add(swiezy);
-                    stamps[(entityType, id, name)] = swiezy;
+                    var fresh = new FieldStamp(entityType, id, name, hlc);
+                    context.Add(fresh);
+                    stamps[(entityType, id, name)] = fresh;
                 }
             }
         }

@@ -73,8 +73,8 @@ public static class GoogleDriveFactory
     /// z cudzych danych bez sprawdzenia jest dokładnie tym rodzajem założenia, które
     /// kiedyś okazuje się nieprawdziwe.
     /// </remarks>
-    public static string KluczKonta(string adres) =>
-        "marshal-konto-" + new string(adres.Trim().Select(
+    public static string AccountKey(string address) =>
+        "marshal-konto-" + new string(address.Trim().Select(
             z => char.IsAsciiLetterOrDigit(z) || z is '@' or '.' or '-' or '_' ? z : '-').ToArray());
 
     /// <summary>
@@ -103,7 +103,7 @@ public static class GoogleDriveFactory
             userKey,
             ct,
             new FileDataStore(tokenFolder, fullPath: true),
-            OdbiorcaKodu?.Invoke());
+            CodeReceiver?.Invoke());
 
     /// <summary>Przepisanie żetonu spod klucza tymczasowego pod docelowy.</summary>
     /// <remarks>
@@ -113,17 +113,17 @@ public static class GoogleDriveFactory
     /// Drugie proszenie o zgodę tylko po to, żeby nazwać plik, byłoby dwoma ekranami
     /// zgody na jedno konto.
     /// </remarks>
-    public static async Task PrzepiszZetonAsync(
-        string tokenFolder, string zKlucza, string naKlucz, CancellationToken ct = default)
+    public static async Task MoveTokenAsync(
+        string tokenFolder, string fromKey, string byKey, CancellationToken ct = default)
     {
-        var skladnica = new FileDataStore(tokenFolder, fullPath: true);
+        var store = new FileDataStore(tokenFolder, fullPath: true);
 
-        var zeton = await skladnica.GetAsync<TokenResponse>(zKlucza)
+        var token = await store.GetAsync<TokenResponse>(fromKey)
             ?? throw new InvalidOperationException(
                 "Zgoda nie zostawiła żetonu — spróbuj dodać konto jeszcze raz.");
 
-        await skladnica.StoreAsync(naKlucz, zeton);
-        await skladnica.DeleteAsync<TokenResponse>(zKlucza);
+        await store.StoreAsync(byKey, token);
+        await store.DeleteAsync<TokenResponse>(fromKey);
     }
 
     /// <summary>Czy to urządzenie ma już żeton pod tym kluczem.</summary>
@@ -135,7 +135,7 @@ public static class GoogleDriveFactory
     /// urządzeniami, żeton nie, więc drugie urządzenie **z założenia** trafia na ten
     /// przypadek i ma o nim powiedzieć zdaniem, a nie ekranem.
     /// </remarks>
-    public static async Task<bool> MaZetonAsync(
+    public static async Task<bool> HasTokenAsync(
         string tokenFolder, string userKey, CancellationToken ct = default)
     {
         if (!Directory.Exists(tokenFolder))
@@ -145,12 +145,12 @@ public static class GoogleDriveFactory
 
         try
         {
-            var zeton = await new FileDataStore(tokenFolder, fullPath: true)
+            var token = await new FileDataStore(tokenFolder, fullPath: true)
                 .GetAsync<TokenResponse>(userKey).WaitAsync(ct);
 
-            return zeton is not null
-                && (!string.IsNullOrEmpty(zeton.RefreshToken)
-                    || !string.IsNullOrEmpty(zeton.AccessToken));
+            return token is not null
+                && (!string.IsNullOrEmpty(token.RefreshToken)
+                    || !string.IsNullOrEmpty(token.AccessToken));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -176,7 +176,7 @@ public static class GoogleDriveFactory
     /// ten sam, bo przeglądarka telefonu sięga do pętli zwrotnej tego samego telefonu.
     /// </para>
     /// </remarks>
-    public static Func<ICodeReceiver>? OdbiorcaKodu { get; set; }
+    public static Func<ICodeReceiver>? CodeReceiver { get; set; }
 
     /// <summary>Zgoda użytkownika. Wspólna droga dla Dysku i kalendarza.</summary>
     public static Task<UserCredential> AuthorizeAsync(
@@ -186,17 +186,17 @@ public static class GoogleDriveFactory
         bool withCalendar,
         CancellationToken ct = default)
     {
-        string[] zakresy = withCalendar
+        string[] scopes = withCalendar
             ? [Scope, CalendarScope, CalendarWriteScope]
             : [Scope];
 
         return GoogleWebAuthorizationBroker.AuthorizeAsync(
             new ClientSecrets { ClientId = clientId, ClientSecret = clientSecret },
-            zakresy,
+            scopes,
             UserKey(withCalendar),
             ct,
             new FileDataStore(tokenFolder, fullPath: true),
-            OdbiorcaKodu?.Invoke());
+            CodeReceiver?.Invoke());
     }
 
     /// <param name="clientId">Z poświadczeń OAuth typu „aplikacja na komputer".</param>
@@ -211,12 +211,12 @@ public static class GoogleDriveFactory
         bool withCalendar = false,
         CancellationToken ct = default)
     {
-        var poswiadczenie = await AuthorizeAsync(
+        var credential = await AuthorizeAsync(
             clientId, clientSecret, tokenFolder, withCalendar, ct);
 
         var service = new DriveService(new BaseClientService.Initializer
         {
-            HttpClientInitializer = poswiadczenie,
+            HttpClientInitializer = credential,
             ApplicationName = "Marshal",
         });
 

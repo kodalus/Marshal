@@ -46,12 +46,12 @@ public sealed class MarshalDbContextTests : IDisposable
     {
         var id = Guid.CreateVersion7();
         var utworzony = new DateTimeOffset(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
-        var znacznik = new Hlc(1757942400123, 7, "a3f1");
+        var stamp = new Hlc(1757942400123, 7, "a3f1");
 
-        using (var zapis = Kontekst())
+        using (var patch = Kontekst())
         {
-            zapis.Areas.Add(new Area(id, utworzony, znacznik, "Sprawy urzędowe", 9.0, 60, 21, "#8899AA"));
-            zapis.SaveChanges();
+            patch.Areas.Add(new Area(id, utworzony, stamp, "Sprawy urzędowe", 9.0, 60, 21, "#8899AA"));
+            patch.SaveChanges();
         }
 
         using var odczyt = Kontekst();
@@ -63,7 +63,7 @@ public sealed class MarshalDbContextTests : IDisposable
         area.SortOrder.Should().Be(9.0);
         area.QuietDays.Should().Be(60);
         area.DefaultNudgeDays.Should().Be(21);
-        area.UpdatedAt.Should().Be(znacznik);
+        area.UpdatedAt.Should().Be(stamp);
         area.CreatedAt.Should().Be(utworzony);
     }
 

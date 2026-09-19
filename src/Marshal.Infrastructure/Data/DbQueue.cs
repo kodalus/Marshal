@@ -36,25 +36,25 @@ namespace Marshal.Infrastructure.Data;
 /// w środku czekałoby na bramę trzymaną przez siebie samego.
 /// </para>
 /// </remarks>
-public sealed class KolejkaBazy : IDbQueue
+public sealed class DbQueue : IDbQueue
 {
-    private readonly SemaphoreSlim _brama = new(1, 1);
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Czy ten przepływ wywołania jest już w środku bramy.</summary>
-    private readonly AsyncLocal<bool> _wSrodku = new();
+    private readonly AsyncLocal<bool> _inside = new();
 
     public async Task RunAsync(Func<Task> work, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(work);
 
-        if (_wSrodku.Value)
+        if (_inside.Value)
         {
             await work();
             return;
         }
 
-        await _brama.WaitAsync(ct);
-        _wSrodku.Value = true;
+        await _gate.WaitAsync(ct);
+        _inside.Value = true;
 
         try
         {
@@ -62,8 +62,8 @@ public sealed class KolejkaBazy : IDbQueue
         }
         finally
         {
-            _wSrodku.Value = false;
-            _brama.Release();
+            _inside.Value = false;
+            _gate.Release();
         }
     }
 
@@ -71,13 +71,13 @@ public sealed class KolejkaBazy : IDbQueue
     {
         ArgumentNullException.ThrowIfNull(work);
 
-        if (_wSrodku.Value)
+        if (_inside.Value)
         {
             return await work();
         }
 
-        await _brama.WaitAsync(ct);
-        _wSrodku.Value = true;
+        await _gate.WaitAsync(ct);
+        _inside.Value = true;
 
         try
         {
@@ -85,8 +85,8 @@ public sealed class KolejkaBazy : IDbQueue
         }
         finally
         {
-            _wSrodku.Value = false;
-            _brama.Release();
+            _inside.Value = false;
+            _gate.Release();
         }
     }
 }
@@ -99,7 +99,7 @@ public sealed class KolejkaBazy : IDbQueue
 /// zmieniła poza czasem — a wstawiona domyślnie w konstruktorach oszczędza
 /// przepisywania kilkunastu miejsc, które o niej nie muszą wiedzieć.
 /// </remarks>
-public sealed class KolejkaWprost : IDbQueue
+public sealed class DirectQueue : IDbQueue
 {
     public Task RunAsync(Func<Task> work, CancellationToken ct = default) =>
         work is null ? throw new ArgumentNullException(nameof(work)) : work();

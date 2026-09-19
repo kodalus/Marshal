@@ -37,23 +37,23 @@ public sealed class PrzezCalaTraseTests : IDisposable
     private readonly string _katalog = Path.Combine(
         Path.GetTempPath(), "marshal-trasa-" + Guid.NewGuid().ToString("N"));
 
-    private readonly ServiceProvider _uslugi;
+    private readonly ServiceProvider _services;
 
     public PrzezCalaTraseTests()
     {
         Directory.CreateDirectory(_katalog);
 
-        _uslugi = new ServiceCollection()
+        _services = new ServiceCollection()
             .AddMarshal(Path.Combine(_katalog, "marshal.db"))
             .AddMarshalViewModels()
             .BuildServiceProvider();
 
         // Pełne przygotowanie, nie sama migracja: obszary zasiewane są właśnie tutaj,
         // a bez nich zadanie nie ma gdzie wylądować przy nadaniu dnia wykonania.
-        DependencyInjection.PrepareAsync(_uslugi).GetAwaiter().GetResult();
+        DependencyInjection.PrepareAsync(_services).GetAwaiter().GetResult();
     }
 
-    private T Usluga<T>() where T : notnull => _uslugi.GetRequiredService<T>();
+    private T Usluga<T>() where T : notnull => _services.GetRequiredService<T>();
 
     /// <summary>Zadanie zaplanowane na dziś, zapisane tak, jak zapisuje je aplikacja.</summary>
     private async Task<TaskItem> ZaplanowaneAsync(string title)
@@ -348,14 +348,14 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         szczegol.Problem.Should().BeNull("zapis miał się udać");
 
-        var zapisane = await Usluga<ITaskRepository>().FindAsync(wrzut.Id);
+        var saved = await Usluga<ITaskRepository>().FindAsync(wrzut.Id);
 
-        zapisane!.DoDate.Should().Be(today);
-        zapisane.DoTime.Should().Be(new TimeOnly(16, 0));
-        zapisane.AreaId.Should().NotBeNull("zadanie z dniem wykonania musi gdzieś należeć");
+        saved!.DoDate.Should().Be(today);
+        saved.DoTime.Should().Be(new TimeOnly(16, 0));
+        saved.AreaId.Should().NotBeNull("zadanie z dniem wykonania musi gdzieś należeć");
 
         // Koniec nie jest osobnym polem: jest długością, i to ona rysuje blok.
-        zapisane.EstimatedMinutes.Should().Be(90);
+        saved.EstimatedMinutes.Should().Be(90);
 
         // I dopiero to jest odpowiedź na „dlaczego Dzisiaj jest puste".
         await main.ShowTodayCommand.ExecuteAsync(null);
@@ -386,10 +386,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var calendarId = Usluga<CalendarViewModel>();
         await calendarId.LoadAsync();
 
-        var blok = calendarId.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Przerwa");
+        var block = calendarId.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Przerwa");
 
-        blok.StartText.Should().Be("09:00");
-        blok.EndText.Should().Be("09:30");
+        block.StartText.Should().Be("09:00");
+        block.EndText.Should().Be("09:30");
     }
 
     [Fact]
@@ -468,9 +468,9 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await szczegol.SaveAsync();
 
         // Odczyt z bazy, nie z obiektu w pamięci: chodzi o to, czy reguła **przeżyła zapis**.
-        var zapisane = await Usluga<ITaskRepository>().FindAsync(task.Id);
-        zapisane!.Recurrence.Should().NotBeNull();
-        zapisane.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
+        var saved = await Usluga<ITaskRepository>().FindAsync(task.Id);
+        saved!.Recurrence.Should().NotBeNull();
+        saved.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
 
         var next = await Usluga<TaskEditService>().CompleteAsync(task.Id);
 
@@ -503,10 +503,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         await szczegol.SaveAsync();
 
-        var zapisane = await Usluga<ITaskRepository>().FindAsync(task.Id);
+        var saved = await Usluga<ITaskRepository>().FindAsync(task.Id);
 
-        zapisane!.ReminderAt.Should().NotBeNull();
-        zapisane.ReminderAt!.Value.TimeOfDay.Should().Be(new TimeSpan(14, 30, 0));
+        saved!.ReminderAt.Should().NotBeNull();
+        saved.ReminderAt!.Value.TimeOfDay.Should().Be(new TimeSpan(14, 30, 0));
     }
 
     [Fact]
@@ -543,11 +543,11 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         await szczegol.SaveAsync();
 
-        var zapisane = await Usluga<ITaskRepository>().FindAsync(task.Id);
-        zapisane!.ReminderLeads.Should().Equal(0, 30, 120);
+        var saved = await Usluga<ITaskRepository>().FindAsync(task.Id);
+        saved!.ReminderLeads.Should().Equal(0, 30, 120);
 
         // Droga powrotna: okno otwarte drugi raz ma pokazać to samo.
-        szczegol.Load(zapisane);
+        szczegol.Load(saved);
         szczegol.Leads.Where(w => w.IsChecked).Select(w => w.Minutes)
             .Should().Equal(new[] { 0, 30, 120 }, "wczytanie ma pokazać to samo, co się zapisało");
 
@@ -611,11 +611,11 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await filtry.SaveCommand.ExecuteAsync(null);
         filtry.OpenId.Should().NotBe(Guid.Empty, "zapis miał zwrócić identyfikator");
 
-        var zapisany = (await Usluga<ISavedFilterRepository>().AllAsync())
+        var saved = (await Usluga<ISavedFilterRepository>().AllAsync())
             .Single(f => f.Name == "Na dziś");
 
-        zapisany.Query.Should().NotBeNull("definicja ma się dać odczytać z powrotem");
-        zapisany.Query!.Conditions.Should().NotBeEmpty("warunek „przelew” miał przeżyć zapis");
+        saved.Query.Should().NotBeNull("definicja ma się dać odczytać z powrotem");
+        saved.Query!.Conditions.Should().NotBeEmpty("warunek „przelew” miał przeżyć zapis");
     }
 
     [Fact]
@@ -676,7 +676,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
     public void Dispose()
     {
-        _uslugi.Dispose();
+        _services.Dispose();
 
         if (Directory.Exists(_katalog))
         {

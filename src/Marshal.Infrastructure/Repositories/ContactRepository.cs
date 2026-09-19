@@ -9,10 +9,10 @@ namespace Marshal.Infrastructure.Repositories;
 public sealed class ContactRepository(MarshalDbContext db, IDbQueue? queue = null)
     : IContactRepository
 {
-    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
+    private readonly IDbQueue _queue = queue ?? new DirectQueue();
 
     public async Task<Contact?> FindAsync(Guid id, CancellationToken ct = default) =>
-        await _kolejka.RunAsync(
+        await _queue.RunAsync(
             () => db.Contacts.FirstOrDefaultAsync(k => k.Id == id && !k.Deleted, ct), ct);
 
     /// <summary>
@@ -27,7 +27,7 @@ public sealed class ContactRepository(MarshalDbContext db, IDbQueue? queue = nul
     {
         var wanted = (email ?? string.Empty).Trim();
 
-        var all = await _kolejka.RunAsync(
+        var all = await _queue.RunAsync(
             () => db.Contacts.Where(k => !k.Deleted).ToListAsync(ct), ct);
 
         return all.FirstOrDefault(
@@ -35,7 +35,7 @@ public sealed class ContactRepository(MarshalDbContext db, IDbQueue? queue = nul
     }
 
     public async Task<IReadOnlyList<Contact>> AllAsync(CancellationToken ct = default) =>
-        await _kolejka.RunAsync(() => db.Contacts
+        await _queue.RunAsync(() => db.Contacts
             .Where(k => !k.Deleted)
             .OrderBy(k => k.Name)
             .ToListAsync(ct), ct);

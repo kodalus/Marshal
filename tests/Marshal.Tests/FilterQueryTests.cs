@@ -17,12 +17,12 @@ public sealed class FilterQueryTests
 
     private static int _licznik;
 
-    private static Hlc Znacznik() => new(Teraz.ToUnixTimeMilliseconds(), _licznik++, "biurko");
+    private static Hlc Stamp() => new(Teraz.ToUnixTimeMilliseconds(), _licznik++, "biurko");
 
     private static TaskItem TaskId(string title = "cokolwiek")
     {
-        var z = TaskItem.Capture(title, Teraz, Znacznik());
-        z.MakeNext(Obszar, Znacznik());
+        var z = TaskItem.Capture(title, Teraz, Stamp());
+        z.MakeNext(Obszar, Stamp());
         return z;
     }
 
@@ -41,7 +41,7 @@ public sealed class FilterQueryTests
     public void Warunki_lacza_sie_spojnikiem_i()
     {
         var pasuje = TaskId();
-        pasuje.SetPriority(Priority.High, Znacznik());
+        pasuje.SetPriority(Priority.High, Stamp());
 
         var niepasuje = TaskId();
 
@@ -60,10 +60,10 @@ public sealed class FilterQueryTests
         var next = TaskId();
 
         var zaplanowane = TaskId();
-        zaplanowane.Schedule(Obszar, Dzis, Znacznik());
+        zaplanowane.Schedule(Obszar, Dzis, Stamp());
 
         var kiedys = TaskId();
-        kiedys.Postpone(Obszar, null, Znacznik());
+        kiedys.Postpone(Obszar, null, Stamp());
 
         var filter = new FilterQuery([FilterCondition.States(TaskState.Next, TaskState.Scheduled)]);
 
@@ -99,13 +99,13 @@ public sealed class FilterQueryTests
     [InlineData(0, DateWindow.Future, false)]
     [InlineData(3, DateWindow.Any, true)]
     [InlineData(3, DateWindow.None, false)]
-    public void Okna_czasowe_liczone_wzgledem_dzisiaj(int przesuniecie, DateWindow okno, bool oczekiwane)
+    public void Okna_czasowe_liczone_wzgledem_dzisiaj(int przesuniecie, DateWindow okno, bool waiting)
     {
         var task = TaskId();
-        task.SetDeadline(Dzis.AddDays(przesuniecie), Znacznik());
+        task.SetDeadline(Dzis.AddDays(przesuniecie), Stamp());
 
         new FilterQuery([FilterCondition.Deadline(okno)])
-            .Matches(Podmiot(task), Dzis).Should().Be(oczekiwane);
+            .Matches(Podmiot(task), Dzis).Should().Be(waiting);
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public sealed class FilterQueryTests
         var sobota = new DateOnly(2026, 9, 19);
 
         var task = TaskId();
-        task.SetDeadline(sobota.AddDays(4), Znacznik());
+        task.SetDeadline(sobota.AddDays(4), Stamp());
 
         new FilterQuery([FilterCondition.Deadline(DateWindow.ThisWeek)])
             .Matches(Podmiot(task), sobota).Should().BeTrue();
@@ -142,7 +142,7 @@ public sealed class FilterQueryTests
         var bez = TaskId();
 
         var z = TaskId();
-        z.SetEstimate(10, Energy.Low, Znacznik());
+        z.SetEstimate(10, Energy.Low, Stamp());
 
         var filter = new FilterQuery([FilterCondition.Estimate(15)]);
 
@@ -171,7 +171,7 @@ public sealed class FilterQueryTests
         var luzem = TaskId();
 
         var wProjekcie = TaskId();
-        wProjekcie.MoveTo(Obszar, Guid.CreateVersion7(), Znacznik());
+        wProjekcie.MoveTo(Obszar, Guid.CreateVersion7(), Stamp());
 
         var filter = new FilterQuery([FilterCondition.Projects(Guid.Empty)]);
 
@@ -192,7 +192,7 @@ public sealed class FilterQueryTests
     public void Szukanie_tekstu_siega_takze_do_notatki()
     {
         var task = TaskId("Zadzwonić");
-        task.SetNote("numer w kalendarzu na lodówce", Znacznik());
+        task.SetNote("numer w kalendarzu na lodówce", Stamp());
 
         new FilterQuery([FilterCondition.Contains("lodówce")])
             .Matches(Podmiot(task), Dzis).Should().BeTrue();
@@ -202,10 +202,10 @@ public sealed class FilterQueryTests
     public void Wykonane_i_wyrzucone_nie_wchodza_dopoki_filtr_o_nie_nie_poprosi()
     {
         var zrobione = TaskId();
-        zrobione.Complete(Teraz, Znacznik());
+        zrobione.Complete(Teraz, Stamp());
 
         var wykosz = TaskId();
-        wykosz.Trash(Znacznik());
+        wykosz.Trash(Stamp());
 
         var poObszarze = new FilterQuery([FilterCondition.Areas(Obszar)]);
         poObszarze.Matches(Podmiot(zrobione), Dzis).Should().BeFalse();
@@ -224,7 +224,7 @@ public sealed class FilterQueryTests
     public void Nagrobek_nie_wchodzi_nawet_gdy_filtr_pyta_o_jego_stan()
     {
         var skasowane = TaskId();
-        skasowane.MarkDeleted(Znacznik());
+        skasowane.MarkDeleted(Stamp());
 
         new FilterQuery([FilterCondition.States(TaskState.Next)])
             .Matches(Podmiot(skasowane), Dzis).Should().BeFalse();

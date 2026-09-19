@@ -24,14 +24,14 @@ public sealed class SyncEngineTests : IDisposable
         public DateTimeOffset Now { get; set; } = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private sealed class Urzadzenie : IDisposable
+    private sealed class Device : IDisposable
     {
-        public Urzadzenie(string id, string katalog)
-            : this(id, new LocalFolderTransport(katalog))
+        public Device(string id, string folder)
+            : this(id, new LocalFolderTransport(folder))
         {
         }
 
-        public Urzadzenie(string id, ISyncTransport skladnica)
+        public Device(string id, ISyncTransport store)
         {
             Id = id;
             Connection = new SqliteConnection("Filename=:memory:");
@@ -43,7 +43,7 @@ public sealed class SyncEngineTests : IDisposable
                     .Options);
             Db.Database.Migrate();
             Hlc = new HlcSource(Zegar, id);
-            Engine = new SyncEngine(Db, skladnica, Hlc, id);
+            Engine = new SyncEngine(Db, store, Hlc, id);
         }
 
         public string Id { get; }
@@ -70,17 +70,17 @@ public sealed class SyncEngineTests : IDisposable
     private readonly string _katalog =
         Path.Combine(Path.GetTempPath(), "marshal-sync-" + Guid.NewGuid().ToString("N"));
 
-    private readonly Urzadzenie _biurko;
-    private readonly Urzadzenie _telefon;
+    private readonly Device _biurko;
+    private readonly Device _telefon;
     private readonly Guid _obszar = Guid.CreateVersion7();
 
     public SyncEngineTests()
     {
-        _biurko = new Urzadzenie("biurko", _katalog);
-        _telefon = new Urzadzenie("telefon", _katalog);
+        _biurko = new Device("biurko", _katalog);
+        _telefon = new Device("telefon", _katalog);
     }
 
-    private static Guid Dodaj(Urzadzenie u, string title)
+    private static Guid Dodaj(Device u, string title)
     {
         var task = TaskItem.Capture(title, u.Zegar.Now, u.Hlc.Next());
         u.Db.Tasks.Add(task);
@@ -121,9 +121,9 @@ public sealed class SyncEngineTests : IDisposable
         await _telefon.Engine.SyncAsync();
         await _biurko.Engine.SyncAsync();
 
-        foreach (var urzadzenie in new[] { _biurko, _telefon })
+        foreach (var device in new[] { _biurko, _telefon })
         {
-            var task = urzadzenie.TaskId(id)!;
+            var task = device.TaskId(id)!;
             task.Title.Should().Be("Złożyć wniosek o wymianę");
             task.Priority.Should().Be(Priority.High);
         }
@@ -224,8 +224,8 @@ public sealed class SyncEngineTests : IDisposable
         Dodaj(_biurko, "pierwsze");
         await _biurko.Engine.SyncAsync();
 
-        var skladnica = new LocalFolderTransport(_katalog);
-        await skladnica.WriteSegmentAsync("biurko", "000002", "{\"e\":\"Tasks\",\"id\":\n");
+        var store = new LocalFolderTransport(_katalog);
+        await store.WriteSegmentAsync("biurko", "000002", "{\"e\":\"Tasks\",\"id\":\n");
 
         Dodaj(_biurko, "trzecie");
         await _biurko.Engine.SyncAsync();
@@ -244,9 +244,9 @@ public sealed class SyncEngineTests : IDisposable
         Dodaj(_biurko, "drugie");
         await _biurko.Engine.SyncAsync();
 
-        var porcje = await new LocalFolderTransport(_katalog).ListSegmentsAsync();
+        var chunks = await new LocalFolderTransport(_katalog).ListSegmentsAsync();
 
-        porcje.Where(s => s.DeviceId == "biurko").Select(s => s.Name)
+        chunks.Where(s => s.DeviceId == "biurko").Select(s => s.Name)
             .Should().Equal("000001", "000002");
     }
 
@@ -273,8 +273,8 @@ public sealed class SyncEngineTests : IDisposable
         // płaskie nazwy plików zamiast katalogów na urządzenie. Jeśli scalanie zależy
         // od czegoś, co daje tylko system plików, to pęknie tutaj.
         var dysk = new FakeDrive();
-        using var biurko = new Urzadzenie("biurko", new GoogleDriveTransport(dysk));
-        using var telefon = new Urzadzenie("telefon", new GoogleDriveTransport(dysk));
+        using var biurko = new Device("biurko", new GoogleDriveTransport(dysk));
+        using var telefon = new Device("telefon", new GoogleDriveTransport(dysk));
 
         var id = Dodaj(biurko, "Zadzwonić do przychodni");
         await biurko.Engine.SyncAsync();

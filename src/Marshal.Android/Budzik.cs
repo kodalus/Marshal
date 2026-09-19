@@ -65,7 +65,7 @@ internal static class Budzik
                 return;
             }
 
-            var kiedy = moment.ToUnixTimeMilliseconds();
+            var when = moment.ToUnixTimeMilliseconds();
 
             // „AllowWhileIdle", bo bez tego drzemka systemu przesuwa przypomnienia
             // ustawione na noc na rano — czyli dokładnie wtedy, gdy przestają być
@@ -74,11 +74,11 @@ internal static class Budzik
 
             if (dokladny)
             {
-                zegar.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, kiedy, zamiar);
+                zegar.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
             }
             else
             {
-                zegar.SetAndAllowWhileIdle(AlarmType.RtcWakeup, kiedy, zamiar);
+                zegar.SetAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
             }
 
             // Ślad w dzienniku, bo przy zamkniętej aplikacji nie ma **żadnego** innego
@@ -92,20 +92,20 @@ internal static class Budzik
         catch (Exception e)
         {
             // Bez budzika przypomnienia działają po staremu, czyli przy otwartym oknie.
-            InAppNotifier.StanSystemowych = $"budzik: {e.GetType().Name}: {e.Message}";
-            await Zapisz("Przypomnienia: budzik", "nie udało się nastawić", e);
+            InAppNotifier.SystemStatus = $"budzik: {e.GetType().Name}: {e.Message}";
+            await Save("Przypomnienia: budzik", "nie udało się nastawić", e);
         }
     }
 
     /// <summary>Wpis do dziennika, który nie wywraca wołającego, gdy baza nie stoi.</summary>
-    public static async Task Zapisz(
-        string co, string content, Exception? blad = null, ActivityLevel? poziom = null)
+    public static async Task Save(
+        string co, string content, Exception? blad = null, ActivityLevel? level = null)
     {
         try
         {
             await AppServices.Provider.GetRequiredService<IActivityLog>().RecordAsync(
                 co, content,
-                poziom ?? (blad is null ? ActivityLevel.Ok : ActivityLevel.Problem),
+                level ?? (blad is null ? ActivityLevel.Ok : ActivityLevel.Problem),
                 blad?.ToString());
         }
         catch
@@ -170,7 +170,7 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
                         .GetRequiredService<ReminderService>()
                         .RunAsync();
 
-                    await Budzik.Zapisz(
+                    await Budzik.Save(
                         "Przypomnienia: budzik odebrany",
                         count == 0 ? "nie było czego pokazać" : $"pokazane: {count}");
                 }
@@ -233,7 +233,7 @@ internal sealed class OdbiorcaStartu : BroadcastReceiver
                 Powiadomienia.Podepnij(kontekst);
 
                 await AppServices.ReadyAsync();
-                await Budzik.Zapisz("Przypomnienia: start telefonu", "budziki nastawione od nowa");
+                await Budzik.Save("Przypomnienia: start telefonu", "budziki nastawione od nowa");
                 OdbiorcaBudzika.Obudz(kontekst);
             }
             catch (Exception e)

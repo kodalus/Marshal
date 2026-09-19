@@ -160,9 +160,9 @@ public sealed class RecurrenceScheduleTests
     [InlineData(RecurrenceKind.Weekly, RecurrenceAnchor.FromScheduled)]
     [InlineData(RecurrenceKind.Monthly, RecurrenceAnchor.FromScheduled)]
     [InlineData(RecurrenceKind.Yearly, RecurrenceAnchor.FromScheduled)]
-    public void Domyslne_zaczepienie_wynika_z_rodzaju(RecurrenceKind kind, RecurrenceAnchor oczekiwane)
+    public void Domyslne_zaczepienie_wynika_z_rodzaju(RecurrenceKind kind, RecurrenceAnchor waiting)
     {
-        RecurrenceRule.DefaultAnchorFor(kind).Should().Be(oczekiwane);
+        RecurrenceRule.DefaultAnchorFor(kind).Should().Be(waiting);
     }
 
     [Fact]

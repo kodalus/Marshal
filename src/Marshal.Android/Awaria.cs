@@ -37,10 +37,10 @@ internal static class Awaria
     public static void Pilnuj(Context kontekst)
     {
         // Dwa źródła, bo to dwie różne drogi: jedna z wątków Javy, druga z zarządzanych.
-        AndroidEnvironment.UnhandledExceptionRaiser += (_, e) => Zapisz(kontekst, e.Exception);
+        AndroidEnvironment.UnhandledExceptionRaiser += (_, e) => Save(kontekst, e.Exception);
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-            Zapisz(kontekst, e.ExceptionObject as Exception);
+            Save(kontekst, e.ExceptionObject as Exception);
     }
 
     /// <summary>Odczyt i skasowanie śladu po poprzednim uruchomieniu.</summary>
@@ -77,7 +77,7 @@ internal static class Awaria
     private static string Pierwsze(string slad) =>
         string.Join("\n", slad.Split('\n').Skip(1).Take(2)).Trim();
 
-    private static void Zapisz(Context kontekst, Exception? blad)
+    private static void Save(Context kontekst, Exception? blad)
     {
         try
         {
@@ -96,5 +96,5 @@ internal static class Awaria
     }
 
     private static string? Sciezka(Context kontekst) =>
-        kontekst.FilesDir is { AbsolutePath: { } katalog } ? Path.Combine(katalog, Plik) : null;
+        kontekst.FilesDir is { AbsolutePath: { } folder } ? Path.Combine(folder, Plik) : null;
 }

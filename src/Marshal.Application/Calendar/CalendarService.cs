@@ -562,17 +562,17 @@ public sealed class CalendarSyncService(
         // na dwóch kontach — udostępniony widnieje u obu stron pod tym samym adresem
         // — a to są wtedy dwa różne podłączenia, o różnych uprawnieniach.
         var wanted = externalId?.Trim() ?? string.Empty;
-        var account = string.IsNullOrWhiteSpace(account) ? null : account.Trim();
+        var normalized = string.IsNullOrWhiteSpace(account) ? null : account.Trim();
 
         if ((await store.SourcesAsync(ct)).FirstOrDefault(
-                z => z.Kind == kind && z.ExternalId == wanted && z.Account == account)
+                z => z.Kind == kind && z.ExternalId == wanted && z.Account == normalized)
             is { } alreadyThere)
         {
             return alreadyThere;
         }
 
         var source = new CalendarSource(
-            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, wanted, name, color, account);
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, wanted, name, color, normalized);
 
         // Poziom dostępu znany już przy podłączaniu — lista kalendarzy z konta podaje
         // go razem z nazwą i barwą. Bez tego kalendarz świąteczny wyglądałby na
@@ -743,7 +743,7 @@ public sealed class CalendarSyncService(
 
         var merged = 0;
         var all = await tasks.AllAsync(ct);
-        var areas = await areas.AllAsync(ct);
+        var allAreas = await areas.AllAsync(ct);
 
         foreach (var group in repeated)
         {
@@ -758,7 +758,7 @@ public sealed class CalendarSyncService(
                 // dokładnie tej usterki.
                 await store.ForgetEventsAsync(extra.Id, ct);
 
-                Reattach(extra.Id, stays.Id, all, areas);
+                Reattach(extra.Id, stays.Id, all, allAreas);
                 merged++;
             }
         }
@@ -881,7 +881,7 @@ public sealed class CalendarSyncService(
         // zrobiłoby z listy zadań kalendarz, w którym wszystko jest umówione.
         var selected = await tasks.FocusedBetweenAsync(from, from.AddDays(days), ct);
 
-        var tasks = upcoming
+        var planned = upcoming
             .Concat(selected.Where(w => upcoming.All(u => u.Id != w.Id)))
             .ToList();
 
@@ -939,7 +939,7 @@ public sealed class CalendarSyncService(
         var areaColors = allAreas.ToDictionary(o => o.Id, o => o.Color);
         var projectColors = ProjectColors(await projects.AllAsync(ct), areaColors);
 
-        foreach (var task in tasks)
+        foreach (var task in planned)
         {
             if (Entry(task, zone, Color(task, projectColors, areaColors)) is { } entry)
             {

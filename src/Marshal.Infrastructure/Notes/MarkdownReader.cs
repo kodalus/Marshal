@@ -30,31 +30,31 @@ public static class MarkdownReader
             return NoteDocument.Empty;
         }
 
-        var bloki = new List<MarkdownBlock>();
-        Flatten(Markdig.Markdown.Parse(markdown), bloki, listLevel: 0);
+        var blocks = new List<MarkdownBlock>();
+        Flatten(Markdig.Markdown.Parse(markdown), blocks, listLevel: 0);
 
-        return new NoteDocument(bloki);
+        return new NoteDocument(blocks);
     }
 
     private static void Flatten(ContainerBlock container, List<MarkdownBlock> output, int listLevel)
     {
-        foreach (var blok in container)
+        foreach (var block in container)
         {
-            switch (blok)
+            switch (block)
             {
-                case HeadingBlock naglowek:
-                    output.Add(Block(MarkdownBlockKind.Heading, naglowek.Level, naglowek.Inline));
+                case HeadingBlock heading:
+                    output.Add(Block(MarkdownBlockKind.Heading, heading.Level, heading.Inline));
                     break;
 
-                case ParagraphBlock akapit:
-                    output.Add(Block(MarkdownBlockKind.Paragraph, listLevel, akapit.Inline));
+                case ParagraphBlock paragraph:
+                    output.Add(Block(MarkdownBlockKind.Paragraph, listLevel, paragraph.Inline));
                     break;
 
-                case QuoteBlock cytat:
+                case QuoteBlock quote:
                     // Cytat rozkładany na akapity oznaczone jako cytat: cytat w cytacie
                     // istnieje w formacie, ale nie w notatce osobistej.
                     var before = output.Count;
-                    Flatten(cytat, output, listLevel);
+                    Flatten(quote, output, listLevel);
 
                     for (var i = before; i < output.Count; i++)
                     {
@@ -63,11 +63,11 @@ public static class MarkdownReader
 
                     break;
 
-                case ListBlock lista:
-                    foreach (var pozycja in lista.OfType<ListItemBlock>())
+                case ListBlock list:
+                    foreach (var item in list.OfType<ListItemBlock>())
                     {
                         var start = output.Count;
-                        Flatten(pozycja, output, listLevel + 1);
+                        Flatten(item, output, listLevel + 1);
 
                         // Pierwszy akapit pozycji staje się punktem listy; dalsze zostają
                         // akapitami z tym samym wcięciem, bo tym właśnie są.
@@ -75,7 +75,7 @@ public static class MarkdownReader
                         {
                             output[start] = output[start] with
                             {
-                                Kind = lista.IsOrdered
+                                Kind = list.IsOrdered
                                     ? MarkdownBlockKind.Numbered
                                     : MarkdownBlockKind.Bullet,
                                 Level = listLevel + 1,
@@ -85,8 +85,8 @@ public static class MarkdownReader
 
                     break;
 
-                case CodeBlock kod:
-                    var content = Lines(kod);
+                case CodeBlock code:
+                    var content = Lines(code);
                     output.Add(new MarkdownBlock(
                         MarkdownBlockKind.Code,
                         listLevel,
@@ -94,8 +94,8 @@ public static class MarkdownReader
                         content));
                     break;
 
-                case ContainerBlock zagniezdzony:
-                    Flatten(zagniezdzony, output, listLevel);
+                case ContainerBlock nested:
+                    Flatten(nested, output, listLevel);
                     break;
             }
         }
@@ -103,10 +103,10 @@ public static class MarkdownReader
 
     private static MarkdownBlock Block(MarkdownBlockKind kind, int level, ContainerInline? inline)
     {
-        var kawalki = new List<MarkdownSpan>();
-        Collect(inline, kawalki, bold: false, italic: false, link: null);
+        var pieces = new List<MarkdownSpan>();
+        Collect(inline, pieces, bold: false, italic: false, link: null);
 
-        return new MarkdownBlock(kind, level, kawalki, string.Concat(kawalki.Select(s => s.Text)));
+        return new MarkdownBlock(kind, level, pieces, string.Concat(pieces.Select(s => s.Text)));
     }
 
     private static void Collect(
@@ -121,27 +121,27 @@ public static class MarkdownReader
         {
             switch (element)
             {
-                case LiteralInline tekst:
-                    Append(output, tekst.Content.ToString(), bold, italic, false, link);
+                case LiteralInline text:
+                    Append(output, text.Content.ToString(), bold, italic, false, link);
                     break;
 
-                case CodeInline kod:
-                    Append(output, kod.Content ?? string.Empty, bold, italic, true, link);
+                case CodeInline code:
+                    Append(output, code.Content ?? string.Empty, bold, italic, true, link);
                     break;
 
-                case EmphasisInline wyroznienie:
+                case EmphasisInline emphasis:
                     // Dwa znaki to pogrubienie, jeden kursywa — tak mówi format
                     // i tak to widać w każdym edytorze.
                     Collect(
-                        wyroznienie,
+                        emphasis,
                         output,
-                        bold || wyroznienie.DelimiterCount >= 2,
-                        italic || wyroznienie.DelimiterCount == 1,
+                        bold || emphasis.DelimiterCount >= 2,
+                        italic || emphasis.DelimiterCount == 1,
                         link);
                     break;
 
-                case LinkInline odsylacz:
-                    Collect(odsylacz, output, bold, italic, odsylacz.Url);
+                case LinkInline link:
+                    Collect(link, output, bold, italic, link.Url);
                     break;
 
                 case LineBreakInline:
@@ -183,16 +183,16 @@ public static class MarkdownReader
 
     private static string Lines(CodeBlock block)
     {
-        var tekst = new StringBuilder();
+        var text = new StringBuilder();
 
-        foreach (var wiersz in block.Lines.Lines)
+        foreach (var row in block.Lines.Lines)
         {
-            if (wiersz.Slice.Text is not null)
+            if (row.Slice.Text is not null)
             {
-                tekst.AppendLine(wiersz.Slice.ToString());
+                text.AppendLine(row.Slice.ToString());
             }
         }
 
-        return tekst.ToString().TrimEnd('\n', '\r');
+        return text.ToString().TrimEnd('\n', '\r');
     }
 }

@@ -38,7 +38,7 @@ public sealed class BackupService(
     // Kopia czyta albo podmienia **całą** bazę, więc idzie przez bramę w całości,
     // a nie zapytaniami. Synchronizacja wchodząca w środek odtwarzania zapisałaby
     // na Dysk stan z połowy podmiany.
-    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
+    private readonly IDbQueue _queue = queue ?? new DirectQueue();
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -52,38 +52,38 @@ public sealed class BackupService(
 
     public async Task ExportAsync(Stream destination, CancellationToken ct = default)
     {
-        var plik = new BackupFile
+        var file = new BackupFile
         {
             CreatedAt = clock.Now,
             DeviceId = device.Id,
-            Lines = await _kolejka.RunAsync(() => BuildLinesAsync(ct), ct),
+            Lines = await _queue.RunAsync(() => BuildLinesAsync(ct), ct),
         };
 
-        await JsonSerializer.SerializeAsync(destination, plik, Json, ct);
+        await JsonSerializer.SerializeAsync(destination, file, Json, ct);
     }
 
     public async Task<ImportReport> ImportAsync(
         Stream source, ImportMode mode, CancellationToken ct = default)
     {
         // Czytanie pliku poza bramą: to strumień, nie baza, a bywa duży.
-        var plik = await JsonSerializer.DeserializeAsync<BackupFile>(source, Json, ct)
+        var file = await JsonSerializer.DeserializeAsync<BackupFile>(source, Json, ct)
             ?? throw new InvalidDataException("Plik nie wygląda na kopię zapasową Marshala.");
 
-        return await _kolejka.RunAsync(() => WgrajAsync(plik, mode, ct), ct);
+        return await _queue.RunAsync(() => UploadAsync(file, mode, ct), ct);
     }
 
-    private async Task<ImportReport> WgrajAsync(
-        BackupFile plik, ImportMode mode, CancellationToken ct)
+    private async Task<ImportReport> UploadAsync(
+        BackupFile file, ImportMode mode, CancellationToken ct)
     {
         // Wgranie kopii nie jest zmianą tego urządzenia: bez tego każdy odtworzony
         // rekord wróciłby do dziennika i poleciał na Dysk jako świeża zmiana,
         // wskrzeszając na drugim urządzeniu rzeczy skasowane po zrobieniu kopii.
-        using var zakres = SyncScope.Begin();
+        using var scope = SyncScope.Begin();
 
         // Wszystko albo nic. Podmiana całości czyści tabele **przed** wgraniem, więc
         // bez transakcji błąd w połowie zostawiłby bazę pustą i nieodtworzoną —
         // odtwarzanie kopii jest ostatnią rzeczą, która ma prawo kasować dane.
-        await using var transakcja = await db.Database.BeginTransactionAsync(ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         try
         {
@@ -92,7 +92,7 @@ public sealed class BackupService(
                 // Pusty plik przy podmianie to prawie na pewno pomyłka, a podmiana
                 // jest jedyną operacją w aplikacji, która kasuje dane naprawdę.
                 // Kto chce zacząć od zera, odinstalowuje aplikację.
-                if (plik.Lines.Count == 0)
+                if (file.Lines.Count == 0)
                 {
                     throw new InvalidDataException(
                         "Kopia nie zawiera żadnych wpisów — podmiana wyczyściłaby bazę i nie wgrała nic.");
@@ -102,23 +102,23 @@ public sealed class BackupService(
             }
 
             var applier = new ChangeApplier(db, hlc);
-            var nalozone = 0;
+            var applied = 0;
 
-            foreach (var wiersz in plik.Lines)
+            foreach (var row in file.Lines)
             {
-                if (applier.Apply(wiersz))
+                if (applier.Apply(row))
                 {
-                    nalozone++;
+                    applied++;
                 }
             }
 
             // Nierozpoznane tabele — plik z innej wersji albo z innej aplikacji —
             // scalanie pomija po cichu i słusznie. Przy podmianie to samo pominięcie
             // znaczy bazę wyczyszczoną i nieodtworzoną, więc tu musi być błędem.
-            if (mode == ImportMode.Replace && nalozone == 0)
+            if (mode == ImportMode.Replace && applied == 0)
             {
                 throw new InvalidDataException(
-                    $"Z {plik.Lines.Count} wpisów nie dało się wczytać żadnego — to nie wygląda na kopię Marshala.");
+                    $"Z {file.Lines.Count} wpisów nie dało się wczytać żadnego — to nie wygląda na kopię Marshala.");
             }
 
             // Scalanie podnosi zegar lokalny ponad znaczniki z pliku — tak samo jak
@@ -126,9 +126,9 @@ public sealed class BackupService(
             LastHlcStore.Stage(db, hlc.Last);
 
             await db.SaveChangesAsync(ct);
-            await transakcja.CommitAsync(ct);
+            await transaction.CommitAsync(ct);
 
-            return new ImportReport(plik.Lines.Count, nalozone, plik.Lines.Count - nalozone);
+            return new ImportReport(file.Lines.Count, applied, file.Lines.Count - applied);
         }
         catch
         {
@@ -151,59 +151,59 @@ public sealed class BackupService(
     /// </remarks>
     private async Task<List<ChangeLine>> BuildLinesAsync(CancellationToken ct)
     {
-        var wiersze = new List<ChangeLine>();
+        var rows = new List<ChangeLine>();
 
         foreach (var typ in db.Model.GetEntityTypes()
             .Where(t => typeof(Entity).IsAssignableFrom(t.ClrType))
             .OrderBy(t => t.GetTableName(), StringComparer.Ordinal))
         {
-            var tabela = typ.GetTableName()!;
+            var table = typ.GetTableName()!;
 
-            var znaczniki = (await db.FieldStamps
-                    .Where(s => s.EntityType == tabela)
+            var stamps = (await db.FieldStamps
+                    .Where(s => s.EntityType == table)
                     .ToListAsync(ct))
                 .ToDictionary(s => (s.EntityId, s.Field), s => s.Hlc);
 
-            var wlasciwosci = typ.GetProperties().Where(p => !p.IsPrimaryKey()).ToList();
+            var properties = typ.GetProperties().Where(p => !p.IsPrimaryKey()).ToList();
 
-            foreach (var encja in await RowsAsync(typ.ClrType, ct))
+            foreach (var entity in await RowsAsync(typ.ClrType, ct))
             {
-                var entry = db.Entry(encja);
+                var entry = db.Entry(entity);
 
                 // Pole bez znacznika to pole zapisane, zanim znaczniki istniały —
                 // albo ustawione konstruktorem. Znacznik encji jest wtedy jedynym,
                 // co o nim wiadomo, i jest prawdziwy: rekord na pewno nie zmienił się
                 // później niż jego własne UpdatedAt.
-                var domyslny = encja.UpdatedAt.ToString();
+                var default = entity.UpdatedAt.ToString();
 
-                foreach (var group in wlasciwosci
+                foreach (var group in properties
                     .Select(p => (
                         Pole: p.Name,
-                        Hlc: znaczniki.GetValueOrDefault((encja.Id, p.Name)),
-                        Wartosc: Encode(entry, p.Name)))
+                        Hlc: stamps.GetValueOrDefault((entity.Id, p.Name)),
+                        Value: Encode(entry, p.Name)))
 
                     // Pole bez znacznika i bez wartości nigdy nie było ustawione —
                     // dziennik pomija puste przy zakładaniu rekordu. Wypisane w kopii
                     // byłoby jawnym „wyczyść to", opatrzonym znacznikiem całej encji,
                     // i potrafiłoby skasować wartość nadaną w międzyczasie na drugim
                     // urządzeniu. Brak wiedzy o polu nie jest wiedzą, że jest puste.
-                    .Where(x => x.Hlc is not null || x.Wartosc is not null)
-                    .Select(x => (x.Pole, Hlc: x.Hlc ?? domyslny, x.Wartosc))
+                    .Where(x => x.Hlc is not null || x.Value is not null)
+                    .Select(x => (x.Pole, Hlc: x.Hlc ?? default, x.Value))
                     .GroupBy(x => x.Hlc)
                     .OrderBy(g => g.Key, StringComparer.Ordinal))
                 {
-                    wiersze.Add(new ChangeLine
+                    rows.Add(new ChangeLine
                     {
-                        Entity = tabela,
-                        Id = encja.Id.ToString(),
+                        Entity = table,
+                        Id = entity.Id.ToString(),
                         Hlc = group.Key,
-                        Fields = group.ToDictionary(x => x.Pole, x => x.Wartosc),
+                        Fields = group.ToDictionary(x => x.Pole, x => x.Value),
                     });
                 }
             }
         }
 
-        return wiersze;
+        return rows;
     }
 
     /// <summary>
@@ -239,16 +239,16 @@ public sealed class BackupService(
         foreach (var typ in db.Model.GetEntityTypes()
             .Where(t => typeof(Entity).IsAssignableFrom(t.ClrType)))
         {
-            var tabela = typ.GetTableName()!;
+            var table = typ.GetTableName()!;
 
             // Nazwa tabeli sklejana poza wywołaniem: przekazany wprost tekst z wstawką
             // trafiłby na przeciążenie dla łańcuchów formatowalnych i analizator
             // słusznie zgłosiłby wstrzykiwanie SQL. Źródłem jest tu model EF,
             // nie cokolwiek wpisanego przez człowieka.
-            var czyszczenie = "DELETE FROM \"" + tabela + "\"";
+            var cleanup = "DELETE FROM \"" + table + "\"";
 
-            await db.Database.ExecuteSqlRawAsync(czyszczenie, ct);
-            await db.FieldStamps.Where(s => s.EntityType == tabela).ExecuteDeleteAsync(ct);
+            await db.Database.ExecuteSqlRawAsync(cleanup, ct);
+            await db.FieldStamps.Where(s => s.EntityType == table).ExecuteDeleteAsync(ct);
         }
 
         // Śledzenie zmian trzyma obiekty, których w bazie już nie ma. Pozostawione
@@ -259,19 +259,19 @@ public sealed class BackupService(
 
     private static JsonNode? Encode(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry, string pole)
     {
-        var wlasciwosc = entry.Property(pole);
-        var wartosc = wlasciwosc.CurrentValue;
+        var property = entry.Property(pole);
+        var value = property.CurrentValue;
 
-        if (wartosc is null)
+        if (value is null)
         {
             return null;
         }
 
         // Postać bazodanowa, po konwerterze — dokładnie ta, którą niesie dziennik
         // zmian, żeby wgrywanie kopii i scalanie czytały to samo.
-        var konwerter = wlasciwosc.Metadata.GetValueConverter();
-        var zapisana = konwerter is null ? wartosc : konwerter.ConvertToProvider(wartosc);
+        var converter = property.Metadata.GetValueConverter();
+        var saved = converter is null ? value : converter.ConvertToProvider(value);
 
-        return zapisana is null ? null : JsonSerializer.SerializeToNode(zapisana, Json);
+        return saved is null ? null : JsonSerializer.SerializeToNode(saved, Json);
     }
 }

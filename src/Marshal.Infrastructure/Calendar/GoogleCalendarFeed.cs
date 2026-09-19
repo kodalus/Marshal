@@ -52,54 +52,54 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     private async Task<FeedResult> ReadAsync(
         CalendarSource source, string? syncToken, CancellationToken ct)
     {
-        var wydarzenia = new List<FeedEvent>();
-        string? strona = null;
-        string? nowyZeton = null;
-        var pelny = syncToken is null;
+        var events = new List<FeedEvent>();
+        string? page = null;
+        string? newToken = null;
+        var full = syncToken is null;
 
         do
         {
-            var zapytanie = service.Events.List(source.ExternalId);
-            zapytanie.MaxResults = 250;
-            zapytanie.PageToken = strona;
+            var query = service.Events.List(source.ExternalId);
+            query.MaxResults = 250;
+            query.PageToken = page;
 
             // Wystąpienia serii zamiast reguł: siatka godzinowa potrzebuje konkretnych
             // godzin, a rozwijaniem powtórzeń Google zajmuje się lepiej niż my.
-            zapytanie.SingleEvents = true;
+            query.SingleEvents = true;
 
             // Odwołane też, bo przy odczycie przyrostowym to jedyny sposób, żeby się
             // dowiedzieć, że coś zniknęło.
-            zapytanie.ShowDeleted = true;
+            query.ShowDeleted = true;
 
             if (syncToken is null)
             {
-                zapytanie.TimeMinDateTimeOffset = DateTimeOffset.UtcNow.AddMonths(-WindowMonths);
-                zapytanie.TimeMaxDateTimeOffset = DateTimeOffset.UtcNow.AddMonths(WindowMonths);
+                query.TimeMinDateTimeOffset = DateTimeOffset.UtcNow.AddMonths(-WindowMonths);
+                query.TimeMaxDateTimeOffset = DateTimeOffset.UtcNow.AddMonths(WindowMonths);
             }
             else
             {
                 // Zakresu i żetonu nie wolno podać razem — Google odrzuca takie zapytanie.
-                zapytanie.SyncToken = syncToken;
+                query.SyncToken = syncToken;
             }
 
-            var odpowiedz = await zapytanie.ExecuteAsync(ct);
+            var response = await query.ExecuteAsync(ct);
 
-            foreach (var ev in odpowiedz.Items ?? [])
+            foreach (var ev in response.Items ?? [])
             {
-                if (Convert(ev) is { } przetworzone)
+                if (Convert(ev) is { } processed)
                 {
-                    wydarzenia.Add(przetworzone);
+                    events.Add(processed);
                 }
             }
 
-            strona = odpowiedz.NextPageToken;
-            nowyZeton = odpowiedz.NextSyncToken ?? nowyZeton;
+            page = response.NextPageToken;
+            newToken = response.NextSyncToken ?? newToken;
         }
-        while (!string.IsNullOrEmpty(strona));
+        while (!string.IsNullOrEmpty(page));
 
-        var entry = await WpisAsync(source, ct);
+        var entry = await EntryAsync(source, ct);
 
-        return new FeedResult(wydarzenia, nowyZeton, pelny, entry.Color, entry.TylkoOdczyt);
+        return new FeedResult(events, newToken, full, entry.Color, entry.ReadOnly);
     }
 
     /// <summary>
@@ -125,14 +125,14 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     /// dalej i lądują w raporcie.
     /// </para>
     /// </remarks>
-    private async Task<(string? Color, bool? TylkoOdczyt)> WpisAsync(
+    private async Task<(string? Color, bool? ReadOnly)> EntryAsync(
         CalendarSource source, CancellationToken ct)
     {
         try
         {
             var entry = await service.CalendarList.Get(source.ExternalId).ExecuteAsync(ct);
 
-            return (entry.BackgroundColor, TylkoOdczyt(entry.AccessRole));
+            return (entry.BackgroundColor, ReadOnly(entry.AccessRole));
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.NotFound)
         {
@@ -152,9 +152,9 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     /// a objawem byłoby pole, którego nie da się kliknąć, bez żadnego wyjaśnienia.
     /// Odwrotna pomyłka kończy się odmową od Google — czyli zdaniem na ekranie.
     /// </remarks>
-    private static bool? TylkoOdczyt(string? poziom) => poziom is { Length: > 0 }
-        ? !string.Equals(poziom, "owner", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(poziom, "writer", StringComparison.OrdinalIgnoreCase)
+    private static bool? ReadOnly(string? level) => level is { Length: > 0 }
+        ? !string.Equals(level, "owner", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(level, "writer", StringComparison.OrdinalIgnoreCase)
         : null;
 
     private static FeedEvent? Convert(Google.Apis.Calendar.v3.Data.Event ev)
@@ -164,7 +164,7 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
             return null;
         }
 
-        var odwolane = string.Equals(ev.Status, "cancelled", StringComparison.Ordinal);
+        var cancelled = string.Equals(ev.Status, "cancelled", StringComparison.Ordinal);
 
         var start = Moment(ev.Start);
         var end = Moment(ev.End) ?? start?.AddHours(1);
@@ -174,7 +174,7 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
         // się dla niego wyłącznie to, że jest odwołane.
         if (start is null || end is null)
         {
-            return odwolane
+            return cancelled
                 ? new FeedEvent(
                     ev.Id, "(odwołane)", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch,
                     false, null, Cancelled: true)
@@ -188,7 +188,7 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
             end.Value,
             IsAllDay: ev.Start?.DateTimeDateTimeOffset is null,
             ev.Location,
-            odwolane);
+            cancelled);
     }
 
     private static DateTimeOffset? Moment(Google.Apis.Calendar.v3.Data.EventDateTime? when) =>
@@ -205,7 +205,7 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     /// </remarks>
     private static DateTimeOffset? ParseDate(object? date) => date switch
     {
-        string tekst when DateOnly.TryParse(tekst, CultureInfo.InvariantCulture, out var day) =>
+        string text when DateOnly.TryParse(text, CultureInfo.InvariantCulture, out var day) =>
             new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
         DateTime moment => new DateTimeOffset(moment.Date, TimeSpan.Zero),
         _ => null,

@@ -18,21 +18,21 @@ namespace Marshal.Infrastructure.Data;
 public sealed class UnitOfWork(
     MarshalDbContext db,
     IDbQueue? queue = null,
-    IWriteSignal? sygnal = null) : IUnitOfWork
+    IWriteSignal? signal = null) : IUnitOfWork
 {
-    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
+    private readonly IDbQueue _queue = queue ?? new DirectQueue();
 
     public async Task<int> SaveChangesAsync(CancellationToken ct = default)
     {
-        var wierszy = await _kolejka.RunAsync(() => db.SaveChangesAsync(ct), ct);
+        var rows = await _queue.RunAsync(() => db.SaveChangesAsync(ct), ct);
 
         // Tylko gdy naprawdę coś poszło do bazy. Zapis bez zmian zdarza się często —
         // odświeżenia, zapisy „na wszelki wypadek" — i prosiłby o przebieg bez treści.
-        if (wierszy > 0)
+        if (rows > 0)
         {
-            sygnal?.Report();
+            signal?.Report();
         }
 
-        return wierszy;
+        return rows;
     }
 }

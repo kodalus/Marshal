@@ -37,7 +37,7 @@ public sealed class ChangeJournalTests : IDisposable
 
     private Hlc Stamp() => new(_znacznik += 10, 0, "biurko");
 
-    private TaskItem Zapisz(string title = "Zadzwonić do przychodni")
+    private TaskItem Save(string title = "Zadzwonić do przychodni")
     {
         var task = TaskItem.Capture(title, new Zegar().Now, Stamp());
         _db.Tasks.Add(task);
@@ -48,7 +48,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Nowa_encja_zapisuje_wpis_dla_kazdego_wypelnionego_pola()
     {
-        Zapisz();
+        Save();
 
         var entries = _db.Changes.ToList();
         entries.Should().NotBeEmpty();
@@ -70,7 +70,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Znacznik_dopisany_i_niezapisany_nie_powiela_sie_przy_zapisie()
     {
-        var task = Zapisz();
+        var task = Save();
 
         // Notatka jest pusta przy zakładaniu, więc **nie ma jeszcze swojego znacznika** —
         // ani w bazie, ani w śledzeniu. To jest dokładnie ten stan, w którym nakładanie
@@ -90,7 +90,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Klucz_glowny_nie_trafia_do_dziennika_jako_pole()
     {
-        Zapisz();
+        Save();
 
         _db.Changes.Select(w => w.Field).Should().NotContain("Id");
     }
@@ -98,7 +98,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Puste_pola_nowej_encji_nie_zasmiecaja_dziennika()
     {
-        Zapisz();
+        Save();
 
         _db.Changes.Select(w => w.Field).Should().NotContain(["Deadline", "WaitingForWho", "ProjectId"]);
     }
@@ -106,7 +106,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Zmiana_zapisuje_wylacznie_pola_faktycznie_zmienione()
     {
-        var task = Zapisz();
+        var task = Save();
         var poDodaniu = _db.Changes.Count();
 
         task.Rename("Zadzwonić do przychodni po skierowanie", Stamp());
@@ -119,7 +119,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Wpis_niesie_wartosc_w_postaci_bazodanowej()
     {
-        Zapisz("kupić mleko");
+        Save("kupić mleko");
 
         _db.Changes.Single(w => w.Field == "Title").Value.Should().Be("\"kupić mleko\"");
 
@@ -133,18 +133,18 @@ public sealed class ChangeJournalTests : IDisposable
     {
         // Format tekstowy ma sens tylko wtedy, gdy da się go czytać. Domyślny
         // serializator zamieniłby każdą polską literę na sekwencję \uXXXX.
-        Zapisz("zażółć gęślą jaźń");
+        Save("zażółć gęślą jaźń");
 
-        var wartosc = _db.Changes.Single(w => w.Field == "Title").Value;
+        var value = _db.Changes.Single(w => w.Field == "Title").Value;
 
-        wartosc.Should().NotContain("\\u");
-        wartosc.Should().Contain("zażółć gęślą jaźń");
+        value.Should().NotContain("\\u");
+        value.Should().Contain("zażółć gęślą jaźń");
     }
 
     [Fact]
     public void Znacznik_wpisu_jest_znacznikiem_encji()
     {
-        var task = Zapisz();
+        var task = Save();
 
         _db.Changes.Should().OnlyContain(w => w.Hlc == task.UpdatedAt.ToString());
     }
@@ -152,7 +152,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Znaczniki_pol_powstaja_i_sa_podnoszone_przy_zmianie()
     {
-        var task = Zapisz();
+        var task = Save();
         var tytulPrzed = _db.FieldStamps.Single(f => f.Field == "Title").Hlc;
 
         task.Rename("inny tytuł", Stamp());
@@ -168,7 +168,7 @@ public sealed class ChangeJournalTests : IDisposable
     {
         // To jest cały sens tabeli: bez niej po zmianie tytułu nie dałoby się
         // stwierdzić, że lokalna waga pochodzi sprzed tej zmiany.
-        var task = Zapisz();
+        var task = Save();
         var stanPrzed = _db.FieldStamps.Single(f => f.Field == "State").Hlc;
 
         task.Rename("inny tytuł", Stamp());
@@ -180,7 +180,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Kazde_pole_ma_dokladnie_jeden_znacznik()
     {
-        var task = Zapisz();
+        var task = Save();
         task.Rename("raz", Stamp());
         _db.SaveChanges();
         task.Rename("dwa", Stamp());
@@ -192,7 +192,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Dziennik_nie_zapisuje_samego_siebie()
     {
-        Zapisz();
+        Save();
 
         _db.Changes.Select(w => w.EntityType).Should().NotContain(["Changes", "FieldStamps"]);
     }
@@ -200,7 +200,7 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Wpisy_zaczynaja_jako_niewyslane()
     {
-        Zapisz();
+        Save();
 
         _db.Changes.Should().OnlyContain(w => !w.Sent);
     }

@@ -96,12 +96,12 @@ public static class DependencyInjection
             var db = new MarshalDbContext(
                 sp.GetRequiredService<DbContextOptions<MarshalDbContext>>());
 
-            var tozsamosc = sp.GetRequiredService<IDeviceIdentity>();
+            var identity = sp.GetRequiredService<IDeviceIdentity>();
 
             return new HlcSource(
                 sp.GetRequiredService<IClock>(),
-                () => tozsamosc.Id,
-                () => LastHlcStore.Read(db, tozsamosc.Id));
+                () => identity.Id,
+                () => LastHlcStore.Read(db, identity.Id));
         });
 
         services.AddSingleton<ITaskRepository, TaskRepository>();
@@ -114,9 +114,9 @@ public static class DependencyInjection
         services.AddSingleton<IContactRepository, ContactRepository>();
         // Brama na bazę przed jednostką pracy, bo to ona przez nią przechodzi.
         // Jedna na proces — dwie bramy to brak bramy.
-        services.AddSingleton<IDbQueue, KolejkaBazy>();
+        services.AddSingleton<IDbQueue, DbQueue>();
         // Znak zapisu: jeden na proces, bo podnosi go jednostka pracy, a nasłuchuje okno.
-        services.AddSingleton<IWriteSignal, SygnalZapisu>();
+        services.AddSingleton<IWriteSignal, WriteSignal>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
         // Dziennik bierze same opcje, nie wspólny kontekst: zapis w środku cudzej

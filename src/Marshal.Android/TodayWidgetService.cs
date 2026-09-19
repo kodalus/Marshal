@@ -179,22 +179,22 @@ public sealed class TodayWidgetService : RemoteViewsService
 
         private const char Wiersz = '\u001e';
 
-        private static string Klucz(int widgetId) => $"wiersze-{widgetId}";
+        private static string Key(int widgetId) => $"wiersze-{widgetId}";
 
         private static IReadOnlyList<PlanRow> Zapamietane(Context kontekst, int widgetId)
         {
             try
             {
-                var zapis = kontekst
+                var patch = kontekst
                     .GetSharedPreferences(TodayWidget.Pamiec, FileCreationMode.Private)
-                    ?.GetString(Klucz(widgetId), null);
+                    ?.GetString(Key(widgetId), null);
 
-                if (string.IsNullOrEmpty(zapis))
+                if (string.IsNullOrEmpty(patch))
                 {
                     return [];
                 }
 
-                return zapis
+                return patch
                     .Split(Wiersz, StringSplitOptions.RemoveEmptyEntries)
                     .Select(w => w.Split(Miedzy))
                     .Where(p => p.Length == 4)
@@ -216,13 +216,13 @@ public sealed class TodayWidgetService : RemoteViewsService
         }
 
         private static void Zapamietaj(
-            Context kontekst, int widgetId, IReadOnlyList<PlanRow> wiersze)
+            Context kontekst, int widgetId, IReadOnlyList<PlanRow> rows)
         {
             try
             {
-                var zapis = string.Join(
+                var patch = string.Join(
                     Wiersz,
-                    wiersze.Select(w => string.Join(
+                    rows.Select(w => string.Join(
                         Miedzy,
                         w.TaskId?.ToString() ?? string.Empty,
                         Czysto(w.Title),
@@ -230,7 +230,7 @@ public sealed class TodayWidgetService : RemoteViewsService
                         Czysto(w.Color ?? string.Empty))));
 
                 kontekst.GetSharedPreferences(TodayWidget.Pamiec, FileCreationMode.Private)
-                    ?.Edit()?.PutString(Klucz(widgetId), zapis)?.Apply();
+                    ?.Edit()?.PutString(Key(widgetId), patch)?.Apply();
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
@@ -239,8 +239,8 @@ public sealed class TodayWidgetService : RemoteViewsService
         }
 
         /// <summary>Bez znaków rozdzielających — tytuł jest cudzym tekstem.</summary>
-        private static string Czysto(string tekst) =>
-            tekst.Replace(Miedzy, ' ').Replace(Wiersz, ' ');
+        private static string Czysto(string text) =>
+            text.Replace(Miedzy, ' ').Replace(Wiersz, ' ');
 
         /// <summary>Ponowna prośba o wiersze, gdy baza będzie już gotowa.</summary>
         /// <remarks>
@@ -271,12 +271,12 @@ public sealed class TodayWidgetService : RemoteViewsService
                 return null;
             }
 
-            var pozycja = _wiersze[position];
+            var item = _wiersze[position];
             var widok = new RemoteViews(kontekst.PackageName, Resource.Layout.widget_wiersz);
 
-            widok.SetTextViewText(Resource.Id.title, pozycja.Title);
-            widok.SetTextViewText(Resource.Id.podpis, pozycja.Caption);
-            widok.SetInt(Resource.Id.pasek, "setBackgroundColor", Color(pozycja.Color));
+            widok.SetTextViewText(Resource.Id.title, item.Title);
+            widok.SetTextViewText(Resource.Id.podpis, item.Caption);
+            widok.SetInt(Resource.Id.pasek, "setBackgroundColor", Color(item.Color));
 
             // Uzupełnienie wzorca, nie własny zamiar: wierszowi listy nie da się dać
             // osobnego zamiaru oczekującego — system trzyma jeden wzorzec na całą listę
@@ -287,7 +287,7 @@ public sealed class TodayWidgetService : RemoteViewsService
             // że czeka. Kwadracik zostaje wtedy schowany — niewidoczny, a nie wyłączony,
             // bo wyłączony wyglądałby na zepsuty. Miejsce po nim zostaje, żeby wiersze
             // miały wspólną krawędź tekstu.
-            if (pozycja.TaskId is { } task)
+            if (item.TaskId is { } task)
             {
                 widok.SetViewVisibility(Resource.Id.zrobione, ViewStates.Visible);
 
@@ -312,7 +312,7 @@ public sealed class TodayWidgetService : RemoteViewsService
             var otwarcie = new Intent();
             otwarcie.PutExtra(TodayWidget.CoOtworzExtra, TodayWidget.CoOtworz);
 
-            if (pozycja.TaskId is { } otwierane)
+            if (item.TaskId is { } otwierane)
             {
                 otwarcie.PutExtra(TodayWidget.TaskIdExtra, otwierane.ToString());
             }
@@ -355,16 +355,16 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// Wywrotka przy rysowaniu wiersza nie daje żadnego objawu poza zepsutą listą
         /// na ekranie domowym, więc zły zapis schodzi na barwę domyślną.
         /// </remarks>
-        private static int Color(string? zapis)
+        private static int Color(string? patch)
         {
-            if (string.IsNullOrWhiteSpace(zapis))
+            if (string.IsNullOrWhiteSpace(patch))
             {
                 return Akcent;
             }
 
             try
             {
-                return global::Android.Graphics.Color.ParseColor(zapis).ToArgb();
+                return global::Android.Graphics.Color.ParseColor(patch).ToArgb();
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {

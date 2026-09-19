@@ -36,15 +36,15 @@ public sealed class TaskMappingTests : IDisposable
         var deadline = new DateOnly(2026, 9, 30);
         Guid id;
 
-        using (var zapis = Kontekst())
+        using (var patch = Kontekst())
         {
             var task = TaskItem.Capture("Złożyć wniosek", Teraz, new Hlc(1000, 0, "a"));
             task.Schedule(area, day, new Hlc(2000, 0, "a"));
             task.SetDeadline(deadline, new Hlc(3000, 0, "a"));
             task.SetNote("Załączniki: **skan dowodu**", new Hlc(4000, 0, "a"));
             id = task.Id;
-            zapis.Tasks.Add(task);
-            zapis.SaveChanges();
+            patch.Tasks.Add(task);
+            patch.SaveChanges();
         }
 
         using var odczyt = Kontekst();

@@ -32,13 +32,13 @@ public sealed class DeviceIdentity(MarshalDbContext db) : IDeviceIdentity
 
     private string Resolve()
     {
-        var zapisany = db.LocalSettings
+        var saved = db.LocalSettings
             .AsNoTracking()
             .FirstOrDefault(s => s.Key == LocalSetting.DeviceIdKey);
 
-        if (zapisany is not null)
+        if (saved is not null)
         {
-            return zapisany.Value;
+            return saved.Value;
         }
 
         var created = Generate(Environment.MachineName);
@@ -54,7 +54,7 @@ public sealed class DeviceIdentity(MarshalDbContext db) : IDeviceIdentity
     /// </summary>
     internal static string Generate(string machineName)
     {
-        var czytelny = new string(machineName
+        var readable = new string(machineName
             .Where(char.IsAsciiLetterOrDigit)
             .Take(12)
             .ToArray())
@@ -64,8 +64,8 @@ public sealed class DeviceIdentity(MarshalDbContext db) : IDeviceIdentity
         // 48-bitowego znacznika czasu w milisekundach, więc jego pierwsze dwanaście
         // znaków szesnastkowych **to jest ten znacznik** — dwa urządzenia zakładane
         // w tej samej milisekundzie dostałyby ten sam człon. Test to wychwycił.
-        var losowy = Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
+        var random = Convert.ToHexString(RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
 
-        return czytelny.Length == 0 ? losowy : $"{czytelny}-{losowy}";
+        return readable.Length == 0 ? random : $"{readable}-{random}";
     }
 }

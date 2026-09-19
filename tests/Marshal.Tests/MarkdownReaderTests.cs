@@ -15,9 +15,9 @@ public sealed class MarkdownReaderTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   \n  ")]
-    public void Pusta_tresc_daje_pusty_dokument(string? tekst)
+    public void Pusta_tresc_daje_pusty_dokument(string? text)
     {
-        MarkdownReader.Read(tekst).IsEmpty.Should().BeTrue();
+        MarkdownReader.Read(text).IsEmpty.Should().BeTrue();
     }
 
     [Fact]
@@ -34,12 +34,12 @@ public sealed class MarkdownReaderTests
     [InlineData("# Wizja", 1)]
     [InlineData("## Zasady", 2)]
     [InlineData("### Szczegół", 3)]
-    public void Naglowek_zachowuje_poziom(string tekst, int poziom)
+    public void Naglowek_zachowuje_poziom(string text, int level)
     {
-        var blok = MarkdownReader.Read(tekst).Blocks.Single();
+        var block = MarkdownReader.Read(text).Blocks.Single();
 
-        blok.Kind.Should().Be(MarkdownBlockKind.Heading);
-        blok.Level.Should().Be(poziom);
+        block.Kind.Should().Be(MarkdownBlockKind.Heading);
+        block.Level.Should().Be(level);
     }
 
     [Fact]
@@ -81,21 +81,21 @@ public sealed class MarkdownReaderTests
     [Fact]
     public void Pogrubienie_i_kursywa_sa_rozrozniane()
     {
-        var blok = MarkdownReader.Read("zwykły **gruby** i *pochyły*").Blocks.Single();
+        var block = MarkdownReader.Read("zwykły **gruby** i *pochyły*").Blocks.Single();
 
-        blok.Spans.Should().Contain(s => s.Text == "gruby" && s.Bold);
-        blok.Spans.Should().Contain(s => s.Text == "pochyły" && s.Italic);
-        blok.Spans.Should().Contain(s => s.Text.StartsWith("zwykły", StringComparison.Ordinal) && !s.Bold);
+        block.Spans.Should().Contain(s => s.Text == "gruby" && s.Bold);
+        block.Spans.Should().Contain(s => s.Text == "pochyły" && s.Italic);
+        block.Spans.Should().Contain(s => s.Text.StartsWith("zwykły", StringComparison.Ordinal) && !s.Bold);
     }
 
     [Fact]
     public void Odsylacz_niesie_adres()
     {
-        var blok = MarkdownReader.Read("zobacz [tutaj](https://example.test/a)").Blocks.Single();
-        var odsylacz = blok.Spans.Single(s => s.IsLink);
+        var block = MarkdownReader.Read("zobacz [tutaj](https://example.test/a)").Blocks.Single();
+        var link = block.Spans.Single(s => s.IsLink);
 
-        odsylacz.Text.Should().Be("tutaj");
-        odsylacz.Link.Should().Be("https://example.test/a");
+        link.Text.Should().Be("tutaj");
+        link.Link.Should().Be("https://example.test/a");
     }
 
     [Fact]
@@ -108,10 +108,10 @@ public sealed class MarkdownReaderTests
     [Fact]
     public void Blok_kodu_zachowuje_wiersze()
     {
-        var blok = MarkdownReader.Read("```\npierwsza\ndruga\n```").Blocks.Single();
+        var block = MarkdownReader.Read("```\npierwsza\ndruga\n```").Blocks.Single();
 
-        blok.IsCode.Should().BeTrue();
-        blok.PlainText.Should().Be("pierwsza\ndruga");
+        block.IsCode.Should().BeTrue();
+        block.PlainText.Should().Be("pierwsza\ndruga");
     }
 
     [Fact]
@@ -126,19 +126,19 @@ public sealed class MarkdownReaderTests
     {
         // Markdig dzieli tekst tam, gdzie jemu wygodnie. Bez sklejania każdy kawałek
         // byłby osobną kontrolką do narysowania.
-        var blok = MarkdownReader.Read("Zwykłe zdanie bez żadnych wyróżnień w środku.")
+        var block = MarkdownReader.Read("Zwykłe zdanie bez żadnych wyróżnień w środku.")
             .Blocks.Single();
 
-        blok.Spans.Should().ContainSingle();
+        block.Spans.Should().ContainSingle();
     }
 
     [Fact]
     public void Tekst_wokol_wyroznienia_sklada_sie_w_calosc()
     {
-        var blok = MarkdownReader.Read("przed **środek** po").Blocks.Single();
+        var block = MarkdownReader.Read("przed **środek** po").Blocks.Single();
 
-        blok.Spans.Should().HaveCount(3);
-        blok.PlainText.Should().Be("przed środek po");
+        block.Spans.Should().HaveCount(3);
+        block.PlainText.Should().Be("przed środek po");
     }
 
     [Fact]

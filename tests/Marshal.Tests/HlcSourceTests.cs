@@ -18,10 +18,10 @@ public class HlcSourceTests
     {
         var source = new HlcSource(new ZegarStojacy(), "biurko");
 
-        var znaczniki = Enumerable.Range(0, 100).Select(_ => source.Next()).ToArray();
+        var stamps = Enumerable.Range(0, 100).Select(_ => source.Next()).ToArray();
 
-        znaczniki.Should().BeInAscendingOrder();
-        znaczniki.Should().OnlyHaveUniqueItems();
+        stamps.Should().BeInAscendingOrder();
+        stamps.Should().OnlyHaveUniqueItems();
     }
 
     [Fact]
@@ -40,11 +40,11 @@ public class HlcSourceTests
     public void Observe_podnosi_zegar_ponad_znacznik_zdalny()
     {
         var source = new HlcSource(new ZegarStojacy(), "biurko");
-        var zdalny = new Hlc(9_000_000, 3, "telefon");
+        var remote = new Hlc(9_000_000, 3, "telefon");
 
-        source.Observe(zdalny);
+        source.Observe(remote);
 
-        source.Next().Should().BeGreaterThan(zdalny);
+        source.Next().Should().BeGreaterThan(remote);
     }
 
     [Fact]

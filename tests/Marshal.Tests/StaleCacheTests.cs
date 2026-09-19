@@ -48,9 +48,9 @@ public sealed class StaleCacheTests : IDisposable
     }
 
     /// <summary>Wpisanie wartości tak, jak robi to scalanie: prosto we właściwość.</summary>
-    private void WpiszZBoku<T>(T encja, string pole, object? wartosc)
+    private void WpiszZBoku<T>(T entity, string pole, object? value)
         where T : class =>
-        _db.Entry(encja).Property(pole).CurrentValue = wartosc;
+        _db.Entry(entity).Property(pole).CurrentValue = value;
 
     [Fact]
     public void Regula_powtarzania_odswieza_sie_po_wpisaniu_z_boku()

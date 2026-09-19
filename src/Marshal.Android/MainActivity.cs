@@ -74,7 +74,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Droga po zgodę Google. Kontekst aplikacji, nie okna: zgoda przeżywa obrót
         // telefonu i zamknięcie okna, a okno zapamiętane w polu statycznym zostałoby
         // w pamięci na długo po tym, jak przestało istnieć.
-        GoogleDriveFactory.OdbiorcaKodu = () => new OdbiorcaKoduAndroid(ApplicationContext!);
+        GoogleDriveFactory.CodeReceiver = () => new OdbiorcaKoduAndroid(ApplicationContext!);
 
         // Budziki nastawiane także przy otwieraniu, nie tylko przy wychodzeniu.
         // Wyjście bywa gwałtowne — zdjęcie aplikacji z listy ostatnich potrafi zabić

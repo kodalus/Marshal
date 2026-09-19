@@ -84,10 +84,10 @@ public sealed class StructureEditService(
             return $"Obszar ma projekty ({count}) — przenieś je albo usuń najpierw.";
         }
 
-        var tasks = await tasks.ByAreaAsync(areaId, ct);
+        var found = await tasks.ByAreaAsync(areaId, ct);
 
-        return tasks.Count > 0
-            ? $"Obszar ma zadania ({tasks.Count}) — przenieś je gdzie indziej."
+        return found.Count > 0
+            ? $"Obszar ma zadania ({found.Count}) — przenieś je gdzie indziej."
             : null;
     }
 
@@ -199,10 +199,10 @@ public sealed class StructureEditService(
             return;
         }
 
-        if (calendarId is { } calendarId)
+        if (calendarId is { } chosen)
         {
             foreach (var other in (await areas.AllAsync(ct))
-                .Where(o => o.Id != areaId && o.CalendarId == calendarId))
+                .Where(o => o.Id != areaId && o.CalendarId == chosen))
             {
                 other.SetCalendar(null, hlc.Next());
             }
@@ -241,10 +241,10 @@ public sealed class StructureEditService(
             return "Projekt ma podprojekty — najpierw usuń albo odepnij je.";
         }
 
-        var tasks = await tasks.ByProjectAsync(projectId, ct);
+        var found = await tasks.ByProjectAsync(projectId, ct);
 
-        return tasks.Count > 0
-            ? $"Projekt ma zadania ({tasks.Count}) — przenieś je albo zamknij projekt."
+        return found.Count > 0
+            ? $"Projekt ma zadania ({found.Count}) — przenieś je albo zamknij projekt."
             : null;
     }
 

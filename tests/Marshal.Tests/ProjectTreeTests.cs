@@ -25,10 +25,10 @@ public class ProjectTreeTests
     {
         var areas = new[] { Obszar("Praca", 1), Obszar("Dom", 2) };
 
-        var wiersze = ProjectTree.Build(areas, []);
+        var rows = ProjectTree.Build(areas, []);
 
-        wiersze.Select(w => w.Label).Should().Equal("Praca", "Dom");
-        wiersze.Should().OnlyContain(w => w.IsArea);
+        rows.Select(w => w.Label).Should().Equal("Praca", "Dom");
+        rows.Should().OnlyContain(w => w.IsArea);
     }
 
     [Fact]
@@ -38,10 +38,10 @@ public class ProjectTreeTests
         var dom = Obszar("Dom", 2);
         var projects = new[] { Projekt("Raport oddany", work.Id), Projekt("Opony wymienione", dom.Id) };
 
-        var wiersze = ProjectTree.Build([work, dom], projects);
+        var rows = ProjectTree.Build([work, dom], projects);
 
-        wiersze.Select(w => w.Label).Should().Equal("Praca", "Raport oddany", "Dom", "Opony wymienione");
-        wiersze[1].Depth.Should().Be(1);
+        rows.Select(w => w.Label).Should().Equal("Praca", "Raport oddany", "Dom", "Opony wymienione");
+        rows[1].Depth.Should().Be(1);
     }
 
     [Fact]
@@ -51,10 +51,10 @@ public class ProjectTreeTests
         var cel = Projekt("Prawo jazdy jest w portfelu", area.Id);
         var step = Projekt("Egzamin zdany", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [cel, step]);
 
-        wiersze.Select(w => w.Depth).Should().Equal(0, 1, 2);
-        wiersze.Last().Label.Should().Be("Egzamin zdany");
+        rows.Select(w => w.Depth).Should().Equal(0, 1, 2);
+        rows.Last().Label.Should().Be("Egzamin zdany");
     }
 
     [Fact]
@@ -66,11 +66,11 @@ public class ProjectTreeTests
         var area = Obszar("Urzędy", 1);
         var sierota = Projekt("Egzamin zdany", area.Id, parent: Guid.CreateVersion7());
 
-        var wiersze = ProjectTree.Build([area], [sierota]);
+        var rows = ProjectTree.Build([area], [sierota]);
 
-        wiersze.Should().HaveCount(2);
-        wiersze.Last().Label.Should().Be("Egzamin zdany");
-        wiersze.Last().Depth.Should().Be(1);
+        rows.Should().HaveCount(2);
+        rows.Last().Label.Should().Be("Egzamin zdany");
+        rows.Last().Depth.Should().Be(1);
     }
 
     [Fact]
@@ -93,17 +93,17 @@ public class ProjectTreeTests
         var cel = Projekt("Cel", area.Id);
         var step = Projekt("Krok", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [cel, step]);
 
-        wiersze.Select(w => w.Id).Should().OnlyHaveUniqueItems();
+        rows.Select(w => w.Id).Should().OnlyHaveUniqueItems();
     }
 
     [Fact]
     public void Obszary_ida_wedlug_wlasnej_kolejnosci()
     {
-        var wiersze = ProjectTree.Build([Obszar("Trzeci", 3), Obszar("Pierwszy", 1), Obszar("Drugi", 2)], []);
+        var rows = ProjectTree.Build([Obszar("Trzeci", 3), Obszar("Pierwszy", 1), Obszar("Drugi", 2)], []);
 
-        wiersze.Select(w => w.Label).Should().Equal("Pierwszy", "Drugi", "Trzeci");
+        rows.Select(w => w.Label).Should().Equal("Pierwszy", "Drugi", "Trzeci");
     }
 
     /// <summary>
@@ -123,9 +123,9 @@ public class ProjectTreeTests
         var cel = Projekt("Cel", area.Id);
         var step = Projekt("Krok", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [cel, step]);
 
-        wiersze.Select(w => w.Color).Should().AllBeEquivalentTo("#4E7FD8");
+        rows.Select(w => w.Color).Should().AllBeEquivalentTo("#4E7FD8");
     }
 
     [Fact]
@@ -138,10 +138,10 @@ public class ProjectTreeTests
         cel.SetColor("#CF5757", Stamp());
         var step = Projekt("Krok", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [cel, step]);
 
-        wiersze.Single(w => w.Label == "Praca").Color.Should().Be("#4E7FD8");
-        wiersze.Single(w => w.Label == "Cel").Color.Should().Be("#CF5757");
-        wiersze.Single(w => w.Label == "Krok").Color.Should().Be("#CF5757");
+        rows.Single(w => w.Label == "Praca").Color.Should().Be("#4E7FD8");
+        rows.Single(w => w.Label == "Cel").Color.Should().Be("#CF5757");
+        rows.Single(w => w.Label == "Krok").Color.Should().Be("#CF5757");
     }
 }

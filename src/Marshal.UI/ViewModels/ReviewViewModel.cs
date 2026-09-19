@@ -213,10 +213,10 @@ public sealed partial class ReviewViewModel(
         Balance.Clear();
         if (IsBalanceStep)
         {
-            foreach (var wiersz in await queries.BalanceAsync(
+            foreach (var row in await queries.BalanceAsync(
                 clock.Today))
             {
-                Balance.Add(wiersz);
+                Balance.Add(row);
             }
         }
 

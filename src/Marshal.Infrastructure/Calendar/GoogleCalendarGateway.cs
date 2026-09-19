@@ -42,7 +42,7 @@ public sealed record GoogleCalendarInfo(
     bool ReadOnly = false)
 {
     /// <summary>Nazwa z kontem, gdy kont jest więcej niż jedno. Na listę wyboru.</summary>
-    public string Opis
+    public string Description
     {
         get
         {
@@ -64,9 +64,9 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// pokazywałoby kalendarze tego konta, którego żeton akurat wczytano jako pierwszy,
     /// a przy zapisie trafiałoby do cudzego kalendarza z uprawnieniami nie tej osoby.
     /// </remarks>
-    private readonly Dictionary<string, CalendarService> _uslugi = [];
+    private readonly Dictionary<string, CalendarService> _services = [];
 
-    private readonly Dictionary<string, GoogleCalendarFeed> _kanaly = [];
+    private readonly Dictionary<string, GoogleCalendarFeed> _feeds = [];
 
     /// <summary>
     /// Brama przed składaniem połączeń.
@@ -78,7 +78,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// z dwóch wątków naraz potrafi zostać uszkodzony w środku — objawem jest odczyt,
     /// który nie wraca. To za wysoka cena za oszczędzenie jednej bramy.
     /// </remarks>
-    private readonly SemaphoreSlim _brama = new(1, 1);
+    private readonly SemaphoreSlim _gate = new(1, 1);
 
     public CalendarKind Kind => CalendarKind.Google;
 
@@ -89,7 +89,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
         try
         {
-            return await (await PolaczAsync(source.Account, ct)).FetchAsync(source, syncToken, ct);
+            return await (await ConnectAsync(source.Account, ct)).FetchAsync(source, syncToken, ct);
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.NotFound)
         {
@@ -114,10 +114,10 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     public async Task<IReadOnlyList<GoogleCalendarInfo>> ListAsync(
         string? account = null, CancellationToken ct = default)
     {
-        var usluga = await UslugaAsync(account, ct);
-        var odpowiedz = await usluga.CalendarList.List().ExecuteAsync(ct);
+        var service = await ServiceAsync(account, ct);
+        var response = await service.CalendarList.List().ExecuteAsync(ct);
 
-        return (odpowiedz.Items ?? [])
+        return (response.Items ?? [])
             .Where(k => !string.IsNullOrWhiteSpace(k.Id))
             .Select(k => new GoogleCalendarInfo(
                 k.Id,
@@ -126,11 +126,11 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
                 // Barwa prosto z konta: kalendarze rozpoznaje się po kolorze, który
                 // się w Google ustawiło, a nie po kolorze, który wylosuje aplikacja.
                 k.BackgroundColor,
-                Klucz(account) is { Length: > 0 } name ? name : null,
+                Key(account) is { Length: > 0 } name ? name : null,
 
                 // Poziom dostępu prosto z listy: świąteczne, fazy księżyca i cudze
                 // udostępnione bez prawa zmian są tu czytelnikami.
-                TylkoOdczyt(k.AccessRole)))
+                ReadOnly(k.AccessRole)))
             .OrderBy(k => k.Name, StringComparer.CurrentCulture)
             .ToArray();
     }
@@ -153,55 +153,55 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// pierwsza reakcja na „chyba nie zadziałało".
     /// </para>
     /// </remarks>
-    public async Task<string> DodajKontoAsync(CancellationToken ct = default)
+    public async Task<string> AddAccountAsync(CancellationToken ct = default)
     {
-        SprawdzPoswiadczenia();
+        CheckCredentials();
 
-        var katalog = Path.Combine(Path.GetDirectoryName(databasePath)!, "google");
-        var tymczasowy = "marshal-konto-nowe";
+        var folder = Path.Combine(Path.GetDirectoryName(databasePath)!, "google");
+        var temporary = "marshal-konto-nowe";
 
-        var poswiadczenie = await GoogleDriveFactory.AuthorizeCalendarAsync(
-            settings.GoogleClientId!, settings.GoogleClientSecret!, katalog, tymczasowy, ct);
+        var credential = await GoogleDriveFactory.AuthorizeCalendarAsync(
+            settings.GoogleClientId!, settings.GoogleClientSecret!, folder, temporary, ct);
 
-        using var usluga = new CalendarService(new BaseClientService.Initializer
+        using var service = new CalendarService(new BaseClientService.Initializer
         {
-            HttpClientInitializer = poswiadczenie,
+            HttpClientInitializer = credential,
             ApplicationName = "Marshal",
         });
 
-        var lista = await usluga.CalendarList.List().ExecuteAsync(ct);
+        var list = await service.CalendarList.List().ExecuteAsync(ct);
 
-        var adres = (lista.Items ?? [])
+        var address = (list.Items ?? [])
             .FirstOrDefault(k => k.Primary == true)?.Id;
 
-        if (string.IsNullOrWhiteSpace(adres))
+        if (string.IsNullOrWhiteSpace(address))
         {
             throw new InvalidOperationException(
                 "Zgoda przeszła, ale konto nie podało swojego kalendarza głównego — "
                 + "bez niego nie wiadomo, jak je nazwać. Spróbuj jeszcze raz.");
         }
 
-        await GoogleDriveFactory.PrzepiszZetonAsync(
-            katalog, tymczasowy, GoogleDriveFactory.KluczKonta(adres), ct);
+        await GoogleDriveFactory.MoveTokenAsync(
+            folder, temporary, GoogleDriveFactory.AccountKey(address), ct);
 
         // Połączenie złożone na nowo przy pierwszym użyciu — to z klucza tymczasowego
         // już nie ma pod sobą żetonu.
-        await _brama.WaitAsync(ct);
+        await _gate.WaitAsync(ct);
 
         try
         {
-            _uslugi.Remove(adres);
-            _kanaly.Remove(adres);
+            _services.Remove(address);
+            _feeds.Remove(address);
         }
         finally
         {
-            _brama.Release();
+            _gate.Release();
         }
 
-        return adres;
+        return address;
     }
 
-    private void SprawdzPoswiadczenia()
+    private void CheckCredentials()
     {
         if (string.IsNullOrWhiteSpace(settings.GoogleClientId)
             || string.IsNullOrWhiteSpace(settings.GoogleClientSecret))
@@ -216,22 +216,22 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        var usluga = await UslugaAsync(source.Account, ct);
+        var service = await ServiceAsync(source.Account, ct);
 
-        Event utworzone;
+        Event created;
 
         try
         {
-            utworzone = await usluga.Events
-                .Insert(Zbuduj(draft), source.ExternalId)
+            created = await service.Events
+                .Insert(Build(draft), source.ExternalId)
                 .ExecuteAsync(ct);
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Forbidden)
         {
-            throw new InvalidOperationException(TylkoDoOdczytu, e);
+            throw new InvalidOperationException(ReadOnly, e);
         }
 
-        return utworzone.Id
+        return created.Id
             ?? throw new InvalidOperationException(
                 "Google przyjął wydarzenie, ale nie oddał jego identyfikatora. "
                 + "Odśwież kalendarz, żeby je zobaczyć.");
@@ -253,10 +253,10 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
 
-        var usluga = await UslugaAsync(source.Account, ct);
+        var service = await ServiceAsync(source.Account, ct);
 
-        await Zniknelo(() => usluga.Events
-            .Patch(Zbuduj(draft), source.ExternalId, Podstawowe(externalId))
+        await Gone(() => service.Events
+            .Patch(Build(draft), source.ExternalId, Basic(externalId))
             .ExecuteAsync(ct));
     }
 
@@ -267,10 +267,10 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
 
-        var usluga = await UslugaAsync(source.Account, ct);
+        var service = await ServiceAsync(source.Account, ct);
 
-        await Zniknelo(() => usluga.Events
-            .Patch(new Event { Summary = title }, source.ExternalId, Podstawowe(externalId))
+        await Gone(() => service.Events
+            .Patch(new Event { Summary = title }, source.ExternalId, Basic(externalId))
             .ExecuteAsync(ct));
     }
 
@@ -280,10 +280,10 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
 
-        var usluga = await UslugaAsync(source.Account, ct);
+        var service = await ServiceAsync(source.Account, ct);
 
-        await Zniknelo(() =>
-            usluga.Events.Delete(source.ExternalId, Podstawowe(externalId)).ExecuteAsync(ct));
+        await Gone(() =>
+            service.Events.Delete(source.ExternalId, Basic(externalId)).ExecuteAsync(ct));
     }
 
     /// <summary>
@@ -317,46 +317,46 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
-        var usluga = await UslugaAsync(source.Account, ct);
+        var service = await ServiceAsync(source.Account, ct);
 
-        var id = Podstawowe(externalId);
-        var dopisywany = email.Trim();
+        var id = Basic(externalId);
+        var appended = email.Trim();
 
         Event? ev = null;
 
-        await Zniknelo(async () =>
-            ev = await usluga.Events.Get(source.ExternalId, id).ExecuteAsync(ct));
+        await Gone(async () =>
+            ev = await service.Events.Get(source.ExternalId, id).ExecuteAsync(ct));
 
         if (ev is null)
         {
             throw new EventGone();
         }
 
-        var goscie = ev.Attendees?.ToList() ?? [];
+        var guests = ev.Attendees?.ToList() ?? [];
 
-        if (goscie.Any(g => string.Equals(g.Email, dopisywany, StringComparison.OrdinalIgnoreCase)))
+        if (guests.Any(g => string.Equals(g.Email, appended, StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
 
-        goscie.Add(new EventAttendee { Email = dopisywany });
+        guests.Add(new EventAttendee { Email = appended });
 
         // Znacznik wersji przepisany z odczytanego wydarzenia — bez niego warunek
         // „tylko jeśli nadal ta wersja" nie ma się do czego odnieść i zapis idzie
         // bezwarunkowo, czyli dokładnie tak, jak być nie miał.
-        var zapis = usluga.Events.Patch(
-            new Event { Attendees = goscie, ETag = ev.ETag },
+        var patch = service.Events.Patch(
+            new Event { Attendees = guests, ETag = ev.ETag },
             source.ExternalId,
             id);
 
         // Zaproszenie ma dojść — inaczej wydarzenie pojawia się u kogoś bez słowa.
-        zapis.SendUpdates = EventsResource.PatchRequest.SendUpdatesEnum.All;
+        patch.SendUpdates = EventsResource.PatchRequest.SendUpdatesEnum.All;
 
         // Zapis wyłącznie na tej wersji, którą przeczytaliśmy. Cudza zmiana w międzyczasie
         // kończy się odmową, a nie skasowaniem jej po cichu.
-        zapis.ETagAction = ETagAction.IfMatch;
+        patch.ETagAction = ETagAction.IfMatch;
 
-        await Zniknelo(() => zapis.ExecuteAsync(ct));
+        await Gone(() => patch.ExecuteAsync(ct));
 
         return true;
     }
@@ -373,11 +373,11 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// Tłumaczenie tutaj, a nie w warstwie aplikacji: to jedyne miejsce, które w ogóle
     /// widzi wyjątki Google, i jedyne, które ma prawo je znać.
     /// </remarks>
-    private static async Task Zniknelo(Func<Task> zapis)
+    private static async Task Gone(Func<Task> patch)
     {
         try
         {
-            await zapis();
+            await patch();
         }
         catch (GoogleApiException e)
             when (e.HttpStatusCode is HttpStatusCode.Gone or HttpStatusCode.NotFound)
@@ -386,7 +386,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Forbidden)
         {
-            throw new InvalidOperationException(TylkoDoOdczytu, e);
+            throw new InvalidOperationException(ReadOnly, e);
         }
     }
 
@@ -401,7 +401,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// Kalendarze świąteczne, fazy księżyca i cudze udostępnione bez prawa zmian są
     /// właśnie takie — a wpisuje się je akurat po to, żeby je tylko czytać.
     /// </remarks>
-    private const string TylkoDoOdczytu =
+    private const string ReadOnly =
         "Ten kalendarz jest tylko do odczytu — Google nie pozwala w nim nic zmieniać "
         + "ani kasować. Tak są ustawione kalendarze świąteczne, fazy księżyca i cudze "
         + "udostępnione bez prawa zmian.";
@@ -416,15 +416,15 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// a tego Google nie zna; tu przychodzą wyłącznie identyfikatory Google, więc
     /// oddajemy je bez zmian i pilnujemy tylko, żeby nie przemycić naszej kreski.
     /// </remarks>
-    private static string Podstawowe(string externalId) =>
+    private static string Basic(string externalId) =>
         externalId.Split('|', 2)[0];
 
-    private static Event Zbuduj(CalendarDraft draft) => new()
+    private static Event Build(CalendarDraft draft) => new()
     {
         Summary = draft.Title,
         Location = draft.Location,
-        Start = Kiedy(draft.Start, draft.AllDay),
-        End = Kiedy(draft.End, draft.AllDay),
+        Start = When(draft.Start, draft.AllDay),
+        End = When(draft.End, draft.AllDay),
     };
 
     /// <summary>
@@ -435,24 +435,24 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// jako chwila o północy czasu lokalnego wypadałoby u kogoś na wschód dzień
     /// wcześniej — a „wzięte na dziś" ma znaczyć dziś u każdego, kto to widzi.
     /// </remarks>
-    private static EventDateTime Kiedy(DateTimeOffset moment, bool allDay) =>
+    private static EventDateTime When(DateTimeOffset moment, bool allDay) =>
         allDay
             ? new EventDateTime { Date = moment.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }
             : new EventDateTime { DateTimeDateTimeOffset = moment };
 
     /// <summary>Usługa konta — głównego, gdy konto puste.</summary>
-    private async Task<CalendarService> UslugaAsync(string? account, CancellationToken ct)
+    private async Task<CalendarService> ServiceAsync(string? account, CancellationToken ct)
     {
-        await _brama.WaitAsync(ct);
+        await _gate.WaitAsync(ct);
 
         try
         {
-            await SkladajAsync(account, ct);
-            return _uslugi[Klucz(account)];
+            await ComposeAsync(account, ct);
+            return _services[Key(account)];
         }
         finally
         {
-            _brama.Release();
+            _gate.Release();
         }
     }
 
@@ -468,12 +468,12 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// odświeżania wygląda jak awaria, a na Androidzie nie wygląda wcale — po prostu
     /// zawisa.
     /// </remarks>
-    private async Task<UserCredential> ZgodaKontaAsync(
-        string katalog, string account, CancellationToken ct)
+    private async Task<UserCredential> AccountConsentAsync(
+        string folder, string account, CancellationToken ct)
     {
-        var kluczZetonu = GoogleDriveFactory.KluczKonta(account);
+        var tokenKey = GoogleDriveFactory.AccountKey(account);
 
-        if (!await GoogleDriveFactory.MaZetonAsync(katalog, kluczZetonu, ct))
+        if (!await GoogleDriveFactory.HasTokenAsync(folder, tokenKey, ct))
         {
             throw new InvalidOperationException(
                 $"to urządzenie nie ma jeszcze zgody konta {account}. Otwórz Ustawienia, "
@@ -481,7 +481,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         }
 
         return await GoogleDriveFactory.AuthorizeCalendarAsync(
-            settings.GoogleClientId!, settings.GoogleClientSecret!, katalog, kluczZetonu, ct);
+            settings.GoogleClientId!, settings.GoogleClientSecret!, folder, tokenKey, ct);
     }
 
     /// <summary>
@@ -493,38 +493,38 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// „wolno": nowa nazwa poziomu zablokowałaby zapis do kalendarza, do którego wolno,
     /// a objawem byłoby pole nie do kliknięcia bez żadnego wyjaśnienia.
     /// </remarks>
-    private static bool TylkoOdczyt(string? poziom) =>
-        poziom is { Length: > 0 }
-            && !string.Equals(poziom, "owner", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(poziom, "writer", StringComparison.OrdinalIgnoreCase);
+    private static bool ReadOnly(string? level) =>
+        level is { Length: > 0 }
+            && !string.Equals(level, "owner", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(level, "writer", StringComparison.OrdinalIgnoreCase);
 
-    private static string Klucz(string? account) =>
+    private static string Key(string? account) =>
         string.IsNullOrWhiteSpace(account) ? string.Empty : account.Trim();
 
-    private async Task<GoogleCalendarFeed> PolaczAsync(string? account, CancellationToken ct)
+    private async Task<GoogleCalendarFeed> ConnectAsync(string? account, CancellationToken ct)
     {
-        await _brama.WaitAsync(ct);
+        await _gate.WaitAsync(ct);
 
         try
         {
-            return await SkladajAsync(account, ct);
+            return await ComposeAsync(account, ct);
         }
         finally
         {
-            _brama.Release();
+            _gate.Release();
         }
     }
 
-    private async Task<GoogleCalendarFeed> SkladajAsync(string? account, CancellationToken ct)
+    private async Task<GoogleCalendarFeed> ComposeAsync(string? account, CancellationToken ct)
     {
-        var klucz = Klucz(account);
+        var key = Key(account);
 
-        if (_kanaly.TryGetValue(klucz, out var gotowy))
+        if (_feeds.TryGetValue(key, out var ready))
         {
-            return gotowy;
+            return ready;
         }
 
-        SprawdzPoswiadczenia();
+        CheckCredentials();
 
         if (!settings.GoogleCalendarEnabled)
         {
@@ -533,24 +533,24 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
                 + "i kliknij „Zapisz i zsynchronizuj”, żeby poprosić o dostęp do kalendarza.");
         }
 
-        var katalog = Path.Combine(Path.GetDirectoryName(databasePath)!, "google");
+        var folder = Path.Combine(Path.GetDirectoryName(databasePath)!, "google");
 
         // Konto główne idzie starą drogą — tym samym kluczem żetonu, co przed kontami
         // dodatkowymi. Dzięki temu nikt, kto ma już zgodę, nie musi jej dawać od nowa.
-        var poswiadczenie = klucz.Length == 0
+        var credential = key.Length == 0
             ? await GoogleDriveFactory.AuthorizeAsync(
-                settings.GoogleClientId!, settings.GoogleClientSecret!, katalog,
+                settings.GoogleClientId!, settings.GoogleClientSecret!, folder,
                 withCalendar: true, ct)
-            : await ZgodaKontaAsync(katalog, klucz, ct);
+            : await AccountConsentAsync(folder, key, ct);
 
-        var usluga = new CalendarService(new BaseClientService.Initializer
+        var service = new CalendarService(new BaseClientService.Initializer
         {
-            HttpClientInitializer = poswiadczenie,
+            HttpClientInitializer = credential,
             ApplicationName = "Marshal",
         });
 
-        _uslugi[klucz] = usluga;
+        _services[key] = service;
 
-        return _kanaly[klucz] = new GoogleCalendarFeed(usluga);
+        return _feeds[key] = new GoogleCalendarFeed(service);
     }
 }

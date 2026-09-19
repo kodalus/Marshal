@@ -50,10 +50,10 @@ public sealed class GoogleDriveTransport(IDriveClient drive, string folderName =
         var folder = await FolderAsync(ct);
         var name = NameOf(segment.DeviceId, segment.Name);
 
-        var plik = (await drive.ListAsync(folder, ct))
+        var file = (await drive.ListAsync(folder, ct))
             .FirstOrDefault(f => f.Name == name);
 
-        return plik is null ? string.Empty : await drive.DownloadAsync(plik.Id, ct);
+        return file is null ? string.Empty : await drive.DownloadAsync(file.Id, ct);
     }
 
     public async Task WriteSegmentAsync(
@@ -93,22 +93,22 @@ public sealed class GoogleDriveTransport(IDriveClient drive, string folderName =
             return null;
         }
 
-        var czlony = fileName[..^Extension.Length].Split('.');
+        var parts = fileName[..^Extension.Length].Split('.');
 
-        if (czlony.Length != 2 || !Dozwolone(czlony[0]) || !Dozwolone(czlony[1]))
+        if (parts.Length != 2 || !Allowed(parts[0]) || !Allowed(parts[1]))
         {
             return null;
         }
 
-        return new LogSegment(czlony[0], czlony[1]);
+        return new LogSegment(parts[0], parts[1]);
     }
 
-    private static bool Dozwolone(string value) =>
+    private static bool Allowed(string value) =>
         value.Length > 0 && value.All(c => char.IsAsciiLetterOrDigit(c) || c == '-');
 
     private static void Validate(string value, string paramName)
     {
-        if (!Dozwolone(value))
+        if (!Allowed(value))
         {
             throw new ArgumentException(
                 $"Wartość '{value}' zawiera znak niedozwolony w nazwie porcji.", paramName);

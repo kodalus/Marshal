@@ -211,7 +211,7 @@ public sealed class TaskEditService(
         ChangeAsync(
             id,
             z => z.SetRecurrence(
-                kind is { } kind ? new RecurrenceRule(kind) : null, hlc.Next()),
+                kind is { } value ? new RecurrenceRule(value) : null, hlc.Next()),
             ct);
 
     /// <summary>Przeniesienie do projektu albo wyjęcie z niego.</summary>
@@ -225,13 +225,13 @@ public sealed class TaskEditService(
 
         var area = task.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
 
-        if (area is not { } id)
+        if (area is not { } areaId)
         {
             throw new InvalidOperationException(
                 "Nie ma żadnego czynnego obszaru, a zadanie w projekcie musi do któregoś należeć.");
         }
 
-        task.MoveTo(id, projectId, hlc.Next());
+        task.MoveTo(areaId, projectId, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
         return task;

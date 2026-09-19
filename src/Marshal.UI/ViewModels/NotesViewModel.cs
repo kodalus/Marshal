@@ -22,7 +22,7 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
     private Guid _openId;
 
     /// <summary>Szukanie rusza na każdy znak, a kontekst bazy jest jeden — zob. LatestOnly.</summary>
-    private readonly LatestOnly _kolejka = new();
+    private readonly LatestOnly _queue = new();
 
     [ObservableProperty]
     public partial string Query { get; set; } = string.Empty;
@@ -55,7 +55,7 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
     public async Task LoadAsync() => await SearchAsync();
 
     [RelayCommand]
-    private Task SearchAsync() => _kolejka.RunAsync(SzukajAsync);
+    private Task SearchAsync() => _queue.RunAsync(SzukajAsync);
 
     private async Task SzukajAsync()
     {
@@ -131,9 +131,9 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
     private void RenderPreview()
     {
         Preview.Clear();
-        foreach (var blok in MarkdownReader.Read(Content).Blocks)
+        foreach (var block in MarkdownReader.Read(Content).Blocks)
         {
-            Preview.Add(BlockView.From(blok));
+            Preview.Add(BlockView.From(block));
         }
 
         OnPropertyChanged(nameof(HasMarkup));

@@ -587,10 +587,10 @@ public partial class MainView : UserControl
 
     private void ObszarPuszczony(object? nadawca, PointerReleasedEventArgs e)
     {
-        var ruch = _przejechanie;
+        var activity = _przejechanie;
         _przejechanie = null;
 
-        if (ruch is not { } dotyk || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        if (activity is not { } dotyk || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
         {
             // Palec: zapasowe zakończenie gestu na wypadek, gdyby biblioteka nie
             // ogłosiła jego końca. Gdy siatka nigdy nie ruszyła, nic się nie dzieje.
@@ -770,7 +770,7 @@ public partial class MainView : UserControl
 
     private void BlokWcisniety(object? nadawca, PointerPressedEventArgs e)
     {
-        if (nadawca is not Control blok || blok.Tag is not SlotBox slot)
+        if (nadawca is not Control block || block.Tag is not SlotBox slot)
         {
             return;
         }
@@ -779,7 +779,7 @@ public partial class MainView : UserControl
         // blok zostawał w ręku: po usunięciu zadania z menu puszczenie nie miało już
         // dokąd trafić, więc wskaźnik do końca sesji zachowywał się tak, jakby wciąż
         // coś ciągnął — i nie dało się z tym nic zrobić.
-        if (!e.GetCurrentPoint(blok).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(block).Properties.IsLeftButtonPressed)
         {
             return;
         }
@@ -810,13 +810,13 @@ public partial class MainView : UserControl
         // Gdzie **w bloku** wylądowała ręka i gdzie ten blok stoi na ekranie. Jedno
         // i drugie po to, żeby kopia w podglądzie trzymała się tego samego punktu,
         // za który została złapana, zamiast skakać rogiem pod wskaźnik.
-        _chwyt = e.GetPosition(blok);
-        _blokNaEkranie = blok.TranslatePoint(new Point(0, 0), this);
+        _chwyt = e.GetPosition(block);
+        _blokNaEkranie = block.TranslatePoint(new Point(0, 0), this);
 
         // Za dolną krawędź ciągnie się koniec, nie cały blok. Tylko przy zadaniach:
         // długość wydarzenia z cudzego kalendarza zmienia się świadomą drogą.
         _rozciagam = slot.TaskId is not null
-            && e.GetPosition(blok).Y >= blok.Bounds.Height - StrefaKrawedzi;
+            && e.GetPosition(block).Y >= block.Bounds.Height - StrefaKrawedzi;
     }
 
     /// <summary>
@@ -828,15 +828,15 @@ public partial class MainView : UserControl
     /// </remarks>
     private void BlokNajechany(object? nadawca, PointerEventArgs e)
     {
-        if (nadawca is not Control blok || blok.Tag is not SlotBox slot)
+        if (nadawca is not Control block || block.Tag is not SlotBox slot)
         {
             return;
         }
 
         var przyKrawedzi = slot.TaskId is not null
-            && e.GetPosition(blok).Y >= blok.Bounds.Height - StrefaKrawedzi;
+            && e.GetPosition(block).Y >= block.Bounds.Height - StrefaKrawedzi;
 
-        blok.Cursor = przyKrawedzi ? KursorKrawedzi : KursorReki;
+        block.Cursor = przyKrawedzi ? KursorKrawedzi : KursorReki;
     }
 
     /// <summary>
@@ -867,9 +867,9 @@ public partial class MainView : UserControl
 
     private void BlokPuscilWskaznik(object? nadawca, PointerCaptureLostEventArgs e)
     {
-        if (nadawca is Control blok)
+        if (nadawca is Control block)
         {
-            blok.Opacity = 1;
+            block.Opacity = 1;
         }
 
         PuscBlok();
@@ -1018,10 +1018,10 @@ public partial class MainView : UserControl
 
             _przeciagam = true;
 
-            if (nadawca is Control blok)
+            if (nadawca is Control block)
             {
-                blok.Opacity = 0.5;
-                e.Pointer.Capture(blok);
+                block.Opacity = 0.5;
+                e.Pointer.Capture(block);
             }
         }
 
@@ -1048,9 +1048,9 @@ public partial class MainView : UserControl
 
         PuscBlok();
 
-        if (nadawca is Control blok)
+        if (nadawca is Control block)
         {
-            blok.Opacity = 1;
+            block.Opacity = 1;
             e.Pointer.Capture(null);
         }
 
@@ -1122,12 +1122,12 @@ public partial class MainView : UserControl
         e.Handled = true;
         _dotkniety = null;
 
-        if (nadawca is not Control kwadracik || kwadracik.Tag is not SlotBox blok)
+        if (nadawca is not Control kwadracik || kwadracik.Tag is not SlotBox block)
         {
             return;
         }
 
-        _dotkniety = (blok, e.GetPosition(kwadracik), e.Pointer);
+        _dotkniety = (block, e.GetPosition(kwadracik), e.Pointer);
     }
 
     private void OdhaczeniePuszczone(object? nadawca, PointerReleasedEventArgs e)
@@ -1382,29 +1382,29 @@ public partial class MainView : UserControl
             return;
         }
 
-        if (Wiersz(source) is { } wiersz)
+        if (Wiersz(source) is { } row)
         {
             e.Handled = true;
-            _ = Probuj("Menu: projekt", () => PokazMenuProjektuAsync(model, source, wiersz));
+            _ = Probuj("Menu: projekt", () => PokazMenuProjektuAsync(model, source, row));
 
             return;
         }
 
-        if (Blok(source) is not { } blok)
+        if (Blok(source) is not { } block)
         {
             return;
         }
 
         // Blok na siatce niesie sam identyfikator, nie całe zadanie — trzeba je dobrać.
-        if (blok.TaskId is { } id)
+        if (block.TaskId is { } id)
         {
             e.Handled = true;
 
             _ = Probuj("Menu: otwarcie", async () =>
             {
-                if (await model.FindTaskAsync(id) is { } zBazy)
+                if (await model.FindTaskAsync(id) is { } fromDb)
                 {
-                    await PokazMenuAsync(model, source, zBazy);
+                    await PokazMenuAsync(model, source, fromDb);
                 }
             });
 
@@ -1412,7 +1412,7 @@ public partial class MainView : UserControl
         }
 
         e.Handled = true;
-        PokazMenuWydarzenia(model, source, blok);
+        PokazMenuWydarzenia(model, source, block);
     }
 
     /// <summary>
@@ -1432,19 +1432,19 @@ public partial class MainView : UserControl
     /// Reszta pól też jest na karcie i to ona jest tu prawdziwą odpowiedzią.
     /// </para>
     /// </remarks>
-    private static void PokazMenuWydarzenia(MainViewModel model, Control source, SlotBox blok)
+    private static void PokazMenuWydarzenia(MainViewModel model, Control source, SlotBox block)
     {
         var calendarId = model.Calendar;
         var rows = new List<MenuItem>();
 
         var otworz = new MenuItem { Header = "Otwórz" };
-        otworz.Click += (_, _) => calendarId.OpenTaskCommand.Execute(blok);
+        otworz.Click += (_, _) => calendarId.OpenTaskCommand.Execute(block);
         rows.Add(otworz);
 
-        if (blok.CanComplete)
+        if (block.CanComplete)
         {
-            var odhacz = new MenuItem { Header = blok.IsDone ? "Zdejmij ptaszek" : "Odhacz" };
-            odhacz.Click += (_, _) => calendarId.ToggleCommand.Execute(blok);
+            var odhacz = new MenuItem { Header = block.IsDone ? "Zdejmij ptaszek" : "Odhacz" };
+            odhacz.Click += (_, _) => calendarId.ToggleCommand.Execute(block);
             rows.Add(odhacz);
         }
 
@@ -1556,8 +1556,8 @@ public partial class MainView : UserControl
     private void NaWpisieMiesiaca(object? nadawca, PointerReleasedEventArgs e)
     {
         if (DataContext is not MainViewModel model
-            || nadawca is not Control wiersz
-            || wiersz.DataContext is not MonthEntry entry)
+            || nadawca is not Control row
+            || row.DataContext is not MonthEntry entry)
         {
             return;
         }
@@ -1595,13 +1595,13 @@ public partial class MainView : UserControl
     {
         if (DataContext is not MainViewModel model
             || nadawca is not Control kwadracik
-            || kwadracik.DataContext is not ProjectTreeRow wiersz)
+            || kwadracik.DataContext is not ProjectTreeRow row)
         {
             return;
         }
 
         e.Handled = true;
-        PokazPalete(model, kwadracik, wiersz);
+        PokazPalete(model, kwadracik, row);
     }
 
     /// <summary>
@@ -1622,11 +1622,11 @@ public partial class MainView : UserControl
     /// w dzienniku zmian, z którym potem scala się drugie urządzenie.
     /// </para>
     /// </remarks>
-    private void PokazPalete(MainViewModel model, Control source, ProjectTreeRow wiersz)
+    private void PokazPalete(MainViewModel model, Control source, ProjectTreeRow row)
     {
         var kolo = new ColorView
         {
-            Color = Color.TryParse(wiersz.Color ?? string.Empty, out var biezaca)
+            Color = Color.TryParse(row.Color ?? string.Empty, out var biezaca)
                 ? biezaca
                 : Colors.SlateGray,
             IsAlphaEnabled = false,
@@ -1645,13 +1645,13 @@ public partial class MainView : UserControl
             var c = kolo.Color;
             _ = Probuj(
                 "Barwa: ustawienie",
-                () => model.SetRowColorAsync(wiersz, $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
+                () => model.SetRowColorAsync(row, $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
         };
 
         wyczysc.Click += (_, _) =>
         {
             flyout.Hide();
-            _ = Probuj("Barwa: zdjęcie", () => model.SetRowColorAsync(wiersz, null));
+            _ = Probuj("Barwa: zdjęcie", () => model.SetRowColorAsync(row, null));
         };
 
         // Barwy przygotowane zostają nad kołem, jednym kliknięciem. Koło jest po to,
@@ -1661,7 +1661,7 @@ public partial class MainView : UserControl
 
         foreach (var color in ColorChoice.All.Where(b => b.Value is not null))
         {
-            var wybor = color;
+            var choice = color;
             // Barwa na ramce w środku, nie na tle przycisku: tło przycisku motyw
             // przemalowuje przy najechaniu, a kwadracik, który zmienia kolor pod
             // wskaźnikiem, przestaje pokazywać to, co ma pokazywać.
@@ -1670,20 +1670,20 @@ public partial class MainView : UserControl
                 Margin = new Thickness(0, 0, 6, 6),
                 Padding = new Thickness(3),
                 CornerRadius = new CornerRadius(7),
-                [ToolTip.TipProperty] = wybor.Label,
+                [ToolTip.TipProperty] = choice.Label,
                 Content = new Border
                 {
                     Width = 22,
                     Height = 22,
                     CornerRadius = new CornerRadius(5),
-                    Background = new SolidColorBrush(Color.Parse(wybor.Value!)),
+                    Background = new SolidColorBrush(Color.Parse(choice.Value!)),
                 },
             };
 
             kwadracik.Click += (_, _) =>
             {
                 flyout.Hide();
-                _ = Probuj("Barwa: ustawienie", () => model.SetRowColorAsync(wiersz, wybor.Value));
+                _ = Probuj("Barwa: ustawienie", () => model.SetRowColorAsync(row, choice.Value));
             };
 
             szybkie.Children.Add(kwadracik);
@@ -1720,31 +1720,31 @@ public partial class MainView : UserControl
     /// Powód odmowy sprawdzany przed pokazaniem menu: pozycja, która po kliknięciu nic
     /// nie robi, uczy nieufności do całego menu.
     /// </remarks>
-    private async Task PokazMenuProjektuAsync(MainViewModel model, Control source, ProjectTreeRow wiersz)
+    private async Task PokazMenuProjektuAsync(MainViewModel model, Control source, ProjectTreeRow row)
     {
-        var blocker = await model.WhyCannotDeleteRowAsync(wiersz);
+        var blocker = await model.WhyCannotDeleteRowAsync(row);
 
         var rows = new List<object>
         {
             Pozycja("Zmień nazwę…", () =>
             {
                 PokazPoleNazwy(
-                    source, wiersz.Label, "Zapisz",
-                    name => model.RenameRowAsync(wiersz, name));
+                    source, row.Label, "Zapisz",
+                    name => model.RenameRowAsync(row, name));
 
                 return Task.CompletedTask;
             }),
-            Pozycja(wiersz.AddLabel, () =>
+            Pozycja(row.AddLabel, () =>
             {
                 PokazPoleNazwy(
                     source, string.Empty, "Załóż",
-                    name => model.AddProjectAsync(wiersz, name));
+                    name => model.AddProjectAsync(row, name));
 
                 return Task.CompletedTask;
             }),
             Pozycja("Barwa…", () =>
             {
-                PokazPalete(model, source, wiersz);
+                PokazPalete(model, source, row);
                 return Task.CompletedTask;
             }),
         };
@@ -1753,7 +1753,7 @@ public partial class MainView : UserControl
         // jest podziałem odpowiedzialności, a kalendarz Google jest tym samym podziałem
         // widzianym z zewnątrz — projekt jest o poziom za drobny, żeby zakładać dla
         // niego osobny kalendarz.
-        if (wiersz.IsArea && await CalendarForAreaAsync(model, wiersz) is { } kalendarze)
+        if (row.IsArea && await CalendarForAreaAsync(model, row) is { } kalendarze)
         {
             rows.Add(kalendarze);
         }
@@ -1761,8 +1761,8 @@ public partial class MainView : UserControl
         rows.Add(new Separator());
 
         rows.Add(blocker is null
-            ? Pozycja(wiersz.IsArea ? "Usuń obszar" : "Usuń projekt",
-                () => model.DeleteRowAsync(wiersz))
+            ? Pozycja(row.IsArea ? "Usuń obszar" : "Usuń projekt",
+                () => model.DeleteRowAsync(row))
             : new MenuItem { Header = blocker, IsEnabled = false });
 
         new MenuFlyout { ItemsSource = rows }.ShowAt(source, showAtPointer: true);
@@ -1787,7 +1787,7 @@ public partial class MainView : UserControl
     /// menu, która nic nie otwiera, jest gorsza od jej braku, bo wygląda na zepsutą.
     /// </para>
     /// </remarks>
-    private async Task<MenuItem?> CalendarForAreaAsync(MainViewModel model, ProjectTreeRow wiersz)
+    private async Task<MenuItem?> CalendarForAreaAsync(MainViewModel model, ProjectTreeRow row)
     {
         var kalendarze = await model.WritableCalendarsAsync();
 
@@ -1796,17 +1796,17 @@ public partial class MainView : UserControl
             return null;
         }
 
-        var now = await model.AreaCalendarAsync(wiersz.Id);
+        var now = await model.AreaCalendarAsync(row.Id);
 
         var rows = new List<MenuItem>
         {
             Pozycja(now is null ? "✓ żaden" : "żaden",
-                () => model.SetAreaCalendarAsync(wiersz, null)),
+                () => model.SetAreaCalendarAsync(row, null)),
         };
 
         rows.AddRange(kalendarze.Select(k => Pozycja(
             now == k.Id ? $"✓ {k.Name}" : k.Name,
-            () => model.SetAreaCalendarAsync(wiersz, k.Id))));
+            () => model.SetAreaCalendarAsync(row, k.Id))));
 
         return Galaz("Kalendarz Google", rows);
     }
@@ -1825,7 +1825,7 @@ public partial class MainView : UserControl
         var pole = new TextBox { Text = poczatkowa, Width = 260 };
         var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
 
-        void Zapisz()
+        void Save()
         {
             var name = pole.Text ?? string.Empty;
             flyout.Hide();
@@ -1837,12 +1837,12 @@ public partial class MainView : UserControl
             if (args.Key == Key.Enter)
             {
                 args.Handled = true;
-                Zapisz();
+                Save();
             }
         };
 
         var zapisz = new Button { Content = przycisk, Padding = new Thickness(14, 6) };
-        zapisz.Click += (_, _) => Zapisz();
+        zapisz.Click += (_, _) => Save();
 
         flyout.Content = new StackPanel { Spacing = 8, Children = { pole, zapisz } };
         flyout.ShowAt(source);
@@ -1887,10 +1887,10 @@ public partial class MainView : UserControl
     /// <summary>Pozycja menu. Woła metodę wprost — wyjątek ma dokąd trafić.</summary>
     private MenuItem Pozycja(string napis, Func<Task> work)
     {
-        var pozycja = new MenuItem { Header = napis };
-        pozycja.Click += (_, _) => _ = Probuj($"Menu: {napis}", work);
+        var item = new MenuItem { Header = napis };
+        item.Click += (_, _) => _ = Probuj($"Menu: {napis}", work);
 
-        return pozycja;
+        return item;
     }
 
     private static MenuItem Galaz(string napis, IReadOnlyList<MenuItem> rows) =>
@@ -1901,18 +1901,18 @@ public partial class MainView : UserControl
     {
         foreach (var przodek in source.GetSelfAndVisualAncestors().OfType<Control>())
         {
-            var znalezione = przodek.DataContext switch
+            var found = przodek.DataContext switch
             {
                 TaskItem wprost => wprost,
-                TaskRow wiersz => wiersz.Task,
+                TaskRow row => row.Task,
                 WaitingItem czekajace => czekajace.Task,
-                NowPick wybor => wybor.Task,
+                NowPick choice => choice.Task,
                 _ => null,
             };
 
-            if (znalezione is not null)
+            if (found is not null)
             {
-                return znalezione;
+                return found;
             }
         }
 
@@ -1941,9 +1941,9 @@ public partial class MainView : UserControl
         var task = (nadawca as ListBox)?.SelectedItem switch
         {
             TaskItem wprost => wprost,
-            TaskRow wiersz => wiersz.Task,
+            TaskRow row => row.Task,
             WaitingItem czekajace => czekajace.Task,
-            NowPick wybor => wybor.Task,
+            NowPick choice => choice.Task,
             _ => e.Source is Control source ? TaskId(source) : null,
         };
 
@@ -1957,8 +1957,8 @@ public partial class MainView : UserControl
     private void OtworzNotatke(object? nadawca, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel model
-            && nadawca is ListBox lista
-            && lista.SelectedItem is Note note)
+            && nadawca is ListBox list
+            && list.SelectedItem is Note note)
         {
             model.Notes.OpenCommand.Execute(note);
         }
@@ -2075,7 +2075,7 @@ public partial class MainView : UserControl
     private const double SlupekGodzin = 52;
 
     /// <summary>Zapas na suwak i odstęp między kolumnami.</summary>
-    private const double Zapas = 14;
+    private const double Capacity = 14;
 
     private void NaZmianieSzerokosci(object? nadawca, SizeChangedEventArgs e) =>
         Szerokosc(e.NewSize.Width);
@@ -2179,7 +2179,7 @@ public partial class MainView : UserControl
     {
         if (calosc > 0)
         {
-            _kalendarz?.SetAvailableWidth(calosc - SlupekGodzin - Zapas);
+            _kalendarz?.SetAvailableWidth(calosc - SlupekGodzin - Capacity);
         }
     }
 
@@ -2240,7 +2240,7 @@ public partial class MainView : UserControl
 
         model.Settings.SaveRequested = async name =>
         {
-            var plik = await okno.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            var file = await okno.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Kopia zapasowa Marshala",
                 SuggestedFileName = name,
@@ -2248,7 +2248,7 @@ public partial class MainView : UserControl
                 FileTypeChoices = [Json],
             });
 
-            return plik is null ? null : await plik.OpenWriteAsync();
+            return file is null ? null : await file.OpenWriteAsync();
         };
 
         model.Settings.OpenRequested = async () =>

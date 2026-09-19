@@ -243,11 +243,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             "Marshal — próba",
             "Jeśli widzisz to poza oknem aplikacji, powiadomienia systemowe działają."));
 
-        NotificationStatus = InAppNotifier.StanSystemowych == "podpięte"
+        NotificationStatus = InAppNotifier.SystemStatus == "podpięte"
             ? "Podpięte, wysłane. Jeśli powiadomienie się nie pokazało, zatrzymał je "
                 + "system — na Windowsie najczęściej brak aplikacji w menu Start albo "
                 + "tryb skupienia, na Androidzie odmowa zgody na powiadomienia."
-            : $"Powiadomienia systemowe nie działają: {InAppNotifier.StanSystemowych}";
+            : $"Powiadomienia systemowe nie działają: {InAppNotifier.SystemStatus}";
     }
 
     partial void OnMainCalendarChanged(MainCalendarChoice? value)
@@ -267,21 +267,21 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         CalendarStatus = "Pobieranie listy kalendarzy…";
 
-        List<GoogleCalendarInfo> lista = [];
+        List<GoogleCalendarInfo> list = [];
         List<string> klopoty = [];
 
         // Konto główne i każde dodane — po kolei, a nie „wszystko albo nic". Jedno
         // konto bez zgody na tym urządzeniu nie ma zabierać kalendarzy pozostałych:
         // wtedy przycisk zwracałby pustą listę i wyglądałoby to na brak kalendarzy
         // w ogóle, zamiast na brak zgody jednego konta.
-        var konta = new List<string?> { null };
-        konta.AddRange(_settings.CalendarAccounts);
+        var accounts = new List<string?> { null };
+        accounts.AddRange(_settings.CalendarAccounts);
 
-        foreach (var account in konta)
+        foreach (var account in accounts)
         {
             try
             {
-                lista.AddRange(await _google.ListAsync(account));
+                list.AddRange(await _google.ListAsync(account));
             }
             catch (Exception e)
             {
@@ -295,16 +295,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         AvailableGoogleCalendars.Clear();
-        foreach (var calendarId in lista)
+        foreach (var calendarId in list)
         {
             AvailableGoogleCalendars.Add(calendarId);
         }
 
         OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
 
-        var podsumowanie = lista.Count == 0
+        var podsumowanie = list.Count == 0
             ? "Żadne konto nie pokazało kalendarzy."
-            : $"Znalezione: {lista.Count}. Wybierz, które podłączyć.";
+            : $"Znalezione: {list.Count}. Wybierz, które podłączyć.";
 
         CalendarStatus = klopoty.Count == 0
             ? podsumowanie
@@ -313,7 +313,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         if (klopoty.Count == 0)
         {
             await _dziennik.RecordAsync(
-                "Kalendarze Google: lista", $"znalezionych {lista.Count}");
+                "Kalendarze Google: lista", $"znalezionych {list.Count}");
         }
     }
 
@@ -339,13 +339,13 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var adres = await _google.DodajKontoAsync();
+            var address = await _google.AddAccountAsync();
 
-            _settings.AddCalendarAccount(adres);
+            _settings.AddCalendarAccount(address);
             WczytajKonta();
 
-            CalendarStatus = $"Konto {adres} dodane. Pobierz kalendarze, żeby je podłączyć.";
-            await _dziennik.RecordAsync("Kalendarz: konto Google", adres);
+            CalendarStatus = $"Konto {address} dodane. Pobierz kalendarze, żeby je podłączyć.";
+            await _dziennik.RecordAsync("Kalendarz: konto Google", address);
 
             await LoadGoogleCalendarsAsync();
         }
@@ -366,18 +366,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// tego urządzenia, więc i skutek ma mieć tylko tutaj.
     /// </remarks>
     [RelayCommand]
-    private async Task RemoveGoogleAccountAsync(string? adres)
+    private async Task RemoveGoogleAccountAsync(string? address)
     {
-        if (string.IsNullOrWhiteSpace(adres))
+        if (string.IsNullOrWhiteSpace(address))
         {
             return;
         }
 
-        _settings.RemoveCalendarAccount(adres);
+        _settings.RemoveCalendarAccount(address);
         WczytajKonta();
 
-        CalendarStatus = $"Konto {adres} odłączone od tego urządzenia.";
-        await _dziennik.RecordAsync("Kalendarz: konto odłączone", adres);
+        CalendarStatus = $"Konto {address} odłączone od tego urządzenia.";
+        await _dziennik.RecordAsync("Kalendarz: konto odłączone", address);
     }
 
     private void WczytajKonta()
@@ -452,34 +452,34 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var raport = await _kalendarze.RefreshAsync(force: true);
+            var report = await _kalendarze.RefreshAsync(force: true);
 
-            if (raport.Sources == 0 && raport.Failed == 0)
+            if (report.Sources == 0 && report.Failed == 0)
             {
                 CalendarStatus = "Nie ma podłączonego żadnego kalendarza.";
                 return;
             }
 
             var podsumowanie =
-                $"Odświeżone {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}."
-                + (raport.Folded > 0
-                    ? $" Odrzucone powtórzone podłączenia: {raport.Folded}."
+                $"Odświeżone {report.Sources}, wydarzeń {report.Events}, nieudanych {report.Failed}."
+                + (report.Folded > 0
+                    ? $" Odrzucone powtórzone podłączenia: {report.Folded}."
                     : string.Empty);
 
             // Powody, nie sama liczba. „Nieudanych 6" wygląda tak samo przy braku zgody,
             // przy złym adresie kanału i przy padniętej sieci — a to trzy różne rzeczy
             // do zrobienia. Powtórzone odsiewane, bo sześć kopii jednego zdania nie jest
             // sześcioma informacjami.
-            CalendarStatus = raport.Problems.Count == 0
+            CalendarStatus = report.Problems.Count == 0
                 ? podsumowanie
                 : podsumowanie + Environment.NewLine
-                    + string.Join(Environment.NewLine, raport.Problems.Distinct());
+                    + string.Join(Environment.NewLine, report.Problems.Distinct());
 
             await _dziennik.RecordAsync(
                 "Kalendarz: pobranie",
                 podsumowanie,
-                raport.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
-                string.Join(Environment.NewLine, raport.Problems.Distinct()));
+                report.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
+                string.Join(Environment.NewLine, report.Problems.Distinct()));
         }
         catch (Exception e)
         {
@@ -610,15 +610,15 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
 
             var tryb = ReplaceOnImport ? ImportMode.Replace : ImportMode.Merge;
-            var raport = await _backup.ImportAsync(strumien, tryb);
+            var report = await _backup.ImportAsync(strumien, tryb);
 
-            Status = raport.Applied == 0
-                ? $"Wczytane {raport.Read} wpisów — wszystkie starsze niż to, co już jest."
-                : $"Wczytane {raport.Read} wpisów, nałożone {raport.Applied}.";
+            Status = report.Applied == 0
+                ? $"Wczytane {report.Read} wpisów — wszystkie starsze niż to, co już jest."
+                : $"Wczytane {report.Read} wpisów, nałożone {report.Applied}.";
 
             await _dziennik.RecordAsync(
                 "Kopia: wczytanie",
-                $"przeczytane {raport.Read}, nałożone {raport.Applied}, pominięte {raport.Skipped}");
+                $"przeczytane {report.Read}, nałożone {report.Applied}, pominięte {report.Skipped}");
 
             Imported?.Invoke(this, EventArgs.Empty);
         }
@@ -665,7 +665,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        SyncStatus = PowrotZgody.Podaj(ConsentUrl.Trim())
+        SyncStatus = ConsentReturn.Serve(ConsentUrl.Trim())
             ? "Adres przyjęty — dokańczam logowanie."
             : "Nic nie czeka na adres. Najpierw kliknij „Zapisz i zsynchronizuj”.";
 

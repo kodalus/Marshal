@@ -304,10 +304,10 @@ public sealed record MonthWeek(IReadOnlyList<MonthCell> Cells);
 /// Na szerokim oknie cztery równe pola rozciągały się zresztą przez cały ekran
 /// i wyglądały jak pasek narzędzi, a nie jak wybór.
 /// </remarks>
-public sealed record ZakresWidoku(string Nazwa, int Dni, bool Miesiac)
+public sealed record ZakresWidoku(string Name, int Days, bool Miesiac)
 {
     /// <summary>Pole wyboru pokazuje to, co zwraca ta metoda — stąd własna, nie ta z rekordu.</summary>
-    public override string ToString() => Nazwa;
+    public override string ToString() => Name;
 }
 
 /// <summary>
@@ -403,11 +403,11 @@ public sealed partial class CalendarViewModel(
         _ = Wybierz(value);
     }
 
-    private async Task Wybierz(ZakresWidoku zakres)
+    private async Task Wybierz(ZakresWidoku scope)
     {
         try
         {
-            await (zakres.Miesiac ? ShowMonthCommand.ExecuteAsync(null) : SetDaysAsync(zakres.Dni));
+            await (scope.Miesiac ? ShowMonthCommand.ExecuteAsync(null) : SetDaysAsync(scope.Days));
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -417,7 +417,7 @@ public sealed partial class CalendarViewModel(
             OnPropertyChanged(nameof(HasProblem));
 
             await log.RecordAsync(
-                "Kalendarz: zmiana zakresu", zakres.Nazwa, ActivityLevel.Problem, e.Message);
+                "Kalendarz: zmiana zakresu", scope.Name, ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -430,7 +430,7 @@ public sealed partial class CalendarViewModel(
         {
             Zakres = IsMonth
                 ? Zakresy[^1]
-                : Zakresy.FirstOrDefault(z => !z.Miesiac && z.Dni == VisibleDays) ?? Zakresy[2];
+                : Zakresy.FirstOrDefault(z => !z.Miesiac && z.Days == VisibleDays) ?? Zakresy[2];
         }
         finally
         {
@@ -777,33 +777,33 @@ public sealed partial class CalendarViewModel(
     /// odpowiedzią na omsknięcie ręki.
     /// </para>
     /// </remarks>
-    public async Task MoveEventAsync(SlotBox blok, DateOnly day, double score)
+    public async Task MoveEventAsync(SlotBox block, DateOnly day, double score)
     {
-        ArgumentNullException.ThrowIfNull(blok);
+        ArgumentNullException.ThrowIfNull(block);
 
-        if (blok is not { SourceId: { } source, ExternalId: { } id })
+        if (block is not { SourceId: { } source, ExternalId: { } id })
         {
             return;
         }
 
         var zone = clock.Now.Offset;
         var start = new DateTimeOffset(day.ToDateTime(Time(score)), zone);
-        var length = TimeSpan.FromHours(Math.Max(0.25, blok.Height / HourHeight));
+        var length = TimeSpan.FromHours(Math.Max(0.25, block.Height / HourHeight));
 
         try
         {
-            var skad = Bylo(blok, zone);
+            var skad = Bylo(block, zone);
 
             await calendar.SaveEventAsync(
-                source, id, new CalendarDraft(blok.Title, start, start + length));
+                source, id, new CalendarDraft(block.Title, start, start + length));
 
-            Undo = new MovedEvent(source, id, blok.Title, skad, skad + length);
+            Undo = new MovedEvent(source, id, block.Title, skad, skad + length);
             OnPropertyChanged(nameof(CanUndo));
             OnPropertyChanged(nameof(UndoText));
 
             await log.RecordAsync(
                 "Kalendarz: przeniesienie wydarzenia",
-                $"{blok.Title} na {day:yyyy-MM-dd} {start:HH}:{start:mm}");
+                $"{block.Title} na {day:yyyy-MM-dd} {start:HH}:{start:mm}");
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -811,7 +811,7 @@ public sealed partial class CalendarViewModel(
             OnPropertyChanged(nameof(HasProblem));
 
             await log.RecordAsync(
-                "Kalendarz: przeniesienie wydarzenia", blok.Title,
+                "Kalendarz: przeniesienie wydarzenia", block.Title,
                 ActivityLevel.Problem, e.Message);
         }
 
@@ -819,10 +819,10 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Skąd wydarzenie przyszło — z dnia i godziny widocznych na bloku.</summary>
-    private static DateTimeOffset Bylo(SlotBox blok, TimeSpan zone)
+    private static DateTimeOffset Bylo(SlotBox block, TimeSpan zone)
     {
-        var day = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
-        var time = TimeOnly.TryParse(blok.StartText, CultureInfo.InvariantCulture, out var g)
+        var day = DateOnly.ParseExact(block.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+        var time = TimeOnly.TryParse(block.StartText, CultureInfo.InvariantCulture, out var g)
             ? g
             : TimeOnly.MinValue;
 
@@ -838,14 +838,14 @@ public sealed partial class CalendarViewModel(
 
     public bool CanUndo => Undo is not null;
 
-    public string UndoText => Undo is { } ruch
-        ? $"Przeniesiono „{ruch.Title}”. Cofnąć na {ruch.Start:dd.MM} {ruch.Start:HH}:{ruch.Start:mm}?"
+    public string UndoText => Undo is { } activity
+        ? $"Przeniesiono „{activity.Title}”. Cofnąć na {activity.Start:dd.MM} {activity.Start:HH}:{activity.Start:mm}?"
         : string.Empty;
 
     [RelayCommand]
     private async Task UndoMoveAsync()
     {
-        if (Undo is not { } ruch)
+        if (Undo is not { } activity)
         {
             return;
         }
@@ -853,10 +853,10 @@ public sealed partial class CalendarViewModel(
         try
         {
             await calendar.SaveEventAsync(
-                ruch.SourceId, ruch.ExternalId,
-                new CalendarDraft(ruch.Title, ruch.Start, ruch.End));
+                activity.SourceId, activity.ExternalId,
+                new CalendarDraft(activity.Title, activity.Start, activity.End));
 
-            await log.RecordAsync("Kalendarz: cofnięcie przeniesienia", ruch.Title);
+            await log.RecordAsync("Kalendarz: cofnięcie przeniesienia", activity.Title);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -1015,18 +1015,18 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task FetchAsync()
     {
-        var raport = await calendar.RefreshAsync(force: true);
+        var report = await calendar.RefreshAsync(force: true);
 
-        Problem = raport.Failed > 0
-            ? $"Nie udało się odświeżyć {raport.Failed} z {raport.Failed + raport.Sources} kalendarzy."
+        Problem = report.Failed > 0
+            ? $"Nie udało się odświeżyć {report.Failed} z {report.Failed + report.Sources} kalendarzy."
             : null;
 
         await log.RecordAsync(
             "Kalendarz: pobranie",
-            $"odświeżonych {raport.Sources}, wydarzeń {raport.Events}, nieudanych {raport.Failed}"
-                + (raport.Folded > 0 ? $", złożonych duplikatów {raport.Folded}" : string.Empty),
-            raport.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
-            string.Join(Environment.NewLine, raport.Problems.Distinct()));
+            $"odświeżonych {report.Sources}, wydarzeń {report.Events}, nieudanych {report.Failed}"
+                + (report.Folded > 0 ? $", złożonych duplikatów {report.Folded}" : string.Empty),
+            report.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
+            string.Join(Environment.NewLine, report.Problems.Distinct()));
 
         OnPropertyChanged(nameof(HasProblem));
         await RefreshAsync();
@@ -1293,15 +1293,15 @@ public sealed partial class CalendarViewModel(
                         s.Entry.Color)))
                 .ToList();
 
-            var widoczne = entries.Count > miejsca ? entries.Take(miejsca).ToList() : entries;
+            var visible = entries.Count > miejsca ? entries.Take(miejsca).ToList() : entries;
 
             komorki.Add(new MonthCell(
                 day.Date,
                 $"{day.Date.Day}",
                 day.Date == today,
                 day.Date.Month != miesiac,
-                widoczne,
-                entries.Count - widoczne.Count));
+                visible,
+                entries.Count - visible.Count));
         }
 
         for (var i = 0; i + 7 <= komorki.Count; i += 7)
@@ -1477,30 +1477,30 @@ public sealed partial class CalendarViewModel(
     /// w oknie — inaczej okno musiałoby wiedzieć, czym blok jest, żeby wiedzieć, co wołać.
     /// </remarks>
     [RelayCommand]
-    private async Task ToggleAsync(SlotBox? blok)
+    private async Task ToggleAsync(SlotBox? block)
     {
-        if (blok is not { CanComplete: true })
+        if (block is not { CanComplete: true })
         {
             return;
         }
 
-        if (blok.IsTask)
+        if (block.IsTask)
         {
-            await (blok.IsDone ? ReopenAsync(blok.TaskId) : CompleteAsync(blok.TaskId));
+            await (block.IsDone ? ReopenAsync(block.TaskId) : CompleteAsync(block.TaskId));
             return;
         }
 
-        if (blok is not { SourceId: { } source, ExternalId: { } zewnetrzny })
+        if (block is not { SourceId: { } source, ExternalId: { } zewnetrzny })
         {
             return;
         }
 
-        var co = blok.IsDone ? "Kalendarz: zdjęcie ptaszka w Google" : "Kalendarz: odhaczenie w Google";
+        var co = block.IsDone ? "Kalendarz: zdjęcie ptaszka w Google" : "Kalendarz: odhaczenie w Google";
 
         try
         {
-            await calendar.SetEventDoneAsync(source, zewnetrzny, !blok.IsDone);
-            await log.RecordAsync(co, blok.Title);
+            await calendar.SetEventDoneAsync(source, zewnetrzny, !block.IsDone);
+            await log.RecordAsync(co, block.Title);
         }
         catch (EventGone e)
         {
@@ -1509,7 +1509,7 @@ public sealed partial class CalendarViewModel(
             Problem = e.Message;
             OnPropertyChanged(nameof(HasProblem));
 
-            await log.RecordAsync(co, blok.Title, ActivityLevel.Problem, e.Message);
+            await log.RecordAsync(co, block.Title, ActivityLevel.Problem, e.Message);
             await RefreshAsync();
 
             return;
@@ -1543,12 +1543,12 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task ToggleOpenedAsync()
     {
-        if (Opened is not { CanComplete: true } blok)
+        if (Opened is not { CanComplete: true } block)
         {
             return;
         }
 
-        await ToggleAsync(blok);
+        await ToggleAsync(block);
         Opened = null;
     }
 
@@ -1568,16 +1568,16 @@ public sealed partial class CalendarViewModel(
     /// ujemną albo blokiem, który zniknął pod palcem.
     /// </para>
     /// </remarks>
-    public async Task ResizeAsync(SlotBox blok, double score)
+    public async Task ResizeAsync(SlotBox block, double score)
     {
-        ArgumentNullException.ThrowIfNull(blok);
+        ArgumentNullException.ThrowIfNull(block);
 
-        if (blok.TaskId is not { } task)
+        if (block.TaskId is not { } task)
         {
             return;
         }
 
-        var start = Time(blok.Top);
+        var start = Time(block.Top);
         var end = Time(score);
         var minutes = (int)(end.ToTimeSpan() - start.ToTimeSpan()).TotalMinutes;
 
@@ -1623,34 +1623,34 @@ public sealed partial class CalendarViewModel(
     /// na siatce, a karta mówi, co to jest i z którego kalendarza pochodzi.
     /// </remarks>
     [RelayCommand]
-    private void OpenTask(SlotBox? blok)
+    private void OpenTask(SlotBox? block)
     {
-        if (blok is null)
+        if (block is null)
         {
             return;
         }
 
-        if (blok.TaskId is { } id)
+        if (block.TaskId is { } id)
         {
             TaskRequested?.Invoke(id);
             return;
         }
 
-        Opened = blok;
+        Opened = block;
 
-        OpenedTitle = blok.Title;
-        OpenedStart = Time(blok.StartText);
-        OpenedEnd = Time(blok.EndText);
+        OpenedTitle = block.Title;
+        OpenedStart = Time(block.StartText);
+        OpenedEnd = Time(block.EndText);
         OpenedProblem = null;
 
         // Przycisków zapisu nie pokazujemy tam, gdzie zapis i tak nie ma dokąd pójść.
-        CanEditOpened = blok.SourceId is not null
-            && blok.ExternalId is not null
+        CanEditOpened = block.SourceId is not null
+            && block.ExternalId is not null
             && calendar.CanWrite(CalendarKind.Google);
 
         OnPropertyChanged(nameof(HasOpenedProblem));
 
-        _ = WczytajObszaryAsync(blok);
+        _ = WczytajObszaryAsync(block);
         _ = WczytajOsobyAsync();
     }
 
@@ -1680,12 +1680,12 @@ public sealed partial class CalendarViewModel(
     /// <summary>Zapora przed odbiciem: wczytanie stanu nie jest wyborem użytkowniczki.</summary>
     private bool _wlasneObszary;
 
-    private async Task WczytajObszaryAsync(SlotBox blok)
+    private async Task WczytajObszaryAsync(SlotBox block)
     {
         try
         {
             var dostepne = await calendar.AreasWithCalendarAsync();
-            var now = blok.SourceId is { } source
+            var now = block.SourceId is { } source
                 ? await calendar.AreaOfCalendarAsync(source)
                 : null;
 
@@ -1714,7 +1714,7 @@ public sealed partial class CalendarViewModel(
         catch (Exception e) when (e is not OperationCanceledException)
         {
             await log.RecordAsync(
-                "Kalendarz: obszary wydarzenia", blok.Title, ActivityLevel.Problem, e.Message);
+                "Kalendarz: obszary wydarzenia", block.Title, ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -1736,7 +1736,7 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task PokazOsobieAsync(Contact? osoba)
     {
-        if (osoba is null || Opened is not { SourceId: { } source, ExternalId: { } entry } blok)
+        if (osoba is null || Opened is not { SourceId: { } source, ExternalId: { } entry } block)
         {
             return;
         }
@@ -1747,7 +1747,7 @@ public sealed partial class CalendarViewModel(
 
             await log.RecordAsync(
                 "Kalendarz: pokazanie osobie",
-                $"{blok.Title} → {osoba.Name}",
+                $"{block.Title} → {osoba.Name}",
                 ActivityLevel.Ok,
                 dopisana ? null : "ta osoba już była na liście gości");
 
@@ -1763,7 +1763,7 @@ public sealed partial class CalendarViewModel(
             OnPropertyChanged(nameof(HasOpenedProblem));
 
             await log.RecordAsync(
-                "Kalendarz: pokazanie osobie", blok.Title, ActivityLevel.Problem, e.Message);
+                "Kalendarz: pokazanie osobie", block.Title, ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -1779,22 +1779,22 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task DopiszOsobeAsync()
     {
-        var adres = NowaOsoba.Trim();
+        var address = NowaOsoba.Trim();
 
-        if (adres.Length == 0 || osoby is null || work is null || zegarLogiczny is null)
+        if (address.Length == 0 || osoby is null || work is null || zegarLogiczny is null)
         {
             return;
         }
 
         try
         {
-            var osoba = await osoby.FindByEmailAsync(adres);
+            var osoba = await osoby.FindByEmailAsync(address);
 
             if (osoba is null)
             {
                 osoba = new Contact(
                     Guid.CreateVersion7(), clock.Now, zegarLogiczny.Next(),
-                    adres.Split('@')[0], adres);
+                    address.Split('@')[0], address);
 
                 osoby.Add(osoba);
                 await work.SaveChangesAsync();
@@ -1810,7 +1810,7 @@ public sealed partial class CalendarViewModel(
             OnPropertyChanged(nameof(HasOpenedProblem));
 
             await log.RecordAsync(
-                "Kalendarz: dopisanie osoby", adres, ActivityLevel.Problem, e.Message);
+                "Kalendarz: dopisanie osoby", address, ActivityLevel.Problem, e.Message);
         }
     }
 
@@ -1825,11 +1825,11 @@ public sealed partial class CalendarViewModel(
         {
             // Pobranie przed czyszczeniem: lista wyczyszczona przed oczekiwaniem
             // zostaje pusta, gdy odczyt się nie uda, i wygląda jak brak osób.
-            var lista = await osoby.AllAsync();
+            var list = await osoby.AllAsync();
 
             Osoby.Clear();
 
-            foreach (var osoba in lista)
+            foreach (var osoba in list)
             {
                 Osoby.Add(osoba);
             }
@@ -1860,7 +1860,7 @@ public sealed partial class CalendarViewModel(
 
     private async Task PrzelozWydarzenieAsync(Guid calendarId)
     {
-        if (Opened is not { SourceId: { } source, ExternalId: { } id } blok
+        if (Opened is not { SourceId: { } source, ExternalId: { } id } block
             || source == calendarId)
         {
             return;
@@ -1869,7 +1869,7 @@ public sealed partial class CalendarViewModel(
         try
         {
             await calendar.MoveEventAsync(source, id, calendarId);
-            await log.RecordAsync("Kalendarz: przełożenie wydarzenia", blok.Title);
+            await log.RecordAsync("Kalendarz: przełożenie wydarzenia", block.Title);
 
             Opened = null;
             await RefreshAsync();
@@ -1880,12 +1880,12 @@ public sealed partial class CalendarViewModel(
             OnPropertyChanged(nameof(HasOpenedProblem));
 
             await log.RecordAsync(
-                "Kalendarz: przełożenie wydarzenia", blok.Title, ActivityLevel.Problem, e.Message);
+                "Kalendarz: przełożenie wydarzenia", block.Title, ActivityLevel.Problem, e.Message);
         }
     }
 
-    private static TimeSpan? Time(string tekst) =>
-        TimeSpan.TryParse(tekst, CultureInfo.InvariantCulture, out var time) ? time : null;
+    private static TimeSpan? Time(string text) =>
+        TimeSpan.TryParse(text, CultureInfo.InvariantCulture, out var time) ? time : null;
 
     [ObservableProperty]
     public partial string OpenedTitle { get; set; } = string.Empty;
@@ -1915,7 +1915,7 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task SaveOpenedAsync()
     {
-        if (Opened is not { SourceId: { } source, ExternalId: { } id } blok)
+        if (Opened is not { SourceId: { } source, ExternalId: { } id } block)
         {
             return;
         }
@@ -1929,7 +1929,7 @@ public sealed partial class CalendarViewModel(
 
         try
         {
-            var day = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+            var day = DateOnly.ParseExact(block.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
             var zone = clock.Now.Offset;
 
             var start = new DateTimeOffset(day.ToDateTime(TimeOnly.FromTimeSpan(od)), zone);

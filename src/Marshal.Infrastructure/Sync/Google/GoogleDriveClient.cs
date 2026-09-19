@@ -19,18 +19,18 @@ public sealed class GoogleDriveClient(DriveService service) : IDriveClient
 
     public async Task<string> EnsureFolderAsync(string name, CancellationToken ct = default)
     {
-        var szukaj = service.Files.List();
-        szukaj.Q = $"mimeType = '{FolderMime}' and name = '{Escape(name)}' and trashed = false";
-        szukaj.Fields = "files(id, name)";
-        szukaj.PageSize = 10;
+        var find = service.Files.List();
+        find.Q = $"mimeType = '{FolderMime}' and name = '{Escape(name)}' and trashed = false";
+        find.Fields = "files(id, name)";
+        find.PageSize = 10;
 
-        var znalezione = (await szukaj.ExecuteAsync(ct)).Files ?? [];
+        var found = (await find.ExecuteAsync(ct)).Files ?? [];
 
         // Dysk pozwala na dwa katalogi o tej samej nazwie, więc przy jednoczesnym
         // założeniu na dwóch urządzeniach mogą powstać dwa. Wybór najmniejszego
         // identyfikatora jest arbitralny, ale **jednakowy na wszystkich urządzeniach**,
         // więc rozjazd sam się schodzi po jednej synchronizacji.
-        var selected = znalezione
+        var selected = found
             .Select(f => f.Id)
             .OrderBy(id => id, StringComparer.Ordinal)
             .FirstOrDefault();
@@ -40,31 +40,31 @@ public sealed class GoogleDriveClient(DriveService service) : IDriveClient
             return selected;
         }
 
-        var zaloz = service.Files.Create(new GoogleFile { Name = name, MimeType = FolderMime });
-        zaloz.Fields = "id";
+        var request = service.Files.Create(new GoogleFile { Name = name, MimeType = FolderMime });
+        request.Fields = "id";
 
-        return (await zaloz.ExecuteAsync(ct)).Id;
+        return (await request.ExecuteAsync(ct)).Id;
     }
 
     public async Task<IReadOnlyList<DriveFile>> ListAsync(
         string folderId, CancellationToken ct = default)
     {
         var result = new List<DriveFile>();
-        string? strona = null;
+        string? page = null;
 
         do
         {
-            var zapytanie = service.Files.List();
-            zapytanie.Q = $"'{Escape(folderId)}' in parents and trashed = false";
-            zapytanie.Fields = "nextPageToken, files(id, name)";
-            zapytanie.PageSize = 1000;
-            zapytanie.PageToken = strona;
+            var query = service.Files.List();
+            query.Q = $"'{Escape(folderId)}' in parents and trashed = false";
+            query.Fields = "nextPageToken, files(id, name)";
+            query.PageSize = 1000;
+            query.PageToken = page;
 
-            var odpowiedz = await zapytanie.ExecuteAsync(ct);
-            result.AddRange((odpowiedz.Files ?? []).Select(f => new DriveFile(f.Id, f.Name)));
-            strona = odpowiedz.NextPageToken;
+            var response = await query.ExecuteAsync(ct);
+            result.AddRange((response.Files ?? []).Select(f => new DriveFile(f.Id, f.Name)));
+            page = response.NextPageToken;
         }
-        while (!string.IsNullOrEmpty(strona));
+        while (!string.IsNullOrEmpty(page));
 
         return result;
     }
@@ -80,13 +80,13 @@ public sealed class GoogleDriveClient(DriveService service) : IDriveClient
     public async Task CreateAsync(
         string folderId, string name, string content, CancellationToken ct = default)
     {
-        var opis = new GoogleFile { Name = name, Parents = [folderId] };
+        var description = new GoogleFile { Name = name, Parents = [folderId] };
         using var content = new MemoryStream(Encoding.UTF8.GetBytes(content));
 
-        var wyslij = service.Files.Create(opis, content, "application/json");
-        wyslij.Fields = "id";
+        var send = service.Files.Create(description, content, "application/json");
+        send.Fields = "id";
 
-        var postep = await wyslij.UploadAsync(ct);
+        var postep = await send.UploadAsync(ct);
 
         // Wysyłka zwraca stan zamiast rzucać. Bez tego sprawdzenia urwane połączenie
         // wyglądałoby na zapisaną porcję i dziennik urwałby się bez śladu.

@@ -42,10 +42,10 @@ public class ChangeLineTests
     [Fact]
     public void Polskie_znaki_zostaja_czytelne()
     {
-        var tekst = Wiersz().Serialize();
+        var text = Wiersz().Serialize();
 
-        tekst.Should().Contain("zażółć gęślą jaźń");
-        tekst.Should().NotContain("\\u");
+        text.Should().Contain("zażółć gęślą jaźń");
+        text.Should().NotContain("\\u");
     }
 
     [Fact]
@@ -53,12 +53,12 @@ public class ChangeLineTests
     {
         // Plik rośnie z każdą zmianą i leży w chmurze — nazwy kluczy powtarzają się
         // w każdej linii, więc ich długość ma znaczenie przy tysiącach wpisów.
-        var tekst = Wiersz().Serialize();
+        var text = Wiersz().Serialize();
 
-        tekst.Should().StartWith("{\"e\":");
-        tekst.Should().Contain("\"id\":");
-        tekst.Should().Contain("\"hlc\":");
-        tekst.Should().Contain("\"f\":");
+        text.Should().StartWith("{\"e\":");
+        text.Should().Contain("\"id\":");
+        text.Should().Contain("\"hlc\":");
+        text.Should().Contain("\"f\":");
     }
 
     [Theory]
@@ -69,21 +69,21 @@ public class ChangeLineTests
     [InlineData("{\"e\":\"Tasks\",\"id\":\"x\"}")]
     [InlineData("{\"id\":\"x\",\"hlc\":\"1.0.a\"}")]
     [InlineData("{\"e\":\"Tasks\",\"hlc\":\"1.0.a\"}")]
-    public void Uszkodzony_wiersz_zwraca_null_zamiast_wybuchac(string linia)
+    public void Uszkodzony_wiersz_zwraca_null_zamiast_wybuchac(string line)
     {
         // Plik może zostać ucięty w pół linii przez przerwane pobieranie albo
         // pochodzić z nowszej wersji aplikacji. Przerwanie całości oznaczałoby,
         // że jedna zła linia blokuje wszystkie zmiany, które przyszły po niej.
-        ChangeLine.TryParse(linia).Should().BeNull();
+        ChangeLine.TryParse(line).Should().BeNull();
     }
 
     [Fact]
     public void Nieznane_pole_nie_psuje_odczytu()
     {
         // Nowsza wersja aplikacji może dopisać kolumnę, której ta jeszcze nie zna.
-        var linia = "{\"e\":\"Tasks\",\"id\":\"x\",\"hlc\":\"1.0.a\",\"f\":{\"CosNowego\":42}}";
+        var line = "{\"e\":\"Tasks\",\"id\":\"x\",\"hlc\":\"1.0.a\",\"f\":{\"CosNowego\":42}}";
 
-        var odczytany = ChangeLine.TryParse(linia);
+        var odczytany = ChangeLine.TryParse(line);
 
         odczytany.Should().NotBeNull();
         odczytany!.Fields.Should().ContainKey("CosNowego");

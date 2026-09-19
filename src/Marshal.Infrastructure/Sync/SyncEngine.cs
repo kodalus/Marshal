@@ -29,7 +29,7 @@ public sealed class SyncEngine(
 {
     private readonly ChangeApplier _applier = new(db, hlc);
 
-    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
+    private readonly IDbQueue _queue = queue ?? new DirectQueue();
 
     public async Task<SyncReport> SyncAsync(CancellationToken ct = default)
     {
@@ -41,7 +41,7 @@ public sealed class SyncEngine(
     /// <summary>Dopisuje niewysłane zmiany na koniec własnego pliku.</summary>
     public async Task<int> PushAsync(CancellationToken ct = default)
     {
-        var pending = await _kolejka.RunAsync(
+        var pending = await _queue.RunAsync(
             () => db.Changes.Where(c => !c.Sent).ToListAsync(ct), ct);
 
         if (pending.Count == 0)
@@ -62,15 +62,15 @@ public sealed class SyncEngine(
                     c => c.Value is null ? null : JsonNode.Parse(c.Value)),
             });
 
-        var tekst = new StringBuilder();
+        var text = new StringBuilder();
         foreach (var line in lines)
         {
-            tekst.Append(line.Serialize()).Append('\n');
+            text.Append(line.Serialize()).Append('\n');
         }
 
-        await transport.WriteSegmentAsync(deviceId, await NextSegmentAsync(ct), tekst.ToString(), ct);
+        await transport.WriteSegmentAsync(deviceId, await NextSegmentAsync(ct), text.ToString(), ct);
 
-        await _kolejka.RunAsync(
+        await _queue.RunAsync(
             () =>
             {
                 foreach (var change in pending)
@@ -92,42 +92,42 @@ public sealed class SyncEngine(
 
         // Kursory z bazy, przez bramę: dopiero one mówią, których porcji jeszcze nie
         // widzieliśmy, a bez tego trzeba by ściągać wszystko od początku świata.
-        var kursory = await _kolejka.RunAsync(
+        var cursors = await _queue.RunAsync(
             () => db.SyncCursors.ToDictionaryAsync(c => c.RemoteDeviceId, ct), ct);
 
         // Ściąganie **w całości przed** nakładaniem. Nakładanie przeplatane pobieraniem
         // trzymałoby bramę przez cały przebieg — czyli okno stałoby tak długo, jak długo
         // trwa sieć.
-        var porcje = new List<(string Urzadzenie, string Nazwa, string Tresc)>();
+        var chunks = new List<(string Device, string Name, string Content)>();
 
         foreach (var group in segments.Where(s => s.DeviceId != deviceId).GroupBy(s => s.DeviceId))
         {
-            var odkad = kursory.TryGetValue(group.Key, out var cursor)
+            var since = cursors.TryGetValue(group.Key, out var cursor)
                 ? cursor.LastSegment
                 : string.Empty;
 
             foreach (var segment in group.OrderBy(s => s.Name, StringComparer.Ordinal))
             {
-                if (string.CompareOrdinal(segment.Name, odkad) <= 0)
+                if (string.CompareOrdinal(segment.Name, since) <= 0)
                 {
                     continue;
                 }
 
-                porcje.Add((group.Key, segment.Name, await transport.ReadSegmentAsync(segment, ct)));
+                chunks.Add((group.Key, segment.Name, await transport.ReadSegmentAsync(segment, ct)));
             }
         }
 
-        if (porcje.Count == 0)
+        if (chunks.Count == 0)
         {
             return 0;
         }
 
-        return await _kolejka.RunAsync(() => NalozAsync(porcje, ct), ct);
+        return await _queue.RunAsync(() => ApplyAsync(chunks, ct), ct);
     }
 
     /// <summary>Nałożenie ściągniętych porcji — jednym blokiem, za bramą.</summary>
-    private async Task<int> NalozAsync(
-        List<(string Urzadzenie, string Nazwa, string Tresc)> porcje, CancellationToken ct)
+    private async Task<int> ApplyAsync(
+        List<(string Device, string Name, string Content)> chunks, CancellationToken ct)
     {
         var applied = 0;
 
@@ -138,22 +138,22 @@ public sealed class SyncEngine(
         //
         // Czytane tutaj, a nie przekazane z góry: brama była puszczona na czas sieci,
         // więc stan sprzed pobierania nie jest już tym samym stanem.
-        var kursory = await db.SyncCursors.ToDictionaryAsync(c => c.RemoteDeviceId, ct);
+        var cursors = await db.SyncCursors.ToDictionaryAsync(c => c.RemoteDeviceId, ct);
 
         using (SyncScope.Begin())
         {
-            foreach (var (urzadzenie, name, content) in porcje)
+            foreach (var (device, name, content) in chunks)
             {
-                if (!kursory.TryGetValue(urzadzenie, out var cursor))
+                if (!cursors.TryGetValue(device, out var cursor))
                 {
-                    cursor = new SyncCursor(urzadzenie, string.Empty);
+                    cursor = new SyncCursor(device, string.Empty);
                     db.SyncCursors.Add(cursor);
-                    kursory[urzadzenie] = cursor;
+                    cursors[device] = cursor;
                 }
 
-                foreach (var linia in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                foreach (var line in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                 {
-                    if (ChangeLine.TryParse(linia) is { } wiersz && _applier.Apply(wiersz))
+                    if (ChangeLine.TryParse(line) is { } row && _applier.Apply(row))
                     {
                         applied++;
                     }
@@ -180,12 +180,12 @@ public sealed class SyncEngine(
     /// </summary>
     private async Task<string> NextSegmentAsync(CancellationToken ct)
     {
-        var moje = (await transport.ListSegmentsAsync(ct))
+        var mine = (await transport.ListSegmentsAsync(ct))
             .Where(s => s.DeviceId == deviceId)
             .Select(s => int.TryParse(s.Name, out var n) ? n : 0)
             .DefaultIfEmpty(0)
             .Max();
 
-        return (moje + 1).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
+        return (mine + 1).ToString("D6", System.Globalization.CultureInfo.InvariantCulture);
     }
 }

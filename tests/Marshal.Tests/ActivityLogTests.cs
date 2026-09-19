@@ -75,9 +75,9 @@ public sealed class ActivityLogTests : IDisposable
                 .Options,
             _zegar);
 
-        var zapis = async () => await zepsuty.RecordAsync("Cokolwiek", "-");
+        var patch = async () => await zepsuty.RecordAsync("Cokolwiek", "-");
 
-        await zapis.Should().NotThrowAsync();
+        await patch.Should().NotThrowAsync();
         zepsuty.Dropped.Should().Be(1);
     }
 
