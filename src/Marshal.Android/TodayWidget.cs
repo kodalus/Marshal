@@ -233,6 +233,19 @@ public sealed class TodayWidget : AppWidgetProvider
     /// <b>tego</b> odbiornika i nie ma znaczenia w oderwaniu od niego.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Ile rozgłoszenie czeka na przygotowanie, zanim odda swój budżet czasu.
+    /// </summary>
+    /// <remarks>
+    /// Odbiornik rozgłoszenia ma na wszystko około dziesięciu sekund i po ich przekroczeniu
+    /// system pokazuje „Marshal nie odpowiada". Przygotowanie potrafi trwać dłużej —
+    /// w dzienniku stoi przypadek, w którym trwało blisko czternaście sekund — więc
+    /// czekanie na nie do skutku jest proszeniem się o to okienko. Trzy sekundy starczają
+    /// na proces, który już stoi; zimny i tak nie zmieści się w budżecie, więc lepiej
+    /// oddać rozgłoszenie i dokończyć bez niego.
+    /// </remarks>
+    private static readonly TimeSpan BroadcastBudget = TimeSpan.FromSeconds(3);
+
     private void Redraw(Context context, AppWidgetManager manager, int[] ids)
     {
         var window = context;
@@ -243,6 +256,17 @@ public sealed class TodayWidget : AppWidgetProvider
             try
             {
                 var clock = System.Diagnostics.Stopwatch.StartNew();
+
+                // Rozgłoszenie oddawane po budżecie, a nie po dojściu do końca. Praca
+                // leci dalej: „UpdateAppWidget" nie wymaga trwającego rozgłoszenia,
+                // wymaga tylko żywego procesu — a ten stoi, bo właśnie się przygotowuje.
+                var prepare = AppServices.ReadyAsync();
+
+                if (await Task.WhenAny(prepare, Task.Delay(BroadcastBudget)) != prepare)
+                {
+                    waiting?.Finish();
+                    waiting = null;
+                }
 
                 var services = await ServicesAsync(window.ApplicationContext ?? window);
                 var ready = clock.ElapsedMilliseconds;

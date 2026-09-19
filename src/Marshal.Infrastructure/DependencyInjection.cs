@@ -4,6 +4,7 @@ using Marshal.Application.Repositories;
 using Marshal.Application.Review;
 using Marshal.Application.Sync;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Diagnostics;
 using Marshal.Infrastructure.Backup;
 using Marshal.Infrastructure.Calendar;
 using Marshal.Infrastructure.Data;
@@ -215,12 +216,16 @@ public static class DependencyInjection
     /// </summary>
     public static async Task PrepareAsync(IServiceProvider services, CancellationToken ct = default)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
         var db = services.GetRequiredService<MarshalDbContext>();
         await db.Database.MigrateAsync(ct);
+        var migrations = clock.ElapsedMilliseconds;
 
         // Identyfikator urządzenia rozstrzygany zaraz po migracji: zakłada go przy
         // pierwszym uruchomieniu, a zegar logiczny potrzebuje go do wznowienia.
         _ = services.GetRequiredService<IDeviceIdentity>().Id;
+        var identity = clock.ElapsedMilliseconds - migrations;
 
         await AreaSeed.EnsureAsync(
             db,
@@ -228,7 +233,22 @@ public static class DependencyInjection
             services.GetRequiredService<IHlcSource>(),
             ct);
 
-        await CatchUpAsync(services, ct);
+        var seed = clock.ElapsedMilliseconds - migrations - identity;
+
+        var catchUp = await CatchUpAsync(services, ct);
+
+        // Przygotowanie jest tym, na co czeka wszystko inne: okno przy starcie i widget
+        // w odbiorniku rozgłoszenia, który ma na to około dziesięciu sekund. W dzienniku
+        // stoi przebieg, w którym trwało 13,8 sekundy — i z jednej liczby nie da się
+        // powiedzieć, na czym. Stąd rozbicie, dopisywane tylko wtedy, gdy trwa długo.
+        if (clock.ElapsedMilliseconds > 2000)
+        {
+            await services.GetRequiredService<IActivityLog>().RecordAsync(
+                "Start: przygotowanie",
+                $"razem {clock.ElapsedMilliseconds} ms — migracje {migrations} ms, "
+                    + $"tożsamość {identity} ms, obszary {seed} ms, {catchUp}",
+                ActivityLevel.Problem);
+        }
     }
 
     /// <summary>
@@ -241,19 +261,33 @@ public static class DependencyInjection
     /// które musiałoby zadziałać dokładnie o północy, jest tylko różnica między datą
     /// zapisaną a dzisiejszą, zastawana przy każdym otwarciu.
     /// </remarks>
-    public static async Task CatchUpAsync(IServiceProvider services, CancellationToken ct = default)
+    /// <returns>Ile zajął każdy z czterech kroków — do dziennika, gdy start trwał długo.</returns>
+    public static async Task<string> CatchUpAsync(
+        IServiceProvider services, CancellationToken ct = default)
     {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
         await services.GetRequiredService<DayRolloverService>().RunAsync(ct);
+        var rollover = clock.ElapsedMilliseconds;
 
         // Wybory z dni minionych wygasają razem z przejściem dnia — to ten sam moment
         // i ta sama zasada: nie ma zadania w tle, jest zastana różnica dat.
         await services.GetRequiredService<FocusService>().ExpireAsync(ct);
+        var focus = clock.ElapsedMilliseconds - rollover;
 
         await services.GetRequiredService<ReminderService>().RunAsync(ct);
+        var reminders = clock.ElapsedMilliseconds - rollover - focus;
 
         // Kalendarze odświeżane przy okazji, nie osobnym zadaniem w tle. Kanał, który
         // nie odpowiedział, ma znaczyć „brak świeżych wydarzeń", a nie zatrzymać start.
+        //
+        // **To jest jedyny krok, który sięga po sieć**, i jedyny, którego czas nie zależy
+        // od nas. Mierzony osobno właśnie dlatego.
         await services.GetRequiredService<CalendarSyncService>().RefreshAsync(ct: ct);
+        var calendars = clock.ElapsedMilliseconds - rollover - focus - reminders;
+
+        return $"przejście dnia {rollover} ms, wybory {focus} ms, "
+            + $"przypomnienia {reminders} ms, kalendarze {calendars} ms";
     }
 }
 
