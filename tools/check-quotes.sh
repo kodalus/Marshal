@@ -17,11 +17,22 @@ while IFS= read -r plik; do
       *///*|*"//"*) continue ;;
     esac
 
+    # Komentarz w YAML-u i w powłoce: prosty cudzysłów tam nie szkodzi.
+    case "${tresc#"${tresc%%[![:space:]]*}"}" in
+      '#'*) continue ;;
+    esac
+
     echo "$plik:$numer: polski cudzysłów zamknięty prostym"
     echo "    $tresc"
     blad=1
   done < <(grep -nP '„[^”"]*(?<!\\)"' "$plik" || true)
-done < <(find src tests -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*')
+done < <(
+  find src tests -name '*.cs' -not -path '*/obj/*' -not -path '*/bin/*'
+  # Przebiegi CI też: tam ten sam błąd kończy napis powłoki, a powłoka mówi wtedy
+  # „unexpected EOF while looking for matching" i nie mówi, w którym miejscu.
+  # Kosztowało to jeden przebieg, w którym krok w ogóle się nie wykonał.
+  find .github/workflows -name '*.yml'
+)
 
 if [ "$blad" -ne 0 ]; then
   echo

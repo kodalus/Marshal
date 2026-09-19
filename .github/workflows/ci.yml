@@ -77,7 +77,7 @@ jobs:
       - name: Model skompilowany zgodny z encjami
         run: |
           if ! git diff --exit-code -- src/Marshal.Infrastructure/Data/Compiled; then
-            echo "::error::Skompilowany model rozjechał się z encjami. Świeżo wygenerowany leży na gałęzi „model-wygenerowany" — wciągnij go do main."
+            echo "::error::Skompilowany model rozjechał się z encjami. Świeżo wygenerowany leży na gałęzi model-wygenerowany — wciągnij go do main."
             exit 1
           fi
 
