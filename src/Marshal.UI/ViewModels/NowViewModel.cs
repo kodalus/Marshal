@@ -108,9 +108,9 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
     }
 
     [RelayCommand]
-    private Task RefreshAsync() => _queue.RunAsync(RefreshAsync);
+    private Task RefreshAsync() => _queue.RunAsync(ReloadAsync);
 
-    private async Task RefreshAsync()
+    private async Task ReloadAsync()
     {
         Unestimated = await now.UnestimatedCountAsync();
 

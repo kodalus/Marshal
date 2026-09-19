@@ -389,11 +389,11 @@ public sealed partial class CalendarViewModel(
     /// razy, a przy zejściu z miesiąca — z niewłaściwym zakotwiczeniem.
     /// </remarks>
     [ObservableProperty]
-    public partial ViewRange? Range { get; set; }
+    public partial ViewRange? SelectedRange { get; set; }
 
     private bool _ownSetting;
 
-    partial void OnRangeChanged(ViewRange? value)
+    partial void OnSelectedRangeChanged(ViewRange? value)
     {
         if (_ownSetting || value is null)
         {
@@ -428,7 +428,7 @@ public sealed partial class CalendarViewModel(
 
         try
         {
-            Range = IsMonth
+            SelectedRange = IsMonth
                 ? Ranges[^1]
                 : Ranges.FirstOrDefault(z => !z.Month && z.Days == VisibleDays) ?? Ranges[2];
         }

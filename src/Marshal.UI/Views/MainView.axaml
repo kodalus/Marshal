@@ -942,7 +942,7 @@
             <ComboBox MinWidth="0" HorizontalAlignment="Stretch"
                       IsVisible="{Binding ShowRangePicker}"
                       ItemsSource="{Binding Ranges}"
-                      SelectedItem="{Binding Range}" />
+                      SelectedItem="{Binding SelectedRange}" />
           </Panel>
           <Button Grid.Column="4" Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
         </Grid>

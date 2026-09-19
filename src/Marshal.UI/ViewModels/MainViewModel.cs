@@ -51,7 +51,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly FocusService _focus;
     private readonly IReviewQueries _queries;
     private readonly InAppNotifier _notifier;
-    private readonly IActivityLog _journal;
+    private readonly IActivityLog _activity;
     private readonly NoteService _notes;
     private readonly StructureEditService _shell;
     private readonly TaskMirror _mirror;
@@ -140,7 +140,7 @@ public sealed partial class MainViewModel : ObservableObject
         FiltersViewModel filters,
         SettingsViewModel settings,
         JournalViewModel journal,
-        IActivityLog journal,
+        IActivityLog activity,
         NoteService noteService,
         StructureEditService shell,
         TaskMirror mirror,
@@ -175,7 +175,7 @@ public sealed partial class MainViewModel : ObservableObject
         _focus = focus;
         _queries = queries;
         _notifier = notifier;
-        _journal = journal;
+        _activity = activity;
         _notes = noteService;
         Clarify = clarify;
         Detail = detail;
@@ -918,7 +918,7 @@ public sealed partial class MainViewModel : ObservableObject
         await _dayRollover.RunAsync();
         await _focus.ExpireAsync();
 
-        await _journal.RecordAsync("Przejście dnia", $"nowy dzień: {today:yyyy-MM-dd}");
+        await _activity.RecordAsync("Przejście dnia", $"nowy dzień: {today:yyyy-MM-dd}");
         await ReloadAsync();
     }
 
@@ -961,7 +961,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            await _journal.RecordAsync(
+            await _activity.RecordAsync(
                 co, "nie udało się", ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
         }
     }
@@ -1014,7 +1014,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (!silently)
         {
-            await _journal.RecordAsync(
+            await _activity.RecordAsync(
                 co,
                 result.Ok ? $"wysłane {result.Sent}, przyjęte {result.Applied}" : result.Message,
                 result.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
@@ -1102,7 +1102,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     private async Task RefreshFocusAsync()
     {
-        var today = Today();
+        var today = Today;
         var forToday = await _focus.TodayAsync();
 
         FocusItems.Clear();
@@ -1271,7 +1271,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Dwa ekrany na te same obiekty dawały różne możliwości w każdym z nich:
         // tu barwa i usunięcie, tam zakładanie, a nazwa tylko tam. Jeden ekran, jeden
         // zestaw czynności — a liczby są cechą obszaru, więc stoją przy nim.
-        var balance = (await _queries.BalanceAsync(Today()))
+        var balance = (await _queries.BalanceAsync(Today))
             .ToDictionary(w => w.AreaId);
 
         ProjectRows.Clear();
@@ -1288,7 +1288,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Waiting;
 
-        var pending = await _queries.WaitingAsync(Today());
+        var pending = await _queries.WaitingAsync(Today);
 
         WaitingItems.Clear();
         foreach (var item in pending)
@@ -1363,7 +1363,7 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowTodayAsync()
     {
         Current = Screen.Today;
-        var today = Today();
+        var today = Today;
         await Fill(TodayItems, _tasks.TodayAsync(today));
         OnPropertyChanged(nameof(HasToday));
         await RefreshFocusAsync();
@@ -1404,15 +1404,13 @@ public sealed partial class MainViewModel : ObservableObject
         await FillPlain(ArchiveItems, _tasks.ArchiveAsync(limit: 200));
     }
 
-    private DateOnly Today() => _clock.Today;
-
     /// <summary>Dzisiaj w strefie z ustawień — dla menu, które samo zegara nie ma.</summary>
     public DateOnly Today => _clock.Today;
 
     private async Task Fill(ObservableCollection<TaskRow> target, Task<IReadOnlyList<TaskItem>> source)
     {
         var items = await source;
-        var today = Today();
+        var today = Today;
 
         target.Clear();
         foreach (var item in items)
@@ -1504,7 +1502,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        var from = task.DoDate ?? Today();
+        var from = task.DoDate ?? Today;
 
         await _edit.RescheduleAsync(task.Id, from.AddDays(1), task.DoTime);
         await ReloadAsync();

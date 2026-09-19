@@ -131,7 +131,7 @@ public partial class MainView : UserControl
 
             // Pierwsze podanie szerokości: zdarzenie rozmiaru potrafi wypaść przed
             // podstawieniem modelu, a wtedy siatka zostałaby na szerokości zapasowej.
-            Width(_grid.Bounds.Width);
+            SetWidth(_grid.Bounds.Width);
         }
 
         // To samo dla wysokości miesiąca. Siatka tygodni zgłasza się przy wczytaniu,
@@ -1109,7 +1109,7 @@ public partial class MainView : UserControl
     /// </para>
     /// </remarks>
     /// <summary>Gdzie i czym zaczęło się dotknięcie kwadracika.</summary>
-    private (SlotBox Block, Point From, IPointer Pointer)? _touched;
+    private (SlotBox Block, Point From, IPointer Pointer)? _touchedBlock;
 
     /// <remarks>
     /// Tak samo jak przy pustej siatce: odhacza puszczenie, a nie naciśnięcie.
@@ -1120,20 +1120,20 @@ public partial class MainView : UserControl
     private void CompleteOnGrid(object? sender, PointerPressedEventArgs e)
     {
         e.Handled = true;
-        _touched = null;
+        _touchedBlock = null;
 
         if (sender is not Control checkbox || checkbox.Tag is not SlotBox block)
         {
             return;
         }
 
-        _touched = (block, e.GetPosition(checkbox), e.Pointer);
+        _touchedBlock = (block, e.GetPosition(checkbox), e.Pointer);
     }
 
     private void CompleteReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var start = _touched;
-        _touched = null;
+        var start = _touchedBlock;
+        _touchedBlock = null;
 
         if (start is not { } touch
             || sender is not Control checkbox
@@ -1157,7 +1157,7 @@ public partial class MainView : UserControl
     }
 
     private void CompleteAbandoned(object? sender, PointerCaptureLostEventArgs e) =>
-        _touched = null;
+        _touchedBlock = null;
 
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
     private void DetailBackground(object? sender, PointerPressedEventArgs e) => _detail?.Close();
@@ -2002,7 +2002,7 @@ public partial class MainView : UserControl
     private CalendarViewModel? _calendar;
 
     /// <summary>Gdzie i czym zaczęło się dotknięcie pustej siatki.</summary>
-    private (DateOnly Day, Point From, IPointer Pointer)? _touched;
+    private (DateOnly Day, Point From, IPointer Pointer)? _touchedDay;
 
     /// <summary>
     /// Dotknięcie pustej siatki zakłada nową rzecz na tej godzinie.
@@ -2025,7 +2025,7 @@ public partial class MainView : UserControl
     /// </remarks>
     private void NewThingOnGrid(object? sender, PointerPressedEventArgs e)
     {
-        _touched = null;
+        _touchedDay = null;
 
         if (sender is not Control layer || layer.Tag is not DateOnly day)
         {
@@ -2039,13 +2039,13 @@ public partial class MainView : UserControl
             return;
         }
 
-        _touched = (day, e.GetPosition(layer), e.Pointer);
+        _touchedDay = (day, e.GetPosition(layer), e.Pointer);
     }
 
     private void GridReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var start = _touched;
-        _touched = null;
+        var start = _touchedDay;
+        _touchedDay = null;
 
         if (start is not { } touch
             || sender is not Control layer
@@ -2069,7 +2069,7 @@ public partial class MainView : UserControl
 
     /// <summary>Przewijanie przejęło wskaźnik — to nie było dotknięcie siatki.</summary>
     private void GridAbandoned(object? sender, PointerCaptureLostEventArgs e) =>
-        _touched = null;
+        _touchedDay = null;
 
     /// <summary>Szerokość kolumny godzin z lewej. Odpowiednik szerokości w XAML-u.</summary>
     private const double HourColumn = 52;
@@ -2078,7 +2078,7 @@ public partial class MainView : UserControl
     private const double Capacity = 14;
 
     private void OnWidthChange(object? sender, SizeChangedEventArgs e) =>
-        Width(e.NewSize.Width);
+        SetWidth(e.NewSize.Width);
 
     /// <summary>
     /// Przesuwanie kreski bieżącej godziny.
@@ -2175,7 +2175,7 @@ public partial class MainView : UserControl
         }
     }
 
-    private void Width(double whole)
+    private void SetWidth(double whole)
     {
         if (whole > 0)
         {

@@ -224,9 +224,9 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// Przeliczenie wyników. Jeden przebieg naraz — zob. <see cref="LatestOnly"/>.
     /// </summary>
     [RelayCommand]
-    private Task RunAsync() => _loading ? Task.CompletedTask : _queue.RunAsync(RunAsync);
+    private Task RunAsync() => _loading ? Task.CompletedTask : _queue.RunAsync(ReloadAsync);
 
-    private async Task RunAsync()
+    private async Task ReloadAsync()
     {
         var today = _clock.Today;
 
