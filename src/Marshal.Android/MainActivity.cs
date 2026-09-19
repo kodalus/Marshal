@@ -40,11 +40,11 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     {
         // Zegar rozruchu jako pierwsza czynność — zob. Rozruch. Wcześniej jest już
         // tylko start procesu i środowiska, czego stąd zmierzyć się nie da.
-        _ = Rozruch.Teraz();
+        _ = Startup.Now();
 
         // Przed wszystkim: okno składa się już z tą wiedzą, a od niej zależy, czy
         // w ogóle rysować rzeczy pomyślane pod kursor. Zob. Platforma.
-        Platforma.Dotykowa = true;
+        Platform.Touch = true;
 
         // Przed bazowym, bo to ono stawia Avalonię — a awaria przy stawianiu jest
         // dokładnie tą, o której najtrudniej się czegokolwiek dowiedzieć.
@@ -56,12 +56,12 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // pokazać okienko systemu; podpięte linijkę później znaczyło, że odpowiedź
         // zawsze brzmiała „nie" i wszystkie pola zostawały przy wybieraku wbudowanym.
         // Samo podpięcie niczego nie otwiera, więc nie potrzebuje gotowego okna.
-        Wybieraki.Podepnij(this);
+        NativePickers.Podepnij(this);
 
         // Bazowe stawia Avalonię i składa cały widok — to jest ta część rozruchu,
         // której dotąd nie mierzyłem, a która idzie wątkiem okna w całości.
         base.OnCreate(savedInstanceState);
-        Rozruch.Platforma = Rozruch.Teraz();
+        Startup.Platform = Startup.Now();
 
         Powiadomienia.Podepnij(this);
 
@@ -80,9 +80,9 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Wyjście bywa gwałtowne — zdjęcie aplikacji z listy ostatnich potrafi zabić
         // proces, zanim nastawianie dobiegnie końca — a wtedy budzik nie istnieje
         // i nie widać tego po niczym. Otwarcie jest chwilą, w której da się to nadrobić.
-        OdbiorcaBudzika.Obudz(ApplicationContext!);
+        OdbiorcaBudzika.OnWake(ApplicationContext!);
 
-        Rozruch.Okno = Rozruch.Teraz();
+        Startup.Window = Startup.Now();
     }
 
     /// <summary>
@@ -122,7 +122,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 
         // Nieczytelny identyfikator traktowany jak jego brak: wejście na kalendarz jest
         // wtedy nadal sensowną odpowiedzią, a odmowa całego wejścia — nie.
-        App.PoprosOKalendarz(
+        App.AskForCalendar(
             Guid.TryParse(zamiar.GetStringExtra(ZadanieExtra), out var task)
                 ? task
                 : null);
@@ -132,7 +132,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     {
         // Haczyk wskazujący na zamknięte okno jest gorszy od pustego: pusty znaczy
         // „użyj wbudowanego", a wskazujący na nic wywraca się dopiero przy dotknięciu.
-        Wybieraki.Odepnij();
+        NativePickers.Odepnij();
 
         base.OnDestroy();
     }
@@ -147,7 +147,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     protected override void OnResume()
     {
         base.OnResume();
-        Uspienie.Ocknij();
+        Sleep.Leave();
     }
 
     protected override void OnPause()
@@ -157,7 +157,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Najpierw uśpienie minutnika, potem reszta. Praca w tle należy do pracownika
         // synchronizacji i budzika — mechanizmów, którym system na nią pozwala — a nie
         // do minutnika okna, którego nikt już nie ogląda.
-        Uspienie.Uspij();
+        Sleep.Enter();
 
         TodayWidget.Refresh(this);
 

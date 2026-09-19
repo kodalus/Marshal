@@ -21,11 +21,11 @@ namespace Marshal.Android;
 /// zamknięcie otwartego menu podręcznego.
 /// </para>
 /// </remarks>
-internal sealed class ObslugaWstecz(ComponentActivity okno) : OnBackPressedCallback(true)
+internal sealed class ObslugaWstecz(ComponentActivity window) : OnBackPressedCallback(true)
 {
     public override void HandleOnBackPressed()
     {
-        if (Wstecz.Zajeto())
+        if (Back.Handled())
         {
             return;
         }
@@ -34,7 +34,7 @@ internal sealed class ObslugaWstecz(ComponentActivity okno) : OnBackPressedCallb
 
         try
         {
-            okno.OnBackPressedDispatcher.OnBackPressed();
+            window.OnBackPressedDispatcher.OnBackPressed();
         }
         finally
         {

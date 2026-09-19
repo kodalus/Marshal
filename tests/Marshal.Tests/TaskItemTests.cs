@@ -7,13 +7,13 @@ namespace Marshal.Tests;
 
 public class TaskItemTests
 {
-    private static readonly DateTimeOffset Teraz = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
+    private static readonly DateTimeOffset Now = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     private static readonly Guid Obszar = Guid.CreateVersion7();
 
     private static Hlc Stamp(long ms = 1000) => new(ms, 0, "a");
 
     private static TaskItem Wrzut(string title = "Zadzwonić do przychodni") =>
-        TaskItem.Capture(title, Teraz, Stamp());
+        TaskItem.Capture(title, Now, Stamp());
 
     [Fact]
     public void Wrzut_ma_tylko_tytul_i_laduje_w_skrzynce()
@@ -144,10 +144,10 @@ public class TaskItemTests
         var task = Wrzut();
         task.MakeNext(Obszar, Stamp(2000));
 
-        task.Complete(Teraz, Stamp(3000));
+        task.Complete(Now, Stamp(3000));
 
         task.State.Should().Be(TaskState.Done);
-        task.CompletedAt.Should().Be(Teraz);
+        task.CompletedAt.Should().Be(Now);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class TaskItemTests
     {
         var task = Wrzut();
         task.MakeNext(Obszar, Stamp(2000));
-        task.Complete(Teraz, Stamp(3000));
+        task.Complete(Now, Stamp(3000));
 
         task.Reopen(Stamp(4000));
 
@@ -175,7 +175,7 @@ public class TaskItemTests
     {
         var task = Wrzut();
         task.Schedule(Obszar, new DateOnly(2026, 9, 17), Stamp(2000));
-        task.Complete(Teraz, Stamp(3000));
+        task.Complete(Now, Stamp(3000));
 
         task.Reopen(Stamp(4000));
 
@@ -192,13 +192,13 @@ public class TaskItemTests
     {
         var task = Wrzut();
         task.Schedule(Obszar, new DateOnly(2026, 9, 17), Stamp(2000));
-        task.Complete(Teraz, Stamp(3000));
+        task.Complete(Now, Stamp(3000));
 
         task.MoveDoDate(new DateOnly(2026, 9, 18), Stamp(4000));
 
         task.State.Should().Be(TaskState.Done);
         task.DoDate.Should().Be(new DateOnly(2026, 9, 18));
-        task.CompletedAt.Should().Be(Teraz);
+        task.CompletedAt.Should().Be(Now);
     }
 
     [Fact]
@@ -206,9 +206,9 @@ public class TaskItemTests
     {
         var task = Wrzut();
 
-        var otworz = () => task.Reopen(Stamp(2000));
+        var open = () => task.Reopen(Stamp(2000));
 
-        otworz.Should().Throw<InvalidOperationException>();
+        open.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]

@@ -29,16 +29,16 @@ public partial class App : Avalonia.Application
     /// uruchomienie padło. Warstwa współdzielona nie ma jak ich zapytać, więc to one
     /// zostawiają tu zdanie przed startem.
     /// </remarks>
-    public static string? SladPlatformy { get; set; }
+    public static string? PlatformTrace { get; set; }
 
     /// <summary>Co okno umie zrobić na prośbę z zewnątrz. Puste, dopóki okna nie ma.</summary>
-    private static Action<Guid?>? _pokazKalendarz;
+    private static Action<Guid?>? _showCalendar;
 
     /// <summary>Czy ktoś prosił o kalendarz, zanim było komu.</summary>
-    private static bool _zadanoKalendarza;
+    private static bool _calendarAsked;
 
     /// <summary>Zadanie, o które proszono razem z kalendarzem. Puste, gdy o żadne.</summary>
-    private static Guid? _zadaneZadanie;
+    private static Guid? _askedTask;
 
     /// <summary>
     /// Prośba spoza okna, żeby pokazać kalendarz — z widgetu na ekranie domowym.
@@ -61,32 +61,32 @@ public partial class App : Avalonia.Application
     /// Bez tego z widgetu dało się wejść tylko „gdzieś w okolice" i dalej trzeba było
     /// szukać wzrokiem po siatce.
     /// </param>
-    public static void PoprosOKalendarz(Guid? task = null)
+    public static void AskForCalendar(Guid? task = null)
     {
-        if (_pokazKalendarz is { } now)
+        if (_showCalendar is { } now)
         {
             now(task);
             return;
         }
 
-        _zadanoKalendarza = true;
-        _zadaneZadanie = task;
+        _calendarAsked = true;
+        _askedTask = task;
     }
 
     /// <summary>Podpięcie okna. Spełnia prośbę, która przyszła, zanim okno powstało.</summary>
-    private static void PodepnijKalendarz(Action<Guid?> pokaz)
+    private static void HookCalendar(Action<Guid?> pokaz)
     {
-        _pokazKalendarz = pokaz;
+        _showCalendar = pokaz;
 
-        if (!_zadanoKalendarza)
+        if (!_calendarAsked)
         {
             return;
         }
 
-        _zadanoKalendarza = false;
+        _calendarAsked = false;
 
-        var task = _zadaneZadanie;
-        _zadaneZadanie = null;
+        var task = _askedTask;
+        _askedTask = null;
 
         pokaz(task);
     }
@@ -100,21 +100,21 @@ public partial class App : Avalonia.Application
     /// Zwinięta aplikacja bez drogi powrotu wygląda na zawieszoną, a znaczek, który
     /// nic nie robi po kliknięciu, jest gorszy od jego braku.
     /// </remarks>
-    private void PokazOkno(object? nadawca, EventArgs e)
+    private void ShowWindow(object? sender, EventArgs e)
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } okno })
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
         {
-            okno.Show();
-            okno.WindowState = WindowState.Normal;
-            okno.Activate();
+            window.Show();
+            window.WindowState = WindowState.Normal;
+            window.Activate();
         }
     }
 
-    private void Zakoncz(object? nadawca, EventArgs e)
+    private void Finish(object? sender, EventArgs e)
     {
-        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime pulpit)
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            pulpit.Shutdown();
+            desktop.Shutdown();
         }
     }
 
@@ -124,10 +124,10 @@ public partial class App : Avalonia.Application
         // bo to właśnie ją Android mierzy, pokazując „aplikacja nie odpowiada".
         // Zatrzymywane po wpisie startowym: dalej mierzy już zwykłą pracę aplikacji,
         // a pytanie dotyczy rozruchu.
-        var serce = new DispatcherTimer(
-            TimeSpan.FromMilliseconds(100), DispatcherPriority.Input, (_, _) => Rozruch.Bicie());
+        var heartbeat = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(100), DispatcherPriority.Input, (_, _) => Startup.Beat());
 
-        serce.Start();
+        heartbeat.Start();
 
         var services = AppServices.Build();
 
@@ -140,17 +140,17 @@ public partial class App : Avalonia.Application
         var desktop = ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
         var singleView = ApplicationLifetime as ISingleViewApplicationLifetime;
 
-        var okno = desktop is null ? null : new MainWindow();
-        var widok = singleView is null ? null : new MainView();
+        var window = desktop is null ? null : new MainWindow();
+        var view = singleView is null ? null : new MainView();
 
         if (desktop is not null)
         {
-            desktop.MainWindow = okno;
+            desktop.MainWindow = window;
         }
 
         if (singleView is not null)
         {
-            singleView.MainView = widok;
+            singleView.MainView = view;
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -171,17 +171,17 @@ public partial class App : Avalonia.Application
                 // Chwila, w której wątek okna w ogóle doszedł do wczytywania. Między
                 // końcem tworzenia okna a tym miejscem stoi kolejka zdarzeń wątku okna
                 // — a jeśli coś ją zapycha, widać to wyłącznie jako tę różnicę.
-                Rozruch.Model = Rozruch.Teraz();
+                Startup.Model = Startup.Now();
 
-                var zegarStartu = Stopwatch.StartNew();
+                var startClock = Stopwatch.StartNew();
 
                 await AppServices.ReadyAsync();
 
-                var przygotowanie = zegarStartu.ElapsedMilliseconds;
+                var prepare = startClock.ElapsedMilliseconds;
 
                 var viewModel = services.GetRequiredService<MainViewModel>();
 
-                var zlozenie = zegarStartu.ElapsedMilliseconds - przygotowanie;
+                var merge = startClock.ElapsedMilliseconds - prepare;
 
                 // Motyw przestawia aplikacja, bo dotyczy całego okna, a nie ekranu
                 // ustawień. Zapisany motyw leży w bazie, więc dopiero teraz.
@@ -191,50 +191,50 @@ public partial class App : Avalonia.Application
                 RequestedThemeVariant = Variant(
                     services.GetRequiredService<ISettings>().Theme);
 
-                if (okno is not null)
+                if (window is not null)
                 {
-                    okno.DataContext = viewModel;
+                    window.DataContext = viewModel;
                 }
 
-                if (widok is not null)
+                if (view is not null)
                 {
-                    widok.DataContext = viewModel;
+                    view.DataContext = viewModel;
                 }
 
                 await viewModel.InitializeAsync();
 
-                var wczytanie = zegarStartu.ElapsedMilliseconds - przygotowanie - zlozenie;
+                var load = startClock.ElapsedMilliseconds - prepare - merge;
 
-                PodepnijKalendarz(
+                HookCalendar(
                     task => Dispatcher.UIThread.Post(
-                        () => viewModel.PokazKalendarz(task)));
+                        () => viewModel.ShowCalendar(task)));
 
                 // Strefa w dzienniku przy każdym starcie: przesuwa wszystkie godziny
                 // naraz, a przesunięte wszystko wygląda tak samo jak źle pobrane dane.
-                var ustawienia = services.GetRequiredService<ISettings>();
-                var zegar = services.GetRequiredService<IClock>();
+                var settings = services.GetRequiredService<ISettings>();
+                var clock = services.GetRequiredService<IClock>();
 
                 // Serce zatrzymane przed spisaniem wpisu, żeby wpisana przerwa dotyczyła
                 // rozruchu, a nie tego, co dzieje się po nim.
-                serce.Stop();
+                heartbeat.Stop();
 
                 await services.GetRequiredService<IActivityLog>().RecordAsync(
                     "Start",
-                    $"strefa {ustawienia.Zone.Id}, teraz {zegar.Now:yyyy-MM-dd HH:mm zzz}, "
-                        + $"wydanie {Wydanie()}, "
+                    $"strefa {settings.Zone.Id}, teraz {clock.Now:yyyy-MM-dd HH:mm zzz}, "
+                        + $"wydanie {Release()}, "
                         + $"powiadomienia systemowe: {InAppNotifier.SystemStatus}, "
-                        + $"kalendarz główny: {ustawienia.MainCalendarId?.ToString() ?? "nieustawiony"}, "
+                        + $"kalendarz główny: {settings.MainCalendarId?.ToString() ?? "nieustawiony"}, "
 
                         // Czasy startu w dzienniku, bo „aplikacja się zawiesza przy
                         // otwarciu" nie mówi, co ją trzyma — a trzy liczby mówią.
-                        + $"start: przygotowanie {przygotowanie} ms, "
-                        + $"złożenie {zlozenie} ms, wczytanie {wczytanie} ms"
-                        + (Rozruch.Zmierzony ? $", {Rozruch.Description}" : string.Empty),
-                    ustawienia.ZoneProblem is null && SladPlatformy is null
+                        + $"start: przygotowanie {prepare} ms, "
+                        + $"złożenie {merge} ms, wczytanie {load} ms"
+                        + (Startup.Measured ? $", {Startup.Description}" : string.Empty),
+                    settings.ZoneProblem is null && PlatformTrace is null
                         ? ActivityLevel.Ok : ActivityLevel.Problem,
-                    string.Join("\n\n", new[] { ustawienia.ZoneProblem, SladPlatformy }
-                        .Where(w => !string.IsNullOrWhiteSpace(w))) is { Length: > 0 } szczegoly
-                        ? szczegoly : null);
+                    string.Join("\n\n", new[] { settings.ZoneProblem, PlatformTrace }
+                        .Where(w => !string.IsNullOrWhiteSpace(w))) is { Length: > 0 } details
+                        ? details : null);
             }
             catch (Exception ex)
             {
@@ -250,16 +250,16 @@ public partial class App : Avalonia.Application
                 await services.GetRequiredService<IActivityLog>().RecordAsync(
                     "Start", "nie udało się", ActivityLevel.Problem, ex.ToString());
 
-                var awaria = StartupFailure.Build(ex);
+                var failure = StartupFailure.Build(ex);
 
-                if (okno is not null)
+                if (window is not null)
                 {
-                    okno.Content = awaria;
+                    window.Content = failure;
                 }
 
-                if (widok is not null)
+                if (view is not null)
                 {
-                    widok.Content = awaria;
+                    view.Content = failure;
                 }
             }
         });
@@ -287,13 +287,13 @@ public partial class App : Avalonia.Application
     /// i nie zależy od tego, czy cokolwiek leży na dysku. CI dokleja do niej skrót
     /// zapisu (zob. Directory.Build.props), więc z tej linijki da się trafić w commit.
     /// </remarks>
-    private static string Wydanie()
+    private static string Release()
     {
-        var wersja = typeof(App).Assembly
+        var version = typeof(App).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             ?.InformationalVersion;
 
-        return string.IsNullOrWhiteSpace(wersja) ? "nieznane" : wersja;
+        return string.IsNullOrWhiteSpace(version) ? "nieznane" : version;
     }
 
     private static ThemeVariant Variant(ThemeChoice choice) => choice switch

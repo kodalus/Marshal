@@ -15,7 +15,7 @@ namespace Marshal.UI.ViewModels;
 /// </remarks>
 public sealed record ProjectTreeRow(ProjectRow Row, AreaBalance? Balance = null)
 {
-    private const string Brak = "#4A5580";
+    private const string Fallback = "#4A5580";
 
     public Guid Id => Row.Id;
 
@@ -65,7 +65,7 @@ public sealed record ProjectTreeRow(ProjectRow Row, AreaBalance? Balance = null)
     public IBrush Swatch =>
         Avalonia.Media.Color.TryParse(Row.Color ?? string.Empty, out var color)
             ? new SolidColorBrush(color)
-            : new SolidColorBrush(Avalonia.Media.Color.Parse(Brak));
+            : new SolidColorBrush(Avalonia.Media.Color.Parse(Fallback));
 }
 
 /// <summary>

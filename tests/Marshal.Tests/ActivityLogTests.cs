@@ -14,7 +14,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class ActivityLogTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 17, 9, 0, 0, TimeSpan.FromHours(2));
@@ -22,8 +22,8 @@ public sealed class ActivityLogTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly DbContextOptions<MarshalDbContext> _opcje;
-    private readonly Zegar _zegar = new();
-    private readonly ActivityLog _dziennik;
+    private readonly Clock _zegar = new();
+    private readonly ActivityLog _journal;
 
     public ActivityLogTests()
     {
@@ -37,15 +37,15 @@ public sealed class ActivityLogTests : IDisposable
             db.Database.Migrate();
         }
 
-        _dziennik = new ActivityLog(_opcje, _zegar);
+        _journal = new ActivityLog(_opcje, _zegar);
     }
 
     [Fact]
     public async Task Wpis_zapisuje_sie_i_wraca()
     {
-        await _dziennik.RecordAsync("Kalendarz: pobranie", "11 kalendarzy, 52 wydarzenia");
+        await _journal.RecordAsync("Kalendarz: pobranie", "11 kalendarzy, 52 wydarzenia");
 
-        var entry = (await _dziennik.RecentAsync()).Single();
+        var entry = (await _journal.RecentAsync()).Single();
 
         entry.Operation.Should().Be("Kalendarz: pobranie");
         entry.Outcome.Should().Be("11 kalendarzy, 52 wydarzenia");
@@ -56,11 +56,11 @@ public sealed class ActivityLogTests : IDisposable
     [Fact]
     public async Task Najnowsze_ida_na_gore()
     {
-        await _dziennik.RecordAsync("Pierwsza", "-");
+        await _journal.RecordAsync("Pierwsza", "-");
         _zegar.Now = _zegar.Now.AddMinutes(1);
-        await _dziennik.RecordAsync("Druga", "-");
+        await _journal.RecordAsync("Druga", "-");
 
-        (await _dziennik.RecentAsync()).Select(w => w.Operation)
+        (await _journal.RecentAsync()).Select(w => w.Operation)
             .Should().ContainInOrder("Druga", "Pierwsza");
     }
 
@@ -89,7 +89,7 @@ public sealed class ActivityLogTests : IDisposable
         // cały dziennik naraz.
         for (var i = 0; i < 610; i++)
         {
-            await _dziennik.RecordAsync($"Wpis {i}", "-");
+            await _journal.RecordAsync($"Wpis {i}", "-");
         }
 
         await using var db = new MarshalDbContext(_opcje);
@@ -105,10 +105,10 @@ public sealed class ActivityLogTests : IDisposable
     [Fact]
     public async Task Czyszczenie_oproznia_dziennik()
     {
-        await _dziennik.RecordAsync("Coś", "-");
-        await _dziennik.ClearAsync();
+        await _journal.RecordAsync("Coś", "-");
+        await _journal.ClearAsync();
 
-        (await _dziennik.RecentAsync()).Should().BeEmpty();
+        (await _journal.RecentAsync()).Should().BeEmpty();
     }
 
     public void Dispose() => _polaczenie.Dispose();

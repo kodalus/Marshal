@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Marshal.UI.ViewModels"
-             xmlns:k="using:Marshal.UI.Kontrolki"
+             xmlns:k="using:Marshal.UI.Controls"
              xmlns:tasks="using:Marshal.Domain.Tasks"
              xmlns:uc="using:Marshal.Application.UseCases"
              xmlns:rev="using:Marshal.Application.Review"
@@ -516,7 +516,7 @@
       <!-- Dwuklik otwiera szczegół. Do dziś jedyną drogą do wrzutu było przetwarzanie,
            więc dopisanie godziny do myśli, która już leży w skrzynce, wymagało przejścia
            przez całe drzewko decyzji. -->
-      <ListBox ItemsSource="{Binding InboxItems}" DoubleTapped="OtworzZListy">
+      <ListBox ItemsSource="{Binding InboxItems}" DoubleTapped="OpenFromList">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
             <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Padding="0,4" />
@@ -620,7 +620,7 @@
         </Grid>
 
         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-          <k:WyborDaty Grid.Column="0" Value="{Binding ScheduledFor}" />
+          <k:DateField Grid.Column="0" Value="{Binding ScheduledFor}" />
           <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
                   Command="{Binding ScheduleCommand}" Content="Zaplanuj" />
         </Grid>
@@ -641,7 +641,7 @@
     </Panel>
 
     <!-- Następne akcje -->
-    <ListBox IsVisible="{Binding IsNext}" ItemsSource="{Binding NextActions}" DoubleTapped="OtworzZListy">
+    <ListBox IsVisible="{Binding IsNext}" ItemsSource="{Binding NextActions}" DoubleTapped="OpenFromList">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:TaskRow">
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
@@ -800,7 +800,7 @@
       </StackPanel>
       <TextBlock Classes="hint" Margin="2,4,0,0" IsVisible="{Binding !HasToday}"
                  Text="Na dziś nic nie ma terminu ani dnia wykonania. To jest poprawny stan, nie pusty ekran." />
-      <ListBox ItemsSource="{Binding TodayItems}" IsVisible="{Binding HasToday}" DoubleTapped="OtworzZListy">
+      <ListBox ItemsSource="{Binding TodayItems}" IsVisible="{Binding HasToday}" DoubleTapped="OpenFromList">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TaskRow">
             <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3">
@@ -833,7 +833,7 @@
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  TextWrapping="Wrap"
                  Text="Bez presji i bez terminu. Wraca, gdy dojrzeje. Prawy przycisk na pozycji — „Weź na dziś” wyjmuje ją stąd i robi z niej następną akcję." />
-      <ListBox ItemsSource="{Binding SomedayItems}" DoubleTapped="OtworzZListy">
+      <ListBox ItemsSource="{Binding SomedayItems}" DoubleTapped="OpenFromList">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
             <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Padding="0,4" />
@@ -875,7 +875,7 @@
 
       <ScrollViewer DataContext="{Binding Now}">
         <ItemsControl ItemsSource="{Binding Picks}" x:DataType="vm:NowViewModel"
-                      DoubleTapped="OtworzZListy">
+                      DoubleTapped="OpenFromList">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="uc:NowPick">
               <Border Margin="0,0,0,8" Padding="14,12" CornerRadius="8" Background="{DynamicResource Panel}">
@@ -941,8 +941,8 @@
 
             <ComboBox MinWidth="0" HorizontalAlignment="Stretch"
                       IsVisible="{Binding ShowRangePicker}"
-                      ItemsSource="{Binding Zakresy}"
-                      SelectedItem="{Binding Zakres}" />
+                      ItemsSource="{Binding Ranges}"
+                      SelectedItem="{Binding Range}" />
           </Panel>
           <Button Grid.Column="4" Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
         </Grid>
@@ -1014,7 +1014,7 @@
                                   HorizontalContentAlignment="Left"
                                   VerticalContentAlignment="Center"
                                   Background="{DynamicResource Panel}"
-                                  Click="OtworzCalodniowe" Tag="{Binding}">
+                                  Click="OpenAllDay" Tag="{Binding}">
                             <TextBlock Text="{Binding Label}" FontSize="11"
                                        VerticalAlignment="Center"
                                        TextTrimming="CharacterEllipsis" />
@@ -1039,7 +1039,7 @@
            to samo pytanie, pokazywane na przemian. Rozdzielone na dwoje rodzeństwa
            w tym samym panelu, bo miesiąc nie ma godzin, kolumn ani paska całodniowego
            i wciśnięty w tamtą siatkę musiałby udawać jej szczególny przypadek. -->
-      <Panel x:Name="ObszarKalendarza" Loaded="ObszarKalendarzaGotowy">
+      <Panel x:Name="ObszarKalendarza" Loaded="CalendarAreaReady">
 
       <!-- Sąsiednie zakresy, widoczne wyłącznie w trakcie przejechania palcem.
            Stoją w tym samym panelu, co siatka, przesunięte o szerokość okna w lewo
@@ -1069,7 +1069,7 @@
               </ItemsControl>
             </StackPanel>
 
-            <ItemsControl ItemsSource="{Binding KolumnyPrzed}">
+            <ItemsControl ItemsSource="{Binding ColumnsBefore}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <StackPanel Orientation="Horizontal" />
@@ -1122,7 +1122,7 @@
           </StackPanel>
         </ScrollViewer>
 
-        <ItemsControl IsVisible="{Binding IsMonth}" ItemsSource="{Binding TygodniePrzed}">
+        <ItemsControl IsVisible="{Binding IsMonth}" ItemsSource="{Binding WeeksBefore}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <UniformGrid Columns="1" />
@@ -1181,7 +1181,7 @@
               </ItemsControl>
             </StackPanel>
 
-            <ItemsControl ItemsSource="{Binding KolumnyPo}">
+            <ItemsControl ItemsSource="{Binding ColumnsAfter}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <StackPanel Orientation="Horizontal" />
@@ -1234,7 +1234,7 @@
           </StackPanel>
         </ScrollViewer>
 
-        <ItemsControl IsVisible="{Binding IsMonth}" ItemsSource="{Binding TygodniePo}">
+        <ItemsControl IsVisible="{Binding IsMonth}" ItemsSource="{Binding WeeksAfter}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <UniformGrid Columns="1" />
@@ -1316,10 +1316,10 @@
                          osobną warstwą, nie tłem bloków, bo mają być widoczne
                          również tam, gdzie nic nie zaplanowano. -->
                     <ItemsControl Name="Godziny" Tag="{Binding Date}"
-                                  Loaded="WarstwaGodzinGotowa"
-                                  PointerPressed="NowaRzeczNaSiatce"
-                                  PointerReleased="SiatkaPuszczona"
-                                  PointerCaptureLost="SiatkaPorzucona"
+                                  Loaded="HourLayerReady"
+                                  PointerPressed="NewThingOnGrid"
+                                  PointerReleased="GridReleased"
+                                  PointerCaptureLost="GridAbandoned"
                                   ItemsSource="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).HourLabels}"
                                   Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}"
                                   Background="{DynamicResource PoleSlabe}">
@@ -1360,10 +1360,10 @@
                                puszczenie bez przejechania progu. -->
                           <Border Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
                                   Tag="{Binding}"
-                                  PointerPressed="BlokWcisniety"
-                                  PointerMoved="BlokRuszony"
-                                  PointerReleased="BlokPuszczony"
-                                  PointerCaptureLost="BlokPuscilWskaznik"
+                                  PointerPressed="BlockPressed"
+                                  PointerMoved="BlockMoved"
+                                  PointerReleased="BlockReleased"
+                                  PointerCaptureLost="BlockLostPointer"
                                   Opacity="{Binding Opacity}"
                                   Background="{Binding Background}" CornerRadius="4" Padding="4,2">
                             <Grid ColumnDefinitions="Auto,*,Auto">
@@ -1391,9 +1391,9 @@
                                         Width="{Binding CheckSize}"
                                         Height="{Binding CheckSize}"
                                         VerticalAlignment="Top" HorizontalAlignment="Left"
-                                        PointerPressed="OdhaczNaSiatce"
-                                        PointerReleased="OdhaczeniePuszczone"
-                                        PointerCaptureLost="OdhaczeniePorzucone">
+                                        PointerPressed="CompleteOnGrid"
+                                        PointerReleased="CompleteReleased"
+                                        PointerCaptureLost="CompleteAbandoned">
                                   <TextBlock Text="✓" IsVisible="{Binding IsDone}"
                                              FontSize="{Binding MarkSize}"
                                              LineHeight="{Binding CheckSize}"
@@ -1475,7 +1475,7 @@
                a na telefonie przy sześciu tygodniach przycinała czwartą, której licznik
                nadmiaru już nie policzył. -->
           <ItemsControl Grid.Row="1" ItemsSource="{Binding MonthWeeks}"
-                        Loaded="SiatkaMiesiacaGotowa">
+                        Loaded="MonthGridReady">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
                 <UniformGrid Columns="1" />
@@ -1493,7 +1493,7 @@
                     <DataTemplate x:DataType="vm:MonthCell">
                       <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
                               Classes.dzisiaj="{Binding IsToday}"
-                              PointerReleased="NaDniuMiesiaca">
+                              PointerReleased="OnMonthDay">
                         <DockPanel>
                           <!-- Numer dnia i licznik nadmiaru w jednym wierszu u góry:
                                oba są wiadomością o komórce, a nie jej treścią, i oba
@@ -1515,7 +1515,7 @@
                                      zlały się w jeden pas. -->
                                 <Border Background="{Binding Background}" CornerRadius="3"
                                         Padding="3,0" Margin="0,1"
-                                        PointerReleased="NaWpisieMiesiaca">
+                                        PointerReleased="OnMonthEntry">
                                   <Grid ColumnDefinitions="Auto,*">
                                     <TextBlock Grid.Column="0" Classes="hint" Margin="0,0,4,0"
                                                FontSize="11"
@@ -1551,10 +1551,10 @@
          nie dostała. -->
     <Panel DataContext="{Binding Calendar}" IsVisible="{Binding HasOpened}"
            Background="{DynamicResource Zaslona}"
-           PointerPressed="TloWydarzenia">
+           PointerPressed="EventBackground">
       <Border x:DataType="vm:CalendarViewModel" MaxWidth="480" Margin="12" Padding="20"
               CornerRadius="10" Background="{DynamicResource Karta}" VerticalAlignment="Center"
-              PointerPressed="ZatrzymajKlikniecie">
+              PointerPressed="StopClick">
         <StackPanel Spacing="8">
 
           <Grid ColumnDefinitions="Auto,*">
@@ -1573,10 +1573,10 @@
           <TextBlock Classes="hint" Text="{Binding Opened.DayText}" />
 
           <Grid ColumnDefinitions="*,Auto,*">
-            <k:WyborGodziny Grid.Column="0" Value="{Binding OpenedStart}"
+            <k:TimeField Grid.Column="0" Value="{Binding OpenedStart}"
                             IsEnabled="{Binding CanEditOpened}" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <k:WyborGodziny Grid.Column="2" Value="{Binding OpenedEnd}"
+            <k:TimeField Grid.Column="2" Value="{Binding OpenedEnd}"
                             IsEnabled="{Binding CanEditOpened}" />
           </Grid>
 
@@ -1592,8 +1592,8 @@
                        Margin="0,0,8,0" Opacity="0.7" />
             <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
                       PlaceholderText="bez obszaru"
-                      ItemsSource="{Binding ObszaryWydarzenia}"
-                      SelectedItem="{Binding ObszarWydarzenia}">
+                      ItemsSource="{Binding EventAreas}"
+                      SelectedItem="{Binding EventArea}">
               <ComboBox.ItemTemplate>
                 <DataTemplate x:DataType="da:Area">
                   <TextBlock Text="{Binding Name}" />
@@ -1614,7 +1614,7 @@
           <StackPanel IsVisible="{Binding CanEditOpened}" Margin="0,4,0,0" Spacing="4">
             <TextBlock Text="Pokaż osobie" Opacity="0.7" />
 
-            <ItemsControl ItemsSource="{Binding Osoby}" IsVisible="{Binding HasOsoby}">
+            <ItemsControl ItemsSource="{Binding People}" IsVisible="{Binding HasPeople}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <WrapPanel />
@@ -1633,9 +1633,9 @@
               <TextBox Grid.Column="0" Watermark="adres e-mail"
                        ti:TextInputOptions.AutoCapitalization="False"
                        ti:TextInputOptions.ContentType="Email"
-                       Text="{Binding NowaOsoba}" />
+                       Text="{Binding NewPerson}" />
               <Button Grid.Column="1" Classes="nav" Margin="4,0,0,0" Content="Pokaż"
-                      Command="{Binding DopiszOsobeCommand}" />
+                      Command="{Binding AddPersonCommand}" />
             </Grid>
           </StackPanel>
 
@@ -1695,7 +1695,7 @@
           <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                      TextWrapping="Wrap" Text="{Binding Empty}"
                      IsVisible="{Binding !HasItems}" />
-          <ListBox ItemsSource="{Binding Items}" DoubleTapped="OtworzNotatke">
+          <ListBox ItemsSource="{Binding Items}" DoubleTapped="OpenNote">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="dn:Note">
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
@@ -2193,7 +2193,7 @@
     <DockPanel IsVisible="{Binding IsWaiting}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Czekanie jest prawidłowym stanem. Próg ponaglenia jest własnością obszaru — urząd nie odpowiada w tydzień." />
-      <ListBox ItemsSource="{Binding WaitingItems}" DoubleTapped="OtworzZListy">
+      <ListBox ItemsSource="{Binding WaitingItems}" DoubleTapped="OpenFromList">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="rev:WaitingItem">
             <Grid ColumnDefinitions="*,Auto" Margin="0,4">
@@ -2256,7 +2256,7 @@
                       VerticalAlignment="Center" Cursor="Hand"
                       Background="{Binding Swatch}"
                       BorderThickness="1" BorderBrush="{DynamicResource Odznaka}"
-                      PointerPressed="NaBarwie" />
+                      PointerPressed="OnColor" />
 
               <StackPanel Grid.Column="2" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Label}" TextWrapping="Wrap" />
@@ -2480,7 +2480,7 @@
     <DockPanel IsVisible="{Binding IsArchive}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                  Text="Wykonane i wyrzucone, najnowsze pierwsze. Nic nie znika z bazy." />
-      <ListBox ItemsSource="{Binding ArchiveItems}" DoubleTapped="OtworzZListy">
+      <ListBox ItemsSource="{Binding ArchiveItems}" DoubleTapped="OpenFromList">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="tasks:TaskItem">
             <Grid ColumnDefinitions="*,Auto" Margin="0,4">
@@ -2546,7 +2546,7 @@
       </Canvas>
 
       <Panel IsVisible="{Binding Detail.IsOpen}" Background="{DynamicResource Zaslona}"
-             PointerPressed="TloSzczegolu">
+             PointerPressed="DetailBackground">
       <!-- Kliknięcie w przyciemnione tło zamyka okno, kliknięcie w samo okno nie:
            zdarzenie zatrzymuje się na ramce, więc do tła nie dociera. -->
       <!-- Na wąskim ekranie karta przestaje być kartą i wypełnia okno. Okienko
@@ -2558,7 +2558,7 @@
               MaxWidth="560" MaxHeight="620" Margin="8" Padding="24" CornerRadius="14"
               Background="{DynamicResource Karta}" VerticalAlignment="Center"
               BorderThickness="1" BorderBrush="{DynamicResource Krawedz}"
-              PointerPressed="ZatrzymajKlikniecie">
+              PointerPressed="StopClick">
       <DockPanel DataContext="{Binding Detail}" x:DataType="vm:TaskDetailViewModel">
 
         <!-- Przyciski przyszpilone na dole, poza przewijaniem. Wcześniej stały na
@@ -2575,13 +2575,13 @@
                Do dziś nie było go wcale. Na komputerze kasowało się z listy, prawym
                przyciskiem; na telefonie nie ma ani prawego przycisku, ani listy pod
                ręką, więc zadania otwartego z kalendarza nie dało się usunąć w ogóle. -->
-          <Button Grid.Column="0" Classes="cichy" Padding="14,8" Click="UsunZadanie"
+          <Button Grid.Column="0" Classes="cichy" Padding="14,8" Click="DeleteTask"
                   Content="Do kosza" IsVisible="{Binding IsExisting}" />
 
           <Button Grid.Column="2" Classes="cichy" Padding="14,8" Margin="8,0"
-                  Click="ZamknijZadanie" Content="Zamknij" />
+                  Click="CloseTask" Content="Zamknij" />
           <Button Grid.Column="3" Classes="glowny" Padding="14,8"
-                  Click="ZapiszZadanie" Content="Zapisz" />
+                  Click="SaveTask" Content="Zapisz" />
         </Grid>
 
       <ScrollViewer Name="SzczegolPrzewijanie">
@@ -2593,12 +2593,12 @@
             <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
                       IsVisible="{Binding IsExisting}"
                       IsChecked="{Binding IsDone, Mode=OneWay}"
-                      Click="OdhaczZadanie" />
+                      Click="CompleteTask" />
             <!-- Znak wodny, bo puste pole bez podpisu jest samym prostokątem:
                  nie widać po nim, że to jest miejsce na nazwę zadania. -->
             <TextBox Grid.Column="1" Text="{Binding Title}" FontSize="18"
                      Watermark="Co jest do zrobienia?"
-                     KeyDown="NazwaKlawisz" />
+                     KeyDown="OnNameKey" />
           </Grid>
 
           <!-- Nieudany zapis zamykał okno tak samo jak udany. -->
@@ -2625,13 +2625,13 @@
           </ComboBox>
 
           <TextBlock Classes="label" Text="Dzień wykonania — obietnica dana sobie" />
-          <k:WyborDaty Value="{Binding DoDate}" />
+          <k:DateField Value="{Binding DoDate}" />
 
           <TextBlock Classes="label" Text="Od której do której" />
           <Grid ColumnDefinitions="*,Auto,*">
-            <k:WyborGodziny Grid.Column="0" Value="{Binding DoTime}" />
+            <k:TimeField Grid.Column="0" Value="{Binding DoTime}" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
-            <k:WyborGodziny Grid.Column="2" Value="{Binding EndTime}" />
+            <k:TimeField Grid.Column="2" Value="{Binding EndTime}" />
           </Grid>
           <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                      Text="Bez godziny zadanie idzie na pasek całodniowy. Bez godziny końca trwa pół godziny." />
@@ -2681,7 +2681,7 @@
           <StackPanel>
           <StackPanel IsVisible="{Binding ShowDeadline}">
             <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
-            <k:WyborDaty Value="{Binding Deadline}" />
+            <k:DateField Value="{Binding Deadline}" />
           </StackPanel>
 
           <StackPanel IsVisible="{Binding ShowReminder}">
@@ -2725,8 +2725,8 @@
                ma własny dzień i porę. -->
           <StackPanel IsVisible="{Binding !HasTime}">
             <Grid ColumnDefinitions="*,Auto">
-              <k:WyborDaty Grid.Column="0" Value="{Binding ReminderDay}" />
-              <k:WyborGodziny Grid.Column="1" Margin="6,0,0,0" Value="{Binding ReminderTime}" />
+              <k:DateField Grid.Column="0" Value="{Binding ReminderDay}" />
+              <k:TimeField Grid.Column="1" Margin="6,0,0,0" Value="{Binding ReminderTime}" />
             </Grid>
             <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                        Text="Bez godziny znaczy rano. Sama godzina bez dnia nie znaczy nic." />

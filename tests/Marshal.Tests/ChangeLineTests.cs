@@ -7,7 +7,7 @@ namespace Marshal.Tests;
 
 public class ChangeLineTests
 {
-    private static ChangeLine Wiersz() => new()
+    private static ChangeLine Row() => new()
     {
         Entity = "Tasks",
         Id = "0199ab00-0000-7000-8000-000000000001",
@@ -23,7 +23,7 @@ public class ChangeLineTests
     [Fact]
     public void Zapis_i_odczyt_sa_wzajemnie_odwrotne()
     {
-        var odczytany = ChangeLine.TryParse(Wiersz().Serialize());
+        var odczytany = ChangeLine.TryParse(Row().Serialize());
 
         odczytany.Should().NotBeNull();
         odczytany!.Entity.Should().Be("Tasks");
@@ -36,13 +36,13 @@ public class ChangeLineTests
     [Fact]
     public void Wiersz_jest_jedna_linia()
     {
-        Wiersz().Serialize().Should().NotContain("\n");
+        Row().Serialize().Should().NotContain("\n");
     }
 
     [Fact]
     public void Polskie_znaki_zostaja_czytelne()
     {
-        var text = Wiersz().Serialize();
+        var text = Row().Serialize();
 
         text.Should().Contain("zażółć gęślą jaźń");
         text.Should().NotContain("\\u");
@@ -53,7 +53,7 @@ public class ChangeLineTests
     {
         // Plik rośnie z każdą zmianą i leży w chmurze — nazwy kluczy powtarzają się
         // w każdej linii, więc ich długość ma znaczenie przy tysiącach wpisów.
-        var text = Wiersz().Serialize();
+        var text = Row().Serialize();
 
         text.Should().StartWith("{\"e\":");
         text.Should().Contain("\"id\":");

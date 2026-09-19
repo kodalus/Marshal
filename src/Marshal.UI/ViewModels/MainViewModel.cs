@@ -51,16 +51,16 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly FocusService _focus;
     private readonly IReviewQueries _queries;
     private readonly InAppNotifier _notifier;
-    private readonly IActivityLog _dziennik;
+    private readonly IActivityLog _journal;
     private readonly NoteService _notes;
-    private readonly StructureEditService _szkielet;
-    private readonly TaskMirror _odbicie;
-    private readonly CalendarSyncService _kalendarze;
-    private readonly ReminderService _przypomnienia;
+    private readonly StructureEditService _shell;
+    private readonly TaskMirror _mirror;
+    private readonly CalendarSyncService _calendars;
+    private readonly ReminderService _reminders;
 
-    private readonly GoogleSyncService _dysk;
+    private readonly GoogleSyncService _drive;
 
-    private readonly DayRolloverService _przejscieDnia;
+    private readonly DayRolloverService _dayRollover;
 
     /// <summary>
     /// Czy od ostatniego przebiegu coś zapisano w oknie.
@@ -72,17 +72,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// ruchem: między sprawdzeniem a zerowaniem zmieściłby się kolejny zapis i wypadłby
     /// z rachunku.
     /// </remarks>
-    private int _zmiana;
+    private int _change;
 
     /// <summary>Kiedy ostatni przebieg się skończył. Do odmierzania przerwy.</summary>
-    private DateTimeOffset _ostatniaSynchronizacja = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastSync = DateTimeOffset.MinValue;
 
     /// <summary>Czy przebieg właśnie trwa.</summary>
     /// <remarks>
     /// Przebieg bywa dłuższy od minuty — sieć, logowanie, kilka odcinków — a minutnik
     /// nie czeka. Bez tej blokady wolna synchronizacja prosiłaby sama siebie o drugą.
     /// </remarks>
-    private bool _trwaSynchronizacja;
+    private bool _syncing;
 
     /// <summary>Co ile sprawdzać Dysk, gdy nic się nie zmieniło.</summary>
     /// <remarks>
@@ -99,7 +99,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// zapytanie i żadnego wpisu w dzienniku.
     /// </para>
     /// </remarks>
-    private static readonly TimeSpan Przerwa = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan Gap = TimeSpan.FromMinutes(1);
 
     /// <summary>Ile czekać z wysyłką po zapisie.</summary>
     /// <remarks>
@@ -108,7 +108,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// i nadal jest poniżej progu, przy którym człowiek zaczyna patrzeć na drugie
     /// urządzenie i zastanawiać się, czy zadziałało.
     /// </remarks>
-    private static readonly TimeSpan OdlozenieWysylki = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan SendDelay = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Dzień, na którym stanęło okno. Do wykrycia północy przy otwartej aplikacji.
@@ -119,7 +119,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// się obejść bez bazy, bo dzieje się przed migracjami. Pilnuje tego test
     /// „złożenie zależności nie sięga do bazy".
     /// </remarks>
-    private DateOnly? _dzien;
+    private DateOnly? _day;
 
     public MainViewModel(
         InboxService inbox,
@@ -142,30 +142,30 @@ public sealed partial class MainViewModel : ObservableObject
         JournalViewModel journal,
         IActivityLog journal,
         NoteService noteService,
-        StructureEditService szkielet,
+        StructureEditService shell,
         TaskMirror mirror,
-        CalendarSyncService kalendarze,
-        ReminderService przypomnienia,
-        GoogleSyncService dysk,
-        DayRolloverService przejscieDnia,
+        CalendarSyncService calendars,
+        ReminderService reminders,
+        GoogleSyncService drive,
+        DayRolloverService dayRollover,
         IWriteSignal signal)
     {
         _inbox = inbox;
-        _szkielet = szkielet;
-        _odbicie = mirror;
-        _kalendarze = kalendarze;
-        _przypomnienia = przypomnienia;
-        _dysk = dysk;
-        _przejscieDnia = przejscieDnia;
+        _shell = shell;
+        _mirror = mirror;
+        _calendars = calendars;
+        _reminders = reminders;
+        _drive = drive;
+        _dayRollover = dayRollover;
 
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
         // dokładnie dwie rzeczy: odłożyć notatkę i poprosić wątek okna o wysyłkę.
         // Sam przebieg rusza stamtąd, bo kończy się przerysowaniem list.
         signal.Saved += () =>
         {
-            Interlocked.Exchange(ref _zmiana, 1);
-            PoproszOWysylke();
-            PoproszOPrzeliczenie();
+            Interlocked.Exchange(ref _change, 1);
+            AskForSend();
+            AskForRecompute();
         };
         _tasks = tasks;
         _projects = projects;
@@ -175,7 +175,7 @@ public sealed partial class MainViewModel : ObservableObject
         _focus = focus;
         _queries = queries;
         _notifier = notifier;
-        _dziennik = journal;
+        _journal = journal;
         _notes = noteService;
         Clarify = clarify;
         Detail = detail;
@@ -186,31 +186,31 @@ public sealed partial class MainViewModel : ObservableObject
         Filters = filters;
         Settings = settings;
         Journal = journal;
-        Clarify.Emptied += (_, _) => Bezpiecznie("Skrzynka opróżniona", ShowInboxAsync);
+        Clarify.Emptied += (_, _) => Safely("Skrzynka opróżniona", ShowInboxAsync);
 
         // Po zapisie szczegółu ekran musi się przeliczyć: zmiana terminu albo dnia
         // wykonania potrafi przenieść zadanie na inną listę niż ta, z której je otwarto.
-        Detail.Saved += (_, _) => Bezpiecznie("Ekran: odświeżenie po zapisie", ReloadAsync);
+        Detail.Saved += (_, _) => Safely("Ekran: odświeżenie po zapisie", ReloadAsync);
 
         // Przegląd zmienia stan zadań i projektów, więc ekran pod spodem musi się
         // przeliczyć — także liczniki niezmienników w „Dzisiaj".
-        Review.Changed += (_, _) => Bezpiecznie("Ekran: odświeżenie po przeglądzie", ReloadAsync);
+        Review.Changed += (_, _) => Safely("Ekran: odświeżenie po przeglądzie", ReloadAsync);
 
         // Krok skrzynki prowadzi do drzewka przetwarzania. Przegląd zostaje otwarty —
         // wznowi się na tym samym kroku, bo jego stan siedzi w bazie, a nie w ekranie.
-        Review.InboxRequested += (_, _) => Bezpiecznie("Przegląd: skrzynka", ShowClarifyAsync);
-        Now.Changed += (_, _) => Bezpiecznie("Teraz: odświeżenie piątki", RefreshFocusAsync);
+        Review.InboxRequested += (_, _) => Safely("Przegląd: skrzynka", ShowClarifyAsync);
+        Now.Changed += (_, _) => Safely("Teraz: odświeżenie piątki", RefreshFocusAsync);
 
         // Wgranie kopii zmienia wszystko naraz, więc ekran pod spodem musi się
         // przeliczyć — inaczej lista pokazuje stan sprzed wczytania, wyglądając
         // na aktualną.
-        Settings.Imported += (_, _) => Bezpiecznie("Ekran: odświeżenie po wczytaniu kopii", ReloadAsync);
+        Settings.Imported += (_, _) => Safely("Ekran: odświeżenie po wczytaniu kopii", ReloadAsync);
 
         // Kliknięcie w blok na siatce otwiera tę samą nakładkę, co kliknięcie na liście.
         Calendar.NewTaskRequested += (day, time) =>
-            Bezpiecznie("Kalendarz: nowe zadanie", () => Detail.NewAsync(day, time));
+            Safely("Kalendarz: nowe zadanie", () => Detail.NewAsync(day, time));
 
-        Calendar.TaskRequested += id => Bezpiecznie("Kalendarz: otwarcie zadania", async () =>
+        Calendar.TaskRequested += id => Safely("Kalendarz: otwarcie zadania", async () =>
         {
             if (await _tasks.FindAsync(id) is { } task)
             {
@@ -228,15 +228,15 @@ public sealed partial class MainViewModel : ObservableObject
     /// zamknięciu zostawałby ten ekran, nie kalendarz. Z widgetu przychodzi się
     /// **na kalendarz**, nawet gdy zadania już nie ma.
     /// </remarks>
-    public void PokazKalendarz(Guid? task)
+    public void ShowCalendar(Guid? task)
     {
-        Bezpiecznie("Kalendarz: wejście z widgetu", async () =>
+        Safely("Kalendarz: wejście z widgetu", async () =>
         {
             await ShowCalendarAsync();
 
-            if (task is { } id && await _tasks.FindAsync(id) is { } rzecz)
+            if (task is { } id && await _tasks.FindAsync(id) is { } found)
             {
-                await Detail.LoadAsync(rzecz);
+                await Detail.LoadAsync(found);
             }
         });
     }
@@ -445,10 +445,10 @@ public sealed partial class MainViewModel : ObservableObject
     /// zamknięcie aplikacji byłby obietnicą powrotu tam, skąd nikt nie wychodził.
     /// </para>
     /// </remarks>
-    private readonly List<Screen> _slad = [];
+    private readonly List<Screen> _trail = [];
 
     /// <summary>Najdłuższy zapamiętywany ślad.</summary>
-    private const int DlugoscSladu = 16;
+    private const int TrailLength = 16;
 
     /// <summary>
     /// Ekran domowy — ten, na którym kończy się cofanie.
@@ -459,7 +459,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// wpisany ekran domowy to dwa miejsca, w których trzeba pamiętać o zmianie —
     /// a przy rozjechanych cofanie kończy się gdzie indziej, niż pyta o to okno.
     /// </remarks>
-    private const Screen Domowy = Screen.Calendar;
+    private const Screen Home = Screen.Calendar;
 
     /// <summary>Czy trwa cofanie. Wtedy zmiana ekranu nie dopisuje się do śladu.</summary>
     /// <remarks>
@@ -467,7 +467,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// cofnięcie wracałoby tam, skąd się właśnie przyszło. Przycisk wstecz zamieniłby
     /// się w przełącznik między dwoma ostatnimi ekranami.
     /// </remarks>
-    private bool _wracam;
+    private bool _goingBack;
 
     /// <summary>
     /// Czy ten ekran wolno zapamiętać jako miejsce, do którego da się wrócić.
@@ -477,8 +477,8 @@ public sealed partial class MainViewModel : ObservableObject
     /// w nie ma początek i koniec, a cofnięcie się do środka porzuconego przetwarzania
     /// stawia człowieka w połowie czynności, której nie zaczynał.
     /// </remarks>
-    private static bool Zapamietywalny(Screen ekran) =>
-        ekran is not (Screen.Clarify or Screen.Review);
+    private static bool Remembered(Screen screen) =>
+        screen is not (Screen.Clarify or Screen.Review);
 
     partial void OnCurrentChanging(Screen value)
     {
@@ -486,16 +486,16 @@ public sealed partial class MainViewModel : ObservableObject
         // wywołaniu. Stąd ślad da się prowadzić w jednym miejscu, zamiast dopisywać
         // się w każdym z piętnastu poleceń nawigacji; piętnaście dopisań rozjechałoby
         // się przy pierwszym nowym ekranie, którego ktoś nie dopisze.
-        if (_wracam || value == Current || !Zapamietywalny(Current))
+        if (_goingBack || value == Current || !Remembered(Current))
         {
             return;
         }
 
-        _slad.Add(Current);
+        _trail.Add(Current);
 
-        if (_slad.Count > DlugoscSladu)
+        if (_trail.Count > TrailLength)
         {
-            _slad.RemoveAt(0);
+            _trail.RemoveAt(0);
         }
     }
 
@@ -516,25 +516,25 @@ public sealed partial class MainViewModel : ObservableObject
     /// nigdy nie wychodzi, przestaje być przyciskiem wstecz.
     /// </para>
     /// </remarks>
-    public async Task WrocAsync()
+    public async Task BackAsync()
     {
-        if (Zdejmij() is not { } ekran)
+        if (Pop() is not { } screen)
         {
             return;
         }
 
-        _wracam = true;
+        _goingBack = true;
 
         try
         {
-            await OtworzAsync(ekran);
+            await OpenAsync(screen);
         }
         finally
         {
             // Po pierwszym oczekiwaniu wewnątrz polecenia ekran jest już przypisany,
             // więc znacznik zdejmujemy dopiero tutaj — wcześniej zdjęty przepuściłby
             // własne cofnięcie z powrotem do śladu.
-            _wracam = false;
+            _goingBack = false;
         }
     }
 
@@ -546,15 +546,15 @@ public sealed partial class MainViewModel : ObservableObject
     /// się cofnięciem. Android nie czeka na zakończenie wczytywania ekranu: albo
     /// odpowiedź jest w tej chwili, albo cofnięcie idzie dalej i zamyka aplikację.
     /// </remarks>
-    public bool MaDokadWrocic => _slad.Any(e => e != Current) || Current != Domowy;
+    public bool CanGoBack => _trail.Any(e => e != Current) || Current != Home;
 
     /// <summary>Dokąd cofnąć. Puste, gdy nie ma dokąd i cofnięcie należy do systemu.</summary>
-    private Screen? Zdejmij()
+    private Screen? Pop()
     {
-        while (_slad.Count > 0)
+        while (_trail.Count > 0)
         {
-            var last = _slad[^1];
-            _slad.RemoveAt(_slad.Count - 1);
+            var last = _trail[^1];
+            _trail.RemoveAt(_trail.Count - 1);
 
             // Ten sam ekran w śladzie to nie jest miejsce do cofnięcia — najczęściej
             // bierze się z wejścia w tryb i wyjścia z niego.
@@ -564,23 +564,23 @@ public sealed partial class MainViewModel : ObservableObject
             }
         }
 
-        return Current == Domowy ? null : Domowy;
+        return Current == Home ? null : Home;
     }
 
-    private Task OtworzAsync(Screen ekran)
+    private Task OpenAsync(Screen screen)
     {
-        switch (ekran)
+        switch (screen)
         {
             case Screen.Settings:
                 ShowSettingsCommand.Execute(null);
                 return Task.CompletedTask;
 
             default:
-                return Polecenie(ekran).ExecuteAsync(null);
+                return Command(screen).ExecuteAsync(null);
         }
     }
 
-    private IAsyncRelayCommand Polecenie(Screen ekran) => ekran switch
+    private IAsyncRelayCommand Command(Screen screen) => screen switch
     {
         Screen.Today => ShowTodayCommand,
         Screen.Now => ShowNowCommand,
@@ -657,7 +657,7 @@ public sealed partial class MainViewModel : ObservableObject
         // działa, więc powód zniknął — a został ten po drugiej stronie: aplikacja
         // otwarta na telefonie pokazywała stan sprzed ostatniej synchronizacji i nie
         // było po niej widać, że jest nieświeży.
-        Bezpiecznie("Synchronizacja przy starcie", SynchronizujCichoAsync);
+        Safely("Synchronizacja przy starcie", SyncQuietlyAsync);
     }
 
     /// <summary>
@@ -672,9 +672,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     public async Task CheckRemindersAsync()
     {
-        await PrzejscieDniaAsync();
+        await DayRolloverAsync();
 
-        if (await _przypomnienia.RunAsync() > 0)
+        if (await _reminders.RunAsync() > 0)
         {
             CollectReminders();
         }
@@ -682,13 +682,13 @@ public sealed partial class MainViewModel : ObservableObject
         // Zaległe kasowania odbić: wydarzenie po zadaniu, którego już nie ma, wisi
         // w cudzym kalendarzu do skutku, a skutek ma tylko wtedy, gdy ktoś spróbuje
         // ponownie. To ta sama odpowiedź na upływ czasu, co reszta tutaj.
-        await Probuj("Kalendarz: zaległe odbicia", () => _odbicie.FinishDeletionAsync());
+        await Try("Kalendarz: zaległe odbicia", () => _mirror.FinishDeletionAsync());
 
-        await Probuj("Kalendarz: pobranie w tle", PobierzKalendarzeAsync);
+        await Try("Kalendarz: pobranie w tle", FetchCalendarsAsync);
 
         // Osobno zabezpieczona: nieudany przebieg do Dysku nie ma prawa zabrać ze sobą
         // przypomnień, które właśnie się policzyły.
-        await Probuj("Synchronizacja sama", SynchronizujSamaAsync);
+        await Try("Synchronizacja sama", SyncAloneAsync);
     }
 
     /// <summary>
@@ -709,9 +709,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// pod ręką, która właśnie coś na niej robi, jest kosztem bez pożytku.
     /// </para>
     /// </remarks>
-    private async Task PobierzKalendarzeAsync()
+    private async Task FetchCalendarsAsync()
     {
-        var report = await _kalendarze.RefreshAsync();
+        var report = await _calendars.RefreshAsync();
 
         if (report.Events > 0 || report.Folded > 0)
         {
@@ -745,7 +745,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// Sekunda, bo tyle mniej więcej trwa wyprawa do Google — a to jest ten zapis,
     /// o którym ekran nie ma jak wiedzieć.
     /// </remarks>
-    private static readonly TimeSpan OdlozeniePrzeliczenia = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan RecomputeDelay = TimeSpan.FromSeconds(1);
 
     /// <summary>
     /// Przeliczenie ekranu po zapisie, który nie przyszedł z ekranu.
@@ -771,31 +771,31 @@ public sealed partial class MainViewModel : ObservableObject
     /// widokiem nieodpowiadającym danym.
     /// </para>
     /// </remarks>
-    private CancellationTokenSource? _odlozonePrzeliczenie;
+    private CancellationTokenSource? _deferredRecompute;
 
-    private void PoproszOPrzeliczenie() => Dispatcher.UIThread.Post(() =>
+    private void AskForRecompute() => Dispatcher.UIThread.Post(() =>
     {
-        _odlozonePrzeliczenie?.Cancel();
-        _odlozonePrzeliczenie?.Dispose();
+        _deferredRecompute?.Cancel();
+        _deferredRecompute?.Dispose();
 
         var source = new CancellationTokenSource();
-        _odlozonePrzeliczenie = source;
+        _deferredRecompute = source;
 
-        _ = PrzeliczZaChwileAsync(source.Token);
+        _ = RecomputeSoonAsync(source.Token);
     });
 
-    private async Task PrzeliczZaChwileAsync(CancellationToken ct)
+    private async Task RecomputeSoonAsync(CancellationToken ct)
     {
         try
         {
-            await Task.Delay(OdlozeniePrzeliczenia, ct);
+            await Task.Delay(RecomputeDelay, ct);
         }
         catch (OperationCanceledException)
         {
             return;
         }
 
-        await Probuj("Ekran: przeliczenie po zapisie w tle", ReloadAsync);
+        await Try("Ekran: przeliczenie po zapisie w tle", ReloadAsync);
     }
 
     /// <summary>Odłożona wysyłka po zapisie. Kolejny zapis odsuwa ją, a nie dokłada.</summary>
@@ -805,24 +805,24 @@ public sealed partial class MainViewModel : ObservableObject
     /// Odwołanie poprzedniego odłożenia jest tu sednem: pięć zapisów pod rząd ma dać
     /// jeden przebieg pięć sekund po ostatnim, a nie pięć przebiegów.
     /// </remarks>
-    private CancellationTokenSource? _odlozonaWysylka;
+    private CancellationTokenSource? _deferredSend;
 
-    private void PoproszOWysylke() => Dispatcher.UIThread.Post(() =>
+    private void AskForSend() => Dispatcher.UIThread.Post(() =>
     {
-        _odlozonaWysylka?.Cancel();
-        _odlozonaWysylka?.Dispose();
+        _deferredSend?.Cancel();
+        _deferredSend?.Dispose();
 
         var source = new CancellationTokenSource();
-        _odlozonaWysylka = source;
+        _deferredSend = source;
 
-        _ = WyslijZaChwileAsync(source.Token);
+        _ = SendSoonAsync(source.Token);
     });
 
-    private async Task WyslijZaChwileAsync(CancellationToken ct)
+    private async Task SendSoonAsync(CancellationToken ct)
     {
         try
         {
-            await Task.Delay(OdlozenieWysylki, ct);
+            await Task.Delay(SendDelay, ct);
         }
         catch (OperationCanceledException)
         {
@@ -830,7 +830,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        await Probuj("Synchronizacja po zapisie", SynchronizujSamaAsync);
+        await Try("Synchronizacja po zapisie", SyncAloneAsync);
     }
 
     /// <summary>
@@ -842,37 +842,37 @@ public sealed partial class MainViewModel : ObservableObject
     /// różnica między urządzeniami jest widoczna. Przerwa zostaje dla okna, przy którym
     /// się siedzi.
     /// </remarks>
-    public async Task SynchronizujPoPowrocieAsync()
+    public async Task SyncAfterReturnAsync()
     {
-        if (_trwaSynchronizacja)
+        if (_syncing)
         {
             return;
         }
 
-        await RunAsync("Synchronizacja po powrocie", cicha: true);
+        await RunAsync("Synchronizacja po powrocie", quiet: true);
 
         // Kalendarze też: powrót do okna jest chwilą, w której patrzy się na siatkę.
-        await Probuj("Kalendarz: pobranie po powrocie", PobierzKalendarzeAsync);
+        await Try("Kalendarz: pobranie po powrocie", FetchCalendarsAsync);
     }
 
-    private async Task SynchronizujSamaAsync()
+    private async Task SyncAloneAsync()
     {
         // Najpierw blokada, dopiero potem znak: przebieg bywa dłuższy od minuty,
         // a zabranie znaku teraz znaczyłoby zgubienie zmiany, która czeka na wysłanie.
-        if (_trwaSynchronizacja)
+        if (_syncing)
         {
             return;
         }
 
-        var change = Interlocked.Exchange(ref _zmiana, 0) == 1;
-        var przerwa = _clock.Now - _ostatniaSynchronizacja >= Przerwa;
+        var change = Interlocked.Exchange(ref _change, 0) == 1;
+        var gap = _clock.Now - _lastSync >= Gap;
 
-        if (!change && !przerwa)
+        if (!change && !gap)
         {
             return;
         }
 
-        await RunAsync(change ? "Synchronizacja po zmianie" : "Synchronizacja co jakiś czas", cicha: true);
+        await RunAsync(change ? "Synchronizacja po zmianie" : "Synchronizacja co jakiś czas", quiet: true);
     }
 
     /// <summary>
@@ -896,29 +896,29 @@ public sealed partial class MainViewModel : ObservableObject
     /// czasu, a drugi minutnik na tę samą minutę byłby drugim miejscem do zatrzymania.
     /// </para>
     /// </remarks>
-    private async Task PrzejscieDniaAsync()
+    private async Task DayRolloverAsync()
     {
         var today = _clock.Today;
 
         // Pierwsze sprawdzenie tylko zapamiętuje dzień. Start nadrabia przejście własną
         // drogą (CatchUpAsync), więc robienie tego drugi raz byłoby pracą bez skutku.
-        if (_dzien is null)
+        if (_day is null)
         {
-            _dzien = today;
+            _day = today;
             return;
         }
 
-        if (_dzien == today)
+        if (_day == today)
         {
             return;
         }
 
-        _dzien = today;
+        _day = today;
 
-        await _przejscieDnia.RunAsync();
+        await _dayRollover.RunAsync();
         await _focus.ExpireAsync();
 
-        await _dziennik.RecordAsync("Przejście dnia", $"nowy dzień: {today:yyyy-MM-dd}");
+        await _journal.RecordAsync("Przejście dnia", $"nowy dzień: {today:yyyy-MM-dd}");
         await ReloadAsync();
     }
 
@@ -951,9 +951,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// bez śladu w oknie i bez śladu nigdzie indziej. Wyglądało to dokładnie tak,
     /// jakby zapis się nie udał — a zapis się udawał.
     /// </remarks>
-    private void Bezpiecznie(string co, Func<Task> work) => _ = Probuj(co, work);
+    private void Safely(string co, Func<Task> work) => _ = Try(co, work);
 
-    private async Task Probuj(string co, Func<Task> work)
+    private async Task Try(string co, Func<Task> work)
     {
         try
         {
@@ -961,7 +961,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 co, "nie udało się", ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
         }
     }
@@ -974,7 +974,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// logowanie chciałoby otworzyć przeglądarkę — przy starcie aplikacji byłoby to
     /// okno wyskakujące bez powodu, zanim zdążysz cokolwiek zrobić.
     /// </remarks>
-    private Task SynchronizujCichoAsync() => RunAsync("Synchronizacja przy starcie");
+    private Task SyncQuietlyAsync() => RunAsync("Synchronizacja przy starcie");
 
     /// <summary>
     /// Jeden przebieg do Dysku wywołany nie przez rękę.
@@ -986,35 +986,35 @@ public sealed partial class MainViewModel : ObservableObject
     /// pięćset — bez tego zjadłby sam siebie i nie byłoby w nim widać niczego innego.
     /// Awarie i przebiegi, które coś przeniosły, zostają zawsze.
     /// </param>
-    private async Task RunAsync(string co, bool cicha = false)
+    private async Task RunAsync(string co, bool quiet = false)
     {
-        if (!_dysk.HasCredentials || !Directory.Exists(_dysk.TokenFolder))
+        if (!_drive.HasCredentials || !Directory.Exists(_drive.TokenFolder))
         {
             return;
         }
 
-        _trwaSynchronizacja = true;
+        _syncing = true;
 
         SyncOutcome result;
 
         try
         {
-            result = await _dysk.SyncAsync();
+            result = await _drive.SyncAsync();
         }
         finally
         {
             // Także po wywrotce: inaczej jedna awaria zatrzymywałaby automat na zawsze.
             // Przerwa liczona od końca przebiegu, nie od początku — długi przebieg nie
             // ma się kończyć w chwili, w której należy się następny.
-            _trwaSynchronizacja = false;
-            _ostatniaSynchronizacja = _clock.Now;
+            _syncing = false;
+            _lastSync = _clock.Now;
         }
 
-        var niemo = cicha && result is { Ok: true, Sent: 0, Applied: 0 };
+        var silently = quiet && result is { Ok: true, Sent: 0, Applied: 0 };
 
-        if (!niemo)
+        if (!silently)
         {
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 co,
                 result.Ok ? $"wysłane {result.Sent}, przyjęte {result.Applied}" : result.Message,
                 result.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
@@ -1027,7 +1027,7 @@ public sealed partial class MainViewModel : ObservableObject
             // Przypomnienia sprawdzane od razu, nie dopiero za minutę. Przyniesione
             // przez synchronizację bywa już zaległe — zadanie zmienione na drugim
             // urządzeniu przychodzi tu z godziną, która zdążyła minąć.
-            if (await _przypomnienia.RunAsync() > 0)
+            if (await _reminders.RunAsync() > 0)
             {
                 CollectReminders();
             }
@@ -1045,7 +1045,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// ekranu, na którym akurat się było, i nic się nie przerysowywało — po zapisie,
     /// który się udał. Jedno popsute miejsce ma psuć jedno miejsce.
     /// </remarks>
-    private Task ReloadAsync() => _ekran.RunAsync(PrzeliczAsync);
+    private Task ReloadAsync() => _screen.RunAsync(RecomputeAsync);
 
     /// <summary>
     /// Jeden przebieg naraz, na końcu zawsze najnowszy.
@@ -1056,11 +1056,11 @@ public sealed partial class MainViewModel : ObservableObject
     /// w drugim to podwójne odczyty tego samego i podwójna praca na listach — a wyniku
     /// pośredniego i tak nikt nie widzi.
     /// </remarks>
-    private readonly LatestOnly _ekran = new();
+    private readonly LatestOnly _screen = new();
 
-    private async Task PrzeliczAsync()
+    private async Task RecomputeAsync()
     {
-        await Probuj("Ekran: przeliczenie skrzynki", RefreshInboxAsync);
+        await Try("Ekran: przeliczenie skrzynki", RefreshInboxAsync);
 
         var task = Current switch
         {
@@ -1078,7 +1078,7 @@ public sealed partial class MainViewModel : ObservableObject
             _ => Task.CompletedTask,
         };
 
-        await Probuj($"Ekran: przeliczenie ({Current})", () => task);
+        await Try($"Ekran: przeliczenie ({Current})", () => task);
     }
 
     /// <summary>
@@ -1094,7 +1094,7 @@ public sealed partial class MainViewModel : ObservableObject
     public partial bool AlsoSomeday { get; set; }
 
     partial void OnAlsoSomedayChanged(bool value) =>
-        Bezpiecznie("Dzisiaj: kandydaci", RefreshFocusAsync);
+        Safely("Dzisiaj: kandydaci", RefreshFocusAsync);
 
     /// <summary>
     /// Piątka na dziś i kandydaci do niej. Kandydaci to „Następne" oraz zaplanowane
@@ -1103,12 +1103,12 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task RefreshFocusAsync()
     {
         var today = Today();
-        var naDzis = await _focus.TodayAsync();
+        var forToday = await _focus.TodayAsync();
 
         FocusItems.Clear();
         FocusOffGrid.Clear();
 
-        foreach (var task in naDzis)
+        foreach (var task in forToday)
         {
             FocusItems.Add(task);
 
@@ -1190,9 +1190,9 @@ public sealed partial class MainViewModel : ObservableObject
 
         await _focus.UnfocusAsync(task.Id);
 
-        if (PendingFocus is { } czekajace)
+        if (PendingFocus is { } pending)
         {
-            await _focus.TryFocusAsync(czekajace.Id);
+            await _focus.TryFocusAsync(pending.Id);
             PendingFocus = null;
         }
 
@@ -1271,7 +1271,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Dwa ekrany na te same obiekty dawały różne możliwości w każdym z nich:
         // tu barwa i usunięcie, tam zakładanie, a nazwa tylko tam. Jeden ekran, jeden
         // zestaw czynności — a liczby są cechą obszaru, więc stoją przy nim.
-        var rownowaga = (await _queries.BalanceAsync(Today()))
+        var balance = (await _queries.BalanceAsync(Today()))
             .ToDictionary(w => w.AreaId);
 
         ProjectRows.Clear();
@@ -1279,7 +1279,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             ProjectRows.Add(new ProjectTreeRow(
                 row,
-                row.IsArea && rownowaga.TryGetValue(row.Id, out var w) ? w : null));
+                row.IsArea && balance.TryGetValue(row.Id, out var w) ? w : null));
         }
     }
 
@@ -1288,10 +1288,10 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Waiting;
 
-        var czekajace = await _queries.WaitingAsync(Today());
+        var pending = await _queries.WaitingAsync(Today());
 
         WaitingItems.Clear();
-        foreach (var item in czekajace)
+        foreach (var item in pending)
         {
             WaitingItems.Add(item);
         }
@@ -1371,11 +1371,11 @@ public sealed partial class MainViewModel : ObservableObject
         // Ponaglenia (N3) i projekty zablokowane (N1) idą na „Dzisiaj", bo są sprawami
         // na dziś. Cisza obszarów (N10) **nigdy tu nie trafia** — to nie jest sprawa na
         // dziś, a codzienne przypominanie o niej zamieniłoby ją w szum (spec 6).
-        var ponaglenia = (await _queries.WaitingAsync(today)).Where(w => w.NeedsNudge).ToList();
+        var nudges = (await _queries.WaitingAsync(today)).Where(w => w.NeedsNudge).ToList();
         var blocked = await _queries.BlockedProjectsAsync();
 
         Nudges.Clear();
-        foreach (var item in ponaglenia)
+        foreach (var item in nudges)
         {
             Nudges.Add(item);
         }
@@ -1407,7 +1407,7 @@ public sealed partial class MainViewModel : ObservableObject
     private DateOnly Today() => _clock.Today;
 
     /// <summary>Dzisiaj w strefie z ustawień — dla menu, które samo zegara nie ma.</summary>
-    public DateOnly Dzisiaj => _clock.Today;
+    public DateOnly Today => _clock.Today;
 
     private async Task Fill(ObservableCollection<TaskRow> target, Task<IReadOnlyList<TaskItem>> source)
     {
@@ -1504,9 +1504,9 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        var skad = task.DoDate ?? Today();
+        var from = task.DoDate ?? Today();
 
-        await _edit.RescheduleAsync(task.Id, skad.AddDays(1), task.DoTime);
+        await _edit.RescheduleAsync(task.Id, from.AddDays(1), task.DoTime);
         await ReloadAsync();
     }
 
@@ -1536,14 +1536,14 @@ public sealed partial class MainViewModel : ObservableObject
         }
         else
         {
-            await _edit.ApplyAsync(task.Id, Bez(task));
+            await _edit.ApplyAsync(task.Id, Without(task));
         }
 
         await ReloadAsync();
     }
 
     /// <summary>Ten sam zestaw pól, tylko bez dnia wykonania — reszta ma zostać.</summary>
-    private static TaskEdit Bez(TaskItem task) =>
+    private static TaskEdit Without(TaskItem task) =>
         new(task.Title, task.Note, null, task.Deadline, task.ReminderAt, task.Recurrence,
             task.Priority, task.EstimatedMinutes, task.Energy, task.AreaId, null);
 
@@ -1569,12 +1569,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// Kalendarze, do których da się udostępnić zadanie. Puste, gdy żadnego nie ma.
     /// </summary>
     public async Task<IReadOnlyList<CalendarSource>> WritableCalendarsAsync() =>
-        (await _kalendarze.SourcesAsync())
-            .Where(_kalendarze.CanWrite)
+        (await _calendars.SourcesAsync())
+            .Where(_calendars.CanWrite)
             .ToList();
 
     /// <summary>Kalendarz, w którym zadania lądują domyślnie.</summary>
-    public Guid? MainCalendarId => _odbicie.MainCalendarId;
+    public Guid? MainCalendarId => _mirror.MainCalendarId;
 
     /// <summary>Kalendarz przypisany do obszaru — na potrzeby ptaszka w menu.</summary>
     public async Task<Guid?> AreaCalendarAsync(Guid areaId) =>
@@ -1592,7 +1592,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(row);
 
-        await _szkielet.SetAreaCalendarAsync(row.Id, calendarId);
+        await _shell.SetAreaCalendarAsync(row.Id, calendarId);
 
         Notice = string.Empty;
         await ShowProjectsAsync();
@@ -1611,7 +1611,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        Notice = await _odbicie.ShareAsync(task.Id, calendarId) ?? string.Empty;
+        Notice = await _mirror.ShareAsync(task.Id, calendarId) ?? string.Empty;
         await ReloadAsync();
     }
 
@@ -1619,7 +1619,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        await _odbicie.UnshareAsync(task.Id);
+        await _mirror.UnshareAsync(task.Id);
         Notice = string.Empty;
         await ReloadAsync();
     }
@@ -1647,7 +1647,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        await _szkielet.AddAreaAsync(name);
+        await _shell.AddAreaAsync(name);
         NewAreaName = string.Empty;
         Notice = string.Empty;
         await ShowProjectsAsync();
@@ -1669,7 +1669,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        await _szkielet.AddProjectAsync(parent.Id, outcome.Trim());
+        await _shell.AddProjectAsync(parent.Id, outcome.Trim());
         Notice = string.Empty;
         await ShowProjectsAsync();
     }
@@ -1686,11 +1686,11 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (row.IsArea)
         {
-            await _szkielet.RenameAreaAsync(row.Id, name.Trim());
+            await _shell.RenameAreaAsync(row.Id, name.Trim());
         }
         else
         {
-            await _szkielet.RenameProjectAsync(row.Id, name.Trim());
+            await _shell.RenameProjectAsync(row.Id, name.Trim());
         }
 
         await ShowProjectsAsync();
@@ -1702,8 +1702,8 @@ public sealed partial class MainViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(row);
 
         Notice = (row.IsArea
-            ? await _szkielet.DeleteAreaAsync(row.Id)
-            : await _szkielet.DeleteProjectAsync(row.Id)) ?? string.Empty;
+            ? await _shell.DeleteAreaAsync(row.Id)
+            : await _shell.DeleteProjectAsync(row.Id)) ?? string.Empty;
 
         await ShowProjectsAsync();
     }
@@ -1714,8 +1714,8 @@ public sealed partial class MainViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(row);
 
         return row.IsArea
-            ? _szkielet.WhyCannotDeleteAreaAsync(row.Id)
-            : _szkielet.WhyCannotDeleteAsync(row.Id);
+            ? _shell.WhyCannotDeleteAreaAsync(row.Id)
+            : _shell.WhyCannotDeleteAsync(row.Id);
     }
 
     /// <summary>Barwa wiersza z ekranu „Projekty" — obszaru albo projektu.</summary>
@@ -1725,11 +1725,11 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (row.IsArea)
         {
-            await _szkielet.SetAreaColorAsync(row.Id, color);
+            await _shell.SetAreaColorAsync(row.Id, color);
         }
         else
         {
-            await _szkielet.SetProjectColorAsync(row.Id, color);
+            await _shell.SetProjectColorAsync(row.Id, color);
         }
 
         Notice = string.Empty;

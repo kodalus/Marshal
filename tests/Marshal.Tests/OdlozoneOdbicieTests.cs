@@ -81,13 +81,13 @@ public sealed class OdlozoneOdbicieTests
     }
 
     /// <summary>Czekanie na warunek zamiast na stoper. Zwleka najwyżej pięć sekund.</summary>
-    private static async Task Doczekaj(Func<bool> warunek)
+    private static async Task Doczekaj(Func<bool> condition)
     {
         var end = DateTime.UtcNow + TimeSpan.FromSeconds(5);
 
         while (DateTime.UtcNow < end)
         {
-            if (warunek())
+            if (condition())
             {
                 return;
             }
@@ -95,7 +95,7 @@ public sealed class OdlozoneOdbicieTests
             await Task.Delay(10);
         }
 
-        warunek().Should().BeTrue("warunek miał zajść w ciągu pięciu sekund");
+        condition().Should().BeTrue("warunek miał zajść w ciągu pięciu sekund");
     }
 
     private static TaskItem TaskId() =>

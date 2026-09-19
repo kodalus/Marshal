@@ -19,7 +19,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class ReviewQueriesTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
@@ -29,7 +29,7 @@ public sealed class ReviewQueriesTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly HlcSource _hlc;
     private readonly ReviewQueries _zapytania;
     private double _kolejnosc;
@@ -138,8 +138,8 @@ public sealed class ReviewQueriesTests : IDisposable
         // zgłaszałby się jako zablokowany, N1 sypałby fałszywymi alarmami i przestałabyś
         // na niego patrzeć. Niezmiennik, który krzyczy bez powodu, uczy ignorowania.
         var area = Obszar("Rozwój własny");
-        var cel = Projekt("Mam prawo jazdy", area);
-        var podprojekt = Projekt("Kurs jest zaliczony", area, cel.Id);
+        var target = Projekt("Mam prawo jazdy", area);
+        var podprojekt = Projekt("Kurs jest zaliczony", area, target.Id);
         TaskId("Zapisać się na kurs", area, podprojekt.Id);
 
         (await _zapytania.BlockedProjectsAsync()).Should().BeEmpty();
@@ -150,8 +150,8 @@ public sealed class ReviewQueriesTests : IDisposable
     {
         // Wskazanie ma trafiać tam, gdzie brakuje akcji, a nie w korzeń drzewa.
         var area = Obszar("Rozwój własny");
-        var cel = Projekt("Mam prawo jazdy", area);
-        Projekt("Kurs jest zaliczony", area, cel.Id);
+        var target = Projekt("Mam prawo jazdy", area);
+        Projekt("Kurs jest zaliczony", area, target.Id);
 
         var result = await _zapytania.BlockedProjectsAsync();
 
@@ -194,8 +194,8 @@ public sealed class ReviewQueriesTests : IDisposable
         // Ma co robić, więc nie utknął — niezależnie od tego, jak długo wisi reszta.
         var area = Obszar("Sprawy urzędowe");
         var project = Projekt("Wniosek jest rozpatrzony", area);
-        var czekajace = TaskId("Odpowiedź z urzędu", area, project.Id);
-        czekajace.Delegate(area.Id, "urząd", Dzis.AddDays(-90), null, _hlc.Next());
+        var pending = TaskId("Odpowiedź z urzędu", area, project.Id);
+        pending.Delegate(area.Id, "urząd", Dzis.AddDays(-90), null, _hlc.Next());
         TaskId("Przygotować załączniki", area, project.Id);
         _db.SaveChanges();
 

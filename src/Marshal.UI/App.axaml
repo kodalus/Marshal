@@ -8,11 +8,11 @@
   <TrayIcon.Icons>
     <TrayIcons>
       <TrayIcon Icon="/Assets/marshal.ico" ToolTipText="Marshal"
-                Clicked="PokazOkno">
+                Clicked="ShowWindow">
         <TrayIcon.Menu>
           <NativeMenu>
-            <NativeMenuItem Header="Pokaż Marshala" Click="PokazOkno" />
-            <NativeMenuItem Header="Zakończ" Click="Zakoncz" />
+            <NativeMenuItem Header="Pokaż Marshala" Click="ShowWindow" />
+            <NativeMenuItem Header="Zakończ" Click="Finish" />
           </NativeMenu>
         </TrayIcon.Menu>
       </TrayIcon>

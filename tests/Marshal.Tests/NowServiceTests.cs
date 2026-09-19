@@ -19,7 +19,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class NowServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
@@ -29,7 +29,7 @@ public sealed class NowServiceTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly HlcSource _hlc;
     private readonly NowService _teraz;
     private readonly FocusService _wybor;

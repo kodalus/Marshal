@@ -18,7 +18,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class AttachmentServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
@@ -29,7 +29,7 @@ public sealed class AttachmentServiceTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly HlcSource _hlc;
     private readonly LocalFolderFileTransport _skladnica;
     private readonly AttachmentService _usluga;
@@ -58,10 +58,10 @@ public sealed class AttachmentServiceTests : IDisposable
     {
         var attachment = await _usluga.AddAsync(Plik("zawartość"), "notatka.txt", taskId: _zadanie);
 
-        await using var strumien = await _usluga.OpenAsync(attachment);
-        strumien.Should().NotBeNull();
+        await using var stream = await _usluga.OpenAsync(attachment);
+        stream.Should().NotBeNull();
 
-        using var reader = new StreamReader(strumien!);
+        using var reader = new StreamReader(stream!);
         (await reader.ReadToEndAsync()).Should().Be("zawartość");
     }
 
@@ -79,21 +79,21 @@ public sealed class AttachmentServiceTests : IDisposable
     {
         // Adresem jest skrót treści, więc dwa takie same zdjęcia to jeden plik.
         // Wpisy zostają dwa, bo „podpięłam to tutaj" i „tam" to dwie decyzje.
-        var pierwszy = await _usluga.AddAsync(Plik("to samo"), "a.txt", taskId: _zadanie);
+        var first = await _usluga.AddAsync(Plik("to samo"), "a.txt", taskId: _zadanie);
         var drugi = await _usluga.AddAsync(Plik("to samo"), "b.txt", noteId: Guid.CreateVersion7());
 
-        pierwszy.Sha256.Should().Be(drugi.Sha256);
-        pierwszy.Id.Should().NotBe(drugi.Id);
+        first.Sha256.Should().Be(drugi.Sha256);
+        first.Id.Should().NotBe(drugi.Id);
         Directory.GetFiles(Path.Combine(_katalog, "files")).Should().ContainSingle();
     }
 
     [Fact]
     public async Task Rozne_pliki_maja_rozne_skroty()
     {
-        var pierwszy = await _usluga.AddAsync(Plik("jedno"), "a.txt", taskId: _zadanie);
+        var first = await _usluga.AddAsync(Plik("jedno"), "a.txt", taskId: _zadanie);
         var drugi = await _usluga.AddAsync(Plik("drugie"), "b.txt", taskId: _zadanie);
 
-        pierwszy.Sha256.Should().NotBe(drugi.Sha256);
+        first.Sha256.Should().NotBe(drugi.Sha256);
     }
 
     [Fact]
@@ -157,9 +157,9 @@ public sealed class AttachmentServiceTests : IDisposable
     [InlineData("../../ucieczka")]
     public async Task Skladnica_odrzuca_adres_ktory_nie_jest_skrotem(string address)
     {
-        var otworz = async () => await _skladnica.ExistsAsync(address);
+        var open = async () => await _skladnica.ExistsAsync(address);
 
-        await otworz.Should().ThrowAsync<ArgumentException>();
+        await open.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
@@ -168,8 +168,8 @@ public sealed class AttachmentServiceTests : IDisposable
         var attachment = await _usluga.AddAsync(Plik("treść"), "a.txt", taskId: _zadanie);
         await _skladnica.PutAsync(attachment.Sha256, Plik("treść"));
 
-        await using var strumien = await _skladnica.OpenAsync(attachment.Sha256);
-        using var reader = new StreamReader(strumien!);
+        await using var stream = await _skladnica.OpenAsync(attachment.Sha256);
+        using var reader = new StreamReader(stream!);
         (await reader.ReadToEndAsync()).Should().Be("treść");
     }
 

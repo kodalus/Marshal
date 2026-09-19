@@ -60,10 +60,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
     {
         var tasks = Usluga<ITaskRepository>();
         var hlc = Usluga<IHlcSource>();
-        var zegar = Usluga<IClock>();
+        var clock = Usluga<IClock>();
 
-        var task = TaskItem.Capture(title, zegar.Now, hlc.Next());
-        task.Schedule(Guid.CreateVersion7(), zegar.Today, hlc.Next());
+        var task = TaskItem.Capture(title, clock.Now, hlc.Next());
+        task.Schedule(Guid.CreateVersion7(), clock.Today, hlc.Next());
 
         tasks.Add(task);
         await Usluga<IUnitOfWork>().SaveChangesAsync();
@@ -127,10 +127,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         var tasks = Usluga<ITaskRepository>();
         var hlc = Usluga<IHlcSource>();
-        var zegar = Usluga<IClock>();
+        var clock = Usluga<IClock>();
 
-        var task = TaskItem.Capture("Nauczyć się szyć", zegar.Now, hlc.Next());
-        task.Postpone(area.Id, zegar.Today.AddDays(90), hlc.Next());
+        var task = TaskItem.Capture("Nauczyć się szyć", clock.Now, hlc.Next());
+        task.Postpone(area.Id, clock.Today.AddDays(90), hlc.Next());
         tasks.Add(task);
         await Usluga<IUnitOfWork>().SaveChangesAsync();
 
@@ -181,9 +181,9 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         var tasks = Usluga<ITaskRepository>();
         var hlc = Usluga<IHlcSource>();
-        var zegar = Usluga<IClock>();
+        var clock = Usluga<IClock>();
 
-        var task = TaskItem.Capture("test na 15 minut i resztkę energii", zegar.Now, hlc.Next());
+        var task = TaskItem.Capture("test na 15 minut i resztkę energii", clock.Now, hlc.Next());
         task.Postpone(area.Id, null, hlc.Next());
         task.SetEstimate(15, Energy.Low, hlc.Next());
         tasks.Add(task);
@@ -255,9 +255,9 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // Zadanie w projekcie blokuje usunięcie projektu z tego samego powodu.
         var tasks = Usluga<ITaskRepository>();
         var hlc = Usluga<IHlcSource>();
-        var zegar = Usluga<IClock>();
+        var clock = Usluga<IClock>();
 
-        var task = TaskItem.Capture("Zakupy", zegar.Now, hlc.Next());
+        var task = TaskItem.Capture("Zakupy", clock.Now, hlc.Next());
         task.MakeNext(poNazwie.Id, hlc.Next());
         task.MoveTo(poNazwie.Id, project.Id, hlc.Next());
         tasks.Add(task);
@@ -629,8 +629,8 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await main.ShowNotesCommand.ExecuteAsync(null);
         await main.ShowJournalCommand.ExecuteAsync(null);
 
-        main.MaDokadWrocic.Should().BeTrue();
-        await main.WrocAsync();
+        main.CanGoBack.Should().BeTrue();
+        await main.BackAsync();
 
         main.IsNotes.Should().BeTrue("cofnięcie ma wrócić tam, skąd się przyszło");
     }
@@ -647,10 +647,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await main.ShowCalendarCommand.ExecuteAsync(null);
         await main.ShowJournalCommand.ExecuteAsync(null);
 
-        await main.WrocAsync();
+        await main.BackAsync();
         main.IsCalendar.Should().BeTrue();
 
-        await main.WrocAsync();
+        await main.BackAsync();
         main.IsNotes.Should().BeTrue("drugie cofnięcie ma iść o jeden dalej wstecz");
     }
 
@@ -668,10 +668,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
         main.IsCalendar.Should().BeTrue("aplikacja otwiera się na kalendarzu");
 
         await main.ShowJournalCommand.ExecuteAsync(null);
-        await main.WrocAsync();
+        await main.BackAsync();
 
         main.Current.Should().Be(Screen.Calendar);
-        main.MaDokadWrocic.Should().BeFalse("z ekranu domowego cofnięcie należy do systemu");
+        main.CanGoBack.Should().BeFalse("z ekranu domowego cofnięcie należy do systemu");
     }
 
     public void Dispose()

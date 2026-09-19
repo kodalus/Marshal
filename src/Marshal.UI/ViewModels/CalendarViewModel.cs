@@ -94,7 +94,7 @@ public sealed record SlotBox(
     /// Ptaszek odhaczonego wpisu zostaje wszędzie: to jest stan, nie przycisk.
     /// </remarks>
     public bool ShowCheck =>
-        !Platforma.Dotykowa && CanComplete && Height >= 12 && Width >= 56;
+        !Platform.Touch && CanComplete && Height >= 12 && Width >= 56;
 
     /// <summary>
     /// Czy zostawić z lewej miejsce na znacznik.
@@ -135,7 +135,7 @@ public sealed record SlotBox(
     public double Opacity => IsTask ? 0.55 : 1.0;
 
     /// <summary>Barwa kalendarza albo zadania, przyciemniona przezroczystością.</summary>
-    public IBrush Background => Barwy.Tlo(Color, IsTask, Barwy.NaSiatce);
+    public IBrush Background => Palette.Background(Color, IsTask, Palette.OnGrid);
 }
 
 /// <summary>
@@ -154,15 +154,15 @@ public sealed record SlotBox(
 /// obszaru bez czytania.
 /// </para>
 /// </remarks>
-internal static class Barwy
+internal static class Palette
 {
     /// <summary>Barwa dla wpisu bez własnej. Zadanie inne niż wydarzenie, żeby dało się je odróżnić.</summary>
-    private const string DomyslneWydarzenie = "#6C8FBF";
+    private const string DefaultEvent = "#6C8FBF";
 
-    private const string DomyslneZadanie = "#6E78A0";
+    private const string DefaultTask = "#6E78A0";
 
     /// <summary>Krycie bloku na siatce godzinowej.</summary>
-    public const byte NaSiatce = 0x66;
+    public const byte OnGrid = 0x66;
 
     /// <summary>
     /// Krycie paska w komórce miesiąca — słabsze.
@@ -174,22 +174,22 @@ internal static class Barwy
     /// widać ani nazw, ani numerów dni. Odcień zostaje ten sam, co na siatce — rozpoznaje
     /// się go po barwie, nie po jej sile.
     /// </remarks>
-    public const byte WKomorce = 0x38;
+    public const byte InCell = 0x38;
 
-    public static IBrush Tlo(string? color, bool task, byte krycie)
+    public static IBrush Background(string? color, bool task, byte opacity)
     {
-        var domyslna = task ? DomyslneZadanie : DomyslneWydarzenie;
+        var fallback = task ? DefaultTask : DefaultEvent;
 
-        var source = string.IsNullOrWhiteSpace(color) ? domyslna : color;
+        var source = string.IsNullOrWhiteSpace(color) ? fallback : color;
 
         // Barwa nie do odczytania wraca do domyślnej **z tym samym kryciem**. Wcześniej
         // wracała krycie pełne i jeden nieudany odczyt dawał jedyny nieprzezroczysty
         // prostokąt na siatce — czyli wpis wyróżniony za to, że coś z nim nie tak.
-        var kolor = Color.TryParse(source, out var odczytana)
-            ? odczytana
-            : Color.Parse(domyslna);
+        var color = Color.TryParse(source, out var read)
+            ? read
+            : Color.Parse(fallback);
 
-        return new SolidColorBrush(Color.FromArgb(krycie, kolor.R, kolor.G, kolor.B));
+        return new SolidColorBrush(Color.FromArgb(opacity, color.R, color.G, color.B));
     }
 }
 
@@ -258,7 +258,7 @@ public sealed record MonthEntry(
     /// niesie już domyślna barwa i brak godziny.
     /// </para>
     /// </remarks>
-    public IBrush Background => Barwy.Tlo(Color, TaskId is not null, Barwy.WKomorce);
+    public IBrush Background => Palette.Background(Color, TaskId is not null, Palette.InCell);
 }
 
 /// <summary>Jedna komórka siatki miesiąca.</summary>
@@ -304,7 +304,7 @@ public sealed record MonthWeek(IReadOnlyList<MonthCell> Cells);
 /// Na szerokim oknie cztery równe pola rozciągały się zresztą przez cały ekran
 /// i wyglądały jak pasek narzędzi, a nie jak wybór.
 /// </remarks>
-public sealed record ZakresWidoku(string Name, int Days, bool Miesiac)
+public sealed record ViewRange(string Name, int Days, bool Month)
 {
     /// <summary>Pole wyboru pokazuje to, co zwraca ta metoda — stąd własna, nie ta z rekordu.</summary>
     public override string ToString() => Name;
@@ -318,9 +318,9 @@ public sealed partial class CalendarViewModel(
     IClock clock,
     IActivityLog log,
     TaskEditService edit,
-    IContactRepository? osoby = null,
+    IContactRepository? people = null,
     IUnitOfWork? work = null,
-    IHlcSource? zegarLogiczny = null)
+    IHlcSource? logicalClock = null)
     : ObservableObject
 {
     /// <summary>Wysokość godziny w punktach.</summary>
@@ -371,7 +371,7 @@ public sealed partial class CalendarViewModel(
     public partial bool IsMonth { get; set; }
 
     /// <summary>Możliwe zakresy, w kolejności od najwęższego.</summary>
-    public IReadOnlyList<ZakresWidoku> Zakresy { get; } =
+    public IReadOnlyList<ViewRange> Ranges { get; } =
     [
         new("dzień", 1, false),
         new("3 dni", 3, false),
@@ -389,25 +389,25 @@ public sealed partial class CalendarViewModel(
     /// razy, a przy zejściu z miesiąca — z niewłaściwym zakotwiczeniem.
     /// </remarks>
     [ObservableProperty]
-    public partial ZakresWidoku? Zakres { get; set; }
+    public partial ViewRange? Range { get; set; }
 
-    private bool _wlasneUstawienie;
+    private bool _ownSetting;
 
-    partial void OnZakresChanged(ZakresWidoku? value)
+    partial void OnRangeChanged(ViewRange? value)
     {
-        if (_wlasneUstawienie || value is null)
+        if (_ownSetting || value is null)
         {
             return;
         }
 
-        _ = Wybierz(value);
+        _ = Choose(value);
     }
 
-    private async Task Wybierz(ZakresWidoku scope)
+    private async Task Choose(ViewRange scope)
     {
         try
         {
-            await (scope.Miesiac ? ShowMonthCommand.ExecuteAsync(null) : SetDaysAsync(scope.Days));
+            await (scope.Month ? ShowMonthCommand.ExecuteAsync(null) : SetDaysAsync(scope.Days));
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -422,19 +422,19 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Dociągnięcie pola wyboru do stanu, który ustawiono gdzie indziej.</summary>
-    private void ZapamietajZakres()
+    private void RememberRange()
     {
-        _wlasneUstawienie = true;
+        _ownSetting = true;
 
         try
         {
-            Zakres = IsMonth
-                ? Zakresy[^1]
-                : Zakresy.FirstOrDefault(z => !z.Miesiac && z.Days == VisibleDays) ?? Zakresy[2];
+            Range = IsMonth
+                ? Ranges[^1]
+                : Ranges.FirstOrDefault(z => !z.Month && z.Days == VisibleDays) ?? Ranges[2];
         }
         finally
         {
-            _wlasneUstawienie = false;
+            _ownSetting = false;
         }
     }
 
@@ -456,7 +456,7 @@ public sealed partial class CalendarViewModel(
     /// Zero znaczy „okno się jeszcze nie zmierzyło" i jest traktowane jak szerokie:
     /// przy pierwszym rysowaniu lepiej pokazać za dużo niż schować coś na stałe.
     /// </remarks>
-    private bool Waski => _doDyspozycji > 0 && _doDyspozycji < 720;
+    private bool Narrow => _available > 0 && _available < 720;
 
     /// <summary>
     /// Czy pokazywać linijkę „w bazie tyle, na tych dniach tyle".
@@ -468,7 +468,7 @@ public sealed partial class CalendarViewModel(
     /// Na komputerze zostaje, bo tam wysokość nie jest towarem deficytowym i bo to
     /// tam się siada, gdy coś naprawdę nie gra.
     /// </remarks>
-    public bool ShowSummary => !Waski;
+    public bool ShowSummary => !Narrow;
 
     /// <summary>
     /// Czy zakres wybiera się przyciskami, czy polem wyboru.
@@ -481,10 +481,10 @@ public sealed partial class CalendarViewModel(
     /// tylko dwie odpowiedzi na to, ile jest miejsca: szerokie okno stać na pokazanie
     /// wszystkiego naraz, wąskie nie.
     /// </remarks>
-    public bool ShowRangeButtons => !Waski;
+    public bool ShowRangeButtons => !Narrow;
 
     /// <summary>Pole wyboru zakresu — na wąskim, gdzie przyciski się nie mieszczą.</summary>
-    public bool ShowRangePicker => Waski;
+    public bool ShowRangePicker => Narrow;
 
     /// <summary>
     /// Ile wpisów mieści komórka, gdy nie wiadomo jeszcze, jak wysoka jest siatka.
@@ -494,7 +494,7 @@ public sealed partial class CalendarViewModel(
     /// Cztery to tyle, ile komórka mieściła, zanim liczyliśmy to z wysokości — czyli
     /// najgorszy przypadek jest równy temu, co było, a nie gorszy od niego.
     /// </remarks>
-    private const int WMiesiacuZapasowo = 4;
+    private const int MonthFallback = 4;
 
     /// <summary>Margines, ramka i wyściółka komórki razem. Odpowiednik stylu w XAML-u.</summary>
     /// <remarks>
@@ -503,10 +503,10 @@ public sealed partial class CalendarViewModel(
     /// kontrolek przy każdym układzie, a te liczby stoją w stylu obok i zmieniają się
     /// razem z nim.
     /// </remarks>
-    private const double ObramowanieKomorki = 12;
+    private const double CellBorder = 12;
 
     /// <summary>Wiersz z numerem dnia i licznikiem nadmiaru.</summary>
-    private const double NumerDnia = 20;
+    private const double DayNumber = 20;
 
     /// <summary>
     /// Wysokość jednego wpisu w komórce.
@@ -518,10 +518,10 @@ public sealed partial class CalendarViewModel(
     /// wpis, którego licznik nadmiaru już nie policzył — czyli komórka chowa coś
     /// i o tym nie mówi. Z tych dwóch pomyłek tylko jedna jest cicha.
     /// </remarks>
-    private const double WysokoscWpisu = 18;
+    private const double EntryHeight = 18;
 
     /// <summary>Wysokość, jaką okno oddaje na tygodnie miesiąca. Zero, dopóki nie zmierzy.</summary>
-    private double _wysokoscTygodni;
+    private double _weekHeight;
 
     /// <summary>
     /// Wysokość siatki tygodni — stąd wiadomo, ile wpisów mieści komórka.
@@ -530,20 +530,20 @@ public sealed partial class CalendarViewModel(
     /// Podawana przez widok, tak samo i z tego samego powodu co szerokość: model widoku
     /// nie pyta okna o rozmiar, dostaje go i przelicza, co z niego wynika.
     /// </remarks>
-    public void SetMonthHeight(double wysokosc)
+    public void SetMonthHeight(double height)
     {
-        var nowa = Math.Max(0, wysokosc);
+        var fresh = Math.Max(0, height);
 
-        if (Math.Abs(nowa - _wysokoscTygodni) < 1)
+        if (Math.Abs(fresh - _weekHeight) < 1)
         {
             return;
         }
 
-        _wysokoscTygodni = nowa;
+        _weekHeight = fresh;
 
         if (IsMonth)
         {
-            PrzeliczMiesiac();
+            RecomputeMonth();
         }
     }
 
@@ -563,16 +563,16 @@ public sealed partial class CalendarViewModel(
     /// nie widać niczego poza liczbą, nie mówi już nic o tym, czym dzień jest zajęty.
     /// </para>
     /// </remarks>
-    private int MiescieSieWKomorce(int tygodni)
+    private int FitsInCell(int weeks)
     {
-        if (_wysokoscTygodni <= 0 || tygodni <= 0)
+        if (_weekHeight <= 0 || weeks <= 0)
         {
-            return WMiesiacuZapasowo;
+            return MonthFallback;
         }
 
-        var naWpisy = (_wysokoscTygodni / tygodni) - ObramowanieKomorki - NumerDnia;
+        var naWpisy = (_weekHeight / weeks) - CellBorder - DayNumber;
 
-        return Math.Clamp((int)Math.Floor(naWpisy / WysokoscWpisu), 1, 20);
+        return Math.Clamp((int)Math.Floor(naWpisy / EntryHeight), 1, 20);
     }
 
     public double GridHeight => 24 * HourHeight;
@@ -582,7 +582,7 @@ public sealed partial class CalendarViewModel(
     /// Podawana przez widok, bo tylko on ją zna. Model widoku nie pyta okna o rozmiar —
     /// dostaje go i przelicza, co z niego wynika.
     /// </remarks>
-    private double _doDyspozycji;
+    private double _available;
 
     /// <summary>
     /// Najwęższa kolumna, poniżej której tydzień zaczyna się przewijać w bok.
@@ -601,7 +601,7 @@ public sealed partial class CalendarViewModel(
     /// widocznych i jedna ucięta jest lepsze od siedmiu pasków bez treści.
     /// </para>
     /// </remarks>
-    private const double NajwezszaKolumna = 34;
+    private const double NarrowestColumn = 34;
 
     /// <summary>
     /// Szerokość kolumny dnia.
@@ -613,19 +613,19 @@ public sealed partial class CalendarViewModel(
     /// Dolna granica jest po to, żeby tydzień w wąskim oknie dał się przewinąć w bok,
     /// zamiast zostać siedmioma nieczytelnymi paskami.
     /// </remarks>
-    public double ColumnWidth => _doDyspozycji <= 0
+    public double ColumnWidth => _available <= 0
         ? VisibleDays switch { 1 => 520, 3 => 240, _ => 130 }
 
         // Minus odstęp między kolumnami. Bez tego siedem kolumn zajmowało czternaście
         // punktów więcej, niż okno miało — i pojawiał się poziomy pasek przewijania
         // na rzecz, która o włos się nie mieści.
-        : Math.Max(NajwezszaKolumna, (_doDyspozycji / VisibleDays) - OdstepKolumny);
+        : Math.Max(NarrowestColumn, (_available / VisibleDays) - ColumnGap);
 
     /// <summary>Odstęp między kolumnami dnia. Musi zgadzać się z marginesem w oknie.</summary>
-    private const double OdstepKolumny = 2;
+    private const double ColumnGap = 2;
 
     /// <summary>Wysokość jednego wiersza na pasku całodniowym.</summary>
-    private const double WierszCalodniowy = 24;
+    private const double AllDayRow = 24;
 
     /// <summary>
     /// Wysokość paska całodniowego — **wspólna dla wszystkich kolumn**.
@@ -644,7 +644,7 @@ public sealed partial class CalendarViewModel(
     /// </para>
     /// </remarks>
     public double AllDayHeight => Math.Max(1, Columns.Count == 0 ? 0 : Columns.Max(k => k.AllDay.Count))
-        * WierszCalodniowy;
+        * AllDayRow;
 
     /// <summary>Czy którykolwiek z widocznych dni ma coś całodniowego.</summary>
     public bool HasAnyAllDay => Columns.Any(k => k.AllDay.Count > 0);
@@ -659,10 +659,10 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public void SetAvailableWidth(double width)
     {
-        var stara = ColumnWidth;
-        _doDyspozycji = Math.Max(0, width);
+        var old = ColumnWidth;
+        _available = Math.Max(0, width);
 
-        if (Math.Abs(ColumnWidth - stara) < 0.5)
+        if (Math.Abs(ColumnWidth - old) < 0.5)
         {
             return;
         }
@@ -674,11 +674,11 @@ public sealed partial class CalendarViewModel(
 
         if (IsMonth)
         {
-            PrzeliczMiesiac();
+            RecomputeMonth();
         }
         else
         {
-            Przelicz();
+            Recompute();
         }
     }
 
@@ -792,12 +792,12 @@ public sealed partial class CalendarViewModel(
 
         try
         {
-            var skad = Bylo(block, zone);
+            var from = Original(block, zone);
 
             await calendar.SaveEventAsync(
                 source, id, new CalendarDraft(block.Title, start, start + length));
 
-            Undo = new MovedEvent(source, id, block.Title, skad, skad + length);
+            Undo = new MovedEvent(source, id, block.Title, from, from + length);
             OnPropertyChanged(nameof(CanUndo));
             OnPropertyChanged(nameof(UndoText));
 
@@ -819,7 +819,7 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Skąd wydarzenie przyszło — z dnia i godziny widocznych na bloku.</summary>
-    private static DateTimeOffset Bylo(SlotBox block, TimeSpan zone)
+    private static DateTimeOffset Original(SlotBox block, TimeSpan zone)
     {
         var day = DateOnly.ParseExact(block.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
         var time = TimeOnly.TryParse(block.StartText, CultureInfo.InvariantCulture, out var g)
@@ -883,14 +883,14 @@ public sealed partial class CalendarViewModel(
     /// punktu byłaby udawaną precyzją — trafienie w 14:07 nie znaczy, że ktoś planuje
     /// na 14:07.
     /// </remarks>
-    private const int Krok = 5;
+    private const int Step = 5;
 
     public static TimeOnly Time(double score)
     {
-        var minutes = Math.Clamp(score / HourHeight * 60, 0, (24 * 60) - Krok);
-        var kroki = (int)(minutes / Krok) * Krok;
+        var minutes = Math.Clamp(score / HourHeight * 60, 0, (24 * 60) - Step);
+        var steps = (int)(minutes / Step) * Step;
 
-        return new TimeOnly(kroki / 60, kroki % 60);
+        return new TimeOnly(steps / 60, steps % 60);
     }
 
     /// <summary>Kliknięcie w pustą siatkę: nowe zadanie na tym dniu i o tej godzinie.</summary>
@@ -916,64 +916,64 @@ public sealed partial class CalendarViewModel(
         }
 
         await RefreshAsync();
-        PrzewinDoTeraz();
+        ScrollToNow();
     }
 
     /// <summary>
     /// Ostatnio złożona siatka. Trzymana, żeby zmiana szerokości okna nie musiała
     /// jechać do bazy — bloki zależą od szerokości, a dane nie.
     /// </summary>
-    private IReadOnlyList<AgendaDay> _dni = [];
+    private IReadOnlyList<AgendaDay> _days = [];
 
     [RelayCommand]
     private async Task RefreshAsync()
     {
         // Sąsiedzi złożeni pod poprzedni stan przestają być sąsiadami.
-        _sasiedziZlozeni = false;
+        _neighboursBuilt = false;
 
         // Pole wyboru zakresu dociągane tutaj, a nie w każdym miejscu, które zmienia
         // zakres z osobna: siatka przeliczana jest po każdej takiej zmianie, więc to
         // jedyne miejsce, przez które wszystkie przechodzą.
-        ZapamietajZakres();
+        RememberRange();
 
         // Miesiąc liczy własny zakres: siatka zaczyna się w poniedziałek przed pierwszym
         // i kończy w niedzielę po ostatnim, bo tydzień na przełomie jest tygodniem.
-        var od = IsMonth ? PoczatekSiatki() : Anchor;
-        var count = IsMonth ? DniSiatki() : VisibleDays;
+        var od = IsMonth ? GridStart() : Anchor;
+        var count = IsMonth ? GridDays() : VisibleDays;
 
-        _dni = await calendar.AgendaAsync(od, count);
+        _days = await calendar.AgendaAsync(od, count);
 
         if (IsMonth)
         {
-            PrzeliczMiesiac();
+            RecomputeMonth();
         }
         else
         {
-            Przelicz();
+            Recompute();
         }
 
-        var wBazie = await calendar.StoredEventCountAsync();
-        var naSiatce = _dni.Sum(d => d.AllDay.Count + d.Timed.Count);
+        var inDb = await calendar.StoredEventCountAsync();
+        var onGrid = _days.Sum(d => d.AllDay.Count + d.Timed.Count);
 
-        Summary = $"W bazie {wBazie}, na tych dniach {naSiatce}. "
+        Summary = $"W bazie {inDb}, na tych dniach {onGrid}. "
             + $"Godziny w strefie {calendar.ZoneName}.";
 
         // Zła strefa przesuwa wszystko naraz i wygląda przez to jak źle pobrane dane.
         // Nie nadpisujemy kłopotu z pobierania — ten jest świeższy i bardziej konkretny.
-        if (Problem is null && calendar.ZoneProblem is { } klopot)
+        if (Problem is null && calendar.ZoneProblem is { } trouble)
         {
-            Problem = klopot;
+            Problem = trouble;
             OnPropertyChanged(nameof(HasProblem));
         }
 
         // Zapisujemy tylko przypadek podejrzany: wydarzenia są, a siatka pusta.
         // Wpis przy każdym przerysowaniu zalałby dziennik tym, co widać na ekranie,
         // i utopiłby w tym rzeczy, których nie widać nigdzie indziej.
-        if (naSiatce == 0 && wBazie > 0)
+        if (onGrid == 0 && inDb > 0)
         {
             await log.RecordAsync(
                 "Kalendarz: siatka",
-                $"w bazie {wBazie}, na siatce 0",
+                $"w bazie {inDb}, na siatce 0",
                 ActivityLevel.Problem,
                 $"Zakres {Range}. Wydarzenia są, ale żadne nie wypada na pokazywanych dniach.");
         }
@@ -1002,8 +1002,8 @@ public sealed partial class CalendarViewModel(
         _ = Dispatcher.UIThread.InvokeAsync(
             async () =>
             {
-                await PrzygotujSasiadowAsync();
-                OnPropertyChanged(nameof(SasiedziGotowi));
+                await PrepareNeighboursAsync();
+                OnPropertyChanged(nameof(NeighboursReady));
             },
             DispatcherPriority.Background);
     }
@@ -1051,7 +1051,7 @@ public sealed partial class CalendarViewModel(
     {
         GoToToday();
         await RefreshAsync();
-        PrzewinDoTeraz();
+        ScrollToNow();
     }
 
     /// <summary>
@@ -1097,7 +1097,7 @@ public sealed partial class CalendarViewModel(
 
     private async Task SetDaysAsync(int days)
     {
-        var zMiesiaca = IsMonth;
+        var fromMonth = IsMonth;
 
         IsMonth = false;
         MonthWeeks.Clear();
@@ -1106,7 +1106,7 @@ public sealed partial class CalendarViewModel(
 
         // Wyjście z miesiąca zostawiało zakotwiczenie na pierwszym dniu, więc „dzień"
         // po „miesiącu" pokazywał pierwszego zamiast dzisiaj.
-        if (zMiesiaca)
+        if (fromMonth)
         {
             GoToToday();
         }
@@ -1139,7 +1139,7 @@ public sealed partial class CalendarViewModel(
     /// Przy dniach bez dzisiaj nie ma czego pokazywać: tam pozycja z poprzedniego
     /// przewinięcia niesie więcej niż godzina z innego dnia.
     /// </remarks>
-    private void PrzewinDoTeraz()
+    private void ScrollToNow()
     {
         if (IsMonth)
         {
@@ -1190,9 +1190,9 @@ public sealed partial class CalendarViewModel(
     /// u góry i przewijanie do niego od nowa.
     /// </remarks>
     [RelayCommand]
-    private async Task OpenMonthDayAsync(MonthCell? komorka)
+    private async Task OpenMonthDayAsync(MonthCell? cell)
     {
-        if (komorka is null)
+        if (cell is null)
         {
             return;
         }
@@ -1200,13 +1200,13 @@ public sealed partial class CalendarViewModel(
         IsMonth = false;
         MonthWeeks.Clear();
         VisibleDays = 1;
-        Anchor = komorka.Date;
+        Anchor = cell.Date;
 
         OnPropertyChanged(nameof(ColumnWidth));
         OnPropertyChanged(nameof(Range));
 
         await RefreshAsync();
-        PrzewinDoTeraz();
+        ScrollToNow();
     }
 
     /// <summary>Poniedziałek, od którego zaczyna się siatka miesiąca.</summary>
@@ -1214,13 +1214,13 @@ public sealed partial class CalendarViewModel(
     /// Tydzień na przełomie jest tygodniem: wycięcie z niego dni należących do sąsiada
     /// zrobiłoby dziurę tam, gdzie jej nie ma. Dni spoza miesiąca zostają przygaszone.
     /// </remarks>
-    private DateOnly PoczatekSiatki() => PoczatekSiatki(Anchor);
+    private DateOnly GridStart() => GridStart(Anchor);
 
-    private static DateOnly PoczatekSiatki(DateOnly kotwica)
+    private static DateOnly GridStart(DateOnly anchor)
     {
-        var pierwszy = new DateOnly(kotwica.Year, kotwica.Month, 1);
+        var first = new DateOnly(anchor.Year, anchor.Month, 1);
 
-        return pierwszy.AddDays(-(((int)pierwszy.DayOfWeek + 6) % 7));
+        return first.AddDays(-(((int)first.DayOfWeek + 6) % 7));
     }
 
     /// <summary>
@@ -1231,12 +1231,12 @@ public sealed partial class CalendarViewModel(
     /// w poniedziałek mieści się w czterech, a rząd pustych komórek pod nim zabierałby
     /// wysokość wszystkim pozostałym — na telefonie to jedna szósta ekranu na nic.
     /// </remarks>
-    private int DniSiatki() => DniSiatki(Anchor);
+    private int GridDays() => GridDays(Anchor);
 
-    private static int DniSiatki(DateOnly kotwica)
+    private static int GridDays(DateOnly anchor)
     {
-        var od = PoczatekSiatki(kotwica);
-        var end = new DateOnly(kotwica.Year, kotwica.Month, 1).AddMonths(1);
+        var od = GridStart(anchor);
+        var end = new DateOnly(anchor.Year, anchor.Month, 1).AddMonths(1);
 
         // Do niedzieli włącznie po ostatnim dniu miesiąca.
         var days = end.DayNumber - od.DayNumber;
@@ -1245,13 +1245,13 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Złożenie siatki miesiąca z wczytanych dni.</summary>
-    private void PrzeliczMiesiac()
+    private void RecomputeMonth()
     {
         MonthWeeks.Clear();
 
-        foreach (var tydzien in ZlozTygodnie(_dni, Anchor))
+        foreach (var week in BuildWeeks(_days, Anchor))
         {
-            MonthWeeks.Add(tydzien);
+            MonthWeeks.Add(week);
         }
     }
 
@@ -1260,17 +1260,17 @@ public sealed partial class CalendarViewModel(
     /// Wyjęte ze składania bieżącego widoku, żeby dało się złożyć także sąsiedni miesiąc
     /// — ten, który przejechanie palcem odsłania w trakcie ruchu.
     /// </remarks>
-    private List<MonthWeek> ZlozTygodnie(IReadOnlyList<AgendaDay> days, DateOnly kotwica)
+    private List<MonthWeek> BuildWeeks(IReadOnlyList<AgendaDay> days, DateOnly anchor)
     {
-        var tygodnie = new List<MonthWeek>();
+        var weeks = new List<MonthWeek>();
 
         var today = clock.Today;
-        var miesiac = kotwica.Month;
-        var komorki = new List<MonthCell>(days.Count);
+        var month = anchor.Month;
+        var cells = new List<MonthCell>(days.Count);
 
         // Pojemność liczona raz na siatkę, nie raz na komórkę: wszystkie mają tę samą
         // wysokość, bo siatka o jednej kolumnie dzieli swoją równo między tygodnie.
-        var miejsca = MiescieSieWKomorce(days.Count / 7);
+        var slots = FitsInCell(days.Count / 7);
 
         foreach (var day in days)
         {
@@ -1286,46 +1286,46 @@ public sealed partial class CalendarViewModel(
                         // na jedną siódmą ekranu telefonu „08:00" zabiera połowę wiersza
                         // i z nazwy zostają dwa znaki — czyli wpis przestaje mówić, czego
                         // dotyczy, żeby powiedzieć, o której. Od godzin jest widok dnia.
-                        Waski ? string.Empty : $"{s.Entry.Start.Hour:D2}:{s.Entry.Start.Minute:D2}",
+                        Narrow ? string.Empty : $"{s.Entry.Start.Hour:D2}:{s.Entry.Start.Minute:D2}",
                         s.Entry.Title,
                         s.Entry.TaskId,
                         s.Entry.IsDone,
                         s.Entry.Color)))
                 .ToList();
 
-            var visible = entries.Count > miejsca ? entries.Take(miejsca).ToList() : entries;
+            var visible = entries.Count > slots ? entries.Take(slots).ToList() : entries;
 
-            komorki.Add(new MonthCell(
+            cells.Add(new MonthCell(
                 day.Date,
                 $"{day.Date.Day}",
                 day.Date == today,
-                day.Date.Month != miesiac,
+                day.Date.Month != month,
                 visible,
                 entries.Count - visible.Count));
         }
 
-        for (var i = 0; i + 7 <= komorki.Count; i += 7)
+        for (var i = 0; i + 7 <= cells.Count; i += 7)
         {
-            tygodnie.Add(new MonthWeek(komorki.GetRange(i, 7)));
+            weeks.Add(new MonthWeek(cells.GetRange(i, 7)));
         }
 
-        return tygodnie;
+        return weeks;
     }
 
     /// <summary>Kolumny zakresu po lewej — tego, który odsłania przejechanie w prawo.</summary>
-    public ObservableCollection<CalendarColumn> KolumnyPrzed { get; } = [];
+    public ObservableCollection<CalendarColumn> ColumnsBefore { get; } = [];
 
     /// <summary>Kolumny zakresu po prawej.</summary>
-    public ObservableCollection<CalendarColumn> KolumnyPo { get; } = [];
+    public ObservableCollection<CalendarColumn> ColumnsAfter { get; } = [];
 
     /// <summary>Tygodnie poprzedniego miesiąca.</summary>
-    public ObservableCollection<MonthWeek> TygodniePrzed { get; } = [];
+    public ObservableCollection<MonthWeek> WeeksBefore { get; } = [];
 
     /// <summary>Tygodnie następnego miesiąca.</summary>
-    public ObservableCollection<MonthWeek> TygodniePo { get; } = [];
+    public ObservableCollection<MonthWeek> WeeksAfter { get; } = [];
 
     /// <summary>Czy sąsiedzi są złożeni dla bieżącego stanu siatki.</summary>
-    private bool _sasiedziZlozeni;
+    private bool _neighboursBuilt;
 
     /// <summary>
     /// Złożenie sąsiednich zakresów — tych, które widać w trakcie przejechania.
@@ -1353,75 +1353,75 @@ public sealed partial class CalendarViewModel(
     /// a to jest gorsze od braku ruchu. Najgorszy przypadek jest więc równy temu,
     /// co było przed tą zmianą, a nie gorszy od niego.
     /// </remarks>
-    public bool SasiedziGotowi =>
+    public bool NeighboursReady =>
         IsMonth
-            ? TygodniePrzed.Count > 0 || TygodniePo.Count > 0
-            : KolumnyPrzed.Count > 0 || KolumnyPo.Count > 0;
+            ? WeeksBefore.Count > 0 || WeeksAfter.Count > 0
+            : ColumnsBefore.Count > 0 || ColumnsAfter.Count > 0;
 
-    public async Task PrzygotujSasiadowAsync()
+    public async Task PrepareNeighboursAsync()
     {
-        if (_sasiedziZlozeni)
+        if (_neighboursBuilt)
         {
             return;
         }
 
-        _sasiedziZlozeni = true;
+        _neighboursBuilt = true;
 
         try
         {
             if (IsMonth)
             {
-                await ZlozSasiadaMiesiaca(Anchor.AddMonths(-1), TygodniePrzed);
-                await ZlozSasiadaMiesiaca(Anchor.AddMonths(1), TygodniePo);
+                await BuildMonthNeighbour(Anchor.AddMonths(-1), WeeksBefore);
+                await BuildMonthNeighbour(Anchor.AddMonths(1), WeeksAfter);
             }
             else
             {
-                await ZlozSasiadaDni(Anchor.AddDays(-VisibleDays), KolumnyPrzed);
-                await ZlozSasiadaDni(Anchor.AddDays(VisibleDays), KolumnyPo);
+                await BuildDaysNeighbour(Anchor.AddDays(-VisibleDays), ColumnsBefore);
+                await BuildDaysNeighbour(Anchor.AddDays(VisibleDays), ColumnsAfter);
             }
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
             // Sąsiad jest ozdobą gestu: bez niego przejechanie odsłania puste tło,
             // czyli to, co było wcześniej. Nie ma powodu, żeby psuł cokolwiek innego.
-            _sasiedziZlozeni = false;
+            _neighboursBuilt = false;
 
             await log.RecordAsync(
                 "Kalendarz: sąsiednie zakresy", Range, ActivityLevel.Problem, e.Message);
         }
     }
 
-    private async Task ZlozSasiadaDni(DateOnly od, ObservableCollection<CalendarColumn> cel)
+    private async Task BuildDaysNeighbour(DateOnly od, ObservableCollection<CalendarColumn> target)
     {
-        var kolumny = ZlozKolumny(await calendar.AgendaAsync(od, VisibleDays));
+        var columns = BuildColumns(await calendar.AgendaAsync(od, VisibleDays));
 
-        cel.Clear();
+        target.Clear();
 
-        foreach (var column in kolumny)
+        foreach (var column in columns)
         {
-            cel.Add(column);
+            target.Add(column);
         }
     }
 
-    private async Task ZlozSasiadaMiesiaca(DateOnly kotwica, ObservableCollection<MonthWeek> cel)
+    private async Task BuildMonthNeighbour(DateOnly anchor, ObservableCollection<MonthWeek> target)
     {
-        var days = await calendar.AgendaAsync(PoczatekSiatki(kotwica), DniSiatki(kotwica));
-        var tygodnie = ZlozTygodnie(days, kotwica);
+        var days = await calendar.AgendaAsync(GridStart(anchor), GridDays(anchor));
+        var weeks = BuildWeeks(days, anchor);
 
-        cel.Clear();
+        target.Clear();
 
-        foreach (var tydzien in tygodnie)
+        foreach (var week in weeks)
         {
-            cel.Add(tydzien);
+            target.Add(week);
         }
     }
 
     /// <summary>Złożenie kolumn z ostatnio pobranych dni. Bez sieci i bez bazy.</summary>
-    private void Przelicz()
+    private void Recompute()
     {
         Columns.Clear();
 
-        foreach (var column in ZlozKolumny(_dni))
+        foreach (var column in BuildColumns(_days))
         {
             Columns.Add(column);
         }
@@ -1432,7 +1432,7 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Kolumny z podanych dni. Wyjęte, żeby dało się złożyć także sąsiedni zakres.</summary>
-    private List<CalendarColumn> ZlozKolumny(IReadOnlyList<AgendaDay> days)
+    private List<CalendarColumn> BuildColumns(IReadOnlyList<AgendaDay> days)
     {
         var today = clock.Today;
         var now = clock.Now.TimeOfDay.TotalHours * HourHeight;
@@ -1490,7 +1490,7 @@ public sealed partial class CalendarViewModel(
             return;
         }
 
-        if (block is not { SourceId: { } source, ExternalId: { } zewnetrzny })
+        if (block is not { SourceId: { } source, ExternalId: { } external })
         {
             return;
         }
@@ -1499,7 +1499,7 @@ public sealed partial class CalendarViewModel(
 
         try
         {
-            await calendar.SetEventDoneAsync(source, zewnetrzny, !block.IsDone);
+            await calendar.SetEventDoneAsync(source, external, !block.IsDone);
             await log.RecordAsync(co, block.Title);
         }
         catch (EventGone e)
@@ -1583,8 +1583,8 @@ public sealed partial class CalendarViewModel(
 
         try
         {
-            await edit.SetMinutesAsync(task, Math.Max(Krok, minutes));
-            await log.RecordAsync("Kalendarz: rozciągnięcie", $"{Math.Max(Krok, minutes)} min");
+            await edit.SetMinutesAsync(task, Math.Max(Step, minutes));
+            await log.RecordAsync("Kalendarz: rozciągnięcie", $"{Math.Max(Step, minutes)} min");
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -1650,12 +1650,12 @@ public sealed partial class CalendarViewModel(
 
         OnPropertyChanged(nameof(HasOpenedProblem));
 
-        _ = WczytajObszaryAsync(block);
-        _ = WczytajOsobyAsync();
+        _ = LoadAreasAsync(block);
+        _ = LoadPeopleAsync();
     }
 
     /// <summary>Obszary, do których da się przełożyć wydarzenie — czyli te z kalendarzem.</summary>
-    public ObservableCollection<Area> ObszaryWydarzenia { get; } = [];
+    public ObservableCollection<Area> EventAreas { get; } = [];
 
     /// <summary>
     /// Obszar otwartego wydarzenia. Zmiana przekłada je do kalendarza tamtego obszaru.
@@ -1675,38 +1675,38 @@ public sealed partial class CalendarViewModel(
     /// </para>
     /// </remarks>
     [ObservableProperty]
-    public partial Area? ObszarWydarzenia { get; set; }
+    public partial Area? EventArea { get; set; }
 
     /// <summary>Zapora przed odbiciem: wczytanie stanu nie jest wyborem użytkowniczki.</summary>
-    private bool _wlasneObszary;
+    private bool _ownAreas;
 
-    private async Task WczytajObszaryAsync(SlotBox block)
+    private async Task LoadAreasAsync(SlotBox block)
     {
         try
         {
-            var dostepne = await calendar.AreasWithCalendarAsync();
+            var available = await calendar.AreasWithCalendarAsync();
             var now = block.SourceId is { } source
                 ? await calendar.AreaOfCalendarAsync(source)
                 : null;
 
-            _wlasneObszary = true;
+            _ownAreas = true;
 
             try
             {
-                ObszaryWydarzenia.Clear();
+                EventAreas.Clear();
 
-                foreach (var area in dostepne)
+                foreach (var area in available)
                 {
-                    ObszaryWydarzenia.Add(area);
+                    EventAreas.Add(area);
                 }
 
                 // Po identyfikatorze, nie po samym obiekcie: lista pochodzi z osobnego
                 // odczytu, więc to nie są te same wystąpienia.
-                ObszarWydarzenia = dostepne.FirstOrDefault(o => o.Id == now?.Id);
+                EventArea = available.FirstOrDefault(o => o.Id == now?.Id);
             }
             finally
             {
-                _wlasneObszary = false;
+                _ownAreas = false;
             }
 
             OnPropertyChanged(nameof(CanMoveOpened));
@@ -1719,11 +1719,11 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Osoby, którym da się pokazać wydarzenie. Puste, gdy lista jeszcze pusta.</summary>
-    public ObservableCollection<Contact> Osoby { get; } = [];
+    public ObservableCollection<Contact> People { get; } = [];
 
     /// <summary>Wpisywany adres — do dopisania kogoś, kogo jeszcze na liście nie ma.</summary>
     [ObservableProperty]
-    public partial string NowaOsoba { get; set; } = string.Empty;
+    public partial string NewPerson { get; set; } = string.Empty;
 
     /// <summary>
     /// Pokazanie otwartego wydarzenia jednej osobie.
@@ -1734,26 +1734,26 @@ public sealed partial class CalendarViewModel(
     /// wszystko pojawia się po cichu i na zawsze, tu jedna rzecz i za wiedzą obu stron.
     /// </remarks>
     [RelayCommand]
-    private async Task PokazOsobieAsync(Contact? osoba)
+    private async Task ShowPersonAsync(Contact? person)
     {
-        if (osoba is null || Opened is not { SourceId: { } source, ExternalId: { } entry } block)
+        if (person is null || Opened is not { SourceId: { } source, ExternalId: { } entry } block)
         {
             return;
         }
 
         try
         {
-            var dopisana = await calendar.InviteAsync(source, entry, osoba.Email);
+            var added = await calendar.InviteAsync(source, entry, person.Email);
 
             await log.RecordAsync(
                 "Kalendarz: pokazanie osobie",
-                $"{block.Title} → {osoba.Name}",
+                $"{block.Title} → {person.Name}",
                 ActivityLevel.Ok,
-                dopisana ? null : "ta osoba już była na liście gości");
+                added ? null : "ta osoba już była na liście gości");
 
-            OpenedProblem = dopisana
-                ? $"Zaproszenie poszło do: {osoba.Name}."
-                : $"{osoba.Name} już to widzi.";
+            OpenedProblem = added
+                ? $"Zaproszenie poszło do: {person.Name}."
+                : $"{person.Name} już to widzi.";
 
             OnPropertyChanged(nameof(HasOpenedProblem));
         }
@@ -1777,32 +1777,32 @@ public sealed partial class CalendarViewModel(
     /// w ogóle ma to znaczenie.
     /// </remarks>
     [RelayCommand]
-    private async Task DopiszOsobeAsync()
+    private async Task AddPersonAsync()
     {
-        var address = NowaOsoba.Trim();
+        var address = NewPerson.Trim();
 
-        if (address.Length == 0 || osoby is null || work is null || zegarLogiczny is null)
+        if (address.Length == 0 || people is null || work is null || logicalClock is null)
         {
             return;
         }
 
         try
         {
-            var osoba = await osoby.FindByEmailAsync(address);
+            var person = await people.FindByEmailAsync(address);
 
-            if (osoba is null)
+            if (person is null)
             {
-                osoba = new Contact(
-                    Guid.CreateVersion7(), clock.Now, zegarLogiczny.Next(),
+                person = new Contact(
+                    Guid.CreateVersion7(), clock.Now, logicalClock.Next(),
                     address.Split('@')[0], address);
 
-                osoby.Add(osoba);
+                people.Add(person);
                 await work.SaveChangesAsync();
             }
 
-            NowaOsoba = string.Empty;
-            await WczytajOsobyAsync();
-            await PokazOsobieAsync(osoba);
+            NewPerson = string.Empty;
+            await LoadPeopleAsync();
+            await ShowPersonAsync(person);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -1814,9 +1814,9 @@ public sealed partial class CalendarViewModel(
         }
     }
 
-    private async Task WczytajOsobyAsync()
+    private async Task LoadPeopleAsync()
     {
-        if (osoby is null)
+        if (people is null)
         {
             return;
         }
@@ -1825,16 +1825,16 @@ public sealed partial class CalendarViewModel(
         {
             // Pobranie przed czyszczeniem: lista wyczyszczona przed oczekiwaniem
             // zostaje pusta, gdy odczyt się nie uda, i wygląda jak brak osób.
-            var list = await osoby.AllAsync();
+            var list = await people.AllAsync();
 
-            Osoby.Clear();
+            People.Clear();
 
-            foreach (var osoba in list)
+            foreach (var person in list)
             {
-                Osoby.Add(osoba);
+                People.Add(person);
             }
 
-            OnPropertyChanged(nameof(HasOsoby));
+            OnPropertyChanged(nameof(HasPeople));
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -1843,22 +1843,22 @@ public sealed partial class CalendarViewModel(
         }
     }
 
-    public bool HasOsoby => Osoby.Count > 0;
+    public bool HasPeople => People.Count > 0;
 
     /// <summary>Czy jest dokąd przekładać. Bez przypisanych obszarów pole nie ma sensu.</summary>
-    public bool CanMoveOpened => CanEditOpened && ObszaryWydarzenia.Count > 0;
+    public bool CanMoveOpened => CanEditOpened && EventAreas.Count > 0;
 
-    partial void OnObszarWydarzeniaChanged(Area? value)
+    partial void OnEventAreaChanged(Area? value)
     {
-        if (_wlasneObszary || value?.CalendarId is not { } calendarId)
+        if (_ownAreas || value?.CalendarId is not { } calendarId)
         {
             return;
         }
 
-        _ = PrzelozWydarzenieAsync(calendarId);
+        _ = MoveEventAsync(calendarId);
     }
 
-    private async Task PrzelozWydarzenieAsync(Guid calendarId)
+    private async Task MoveEventAsync(Guid calendarId)
     {
         if (Opened is not { SourceId: { } source, ExternalId: { } id } block
             || source == calendarId)
@@ -1920,7 +1920,7 @@ public sealed partial class CalendarViewModel(
             return;
         }
 
-        if (OpenedStart is not { } od || OpenedEnd is not { } doGodziny)
+        if (OpenedStart is not { } od || OpenedEnd is not { } toHour)
         {
             OpenedProblem = "Bez godzin nie ma czego zapisać.";
             OnPropertyChanged(nameof(HasOpenedProblem));
@@ -1933,8 +1933,8 @@ public sealed partial class CalendarViewModel(
             var zone = clock.Now.Offset;
 
             var start = new DateTimeOffset(day.ToDateTime(TimeOnly.FromTimeSpan(od)), zone);
-            var end = doGodziny > od
-                ? new DateTimeOffset(day.ToDateTime(TimeOnly.FromTimeSpan(doGodziny)), zone)
+            var end = toHour > od
+                ? new DateTimeOffset(day.ToDateTime(TimeOnly.FromTimeSpan(toHour)), zone)
                 : start.AddMinutes(30);
 
             await calendar.SaveEventAsync(
@@ -2039,20 +2039,20 @@ public sealed partial class CalendarViewModel(
     {
         if (Columns.Any(k => k.IsToday))
         {
-            Przelicz();
+            Recompute();
         }
     }
 
     private SlotBox Box(AgendaSlot slot)
     {
-        var szerokosc = ColumnWidth / Math.Max(1, slot.Columns);
+        var width = ColumnWidth / Math.Max(1, slot.Columns);
 
         return new SlotBox(
             slot.Entry.Title,
             slot.Entry.StartHour * HourHeight,
             slot.Entry.Hours * HourHeight,
-            slot.Column * szerokosc,
-            szerokosc - 2,
+            slot.Column * width,
+            width - 2,
             slot.Entry.Kind == AgendaKind.Task,
             slot.Entry.Color,
 

@@ -7,10 +7,10 @@ namespace Marshal.Tests;
 
 public class ProjectTests
 {
-    private static readonly DateTimeOffset Teraz = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
+    private static readonly DateTimeOffset Now = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
 
     private static Project Projekt(string result = "Zimowe opony są na aucie", Guid? area = null) =>
-        new(Guid.CreateVersion7(), Teraz, new Hlc(1000, 0, "a"), result, area ?? Guid.CreateVersion7(), 1.0);
+        new(Guid.CreateVersion7(), Now, new Hlc(1000, 0, "a"), result, area ?? Guid.CreateVersion7(), 1.0);
 
     [Fact]
     public void Nowy_projekt_jest_aktywny()
@@ -22,7 +22,7 @@ public class ProjectTests
     public void Projekt_bez_obszaru_jest_odrzucany()
     {
         var utworz = () => new Project(
-            Guid.CreateVersion7(), Teraz, new Hlc(1000, 0, "a"), "Cokolwiek", Guid.Empty, 1.0);
+            Guid.CreateVersion7(), Now, new Hlc(1000, 0, "a"), "Cokolwiek", Guid.Empty, 1.0);
 
         utworz.Should().Throw<ArgumentException>();
     }
@@ -41,12 +41,12 @@ public class ProjectTests
     public void Podprojekt_przejmuje_obszar_nadrzednego()
     {
         var obszarCelu = Guid.CreateVersion7();
-        var cel = Projekt("Prawo jazdy jest w portfelu", obszarCelu);
+        var target = Projekt("Prawo jazdy jest w portfelu", obszarCelu);
         var step = Projekt("Egzamin teoretyczny zdany", Guid.CreateVersion7());
 
-        step.AttachTo(cel, new Hlc(2000, 0, "a"));
+        step.AttachTo(target, new Hlc(2000, 0, "a"));
 
-        step.ParentProjectId.Should().Be(cel.Id);
+        step.ParentProjectId.Should().Be(target.Id);
         step.AreaId.Should().Be(obszarCelu);
     }
 
@@ -63,13 +63,13 @@ public class ProjectTests
     [Fact]
     public void Odpiecie_zostawia_obszar_bez_zmian()
     {
-        var cel = Projekt("Cel", Guid.CreateVersion7());
+        var target = Projekt("Cel", Guid.CreateVersion7());
         var step = Projekt("Krok", Guid.CreateVersion7());
-        step.AttachTo(cel, new Hlc(2000, 0, "a"));
+        step.AttachTo(target, new Hlc(2000, 0, "a"));
 
         step.Detach(new Hlc(3000, 0, "a"));
 
         step.ParentProjectId.Should().BeNull();
-        step.AreaId.Should().Be(cel.AreaId);
+        step.AreaId.Should().Be(target.AreaId);
     }
 }

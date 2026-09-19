@@ -62,9 +62,9 @@ internal sealed class FakeDrive : IDriveClient
 
 public sealed class GoogleDriveTransportTests
 {
-    private readonly FakeDrive _dysk = new();
+    private readonly FakeDrive _drive = new();
 
-    private GoogleDriveTransport Skladnica() => new(_dysk);
+    private GoogleDriveTransport Skladnica() => new(_drive);
 
     [Fact]
     public async Task Pusty_dysk_nie_ma_zadnych_porcji()
@@ -122,7 +122,7 @@ public sealed class GoogleDriveTransportTests
         // samej nazwie. Treść jest ta sama, więc porcja ma się pojawić na liście raz.
         var store = Skladnica();
         await store.WriteSegmentAsync("biurko", "000001", "treść\n");
-        _dysk.Zdubluj("biurko.000001.jsonl");
+        _drive.Zdubluj("biurko.000001.jsonl");
 
         (await store.ListSegmentsAsync()).Should().ContainSingle();
     }
@@ -133,9 +133,9 @@ public sealed class GoogleDriveTransportTests
         // Katalog roboczy może dostać cokolwiek — choćby notatkę wrzuconą ręcznie.
         var store = Skladnica();
         await store.WriteSegmentAsync("biurko", "000001", "treść\n");
-        _dysk.PodrzucSmiec("notatka.txt");
-        _dysk.PodrzucSmiec("bez-kropki.jsonl");
-        _dysk.PodrzucSmiec("za.duzo.kropek.jsonl");
+        _drive.PodrzucSmiec("notatka.txt");
+        _drive.PodrzucSmiec("bez-kropki.jsonl");
+        _drive.PodrzucSmiec("za.duzo.kropek.jsonl");
 
         (await store.ListSegmentsAsync()).Should().Equal(new LogSegment("biurko", "000001"));
     }
@@ -150,7 +150,7 @@ public sealed class GoogleDriveTransportTests
             await store.WriteSegmentAsync("biurko", "000001", "podmieniona\n");
 
         await again.Should().ThrowAsync<InvalidOperationException>();
-        _dysk.Zapisow.Should().Be(1);
+        _drive.Zapisow.Should().Be(1);
     }
 
     [Fact]
@@ -171,7 +171,7 @@ public sealed class GoogleDriveTransportTests
         await store.ListSegmentsAsync();
         await store.ReadSegmentAsync(new LogSegment("biurko", "000001"));
 
-        _dysk.SzukanKatalogu.Should().Be(1);
+        _drive.SzukanKatalogu.Should().Be(1);
     }
 
     [Theory]
@@ -184,9 +184,9 @@ public sealed class GoogleDriveTransportTests
     {
         // Kropka rozdziela człony nazwy, więc kropka w identyfikatorze rozsypałaby
         // odczyt: „a.b.000001.jsonl" przeczytałoby się jako urządzenie „a".
-        var zapisz = async () =>
+        var save = async () =>
             await Skladnica().WriteSegmentAsync(device, "000001", "cokolwiek\n");
 
-        await zapisz.Should().ThrowAsync<ArgumentException>();
+        await save.Should().ThrowAsync<ArgumentException>();
     }
 }

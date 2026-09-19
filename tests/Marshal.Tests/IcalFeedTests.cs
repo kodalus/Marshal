@@ -10,7 +10,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class IcalFeedTests
 {
-    private static readonly DateTime Teraz = new(2026, 9, 16, 12, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime Now = new(2026, 9, 16, 12, 0, 0, DateTimeKind.Utc);
 
     private static string Kalendarz(string wnetrze) =>
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//PL\r\n" + wnetrze + "END:VCALENDAR\r\n";
@@ -18,7 +18,7 @@ public sealed class IcalFeedTests
     [Fact]
     public void Pusty_kalendarz_nie_ma_wydarzen()
     {
-        IcalFeed.Parse(Kalendarz(string.Empty), Teraz).Should().BeEmpty();
+        IcalFeed.Parse(Kalendarz(string.Empty), Now).Should().BeEmpty();
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public sealed class IcalFeedTests
             "DTSTART:20260917T090000Z\r\nDTEND:20260917T100000Z\r\n" +
             "LOCATION:Przychodnia\r\nEND:VEVENT\r\n");
 
-        var events = IcalFeed.Parse(file, Teraz);
+        var events = IcalFeed.Parse(file, Now);
 
         events.Should().ContainSingle();
         events[0].Title.Should().Be("Wizyta u pediatry");
@@ -47,7 +47,7 @@ public sealed class IcalFeedTests
             "BEGIN:VEVENT\r\nUID:a2\r\nSUMMARY:Urlop\r\n" +
             "DTSTART;VALUE=DATE:20260920\r\nDTEND;VALUE=DATE:20260922\r\nEND:VEVENT\r\n");
 
-        IcalFeed.Parse(file, Teraz).Single().IsAllDay.Should().BeTrue();
+        IcalFeed.Parse(file, Now).Single().IsAllDay.Should().BeTrue();
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public sealed class IcalFeedTests
         var file = Kalendarz(
             "BEGIN:VEVENT\r\nUID:a3\r\nDTSTART:20260917T090000Z\r\nDTEND:20260917T100000Z\r\nEND:VEVENT\r\n");
 
-        IcalFeed.Parse(file, Teraz).Single().Title.Should().Be("(bez tytułu)");
+        IcalFeed.Parse(file, Now).Single().Title.Should().Be("(bez tytułu)");
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed class IcalFeedTests
             "DTSTART:20260917T170000Z\r\nDTEND:20260917T180000Z\r\n" +
             "RRULE:FREQ=WEEKLY;COUNT=4\r\nEND:VEVENT\r\n");
 
-        IcalFeed.Parse(file, Teraz).Should().HaveCount(4);
+        IcalFeed.Parse(file, Now).Should().HaveCount(4);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class IcalFeedTests
             "DTSTART:20260917T170000Z\r\nDTEND:20260917T180000Z\r\n" +
             "RRULE:FREQ=WEEKLY;COUNT=4\r\nEND:VEVENT\r\n");
 
-        var events = IcalFeed.Parse(file, Teraz);
+        var events = IcalFeed.Parse(file, Now);
 
         events.Select(e => e.ExternalId).Distinct().Should().HaveCount(4);
         events.Should().AllSatisfy(e => e.ExternalId.Should().StartWith("a5|"));
@@ -97,7 +97,7 @@ public sealed class IcalFeedTests
             "DTSTART:20260917T170000Z\r\nDTEND:20260917T180000Z\r\n" +
             "RRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\n");
 
-        var events = IcalFeed.Parse(file, Teraz);
+        var events = IcalFeed.Parse(file, Now);
 
         events.Should().NotBeEmpty();
         events.Should().HaveCountLessThan(40);
@@ -110,7 +110,7 @@ public sealed class IcalFeedTests
             "BEGIN:VEVENT\r\nUID:a7\r\nSUMMARY:Za rok\r\n" +
             "DTSTART:20270917T090000Z\r\nDTEND:20270917T100000Z\r\nEND:VEVENT\r\n");
 
-        IcalFeed.Parse(file, Teraz).Should().BeEmpty();
+        IcalFeed.Parse(file, Now).Should().BeEmpty();
     }
 
     [Fact]

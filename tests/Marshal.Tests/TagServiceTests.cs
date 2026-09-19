@@ -12,7 +12,7 @@ namespace Marshal.Tests;
 
 public sealed class TagServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now => new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
@@ -30,9 +30,9 @@ public sealed class TagServiceTests : IDisposable
             new DbContextOptionsBuilder<MarshalDbContext>().UseSqlite(_connection).Options);
         _db.Database.Migrate();
 
-        var zegar = new Zegar();
+        var clock = new Clock();
         _tagi = new TagService(
-            new TagRepository(_db), new UnitOfWork(_db), zegar, new HlcSource(zegar, "testy"));
+            new TagRepository(_db), new UnitOfWork(_db), clock, new HlcSource(clock, "testy"));
     }
 
     [Fact]

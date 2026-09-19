@@ -10,14 +10,14 @@ namespace Marshal.Tests;
 
 public sealed class AreaSeedTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now => new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
 
     private readonly SqliteConnection _connection;
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
 
     public AreaSeedTests()
     {

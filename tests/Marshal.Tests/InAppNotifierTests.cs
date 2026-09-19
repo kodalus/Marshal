@@ -90,11 +90,11 @@ public sealed class InAppNotifierTests : IDisposable
         wyszly.Should().Equal("po");
     }
 
-    private static async Task Poczekaj(Func<bool> warunek, TimeSpan? count = null)
+    private static async Task Poczekaj(Func<bool> condition, TimeSpan? count = null)
     {
         var end = DateTime.UtcNow + (count ?? TimeSpan.FromSeconds(2));
 
-        while (DateTime.UtcNow < end && !warunek())
+        while (DateTime.UtcNow < end && !condition())
         {
             await Task.Delay(10);
         }

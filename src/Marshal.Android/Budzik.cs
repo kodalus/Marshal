@@ -48,7 +48,7 @@ internal static class Budzik
                 .GetRequiredService<ReminderService>()
                 .NextUpAsync();
 
-            if (kontekst.GetSystemService(Context.AlarmService) is not AlarmManager zegar)
+            if (kontekst.GetSystemService(Context.AlarmService) is not AlarmManager clock)
             {
                 return;
             }
@@ -60,7 +60,7 @@ internal static class Budzik
             if (najblizsza is not { } moment)
             {
                 // Nic nie czeka — budzik skasowany, żeby system nie budził nas po nic.
-                zegar.Cancel(zamiar);
+                clock.Cancel(zamiar);
                 await journal.RecordAsync("Przypomnienia: budzik", "nic nie czeka");
                 return;
             }
@@ -70,15 +70,15 @@ internal static class Budzik
             // „AllowWhileIdle", bo bez tego drzemka systemu przesuwa przypomnienia
             // ustawione na noc na rano — czyli dokładnie wtedy, gdy przestają być
             // potrzebne.
-            var dokladny = Dokladny(zegar);
+            var dokladny = Dokladny(clock);
 
             if (dokladny)
             {
-                zegar.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
+                clock.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
             }
             else
             {
-                zegar.SetAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
+                clock.SetAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
             }
 
             // Ślad w dzienniku, bo przy zamkniętej aplikacji nie ma **żadnego** innego
@@ -99,14 +99,14 @@ internal static class Budzik
 
     /// <summary>Wpis do dziennika, który nie wywraca wołającego, gdy baza nie stoi.</summary>
     public static async Task Save(
-        string co, string content, Exception? blad = null, ActivityLevel? level = null)
+        string co, string content, Exception? error = null, ActivityLevel? level = null)
     {
         try
         {
             await AppServices.Provider.GetRequiredService<IActivityLog>().RecordAsync(
                 co, content,
-                level ?? (blad is null ? ActivityLevel.Ok : ActivityLevel.Problem),
-                blad?.ToString());
+                level ?? (error is null ? ActivityLevel.Ok : ActivityLevel.Problem),
+                error?.ToString());
         }
         catch
         {
@@ -114,8 +114,8 @@ internal static class Budzik
         }
     }
 
-    private static bool Dokladny(AlarmManager zegar) =>
-        !OperatingSystem.IsAndroidVersionAtLeast(31) || zegar.CanScheduleExactAlarms();
+    private static bool Dokladny(AlarmManager clock) =>
+        !OperatingSystem.IsAndroidVersionAtLeast(31) || clock.CanScheduleExactAlarms();
 
     private static PendingIntent Zamiar(Context kontekst)
     {
@@ -192,7 +192,7 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
     }
 
     /// <summary>Wołane także po starcie telefonu — patrz OdbiorcaStartu.</summary>
-    internal static void Obudz(Context kontekst)
+    internal static void OnWake(Context kontekst)
     {
         _ = Budzik.PrzestawAsync(kontekst);
         SynchronizacjaWorker.Nastaw(kontekst);
@@ -234,7 +234,7 @@ internal sealed class OdbiorcaStartu : BroadcastReceiver
 
                 await AppServices.ReadyAsync();
                 await Budzik.Save("Przypomnienia: start telefonu", "budziki nastawione od nowa");
-                OdbiorcaBudzika.Obudz(kontekst);
+                OdbiorcaBudzika.OnWake(kontekst);
             }
             catch (Exception e)
             {

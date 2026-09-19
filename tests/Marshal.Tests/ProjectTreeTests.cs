@@ -9,16 +9,16 @@ namespace Marshal.Tests;
 
 public class ProjectTreeTests
 {
-    private static readonly DateTimeOffset Teraz = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
+    private static readonly DateTimeOffset Now = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     private static long _znacznik = 1000;
 
     private static Hlc Stamp() => new(_znacznik += 10, 0, "t");
 
     private static Area Obszar(string name, double order) =>
-        new(Guid.CreateVersion7(), Teraz, Stamp(), name, order);
+        new(Guid.CreateVersion7(), Now, Stamp(), name, order);
 
     private static Project Projekt(string result, Guid area, double order = 0, Guid? parent = null) =>
-        new(Guid.CreateVersion7(), Teraz, Stamp(), result, area, order, parent);
+        new(Guid.CreateVersion7(), Now, Stamp(), result, area, order, parent);
 
     [Fact]
     public void Puste_obszary_i_tak_sa_widoczne()
@@ -48,10 +48,10 @@ public class ProjectTreeTests
     public void Podprojekt_ma_wieksza_glebokosc()
     {
         var area = Obszar("Urzędy", 1);
-        var cel = Projekt("Prawo jazdy jest w portfelu", area.Id);
-        var step = Projekt("Egzamin zdany", area.Id, parent: cel.Id);
+        var target = Projekt("Prawo jazdy jest w portfelu", area.Id);
+        var step = Projekt("Egzamin zdany", area.Id, parent: target.Id);
 
-        var rows = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [target, step]);
 
         rows.Select(w => w.Depth).Should().Equal(0, 1, 2);
         rows.Last().Label.Should().Be("Egzamin zdany");
@@ -90,10 +90,10 @@ public class ProjectTreeTests
     public void Projekt_pojawia_sie_tylko_raz()
     {
         var area = Obszar("Dom", 1);
-        var cel = Projekt("Cel", area.Id);
-        var step = Projekt("Krok", area.Id, parent: cel.Id);
+        var target = Projekt("Cel", area.Id);
+        var step = Projekt("Krok", area.Id, parent: target.Id);
 
-        var rows = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [target, step]);
 
         rows.Select(w => w.Id).Should().OnlyHaveUniqueItems();
     }
@@ -120,10 +120,10 @@ public class ProjectTreeTests
         var area = Obszar("Praca", 1);
         area.SetColor("#4E7FD8", Stamp());
 
-        var cel = Projekt("Cel", area.Id);
-        var step = Projekt("Krok", area.Id, parent: cel.Id);
+        var target = Projekt("Cel", area.Id);
+        var step = Projekt("Krok", area.Id, parent: target.Id);
 
-        var rows = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [target, step]);
 
         rows.Select(w => w.Color).Should().AllBeEquivalentTo("#4E7FD8");
     }
@@ -134,11 +134,11 @@ public class ProjectTreeTests
         var area = Obszar("Praca", 1);
         area.SetColor("#4E7FD8", Stamp());
 
-        var cel = Projekt("Cel", area.Id);
-        cel.SetColor("#CF5757", Stamp());
-        var step = Projekt("Krok", area.Id, parent: cel.Id);
+        var target = Projekt("Cel", area.Id);
+        target.SetColor("#CF5757", Stamp());
+        var step = Projekt("Krok", area.Id, parent: target.Id);
 
-        var rows = ProjectTree.Build([area], [cel, step]);
+        var rows = ProjectTree.Build([area], [target, step]);
 
         rows.Single(w => w.Label == "Praca").Color.Should().Be("#4E7FD8");
         rows.Single(w => w.Label == "Cel").Color.Should().Be("#CF5757");

@@ -96,9 +96,9 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// </remarks>
         public void OnDataSetChanged()
         {
-            var przygotowanie = AppServices.ReadyAsync();
+            var prepare = AppServices.ReadyAsync();
 
-            if (!przygotowanie.IsCompleted)
+            if (!prepare.IsCompleted)
             {
                 // Zapamiętane wiersze zamiast pustki. „Zostawiamy widgetowi to, co ma"
                 // brzmiało rozsądnie i było nieprawdą w jedynym przypadku, w którym
@@ -114,7 +114,7 @@ public sealed class TodayWidgetService : RemoteViewsService
                 return;
             }
 
-            var zegar = System.Diagnostics.Stopwatch.StartNew();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
 
             try
             {
@@ -129,14 +129,14 @@ public sealed class TodayWidgetService : RemoteViewsService
                 // więc każda jej sekunda jest sekundą cudzego czekania. Dopisywane tylko
                 // wtedy, gdy trwa długo — to jedyne miejsce, z którego da się tę liczbę
                 // zobaczyć bez kabla.
-                if (zegar.ElapsedMilliseconds > 1000)
+                if (clock.ElapsedMilliseconds > 1000)
                 {
                     // Bez czekania: ta metoda i tak trwała już za długo, a wpis
                     // o tym nie ma prawa jej przedłużać.
                     _ = AppServices.Provider.GetRequiredService<IActivityLog>()
                         .RecordAsync(
                             "Widget: wiersze",
-                            $"{zegar.ElapsedMilliseconds} ms",
+                            $"{clock.ElapsedMilliseconds} ms",
                             ActivityLevel.Problem);
                 }
             }
@@ -177,7 +177,7 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// </remarks>
         private const char Miedzy = '\u001f';
 
-        private const char Wiersz = '\u001e';
+        private const char Row = '\u001e';
 
         private static string Key(int widgetId) => $"wiersze-{widgetId}";
 
@@ -195,7 +195,7 @@ public sealed class TodayWidgetService : RemoteViewsService
                 }
 
                 return patch
-                    .Split(Wiersz, StringSplitOptions.RemoveEmptyEntries)
+                    .Split(Row, StringSplitOptions.RemoveEmptyEntries)
                     .Select(w => w.Split(Miedzy))
                     .Where(p => p.Length == 4)
                     .Select(p => new PlanRow(
@@ -221,7 +221,7 @@ public sealed class TodayWidgetService : RemoteViewsService
             try
             {
                 var patch = string.Join(
-                    Wiersz,
+                    Row,
                     rows.Select(w => string.Join(
                         Miedzy,
                         w.TaskId?.ToString() ?? string.Empty,
@@ -240,7 +240,7 @@ public sealed class TodayWidgetService : RemoteViewsService
 
         /// <summary>Bez znaków rozdzielających — tytuł jest cudzym tekstem.</summary>
         private static string Czysto(string text) =>
-            text.Replace(Miedzy, ' ').Replace(Wiersz, ' ');
+            text.Replace(Miedzy, ' ').Replace(Row, ' ');
 
         /// <summary>Ponowna prośba o wiersze, gdy baza będzie już gotowa.</summary>
         /// <remarks>
@@ -272,11 +272,11 @@ public sealed class TodayWidgetService : RemoteViewsService
             }
 
             var item = _wiersze[position];
-            var widok = new RemoteViews(kontekst.PackageName, Resource.Layout.widget_wiersz);
+            var view = new RemoteViews(kontekst.PackageName, Resource.Layout.widget_wiersz);
 
-            widok.SetTextViewText(Resource.Id.title, item.Title);
-            widok.SetTextViewText(Resource.Id.podpis, item.Caption);
-            widok.SetInt(Resource.Id.pasek, "setBackgroundColor", Color(item.Color));
+            view.SetTextViewText(Resource.Id.title, item.Title);
+            view.SetTextViewText(Resource.Id.podpis, item.Caption);
+            view.SetInt(Resource.Id.pasek, "setBackgroundColor", Color(item.Color));
 
             // Uzupełnienie wzorca, nie własny zamiar: wierszowi listy nie da się dać
             // osobnego zamiaru oczekującego — system trzyma jeden wzorzec na całą listę
@@ -289,16 +289,16 @@ public sealed class TodayWidgetService : RemoteViewsService
             // miały wspólną krawędź tekstu.
             if (item.TaskId is { } task)
             {
-                widok.SetViewVisibility(Resource.Id.zrobione, ViewStates.Visible);
+                view.SetViewVisibility(Resource.Id.zrobione, ViewStates.Visible);
 
                 var odhaczenie = new Intent();
                 odhaczenie.PutExtra(TodayWidget.TaskIdExtra, task.ToString());
 
-                widok.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
+                view.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
             }
             else
             {
-                widok.SetViewVisibility(Resource.Id.zrobione, ViewStates.Invisible);
+                view.SetViewVisibility(Resource.Id.zrobione, ViewStates.Invisible);
             }
 
             // Treść wiersza otwiera aplikację. **Rodzeństwo kwadracika, nie jego rodzic:**
@@ -317,9 +317,9 @@ public sealed class TodayWidgetService : RemoteViewsService
                 otwarcie.PutExtra(TodayWidget.TaskIdExtra, otwierane.ToString());
             }
 
-            widok.SetOnClickFillInIntent(Resource.Id.content, otwarcie);
+            view.SetOnClickFillInIntent(Resource.Id.content, otwarcie);
 
-            return widok;
+            return view;
         }
 
         /// <summary>

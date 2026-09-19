@@ -18,8 +18,8 @@ public sealed class AgendaTests
         new(DateOnly.Parse(day).ToDateTime(new TimeOnly(hour, minuta)), Strefa);
 
     private static AgendaEntry Wydarzenie(
-        string title, string day, int od, int doGodz, int odMin = 0, int doMin = 0) =>
-        new(title, O(day, od, odMin), O(day, doGodz, doMin), false, AgendaKind.Event, null, null);
+        string title, string day, int od, int toHour, int odMin = 0, int doMin = 0) =>
+        new(title, O(day, od, odMin), O(day, toHour, doMin), false, AgendaKind.Event, null, null);
 
     [Fact]
     public void Pusty_zakres_daje_dni_bez_zawartosci()

@@ -24,7 +24,7 @@ public sealed partial class ClarifyViewModel(
     TaskEditService edit) : ObservableObject
 {
     /// <summary>Komunikat do pokazania po przejściu do następnego wrzutu.</summary>
-    private string? _doPowiedzenia;
+    private string? _toSay;
 
     /// <summary>
     /// Który wrzut z kolejki jest na wierzchu.
@@ -36,7 +36,7 @@ public sealed partial class ClarifyViewModel(
     /// całą resztę i kończyło się zamknięciem ekranu. Przewijanie nie psuje zasady
     /// „jedna pozycja naraz": nadal widać jedną, tylko da się wybrać którą.
     /// </remarks>
-    private int _numer;
+    private int _number;
 
     [ObservableProperty]
     public partial TaskItem? Current { get; set; }
@@ -75,7 +75,7 @@ public sealed partial class ClarifyViewModel(
     public partial int Remaining { get; set; }
 
     /// <summary>Który z ilu — żeby przewijanie kolejki nie było ruchem w ciemno.</summary>
-    public string Position => Remaining == 0 ? string.Empty : $"{_numer + 1} z {Remaining}";
+    public string Position => Remaining == 0 ? string.Empty : $"{_number + 1} z {Remaining}";
 
     public bool CanMove => Remaining > 1;
 
@@ -117,10 +117,10 @@ public sealed partial class ClarifyViewModel(
         // Dociągane przy każdym wejściu, nie raz na życie okna: obszary i projekty
         // zmienia się na osobnych ekranach, a zapamiętana lista robi się nieprawdziwa
         // dokładnie wtedy, gdy ktoś właśnie założył projekt i chce do niego coś wrzucić.
-        var drzewko = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
+        var tree = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
 
         Areas.Clear();
-        foreach (var row in drzewko)
+        foreach (var row in tree)
         {
             Areas.Add(PlacementChoice.From(row));
         }
@@ -130,13 +130,13 @@ public sealed partial class ClarifyViewModel(
 
     /// <summary>Następny wrzut w kolejce — bez rozstrzygania tego, co na wierzchu.</summary>
     [RelayCommand]
-    private Task Skip() => PrzesunAsync(1);
+    private Task Skip() => MoveAsync(1);
 
     /// <summary>Poprzedni wrzut.</summary>
     [RelayCommand]
-    private Task Back() => PrzesunAsync(-1);
+    private Task Back() => MoveAsync(-1);
 
-    private async Task PrzesunAsync(int o)
+    private async Task MoveAsync(int o)
     {
         var pending = await inbox.ListAsync();
 
@@ -145,24 +145,24 @@ public sealed partial class ClarifyViewModel(
             return;
         }
 
-        _numer = ((_numer + o) % pending.Count + pending.Count) % pending.Count;
-        await NextAsync(zachowajNumer: true);
+        _number = ((_number + o) % pending.Count + pending.Count) % pending.Count;
+        await NextAsync(keepNumber: true);
     }
 
-    private async Task NextAsync(bool zachowajNumer = false)
+    private async Task NextAsync(bool keepNumber = false)
     {
         var pending = await inbox.ListAsync();
         Remaining = pending.Count;
 
-        if (!zachowajNumer)
+        if (!keepNumber)
         {
             // Po rozstrzygnięciu zostajemy w tym samym miejscu kolejki: następny wrzut
             // wchodzi pod ten sam numer. Skok na początek kazałby przewijać od nowa
             // do miejsca, w którym się było.
-            _numer = pending.Count == 0 ? 0 : Math.Min(_numer, pending.Count - 1);
+            _number = pending.Count == 0 ? 0 : Math.Min(_number, pending.Count - 1);
         }
 
-        Current = pending.Count == 0 ? null : pending[_numer];
+        Current = pending.Count == 0 ? null : pending[_number];
         Problem = null;
         WaitingForWho = string.Empty;
         ProjectOutcome = string.Empty;
@@ -231,7 +231,7 @@ public sealed partial class ClarifyViewModel(
             {
                 // Odkładane, nie ustawiane wprost: przejście do następnego wrzutu
                 // czyści komunikat, więc napisany tutaj zniknąłby w tej samej chwili.
-                _doPowiedzenia = "Pięć zadań na dziś już jest — to zostaje wśród następnych akcji.";
+                _toSay = "Pięć zadań na dziś już jest — to zostaje wśród następnych akcji.";
             }
         });
 
@@ -248,17 +248,17 @@ public sealed partial class ClarifyViewModel(
                 : null);
 
     /// <summary>Dopisanie długości i sił do zadania, które właśnie wyszło ze skrzynki.</summary>
-    private async Task ZapiszOszacowanieAsync(Guid id)
+    private async Task SaveEstimateAsync(Guid id)
     {
-        var minutes = EstimatedMinutes is { } liczba ? (int)liczba : (int?)null;
-        var sila = SelectedEnergy?.Value ?? Energy.Unknown;
+        var minutes = EstimatedMinutes is { } number ? (int)number : (int?)null;
+        var energy = SelectedEnergy?.Value ?? Energy.Unknown;
 
-        if (minutes is null && sila == Energy.Unknown)
+        if (minutes is null && energy == Energy.Unknown)
         {
             return;
         }
 
-        await edit.SetEstimateAsync(id, minutes, sila);
+        await edit.SetEstimateAsync(id, minutes, energy);
     }
 
     private async Task Run(Func<Guid, Task> action, bool needsArea = true, Func<string?>? validate = null)
@@ -288,14 +288,14 @@ public sealed partial class ClarifyViewModel(
 
         // Oszacowanie po przejściu stanu, nie przed: gałęzie kosza i notatki nie mają
         // czego szacować, a zadanie przeniesione do projektu ma już własny byt.
-        await ZapiszOszacowanieAsync(id);
+        await SaveEstimateAsync(id);
 
         await NextAsync();
 
-        if (_doPowiedzenia is { } slowo)
+        if (_toSay is { } word)
         {
-            Problem = slowo;
-            _doPowiedzenia = null;
+            Problem = word;
+            _toSay = null;
         }
     }
 }

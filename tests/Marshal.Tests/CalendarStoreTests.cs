@@ -26,7 +26,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class CalendarStoreTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
@@ -218,7 +218,7 @@ public sealed class CalendarStoreTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly HlcSource _hlc;
     private readonly CalendarStore _sklad;
     private readonly Kanal _kanal = new(CalendarKind.Ical);
@@ -264,10 +264,10 @@ public sealed class CalendarStoreTests : IDisposable
     /// </remarks>
     private DateOnly Dzis => ((IClock)_zegar).Today;
 
-    private static FeedEvent Wydarzenie(string id, string title, string day, int od, int doGodz) =>
+    private static FeedEvent Wydarzenie(string id, string title, string day, int od, int toHour) =>
         new(id, title,
             new DateTimeOffset(DateOnly.Parse(day).ToDateTime(new TimeOnly(od, 0)), TimeSpan.FromHours(2)),
-            new DateTimeOffset(DateOnly.Parse(day).ToDateTime(new TimeOnly(doGodz, 0)), TimeSpan.FromHours(2)),
+            new DateTimeOffset(DateOnly.Parse(day).ToDateTime(new TimeOnly(toHour, 0)), TimeSpan.FromHours(2)),
             false, null, false);
 
     [Fact]
@@ -334,11 +334,11 @@ public sealed class CalendarStoreTests : IDisposable
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        var ustawienia = new Ustawienia();
-        ustawienia.SetMainCalendar(mlodsze.Id);
+        var settings = new Ustawienia();
+        settings.SetMainCalendar(mlodsze.Id);
 
         var service = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, ustawienia, [_pisarz],
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, settings, [_pisarz],
             new ProjectRepository(_db), new AreaRepository(_db));
 
         _kanal.Next = new FeedResult([], null, true);
@@ -347,7 +347,7 @@ public sealed class CalendarStoreTests : IDisposable
 
         // Obie strony wskazywały **ten sam** kalendarz u źródła — na tym polega bycie
         // duplikatem — więc identyfikator wydarzenia zostaje ważny.
-        ustawienia.MainCalendarId.Should().Be(_zrodlo.Id);
+        settings.MainCalendarId.Should().Be(_zrodlo.Id);
 
         var przepiete = _db.Tasks.Single(t => t.Id == task.Id);
         przepiete.SharedCalendarId.Should().Be(_zrodlo.Id);
@@ -402,16 +402,16 @@ public sealed class CalendarStoreTests : IDisposable
         _db.CalendarSources.Add(mlodsze);
         _db.SaveChanges();
 
-        var ustawienia = new Ustawienia { MainCalendarId = mlodsze.Id };
+        var settings = new Ustawienia { MainCalendarId = mlodsze.Id };
 
         var service = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, ustawienia, [_pisarz],
+            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, settings, [_pisarz],
             new ProjectRepository(_db), new AreaRepository(_db));
 
         _kanal.Next = new FeedResult([], null, true);
         await service.RefreshAsync(force: true);
 
-        ustawienia.MainCalendarId.Should().Be(_zrodlo.Id);
+        settings.MainCalendarId.Should().Be(_zrodlo.Id);
     }
 
     [Fact]
@@ -750,9 +750,9 @@ public sealed class CalendarStoreTests : IDisposable
         await _usluga.RefreshAsync(force: true);
         _pisarz.Rzuca = true;
 
-        var odhacz = async () => await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: true);
+        var complete = async () => await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: true);
 
-        await odhacz.Should().ThrowAsync<HttpRequestException>();
+        await complete.Should().ThrowAsync<HttpRequestException>();
 
         (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
             .Timed.Single().Entry.IsDone.Should().BeFalse();
@@ -1014,9 +1014,9 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zadanie_z_godzina_trafia_do_kalendarza_glownego_samo()
     {
-        var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var settings = new Ustawienia { MainCalendarId = _zrodlo.Id };
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes(),
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
             new AreaRepository(_db));
 
         var edycja = new TaskEditService(
@@ -1187,10 +1187,10 @@ public sealed class CalendarStoreTests : IDisposable
         _pisarz.Wyslane.Select(w => w.Co).Should().Equal("utworzenie", "skasowanie");
 
         // U nas zostaje jeden wpis, w nowym kalendarzu.
-        var naSiatce = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed;
+        var onGrid = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed;
 
-        naSiatce.Should().ContainSingle();
-        naSiatce.Single().Entry.SourceId.Should().Be(rodzinny.Id);
+        onGrid.Should().ContainSingle();
+        onGrid.Single().Entry.SourceId.Should().Be(rodzinny.Id);
     }
 
     /// <summary>
@@ -1240,7 +1240,7 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Kalendarz_stoi_przy_jednym_obszarze()
     {
-        var szkielet = new StructureEditService(
+        var shell = new StructureEditService(
             new ProjectRepository(_db), new AreaRepository(_db), new TaskRepository(_db),
             new UnitOfWork(_db), _zegar, _hlc);
 
@@ -1249,11 +1249,11 @@ public sealed class CalendarStoreTests : IDisposable
         _db.Areas.AddRange(children, dom);
         _db.SaveChanges();
 
-        await szkielet.SetAreaCalendarAsync(children.Id, _zrodlo.Id);
+        await shell.SetAreaCalendarAsync(children.Id, _zrodlo.Id);
         _db.Areas.Single(o => o.Id == children.Id).CalendarId.Should().Be(_zrodlo.Id);
 
         // Ten sam kalendarz przy drugim obszarze zdejmuje go z pierwszego.
-        await szkielet.SetAreaCalendarAsync(dom.Id, _zrodlo.Id);
+        await shell.SetAreaCalendarAsync(dom.Id, _zrodlo.Id);
 
         _db.Areas.Single(o => o.Id == dom.Id).CalendarId.Should().Be(_zrodlo.Id);
         _db.Areas.Single(o => o.Id == children.Id).CalendarId.Should().BeNull();
@@ -1271,9 +1271,9 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zadanie_idzie_do_kalendarza_swojego_obszaru()
     {
-        var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var settings = new Ustawienia { MainCalendarId = _zrodlo.Id };
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes(),
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
             new AreaRepository(_db));
 
         var rodzinny = new CalendarSource(
@@ -1322,9 +1322,9 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Przeniesienie_do_wspolnego_i_z_powrotem_zostawia_jeden_wpis()
     {
-        var ustawienia = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var settings = new Ustawienia { MainCalendarId = _zrodlo.Id };
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, ustawienia, new Notes(),
+            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
             new AreaRepository(_db));
 
         // Drugi kalendarz zakładany tutaj, nie w konstruktorze: odświeżanie przechodzi
@@ -1726,17 +1726,17 @@ public sealed class CalendarStoreTests : IDisposable
         await model.LoadAsync();
 
         await model.ShowWeekCommand.ExecuteAsync(null);
-        model.Zakres!.Days.Should().Be(7);
+        model.Range!.Days.Should().Be(7);
 
         await model.ShowMonthCommand.ExecuteAsync(null);
-        model.Zakres!.Miesiac.Should().BeTrue();
+        model.Range!.Month.Should().BeTrue();
 
         // Dotknięcie dnia w miesiącu schodzi na jego siatkę godzinową.
         await model.OpenMonthDayCommand.ExecuteAsync(
             new MonthCell(new DateOnly(2026, 9, 16), "16", true, false, [], 0));
 
-        model.Zakres!.Miesiac.Should().BeFalse();
-        model.Zakres!.Days.Should().Be(1);
+        model.Range!.Month.Should().BeFalse();
+        model.Range!.Days.Should().Be(1);
     }
 
     [Fact]
@@ -1785,12 +1785,12 @@ public sealed class CalendarStoreTests : IDisposable
         // zaczyna się od przewijania. Godzina zapasu u góry, stąd nie 9 * 48, a 8 * 48.
         var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
 
-        double? dokad = null;
-        model.ScrollRequested += score => dokad = score;
+        double? to = null;
+        model.ScrollRequested += score => to = score;
 
         await model.LoadAsync();
 
-        dokad.Should().Be(8 * 48);
+        to.Should().Be(8 * 48);
     }
 
     [Fact]
@@ -1802,13 +1802,13 @@ public sealed class CalendarStoreTests : IDisposable
 
         await model.LoadAsync();
 
-        double? dokad = null;
-        model.ScrollRequested += score => dokad = score;
+        double? to = null;
+        model.ScrollRequested += score => to = score;
 
         await model.NextCommand.ExecuteAsync(null);
         await model.LoadAsync();
 
-        dokad.Should().BeNull();
+        to.Should().BeNull();
     }
 
     [Fact]
@@ -1887,13 +1887,13 @@ public sealed class CalendarStoreTests : IDisposable
         // Klikanie „Dodaj" w reakcji na to, że nic się nie pojawiło, jest odruchem —
         // a duplikaty mnożą potem te same błędy w raporcie i zaciemniają ten jeden,
         // który coś znaczy.
-        var pierwszy = await _usluga.AddAsync(
+        var first = await _usluga.AddAsync(
             CalendarKind.Google, "primary", "Mój kalendarz");
 
         var drugi = await _usluga.AddAsync(
             CalendarKind.Google, "primary", "Mój kalendarz jeszcze raz");
 
-        drugi.Id.Should().Be(pierwszy.Id);
+        drugi.Id.Should().Be(first.Id);
         (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(1);
     }
 
@@ -2165,14 +2165,14 @@ public sealed class CalendarStoreTests : IDisposable
             "Zadanie", 0, 30, 0, 100, true, null, "09:00", "10:00",
             Guid.CreateVersion7(), "śr", null, null, false);
 
-        var bylo = Platforma.Dotykowa;
+        var bylo = Platform.Touch;
 
         try
         {
-            Platforma.Dotykowa = false;
+            Platform.Touch = false;
             block.ShowCheck.Should().BeTrue("na pulpicie kwadracik zostaje");
 
-            Platforma.Dotykowa = true;
+            Platform.Touch = true;
             block.ShowCheck.Should().BeFalse("palec nie trafia w kwadracik wielkości dziesięciu punktów");
 
             // Ptaszek odhaczonego wpisu zostaje wszędzie: to jest stan, nie przycisk.
@@ -2180,7 +2180,7 @@ public sealed class CalendarStoreTests : IDisposable
         }
         finally
         {
-            Platforma.Dotykowa = bylo;
+            Platform.Touch = bylo;
         }
     }
 
@@ -2213,11 +2213,11 @@ public sealed class CalendarStoreTests : IDisposable
 
         var entry = new MonthEntry("09:00", "Spotkanie", null, false, color);
 
-        var naSiatce = ((SolidColorBrush)block.Background).Color;
+        var onGrid = ((SolidColorBrush)block.Background).Color;
         var wKomorce = ((SolidColorBrush)entry.Background).Color;
 
-        (wKomorce.R, wKomorce.G, wKomorce.B).Should().Be((naSiatce.R, naSiatce.G, naSiatce.B));
-        wKomorce.A.Should().BeLessThan(naSiatce.A);
+        (wKomorce.R, wKomorce.G, wKomorce.B).Should().Be((onGrid.R, onGrid.G, onGrid.B));
+        wKomorce.A.Should().BeLessThan(onGrid.A);
     }
 
     [Fact]

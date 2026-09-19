@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Markup.Xaml;
 
-namespace Marshal.UI.Kontrolki;
+namespace Marshal.UI.Controls;
 
 /// <summary>
 /// Pole daty: kalendarz miesiąca, a na Androidzie ten systemowy.
@@ -22,10 +22,10 @@ namespace Marshal.UI.Kontrolki;
 /// bo oba wyglądają jak pole daty.
 /// </para>
 /// </remarks>
-public partial class WyborDaty : UserControl
+public partial class DateField : UserControl
 {
     public static readonly StyledProperty<DateTimeOffset?> ValueProperty =
-        AvaloniaProperty.Register<WyborDaty, DateTimeOffset?>(
+        AvaloniaProperty.Register<DateField, DateTimeOffset?>(
             nameof(Value), defaultBindingMode: BindingMode.TwoWay);
 
     public DateTimeOffset? Value
@@ -34,62 +34,62 @@ public partial class WyborDaty : UserControl
         set => SetValue(ValueProperty, value);
     }
 
-    private readonly Button _otwarcie;
+    private readonly Button _opener;
 
-    private readonly Calendar _miesiac;
+    private readonly Calendar _month;
 
-    private readonly Flyout _rozwiniecie;
+    private readonly Flyout _expanded;
 
     /// <summary>Zapora przed odbiciem: nasz zapis do kalendarza wraca do nas jako zmiana.</summary>
-    private bool _wlasneWpisanie;
+    private bool _ownTyping;
 
-    public WyborDaty()
+    public DateField()
     {
         InitializeComponent();
 
-        _otwarcie = Znajdz<Button>(this, "Otwarcie");
+        _opener = Find<Button>(this, "Otwarcie");
 
-        _miesiac = new Calendar { SelectionMode = CalendarSelectionMode.SingleDate };
-        _rozwiniecie = new Flyout { Content = _miesiac };
+        _month = new Calendar { SelectionMode = CalendarSelectionMode.SingleDate };
+        _expanded = new Flyout { Content = _month };
 
-        _miesiac.SelectedDatesChanged += (_, _) =>
+        _month.SelectedDatesChanged += (_, _) =>
         {
-            if (_wlasneWpisanie)
+            if (_ownTyping)
             {
                 return;
             }
 
-            Value = _miesiac.SelectedDate is { } day
+            Value = _month.SelectedDate is { } day
                 ? new DateTimeOffset(day.Date, TimeSpan.Zero)
                 : null;
 
             // Dzień wybrany, więc nie ma na co dłużej patrzeć. Rozwinięcie zostawione
             // otwarte zasłaniałoby pole, które właśnie wypełniło.
-            _rozwiniecie.Hide();
+            _expanded.Hide();
         };
 
-        _otwarcie.Click += async (_, _) =>
+        _opener.Click += async (_, _) =>
         {
-            if (Pickery.Data is not { } zapytaj)
+            if (Pickers.Data is not { } ask)
             {
                 return;
             }
 
-            var wybrana = await zapytaj(
+            var chosen = await ask(
                 Value is { } now ? DateOnly.FromDateTime(now.Date) : null);
 
-            Value = wybrana is { } day
+            Value = chosen is { } day
                 ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
                 : null;
         };
 
-        Znajdz<Button>(this, "Czyszczenie").Click += (_, _) => Value = null;
+        Find<Button>(this, "Czyszczenie").Click += (_, _) => Value = null;
 
         // Rozstrzygnięcie dopiero tutaj — do tej chwili okienka systemu mogły się
         // jeszcze nie podpiąć.
         AttachedToVisualTree += (_, _) => Resolve();
 
-        Odswiez();
+        Refresh();
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -98,45 +98,45 @@ public partial class WyborDaty : UserControl
 
         if (change.Property == ValueProperty)
         {
-            Odswiez();
+            Refresh();
         }
     }
 
     /// <summary>Kalendarz własny albo systemowy — jedno albo drugie, nigdy oba.</summary>
     private void Resolve() =>
-        _otwarcie.Flyout = Pickery.SystemSink ? null : _rozwiniecie;
+        _opener.Flyout = Pickers.SystemSink ? null : _expanded;
 
-    private void Odswiez()
+    private void Refresh()
     {
         // Zmiana właściwości potrafi przyjść, zanim konstruktor dojdzie do odczytania
         // elementów — a wtedy pola są jeszcze puste. To jest ten sam kształt wywrotki,
         // przez który ta kontrolka wywracała całą aplikację przy starcie, więc stoi tu
         // zapora, a nie założenie, że się nie zdarzy.
-        if (_otwarcie is null || _miesiac is null)
+        if (_opener is null || _month is null)
         {
             return;
         }
 
-        _wlasneWpisanie = true;
+        _ownTyping = true;
 
         try
         {
-            _miesiac.SelectedDate = Value?.Date;
+            _month.SelectedDate = Value?.Date;
 
             if (Value is { } day)
             {
                 // Otwieraj na miesiącu, który jest wybrany, a nie na bieżącym.
-                _miesiac.DisplayDate = day.Date;
+                _month.DisplayDate = day.Date;
             }
         }
         finally
         {
-            _wlasneWpisanie = false;
+            _ownTyping = false;
         }
 
         // „Wybierz", nie pusty przycisk: pusty wygląda na zepsuty, a kreska nie mówi,
         // co się stanie po dotknięciu.
-        _otwarcie.Content = Value is { } data ? $"{data:yyyy-MM-dd}" : "wybierz";
+        _opener.Content = Value is { } data ? $"{data:yyyy-MM-dd}" : "wybierz";
     }
 
     /// <summary>
@@ -149,7 +149,7 @@ public partial class WyborDaty : UserControl
     /// kończyło się pustym wskazaniem w konstruktorze i wywrotką całej aplikacji przy
     /// starcie, bo kontrolka powstaje w środku składania okna.
     /// </remarks>
-    private static T Znajdz<T>(UserControl where, string name)
+    private static T Find<T>(UserControl where, string name)
         where T : Control =>
         where.FindControl<T>(name)
             ?? throw new InvalidOperationException($"Brak elementu „{name}” w układzie.");

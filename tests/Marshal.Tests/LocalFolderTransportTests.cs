@@ -118,10 +118,10 @@ public sealed class LocalFolderTransportTests : IDisposable
     [InlineData("")]
     public async Task Identyfikator_psujacy_nazwe_pliku_jest_odrzucany(string device)
     {
-        var zapisz = async () =>
+        var save = async () =>
             await Skladnica().WriteSegmentAsync(device, "000001", "cokolwiek\n");
 
-        await zapisz.Should().ThrowAsync<ArgumentException>();
+        await save.Should().ThrowAsync<ArgumentException>();
     }
 
     [Theory]
@@ -130,10 +130,10 @@ public sealed class LocalFolderTransportTests : IDisposable
     [InlineData("")]
     public async Task Nazwa_porcji_psujaca_sciezke_jest_odrzucana(string porcja)
     {
-        var zapisz = async () =>
+        var save = async () =>
             await Skladnica().WriteSegmentAsync("biurko", porcja, "cokolwiek\n");
 
-        await zapisz.Should().ThrowAsync<ArgumentException>();
+        await save.Should().ThrowAsync<ArgumentException>();
     }
 
     public void Dispose()

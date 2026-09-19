@@ -32,7 +32,7 @@ public partial class MainView : UserControl
     /// ale wąskie okno na pulpicie ma ten sam problem co telefon, a nie ma powodu,
     /// żeby rozstrzygało o tym urządzenie zamiast miejsca, które faktycznie jest.
     /// </remarks>
-    private const double WidokWaski = 720;
+    private const double NarrowView = 720;
 
     public MainView()
     {
@@ -40,7 +40,7 @@ public partial class MainView : UserControl
         DataContextChanged += (_, _) =>
         {
             WirePicker();
-            OdsloniecieGotowego();
+            RevealReady();
         };
 
         // Klawisze łapane w drodze w dół: inaczej kontrolka pod kursorem zjada
@@ -49,12 +49,12 @@ public partial class MainView : UserControl
         // Kółka **nie** łapiemy. Przekierowanie go do okna szczegółu odbierało obrót
         // rozwiniętej liście godzin, czyli psuło wybieranie godziny — a zamknięte pole
         // daty ani godziny kółka nie zjada, więc przewijanie okna działa samo.
-        AddHandler(KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
+        AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
         AddHandler(ContextRequestedEvent, NaMenu, RoutingStrategies.Bubble);
 
         // Cofnięcie systemowe — na Androidzie przycisk albo gest wstecz. Ta sama
         // odpowiedź co Escape, bo to jest to samo pytanie: „zamknij to, co na wierzchu".
-        Wstecz.Obsluga = Cofnij;
+        Back.Handler = Undo;
 
         // **Także na oknie.** Klawisz idzie drogą od okna do tego, co ma skupienie —
         // a gdy skupienia nie ma nic, droga kończy się na oknie i ten widok nie leży
@@ -62,7 +62,7 @@ public partial class MainView : UserControl
         // w siatkę: Escape nie zamykał jej, bo ta obsługa nigdy się nie odzywała.
         AttachedToVisualTree += (_, _) =>
             TopLevel.GetTopLevel(this)?.AddHandler(
-                KeyDownEvent, NaKlawiszu, RoutingStrategies.Tunnel);
+                KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
 
         // Układ dobierany z faktycznej szerokości, nie z platformy: obrót telefonu
         // i zwężenie okna to ta sama zmiana.
@@ -70,7 +70,7 @@ public partial class MainView : UserControl
         {
             if (DataContext is MainViewModel model)
             {
-                model.IsNarrow = e.NewSize.Width < WidokWaski;
+                model.IsNarrow = e.NewSize.Width < NarrowView;
             }
         };
     }
@@ -85,18 +85,18 @@ public partial class MainView : UserControl
     /// czyli widoczne — a to znaczy wszystkie ekrany naraz plus pusty formularz
     /// zadania. Zasłona trwa dokładnie tyle, ile ta chwila.
     /// </remarks>
-    private void OdsloniecieGotowego()
+    private void RevealReady()
     {
-        if (this.FindControl<Panel>("ZaslonaStartu") is { } zaslona)
+        if (this.FindControl<Panel>("ZaslonaStartu") is { } scrim)
         {
-            zaslona.IsVisible = DataContext is null;
+            scrim.IsVisible = DataContext is null;
         }
     }
 
-    private ScrollViewer? _siatka;
+    private ScrollViewer? _grid;
 
     /// <summary>Przesunięcie, które czeka na zmierzenie siatki. Null, gdy nic nie czeka.</summary>
-    private double? _docelowe;
+    private double? _target;
 
     /// <summary>
     /// Podpięcie przewijania siatki kalendarza pod prośby modelu widoku.
@@ -108,44 +108,44 @@ public partial class MainView : UserControl
     /// </remarks>
     private void WireCalendar(MainViewModel model)
     {
-        _siatka ??= this.FindControl<ScrollViewer>("SiatkaKalendarza");
-        _naglowki ??= this.FindControl<ScrollViewer>("NaglowkiDni");
-        _kalendarz = model.Calendar;
-        _szczegol = model.Detail;
+        _grid ??= this.FindControl<ScrollViewer>("SiatkaKalendarza");
+        _headings ??= this.FindControl<ScrollViewer>("NaglowkiDni");
+        _calendar = model.Calendar;
+        _detail = model.Detail;
 
-        model.Calendar.ScrollRequested -= NaProsbeOPrzewiniecie;
-        model.Calendar.ScrollRequested += NaProsbeOPrzewiniecie;
+        model.Calendar.ScrollRequested -= OnScrollRequest;
+        model.Calendar.ScrollRequested += OnScrollRequest;
 
-        if (_siatka is not null)
+        if (_grid is not null)
         {
-            _siatka.LayoutUpdated -= NaUkladzie;
-            _siatka.LayoutUpdated += NaUkladzie;
+            _grid.LayoutUpdated -= OnLayout;
+            _grid.LayoutUpdated += OnLayout;
 
             // Nagłówki jadą w poziomie za siatką. Pionowo stoją — o to właśnie chodzi,
             // bo inaczej uciekały do góry przy pierwszym obrocie kółka i po kilku
             // godzinach dnia nie było wiadomo, na którą kolumnę się patrzy.
-            _siatka.ScrollChanged -= NaPrzewinieciuSiatki;
-            _siatka.ScrollChanged += NaPrzewinieciuSiatki;
-            _siatka.SizeChanged -= NaZmianieSzerokosci;
-            _siatka.SizeChanged += NaZmianieSzerokosci;
+            _grid.ScrollChanged -= OnGridScroll;
+            _grid.ScrollChanged += OnGridScroll;
+            _grid.SizeChanged -= OnWidthChange;
+            _grid.SizeChanged += OnWidthChange;
 
             // Pierwsze podanie szerokości: zdarzenie rozmiaru potrafi wypaść przed
             // podstawieniem modelu, a wtedy siatka zostałaby na szerokości zapasowej.
-            Szerokosc(_siatka.Bounds.Width);
+            Width(_grid.Bounds.Width);
         }
 
         // To samo dla wysokości miesiąca. Siatka tygodni zgłasza się przy wczytaniu,
         // a to bywa **przed** podstawieniem modelu — wtedy jej meldunek trafiał donikąd
         // i komórka zostawała przy pojemności zapasowej do pierwszej zmiany rozmiaru
         // okna. Na telefonie, gdzie okna się nie zmienia, znaczyło to „nigdy".
-        if (_siatkaMiesiaca is { Bounds.Height: > 0 } tygodnie)
+        if (_monthGrid is { Bounds.Height: > 0 } weeks)
         {
-            _kalendarz.SetMonthHeight(tygodnie.Bounds.Height);
+            _calendar.SetMonthHeight(weeks.Bounds.Height);
         }
     }
 
     /// <summary>Model szczegółu zadania. Podstawiany razem z resztą, przy zmianie kontekstu.</summary>
-    private TaskDetailViewModel? _szczegol;
+    private TaskDetailViewModel? _detail;
 
     /// <summary>
     /// Przyciski okna szczegółu wołane wprost.
@@ -156,16 +156,16 @@ public partial class MainView : UserControl
     /// Tu wyjątek też ma dokąd trafić: bez tego byłaby to ta sama pułapka, tylko
     /// przeniesiona o warstwę niżej.
     /// </remarks>
-    private void ZapiszZadanie(object? nadawca, RoutedEventArgs e) =>
+    private void SaveTask(object? sender, RoutedEventArgs e) =>
         TaskId("Zadanie: zapis z okna", m => m.SaveAsync());
 
-    private void OdhaczZadanie(object? nadawca, RoutedEventArgs e) =>
+    private void CompleteTask(object? sender, RoutedEventArgs e) =>
         TaskId("Zadanie: odhaczenie z okna", m => m.CompleteAsync());
 
-    private void UsunZadanie(object? nadawca, RoutedEventArgs e) =>
+    private void DeleteTask(object? sender, RoutedEventArgs e) =>
         TaskId("Zadanie: do kosza z okna", m => m.TrashAsync());
 
-    private void ZamknijZadanie(object? nadawca, RoutedEventArgs e) =>
+    private void CloseTask(object? sender, RoutedEventArgs e) =>
         TaskId("Zadanie: zamknięcie okna", m =>
         {
             m.Close();
@@ -173,7 +173,7 @@ public partial class MainView : UserControl
         });
 
     /// <summary>Enter w nazwie zadania zapisuje — tak jak w każdym polu z jedną linijką.</summary>
-    private void NazwaKlawisz(object? nadawca, KeyEventArgs e)
+    private void OnNameKey(object? sender, KeyEventArgs e)
     {
         if (e.Key is Key.Enter or Key.Return)
         {
@@ -218,9 +218,9 @@ public partial class MainView : UserControl
     /// ruszać.
     /// </para>
     /// </remarks>
-    private void ObszarKalendarzaGotowy(object? nadawca, RoutedEventArgs e)
+    private void CalendarAreaReady(object? sender, RoutedEventArgs e)
     {
-        if (nadawca is not Control area)
+        if (sender is not Control area)
         {
             return;
         }
@@ -246,19 +246,19 @@ public partial class MainView : UserControl
         // wtedy je widzieliśmy. Przejechanie w bok nie odbiera przewijania niczego,
         // bo osobno pilnuje, żeby ruch był wyraźnie poziomy.
         area.AddHandler(
-            Gestures.ScrollGestureEvent, ObszarGest, RoutingStrategies.Bubble, handledEventsToo: true);
+            Gestures.ScrollGestureEvent, AreaGesture, RoutingStrategies.Bubble, handledEventsToo: true);
 
         area.AddHandler(
-            Gestures.ScrollGestureEndedEvent, ObszarGestSkonczony,
+            Gestures.ScrollGestureEndedEvent, AreaGestureDone,
             RoutingStrategies.Bubble, handledEventsToo: true);
 
-        area.AddHandler(PointerPressedEvent, ObszarNacisniety, RoutingStrategies.Tunnel);
-        area.AddHandler(PointerMovedEvent, ObszarRuch, RoutingStrategies.Tunnel);
-        area.AddHandler(PointerReleasedEvent, ObszarPuszczony, RoutingStrategies.Tunnel);
+        area.AddHandler(PointerPressedEvent, AreaPressed, RoutingStrategies.Tunnel);
+        area.AddHandler(PointerMovedEvent, AreaMoved, RoutingStrategies.Tunnel);
+        area.AddHandler(PointerReleasedEvent, AreaReleased, RoutingStrategies.Tunnel);
 
-        _obszarKalendarza = area;
-        _podgladPrzed = this.FindControl<Panel>("PodgladPrzed");
-        _podgladPo = this.FindControl<Panel>("PodgladPo");
+        _calendarArea = area;
+        _previewBefore = this.FindControl<Panel>("PodgladPrzed");
+        _previewAfter = this.FindControl<Panel>("PodgladPo");
     }
 
     /// <summary>
@@ -277,58 +277,58 @@ public partial class MainView : UserControl
     /// brak zostawiał kolumny na szerokości zapasowej.
     /// </para>
     /// </remarks>
-    private void SiatkaMiesiacaGotowa(object? nadawca, RoutedEventArgs e)
+    private void MonthGridReady(object? sender, RoutedEventArgs e)
     {
-        if (nadawca is not Control siatka)
+        if (sender is not Control grid)
         {
             return;
         }
 
-        _siatkaMiesiaca = siatka;
+        _monthGrid = grid;
 
-        siatka.SizeChanged -= NaZmianieWysokosciMiesiaca;
-        siatka.SizeChanged += NaZmianieWysokosciMiesiaca;
+        grid.SizeChanged -= OnMonthHeightChange;
+        grid.SizeChanged += OnMonthHeightChange;
 
-        _kalendarz?.SetMonthHeight(siatka.Bounds.Height);
+        _calendar?.SetMonthHeight(grid.Bounds.Height);
     }
 
     /// <summary>Siatka tygodni miesiąca. Trzymana, żeby podać jej wysokość po modelu.</summary>
-    private Control? _siatkaMiesiaca;
+    private Control? _monthGrid;
 
-    private void NaZmianieWysokosciMiesiaca(object? nadawca, SizeChangedEventArgs e) =>
-        _kalendarz?.SetMonthHeight(e.NewSize.Height);
+    private void OnMonthHeightChange(object? sender, SizeChangedEventArgs e) =>
+        _calendar?.SetMonthHeight(e.NewSize.Height);
 
     /// <summary>Podglądy sąsiednich zakresów. Widoczne wyłącznie w trakcie przejechania.</summary>
-    private Panel? _podgladPrzed;
+    private Panel? _previewBefore;
 
-    private Panel? _podgladPo;
+    private Panel? _previewAfter;
 
     /// <summary>Żeby brak warstw trafił do dziennika raz, a nie przy każdym ruchu palca.</summary>
-    private bool _brakWarstwZapisany;
+    private bool _missingLayersLogged;
 
     /// <summary>Panel z siatkami. Trzymany do przesunięcia przy zmianie zakresu.</summary>
-    private Control? _obszarKalendarza;
+    private Control? _calendarArea;
 
     /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
     /// <remarks>
     /// Sześćdziesiąt punktów to około jednej szóstej szerokości telefonu: za dużo, żeby
     /// wyszło przy pionowym przewijaniu, za mało, żeby trzeba było brać rozmach.
     /// </remarks>
-    private const double ProgPrzejechania = 60;
+    private const double SwipeThreshold = 60;
 
     /// <summary>Od ilu punktów w bok siatka zaczyna iść za palcem.</summary>
     /// <remarks>
     /// Dwanaście, bo tyle mieści się w drgnięciu ręki przy przewijaniu w pionie.
     /// Niżej siatka drgałaby w bok przy każdym ruchu po godzinach.
     /// </remarks>
-    private const double ProgSledzenia = 12;
+    private const double TrackThreshold = 12;
 
     /// <summary>Zsumowane przesunięcie bieżącego gestu.</summary>
-    private Vector _gest;
+    private Vector _gesture;
 
     /// <summary>Czy ten gest już przeskoczył. Jeden ruch to jeden zakres.</summary>
     /// <remarks>Dotyczy wyłącznie drogi bez sąsiadów, gdzie rozstrzyga się w trakcie ruchu.</remarks>
-    private bool _gestZuzyty;
+    private bool _gestureSpent;
 
     /// <summary>
     /// Siatka idzie za palcem.
@@ -354,16 +354,16 @@ public partial class MainView : UserControl
     /// odhaczeniu i przeciągnięciu bloku — czyli przepisanie kalendarza na karuzelę.
     /// </para>
     /// </remarks>
-    private void ObszarGest(object? nadawca, ScrollGestureEventArgs e)
+    private void AreaGesture(object? sender, ScrollGestureEventArgs e)
     {
-        _gest += e.Delta;
+        _gesture += e.Delta;
 
-        var wBok = -_gest.X;
-        var wPion = -_gest.Y;
+        var wBok = -_gesture.X;
+        var vertical = -_gesture.Y;
 
         // W bok wyraźnie bardziej niż w pionie — inaczej dojeżdżanie do wieczora
         // ciągnęłoby siatkę w bok przy każdym ukośnym ruchu.
-        if (Math.Abs(wBok) < ProgSledzenia || Math.Abs(wBok) < 1.5 * Math.Abs(wPion))
+        if (Math.Abs(wBok) < TrackThreshold || Math.Abs(wBok) < 1.5 * Math.Abs(vertical))
         {
             return;
         }
@@ -372,39 +372,39 @@ public partial class MainView : UserControl
         // przeciąganie pokazuje puste tło, a to jest gorsze od braku ruchu: udaje
         // płynność i pokazuje dziurę tam, gdzie powinien być następny tydzień.
         // Wtedy siatka po prostu przeskakuje — czyli robi to, co robiła zawsze.
-        if (_kalendarz?.SasiedziGotowi != true)
+        if (_calendar?.NeighboursReady != true)
         {
-            if (!_gestZuzyty)
+            if (!_gestureSpent)
             {
-                _gestZuzyty = Przeskocz(wBok, wPion);
+                _gestureSpent = Skip(wBok, vertical);
             }
 
             return;
         }
 
-        Czuwaj();
-        Przesun(wBok);
+        Watch();
+        Move(wBok);
     }
 
-    private void ObszarGestSkonczony(object? nadawca, ScrollGestureEndedEventArgs e) =>
-        ZakonczGest();
+    private void AreaGestureDone(object? sender, ScrollGestureEndedEventArgs e) =>
+        FinishGesture();
 
     /// <summary>Ustawienie siatki na zadanym przesunięciu — bez animacji, wprost za palcem.</summary>
-    private void Przesun(double wBok)
+    private void Move(double wBok)
     {
-        if (_obszarKalendarza is not { Bounds.Width: > 0 } area)
+        if (_calendarArea is not { Bounds.Width: > 0 } area)
         {
             return;
         }
 
-        OdslonSasiadow(area.Bounds.Width);
+        RevealNeighbours(area.Bounds.Width);
 
-        _przesuniecieSiatki ??= new TranslateTransform();
-        area.RenderTransform = _przesuniecieSiatki;
+        _gridOffset ??= new TranslateTransform();
+        area.RenderTransform = _gridOffset;
 
         // Ograniczone do szerokości: dalej i tak nie ma czego odsłaniać, a siatka
         // wyjechana poza ekran wygląda na zgubioną.
-        _przesuniecieSiatki.X = Math.Clamp(wBok, -area.Bounds.Width, area.Bounds.Width);
+        _gridOffset.X = Math.Clamp(wBok, -area.Bounds.Width, area.Bounds.Width);
     }
 
     /// <summary>
@@ -423,21 +423,21 @@ public partial class MainView : UserControl
     /// byliby wtedy prawie zawsze wyrzuceni bez użycia.
     /// </para>
     /// </remarks>
-    private void OdslonSasiadow(double szerokosc)
+    private void RevealNeighbours(double width)
     {
         // Warstwy odszukiwane przy pierwszym użyciu, nie przy wczytaniu panelu, i to
         // jest zabezpieczenie przed jedyną przyczyną, której poprzednim razem nie
         // wykluczyłem: gdyby odszukanie po nazwie zawiodło, pola zostałyby puste,
         // podglądy nigdy nie zapaliłyby się i wyglądałoby to dokładnie tak samo jak
         // brak danych. Zapis w dzienniku rozdziela te dwie przyczyny.
-        _podgladPrzed ??= this.FindControl<Panel>("PodgladPrzed");
-        _podgladPo ??= this.FindControl<Panel>("PodgladPo");
+        _previewBefore ??= this.FindControl<Panel>("PodgladPrzed");
+        _previewAfter ??= this.FindControl<Panel>("PodgladPo");
 
-        if ((_podgladPrzed is null || _podgladPo is null) && !_brakWarstwZapisany)
+        if ((_previewBefore is null || _previewAfter is null) && !_missingLayersLogged)
         {
-            _brakWarstwZapisany = true;
+            _missingLayersLogged = true;
 
-            _ = Probuj("Kalendarz: podgląd sąsiadów", () =>
+            _ = Try("Kalendarz: podgląd sąsiadów", () =>
                 DataContext is MainViewModel model
                     ? model.Journal.RecordAsync(
                         "Kalendarz: podgląd sąsiadów",
@@ -446,38 +446,38 @@ public partial class MainView : UserControl
                     : Task.CompletedTask);
         }
 
-        Ustaw(_podgladPrzed, -szerokosc);
-        Ustaw(_podgladPo, szerokosc);
+        Set(_previewBefore, -width);
+        Set(_previewAfter, width);
 
-        static void Ustaw(Panel? podglad, double where)
+        static void Set(Panel? preview, double where)
         {
-            if (podglad is null)
+            if (preview is null)
             {
                 return;
             }
 
-            if (podglad.RenderTransform is not TranslateTransform przesuniecie)
+            if (preview.RenderTransform is not TranslateTransform offset)
             {
-                przesuniecie = new TranslateTransform();
-                podglad.RenderTransform = przesuniecie;
+                offset = new TranslateTransform();
+                preview.RenderTransform = offset;
             }
 
-            przesuniecie.X = where;
-            podglad.IsVisible = true;
+            offset.X = where;
+            preview.IsVisible = true;
         }
     }
 
     /// <summary>Schowanie sąsiadów. Poza gestem nie mają czego pokazywać.</summary>
-    private void SchowajSasiadow()
+    private void HideNeighbours()
     {
-        if (_podgladPrzed is not null)
+        if (_previewBefore is not null)
         {
-            _podgladPrzed.IsVisible = false;
+            _previewBefore.IsVisible = false;
         }
 
-        if (_podgladPo is not null)
+        if (_previewAfter is not null)
         {
-            _podgladPo.IsVisible = false;
+            _previewAfter.IsVisible = false;
         }
     }
 
@@ -490,38 +490,38 @@ public partial class MainView : UserControl
     /// znaczyłoby skok z położenia, w którym była, na krawędź — czyli to samo szarpnięcie,
     /// które ten gest ma usunąć.
     /// </remarks>
-    private void ZakonczGest()
+    private void FinishGesture()
     {
-        var wBok = -_gest.X;
-        var wPion = -_gest.Y;
+        var wBok = -_gesture.X;
+        var vertical = -_gesture.Y;
 
-        _gest = default;
-        _czuwanie?.Stop();
+        _gesture = default;
+        _watch?.Stop();
 
-        if (_gestZuzyty)
+        if (_gestureSpent)
         {
-            _gestZuzyty = false;
+            _gestureSpent = false;
             return;
         }
 
-        var skad = _przesuniecieSiatki?.X ?? 0;
+        var from = _gridOffset?.X ?? 0;
 
-        if (Math.Abs(skad) < 0.5)
+        if (Math.Abs(from) < 0.5)
         {
             // Siatka nigdy nie ruszyła — to nie było przejechanie, tylko przewijanie
             // albo dotknięcie. Nie ma czego kończyć.
             return;
         }
 
-        Przeskocz(wBok, wPion);
-        Wroc(skad);
+        Skip(wBok, vertical);
+        Back(from);
     }
 
     /// <summary>Sąsiedzi chowani po dojeździe, nie przed nim — inaczej znikliby w ruchu.</summary>
-    private async Task PoDojezdzieAsync(Task dojazd)
+    private async Task AfterCoastAsync(Task coast)
     {
-        await dojazd;
-        SchowajSasiadow();
+        await coast;
+        HideNeighbours();
     }
 
     /// <summary>
@@ -533,111 +533,111 @@ public partial class MainView : UserControl
     /// w bok na stałe, a to jest awaria widoczna i nie do naprawienia inaczej niż
     /// zamknięciem aplikacji. Koszt zabezpieczenia to jeden minutnik na gest.
     /// </remarks>
-    private DispatcherTimer? _czuwanie;
+    private DispatcherTimer? _watch;
 
-    private void Czuwaj()
+    private void Watch()
     {
-        _czuwanie ??= new DispatcherTimer(
+        _watch ??= new DispatcherTimer(
             TimeSpan.FromMilliseconds(400),
             DispatcherPriority.Input,
-            (_, _) => ZakonczGest());
+            (_, _) => FinishGesture());
 
-        _czuwanie.Stop();
-        _czuwanie.Start();
+        _watch.Stop();
+        _watch.Start();
     }
 
-    private (Point Skad, Point Dokad, IPointer Wskaznik)? _przejechanie;
+    private (Point From, Point To, IPointer Pointer)? _swipe;
 
-    private void ObszarNacisniety(object? nadawca, PointerPressedEventArgs e)
+    private void AreaPressed(object? sender, PointerPressedEventArgs e)
     {
         // Gest palca ma własną drogę; tu zostaje mysz, bo jej nikt nie przejmuje.
-        if (nadawca is not Control area || e.Pointer.Type != PointerType.Mouse)
+        if (sender is not Control area || e.Pointer.Type != PointerType.Mouse)
         {
-            _przejechanie = null;
+            _swipe = null;
             return;
         }
 
-        var punkt = e.GetPosition(area);
-        _przejechanie = (punkt, punkt, e.Pointer);
+        var point = e.GetPosition(area);
+        _swipe = (point, point, e.Pointer);
     }
 
-    private void ObszarRuch(object? nadawca, PointerEventArgs e)
+    private void AreaMoved(object? sender, PointerEventArgs e)
     {
-        if (_przejechanie is not { } dotyk
-            || nadawca is not Control area
-            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        if (_swipe is not { } touch
+            || sender is not Control area
+            || !ReferenceEquals(touch.Pointer, e.Pointer))
         {
             return;
         }
 
-        var dokad = e.GetPosition(area);
-        _przejechanie = dotyk with { Dokad = dokad };
+        var to = e.GetPosition(area);
+        _swipe = touch with { To = to };
 
-        var wBok = dokad.X - dotyk.Skad.X;
-        var wPion = dokad.Y - dotyk.Skad.Y;
+        var wBok = to.X - touch.From.X;
+        var vertical = to.Y - touch.From.Y;
 
         // Mysz idzie za ręką tak samo jak palec — ten sam próg i ten sam warunek.
-        if (!_przeciagam
-            && Math.Abs(wBok) >= ProgSledzenia
-            && Math.Abs(wBok) >= 1.5 * Math.Abs(wPion))
+        if (!_dragging
+            && Math.Abs(wBok) >= TrackThreshold
+            && Math.Abs(wBok) >= 1.5 * Math.Abs(vertical))
         {
-            Przesun(wBok);
+            Move(wBok);
         }
     }
 
-    private void ObszarPuszczony(object? nadawca, PointerReleasedEventArgs e)
+    private void AreaReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var activity = _przejechanie;
-        _przejechanie = null;
+        var activity = _swipe;
+        _swipe = null;
 
-        if (activity is not { } dotyk || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        if (activity is not { } touch || !ReferenceEquals(touch.Pointer, e.Pointer))
         {
             // Palec: zapasowe zakończenie gestu na wypadek, gdyby biblioteka nie
             // ogłosiła jego końca. Gdy siatka nigdy nie ruszyła, nic się nie dzieje.
-            ZakonczGest();
+            FinishGesture();
             return;
         }
 
-        var dokad = nadawca is Control area ? e.GetPosition(area) : dotyk.Dokad;
+        var to = sender is Control area ? e.GetPosition(area) : touch.To;
 
-        var wBok = dokad.X - dotyk.Skad.X;
-        var wPion = dokad.Y - dotyk.Skad.Y;
+        var wBok = to.X - touch.From.X;
+        var vertical = to.Y - touch.From.Y;
 
-        var skad = _przesuniecieSiatki?.X ?? 0;
+        var from = _gridOffset?.X ?? 0;
 
         // Obsłużone tylko wtedy, gdy naprawdę przejechano — inaczej zwykłe kliknięcie
         // bloku przestałoby go otwierać.
-        e.Handled = Przeskocz(wBok, wPion);
+        e.Handled = Skip(wBok, vertical);
 
-        if (Math.Abs(skad) >= 0.5)
+        if (Math.Abs(from) >= 0.5)
         {
-            Wroc(skad);
+            Back(from);
         }
     }
 
     /// <summary>Czy ruch o tyle punktów jest przejechaniem — i jeśli tak, przeskakuje.</summary>
-    private bool Przeskocz(double wBok, double wPion)
+    private bool Skip(double wBok, double vertical)
     {
         // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, nie zakres.
-        if (_przeciagam || _kalendarz is null)
+        if (_dragging || _calendar is null)
         {
             return false;
         }
 
         // W bok **wyraźnie bardziej** niż w pionie: ukośny ruch przy przewijaniu dnia
         // przeskakiwałby tydzień przy każdej próbie dojechania do wieczora.
-        if (Math.Abs(wBok) < ProgPrzejechania || Math.Abs(wBok) < 1.5 * Math.Abs(wPion))
+        if (Math.Abs(wBok) < SwipeThreshold || Math.Abs(wBok) < 1.5 * Math.Abs(vertical))
         {
             return false;
         }
 
         // Palec w lewo odsłania to, co po prawej — czyli następny zakres. Tak samo
         // zachowuje się każda lista, po której się przejeżdża.
-        _ = Probuj(
+        _ = Try(
             "Kalendarz: przejechanie",
             () => wBok < 0
-                ? _kalendarz.NextCommand.ExecuteAsync(null)
-                : _kalendarz.PreviousCommand.ExecuteAsync(null));
+                ? _calendar.NextCommand.ExecuteAsync(null)
+                : _calendar.PreviousCommand.ExecuteAsync(null));
 
         return true;
     }
@@ -647,14 +647,14 @@ public partial class MainView : UserControl
     /// Sto sześćdziesiąt milisekund: dość, żeby ruch był ruchem, a nie podmianą,
     /// i za mało, żeby zdążyło się na niego czekać.
     /// </remarks>
-    private static readonly TimeSpan CzasDojazdu = TimeSpan.FromMilliseconds(160);
+    private static readonly TimeSpan CoastTime = TimeSpan.FromMilliseconds(160);
 
     /// <summary>Przesunięcie rysowania siatki. Jedno na całe życie okna.</summary>
     /// <remarks>
     /// Przesuwane jest rysowanie, nie układ: siatka zostaje tam, gdzie była, więc nic
     /// się nie przelicza i nic nie zmienia rozmiaru.
     /// </remarks>
-    private TranslateTransform? _przesuniecieSiatki;
+    private TranslateTransform? _gridOffset;
 
     /// <summary>
     /// Dojazd siatki do miejsca — z tego, dokąd dociągnął ją palec, do zera.
@@ -679,19 +679,19 @@ public partial class MainView : UserControl
     /// tak czy owak — a ozdoba nie ma prawa zamknąć aplikacji.
     /// </para>
     /// </remarks>
-    private void Wroc(double skad) =>
-        _ = Probuj("Kalendarz: dojazd siatki", () => PoDojezdzieAsync(WrocAsync(skad)));
+    private void Back(double from) =>
+        _ = Try("Kalendarz: dojazd siatki", () => AfterCoastAsync(BackAsync(from)));
 
-    private Task WrocAsync(double skad)
+    private Task BackAsync(double from)
     {
-        if (_przesuniecieSiatki is not { } przesuniecie)
+        if (_gridOffset is not { } offset)
         {
             return Task.CompletedTask;
         }
 
-        var animacja = new Animation
+        var animation = new Animation
         {
-            Duration = CzasDojazdu,
+            Duration = CoastTime,
             Easing = new CubicEaseOut(),
             FillMode = FillMode.None,
             Children =
@@ -699,7 +699,7 @@ public partial class MainView : UserControl
                 new KeyFrame
                 {
                     Cue = new Cue(0d),
-                    Setters = { new Setter(TranslateTransform.XProperty, skad) },
+                    Setters = { new Setter(TranslateTransform.XProperty, from) },
                 },
                 new KeyFrame
                 {
@@ -711,9 +711,9 @@ public partial class MainView : UserControl
 
         // Wartość zdejmowana od razu, żeby po animacji nie wrócił na nią stary stan:
         // animacja z wygaszaniem „None" oddaje własność temu, co w niej zapisane.
-        przesuniecie.X = 0;
+        offset.X = 0;
 
-        return animacja.RunAsync(przesuniecie);
+        return animation.RunAsync(offset);
     }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
@@ -722,27 +722,27 @@ public partial class MainView : UserControl
     /// wysokość liczona względem niej jest prawdziwa niezależnie od tego, nad którym
     /// dniem stoi wskaźnik.
     /// </remarks>
-    private Control? _warstwaGodzin;
+    private Control? _hourLayer;
 
-    private void WarstwaGodzinGotowa(object? nadawca, RoutedEventArgs e) =>
-        _warstwaGodzin = nadawca as Control;
+    private void HourLayerReady(object? sender, RoutedEventArgs e) =>
+        _hourLayer = sender as Control;
 
     /// <summary>Ile trzeba przejechać, żeby to było przeciąganie, a nie drgnięcie ręki.</summary>
-    private const double ProgPrzeciagniecia = 6;
+    private const double DragThreshold = 6;
 
-    private SlotBox? _wciesniety;
+    private SlotBox? _pressed;
 
-    private Point _skad;
+    private Point _from;
 
-    private bool _przeciagam;
+    private bool _dragging;
 
     /// <summary>Czy trwające przeciąganie zmienia długość, a nie porę.</summary>
-    private bool _rozciagam;
+    private bool _stretching;
 
     /// <summary>Kursory tworzone raz. Nowy przy każdym drgnięciu myszy to nowy zasób systemu.</summary>
-    private static readonly Cursor KursorReki = new(StandardCursorType.Hand);
+    private static readonly Cursor HandCursor = new(StandardCursorType.Hand);
 
-    private static readonly Cursor KursorKrawedzi = new(StandardCursorType.SizeNorthSouth);
+    private static readonly Cursor EdgeCursor = new(StandardCursorType.SizeNorthSouth);
 
     /// <summary>Ile punktów od dolnej krawędzi bloku łapie za jego koniec.</summary>
     /// <remarks>
@@ -750,7 +750,7 @@ public partial class MainView : UserControl
     /// jest w połowie krawędzią i nie da się go już przesunąć; mniej, że w krawędź
     /// trzeba celować.
     /// </remarks>
-    private const double StrefaKrawedzi = 6;
+    private const double EdgeZone = 6;
 
     /// <summary>
     /// Ile punktów ma godzina na siatce.
@@ -760,17 +760,17 @@ public partial class MainView : UserControl
     /// rysuje okno, a nie model, i gdyby sięgał po nią przez model, okno zależałoby
     /// od jego wnętrza po to, żeby narysować prostokąt.
     /// </remarks>
-    private const double WysokoscGodziny = 48;
+    private const double HourHeight = 48;
 
     /// <summary>Punkt wewnątrz bloku, za który go złapano.</summary>
-    private Point _chwyt;
+    private Point _grip;
 
     /// <summary>Lewy górny róg chwyconego bloku we współrzędnych okna.</summary>
-    private Point? _blokNaEkranie;
+    private Point? _blockOnScreen;
 
-    private void BlokWcisniety(object? nadawca, PointerPressedEventArgs e)
+    private void BlockPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (nadawca is not Control block || block.Tag is not SlotBox slot)
+        if (sender is not Control block || block.Tag is not SlotBox slot)
         {
             return;
         }
@@ -784,39 +784,39 @@ public partial class MainView : UserControl
             return;
         }
 
-        _wciesniety = slot;
-        _skad = e.GetPosition(this);
-        _przeciagam = false;
+        _pressed = slot;
+        _from = e.GetPosition(this);
+        _dragging = false;
 
         // Myszą przeciąga się od razu; palcem dopiero po przytrzymaniu. Na dotyku
         // ruch palca po bloku znaczy najczęściej „przewiń widok", a nie „przenieś to
         // zadanie" — a blok, który przejmuje wskaźnik po sześciu punktach, odbiera
         // przewijanie wszędzie tam, gdzie coś stoi. Czyli w zajęty dzień prawie wszędzie.
-        _wolnoPrzeciagac = e.Pointer.Type != PointerType.Touch;
+        _dragAllowed = e.Pointer.Type != PointerType.Touch;
 
-        if (!_wolnoPrzeciagac)
+        if (!_dragAllowed)
         {
-            _przytrzymanie?.Stop();
-            _przytrzymanie = new DispatcherTimer(
-                Przytrzymanie, DispatcherPriority.Input, (zegar, _) =>
+            _longPress?.Stop();
+            _longPress = new DispatcherTimer(
+                LongPress, DispatcherPriority.Input, (clock, _) =>
                 {
-                    (zegar as DispatcherTimer)?.Stop();
-                    _wolnoPrzeciagac = true;
+                    (clock as DispatcherTimer)?.Stop();
+                    _dragAllowed = true;
                 });
 
-            _przytrzymanie.Start();
+            _longPress.Start();
         }
 
         // Gdzie **w bloku** wylądowała ręka i gdzie ten blok stoi na ekranie. Jedno
         // i drugie po to, żeby kopia w podglądzie trzymała się tego samego punktu,
         // za który została złapana, zamiast skakać rogiem pod wskaźnik.
-        _chwyt = e.GetPosition(block);
-        _blokNaEkranie = block.TranslatePoint(new Point(0, 0), this);
+        _grip = e.GetPosition(block);
+        _blockOnScreen = block.TranslatePoint(new Point(0, 0), this);
 
         // Za dolną krawędź ciągnie się koniec, nie cały blok. Tylko przy zadaniach:
         // długość wydarzenia z cudzego kalendarza zmienia się świadomą drogą.
-        _rozciagam = slot.TaskId is not null
-            && e.GetPosition(block).Y >= block.Bounds.Height - StrefaKrawedzi;
+        _stretching = slot.TaskId is not null
+            && e.GetPosition(block).Y >= block.Bounds.Height - EdgeZone;
     }
 
     /// <summary>
@@ -826,17 +826,17 @@ public partial class MainView : UserControl
     /// Bez tego chwyt za koniec bloku jest wiedzą tajemną — nic na ekranie nie mówi,
     /// że dolne sześć punktów robi co innego niż reszta.
     /// </remarks>
-    private void BlokNajechany(object? nadawca, PointerEventArgs e)
+    private void BlockHovered(object? sender, PointerEventArgs e)
     {
-        if (nadawca is not Control block || block.Tag is not SlotBox slot)
+        if (sender is not Control block || block.Tag is not SlotBox slot)
         {
             return;
         }
 
-        var przyKrawedzi = slot.TaskId is not null
-            && e.GetPosition(block).Y >= block.Bounds.Height - StrefaKrawedzi;
+        var atEdge = slot.TaskId is not null
+            && e.GetPosition(block).Y >= block.Bounds.Height - EdgeZone;
 
-        block.Cursor = przyKrawedzi ? KursorKrawedzi : KursorReki;
+        block.Cursor = atEdge ? EdgeCursor : HandCursor;
     }
 
     /// <summary>
@@ -848,31 +848,31 @@ public partial class MainView : UserControl
     /// w polu i każdy następny ruch myszy wyglądał jak przeciąganie.
     /// </remarks>
     /// <summary>Ile trwa przytrzymanie, po którym palec zaczyna przeciągać, a nie przewijać.</summary>
-    private static readonly TimeSpan Przytrzymanie = TimeSpan.FromMilliseconds(400);
+    private static readonly TimeSpan LongPress = TimeSpan.FromMilliseconds(400);
 
     /// <summary>Minutnik przytrzymania i jego wynik. Mysz ma zgodę od razu.</summary>
-    private DispatcherTimer? _przytrzymanie;
+    private DispatcherTimer? _longPress;
 
-    private bool _wolnoPrzeciagac = true;
+    private bool _dragAllowed = true;
 
-    private void PuscBlok()
+    private void ReleaseBlock()
     {
-        _przytrzymanie?.Stop();
-        _wolnoPrzeciagac = true;
-        _wciesniety = null;
-        _przeciagam = false;
-        _rozciagam = false;
-        SchowajPodglad();
+        _longPress?.Stop();
+        _dragAllowed = true;
+        _pressed = null;
+        _dragging = false;
+        _stretching = false;
+        HidePreview();
     }
 
-    private void BlokPuscilWskaznik(object? nadawca, PointerCaptureLostEventArgs e)
+    private void BlockLostPointer(object? sender, PointerCaptureLostEventArgs e)
     {
-        if (nadawca is Control block)
+        if (sender is Control block)
         {
             block.Opacity = 1;
         }
 
-        PuscBlok();
+        ReleaseBlock();
     }
 
     /// <summary>Dzień i wysokość pod wskaźnikiem, przeliczone na współrzędne siatki.</summary>
@@ -880,20 +880,20 @@ public partial class MainView : UserControl
     /// Z położenia wskaźnika, a nie z tego, co pod nim: przy przechwyconym wskaźniku
     /// zdarzenia trafiają do przeciąganego bloku niezależnie od tego, nad czym stoi.
     /// </remarks>
-    private (DateOnly Day, double Wysokosc)? Cel(PointerEventArgs e)
+    private (DateOnly Day, double Height)? Target(PointerEventArgs e)
     {
-        if (_kalendarz is null
-            || _warstwaGodzin is null
-            || this.FindControl<ItemsControl>("KolumnyDni") is not { } kolumny)
+        if (_calendar is null
+            || _hourLayer is null
+            || this.FindControl<ItemsControl>("KolumnyDni") is not { } columns)
         {
             return null;
         }
 
-        var szerokosc = _kalendarz.ColumnWidth + 2;
-        var numer = Math.Clamp(
-            (int)(e.GetPosition(kolumny).X / szerokosc), 0, _kalendarz.VisibleDays - 1);
+        var width = _calendar.ColumnWidth + 2;
+        var number = Math.Clamp(
+            (int)(e.GetPosition(columns).X / width), 0, _calendar.VisibleDays - 1);
 
-        return (_kalendarz.Anchor.AddDays(numer), e.GetPosition(_warstwaGodzin).Y);
+        return (_calendar.Anchor.AddDays(number), e.GetPosition(_hourLayer).Y);
     }
 
     /// <summary>
@@ -904,26 +904,26 @@ public partial class MainView : UserControl
     /// się dopiero po puszczeniu, czyli po zapisie. Przy wydarzeniach z Google znaczy
     /// to po zapisie w cudzym kalendarzu.
     /// </remarks>
-    private void PokazPodglad(PointerEventArgs e, SlotBox slot)
+    private void ShowPreview(PointerEventArgs e, SlotBox slot)
     {
-        if (this.FindControl<Border>("Podglad") is not { } podglad
+        if (this.FindControl<Border>("Podglad") is not { } preview
             || this.FindControl<TextBlock>("PodgladTytul") is not { } title
             || this.FindControl<TextBlock>("PodgladOd") is not { } od
-            || this.FindControl<TextBlock>("PodgladDo") is not { } doGodz
-            || this.FindControl<StackPanel>("PodgladGodziny") is not { } godziny
-            || Cel(e) is not var (day, wysokosc))
+            || this.FindControl<TextBlock>("PodgladDo") is not { } toHour
+            || this.FindControl<StackPanel>("PodgladGodziny") is not { } hours
+            || Target(e) is not var (day, height))
         {
             return;
         }
 
         var start = CalendarViewModel.Time(slot.Top);
-        var time = CalendarViewModel.Time(wysokosc);
+        var time = CalendarViewModel.Time(height);
 
-        podglad.Width = slot.Width;
-        podglad.Background = slot.Background;
+        preview.Width = slot.Width;
+        preview.Background = slot.Background;
         title.Text = slot.Title;
 
-        if (_rozciagam)
+        if (_stretching)
         {
             // Rozciąganie: blok stoi tam, gdzie stał, i rośnie w dół za wskaźnikiem.
             // Dzień się nie zmienia, więc pokazanie go sugerowałoby, że gdzieś jedzie.
@@ -932,17 +932,17 @@ public partial class MainView : UserControl
                     ? time.ToTimeSpan()
                     : start.ToTimeSpan() + TimeSpan.FromMinutes(5));
 
-            podglad.Height = Math.Max(
-                12, (end.ToTimeSpan() - start.ToTimeSpan()).TotalHours * WysokoscGodziny);
+            preview.Height = Math.Max(
+                12, (end.ToTimeSpan() - start.ToTimeSpan()).TotalHours * HourHeight);
 
             od.Text = $"{start:HH}:{start:mm}";
-            doGodz.Text = $"{end:HH}:{end:mm}";
-            godziny.IsVisible = true;
+            toHour.Text = $"{end:HH}:{end:mm}";
+            hours.IsVisible = true;
 
-            if (_blokNaEkranie is { } rog)
+            if (_blockOnScreen is { } corner)
             {
-                Canvas.SetLeft(podglad, rog.X);
-                Canvas.SetTop(podglad, rog.Y);
+                Canvas.SetLeft(preview, corner.X);
+                Canvas.SetTop(preview, corner.Y);
             }
         }
         else
@@ -950,59 +950,59 @@ public partial class MainView : UserControl
             // Koniec liczony z długości bloku, nie z jego starej godziny: przeciągnięcie
             // przesuwa, a nie skraca. Doba przycięta, żeby blok zaczepiony pod wieczór
             // nie pokazywał godziny z następnego dnia.
-            var suma = time.ToTimeSpan() + TimeSpan.FromHours(slot.Height / WysokoscGodziny);
+            var total = time.ToTimeSpan() + TimeSpan.FromHours(slot.Height / HourHeight);
             var end = TimeOnly.FromTimeSpan(
-                suma < TimeSpan.FromDays(1) ? suma : TimeSpan.FromDays(1) - TimeSpan.FromMinutes(5));
+                total < TimeSpan.FromDays(1) ? total : TimeSpan.FromDays(1) - TimeSpan.FromMinutes(5));
 
-            podglad.Height = slot.Height;
+            preview.Height = slot.Height;
             od.Text = $"{day:dd.MM} {time:HH}:{time:mm}";
-            doGodz.Text = $"{end:HH}:{end:mm}";
-            godziny.IsVisible = slot.Width >= 120;
+            toHour.Text = $"{end:HH}:{end:mm}";
+            hours.IsVisible = slot.Width >= 120;
 
             var where = e.GetPosition(this);
-            Canvas.SetLeft(podglad, where.X - _chwyt.X);
-            Canvas.SetTop(podglad, where.Y - _chwyt.Y);
+            Canvas.SetLeft(preview, where.X - _grip.X);
+            Canvas.SetTop(preview, where.Y - _grip.Y);
         }
 
-        podglad.IsVisible = true;
+        preview.IsVisible = true;
     }
 
-    private void SchowajPodglad()
+    private void HidePreview()
     {
-        _blokNaEkranie = null;
+        _blockOnScreen = null;
 
-        if (this.FindControl<Border>("Podglad") is { } podglad)
+        if (this.FindControl<Border>("Podglad") is { } preview)
         {
-            podglad.IsVisible = false;
+            preview.IsVisible = false;
         }
     }
 
-    private void BlokRuszony(object? nadawca, PointerEventArgs e)
+    private void BlockMoved(object? sender, PointerEventArgs e)
     {
         // Kształt wskaźnika liczony przy każdym ruchu, także bez wciśnięcia: to jedyne
         // miejsce, po którym widać, że dolna krawędź robi co innego niż reszta bloku.
-        BlokNajechany(nadawca, e);
+        BlockHovered(sender, e);
 
-        if (_wciesniety is not { } slot)
+        if (_pressed is not { } slot)
         {
             return;
         }
 
         // Zadania ruszamy zawsze, wydarzenia tylko takie, które mają dokąd wrócić.
-        var doRuszenia = slot.TaskId is not null
+        var toMove = slot.TaskId is not null
             || (slot.SourceId is not null && slot.ExternalId is not null);
 
-        if (!doRuszenia)
+        if (!toMove)
         {
             return;
         }
 
-        if (!_przeciagam)
+        if (!_dragging)
         {
             var now = e.GetPosition(this);
 
-            if (Math.Abs(now.X - _skad.X) <= ProgPrzeciagniecia
-                && Math.Abs(now.Y - _skad.Y) <= ProgPrzeciagniecia)
+            if (Math.Abs(now.X - _from.X) <= DragThreshold
+                && Math.Abs(now.Y - _from.Y) <= DragThreshold)
             {
                 return;
             }
@@ -1010,22 +1010,22 @@ public partial class MainView : UserControl
             // Palec ruszył, zanim minęło przytrzymanie: ten gest należy do przewijania.
             // Blok wypuszczamy z ręki na dobre, żeby przytrzymanie, które minie
             // w połowie przewijania, nie porwało go w locie.
-            if (!_wolnoPrzeciagac)
+            if (!_dragAllowed)
             {
-                PuscBlok();
+                ReleaseBlock();
                 return;
             }
 
-            _przeciagam = true;
+            _dragging = true;
 
-            if (nadawca is Control block)
+            if (sender is Control block)
             {
                 block.Opacity = 0.5;
                 e.Pointer.Capture(block);
             }
         }
 
-        PokazPodglad(e, slot);
+        ShowPreview(e, slot);
     }
 
     /// <summary>
@@ -1037,18 +1037,18 @@ public partial class MainView : UserControl
     /// od tego, nad czym akurat stoi. Cudze wydarzenia nie dają się przeciągać — zapis
     /// do kalendarza Google idzie świadomą drogą, przez kartę, a nie przez omsknięcie ręki.
     /// </remarks>
-    private void BlokPuszczony(object? nadawca, PointerReleasedEventArgs e)
+    private void BlockReleased(object? sender, PointerReleasedEventArgs e)
     {
         // Stan odczytany **przed** oddaniem wskaźnika. Oddanie zgłasza utratę
         // przechwycenia, a ta kończy chwyt i zeruje te trzy pola — czytane po niej
         // dałyby każde puszczenie jako kliknięcie i przeciąganie przestałoby działać.
-        var slot = _wciesniety;
-        var przeciagniete = _przeciagam;
-        var rozciagane = _rozciagam;
+        var slot = _pressed;
+        var dragged = _dragging;
+        var stretched = _stretching;
 
-        PuscBlok();
+        ReleaseBlock();
 
-        if (nadawca is Control block)
+        if (sender is Control block)
         {
             block.Opacity = 1;
             e.Pointer.Capture(null);
@@ -1056,39 +1056,39 @@ public partial class MainView : UserControl
 
         // Puszczenie bez przejechania progu jest kliknięciem. Przycisk robił to za nas,
         // ale przy okazji zjadał wciśnięcie i przeciąganie nie miało jak się zacząć.
-        if (!przeciagniete)
+        if (!dragged)
         {
             if (slot is not null)
             {
-                _kalendarz?.OpenTaskCommand.Execute(slot);
+                _calendar?.OpenTaskCommand.Execute(slot);
             }
 
             return;
         }
 
-        if (_kalendarz is null || slot is null)
+        if (_calendar is null || slot is null)
         {
             return;
         }
 
-        if (Cel(e) is not var (day, wysokosc) || _kalendarz is null)
+        if (Target(e) is not var (day, height) || _calendar is null)
         {
             return;
         }
 
-        if (rozciagane)
+        if (stretched)
         {
-            _ = Probuj("Kalendarz: rozciągnięcie", () => _kalendarz.ResizeAsync(slot, wysokosc));
+            _ = Try("Kalendarz: rozciągnięcie", () => _calendar.ResizeAsync(slot, height));
             return;
         }
 
         // Zadanie idzie naszą drogą, wydarzenie — prosto do kalendarza, z którego
         // pochodzi. To druga rzecz, nie ta sama z innym zapisem.
         _ = slot.TaskId is { } task
-            ? Probuj("Kalendarz: przełożenie", () => _kalendarz.MoveAsync(task, day, wysokosc))
-            : Probuj(
+            ? Try("Kalendarz: przełożenie", () => _calendar.MoveAsync(task, day, height))
+            : Try(
                 "Kalendarz: przeniesienie wydarzenia",
-                () => _kalendarz.MoveEventAsync(slot, day, wysokosc));
+                () => _calendar.MoveEventAsync(slot, day, height));
     }
 
 
@@ -1109,7 +1109,7 @@ public partial class MainView : UserControl
     /// </para>
     /// </remarks>
     /// <summary>Gdzie i czym zaczęło się dotknięcie kwadracika.</summary>
-    private (SlotBox Blok, Point Skad, IPointer Wskaznik)? _dotkniety;
+    private (SlotBox Block, Point From, IPointer Pointer)? _touched;
 
     /// <remarks>
     /// Tak samo jak przy pustej siatce: odhacza puszczenie, a nie naciśnięcie.
@@ -1117,61 +1117,61 @@ public partial class MainView : UserControl
     /// gdzie akurat wylądował palec — odhaczenie zadania przy próbie przesunięcia
     /// widoku jest gorsze od nieodhaczenia go wcale.
     /// </remarks>
-    private void OdhaczNaSiatce(object? nadawca, PointerPressedEventArgs e)
+    private void CompleteOnGrid(object? sender, PointerPressedEventArgs e)
     {
         e.Handled = true;
-        _dotkniety = null;
+        _touched = null;
 
-        if (nadawca is not Control kwadracik || kwadracik.Tag is not SlotBox block)
+        if (sender is not Control checkbox || checkbox.Tag is not SlotBox block)
         {
             return;
         }
 
-        _dotkniety = (block, e.GetPosition(kwadracik), e.Pointer);
+        _touched = (block, e.GetPosition(checkbox), e.Pointer);
     }
 
-    private void OdhaczeniePuszczone(object? nadawca, PointerReleasedEventArgs e)
+    private void CompleteReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var start = _dotkniety;
-        _dotkniety = null;
+        var start = _touched;
+        _touched = null;
 
-        if (start is not { } dotyk
-            || nadawca is not Control kwadracik
-            || _kalendarz is null
-            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        if (start is not { } touch
+            || sender is not Control checkbox
+            || _calendar is null
+            || !ReferenceEquals(touch.Pointer, e.Pointer))
         {
             return;
         }
 
-        var end = e.GetPosition(kwadracik);
+        var end = e.GetPosition(checkbox);
 
-        if (Math.Abs(end.X - dotyk.Skad.X) > ProgPrzeciagniecia
-            || Math.Abs(end.Y - dotyk.Skad.Y) > ProgPrzeciagniecia)
+        if (Math.Abs(end.X - touch.From.X) > DragThreshold
+            || Math.Abs(end.Y - touch.From.Y) > DragThreshold)
         {
             return;
         }
 
         // Jedno polecenie na oba rodzaje bloku i oba kierunki. Okno nie musi wiedzieć,
         // czy pod spodem idzie zapis do bazy, czy zmiana nazwy w cudzym kalendarzu.
-        _ = Probuj("Kalendarz: kwadracik", () => _kalendarz.ToggleCommand.ExecuteAsync(dotyk.Blok));
+        _ = Try("Kalendarz: kwadracik", () => _calendar.ToggleCommand.ExecuteAsync(touch.Block));
     }
 
-    private void OdhaczeniePorzucone(object? nadawca, PointerCaptureLostEventArgs e) =>
-        _dotkniety = null;
+    private void CompleteAbandoned(object? sender, PointerCaptureLostEventArgs e) =>
+        _touched = null;
 
     /// <summary>Kliknięcie w przyciemnione tło zamyka okno szczegółu.</summary>
-    private void TloSzczegolu(object? nadawca, PointerPressedEventArgs e) => _szczegol?.Close();
+    private void DetailBackground(object? sender, PointerPressedEventArgs e) => _detail?.Close();
 
     /// <summary>Kliknięcie obok karty wydarzenia zamyka ją.</summary>
     /// <remarks>
     /// To samo, co przy karcie zadania, i z tego samego powodu: karta zasłania kalendarz,
     /// a najbliższą rzeczą, w którą trafia ręka chcąca wrócić do siatki, jest siatka.
     /// </remarks>
-    private void TloWydarzenia(object? nadawca, PointerPressedEventArgs e) =>
-        _kalendarz?.CloseOpenedCommand.Execute(null);
+    private void EventBackground(object? sender, PointerPressedEventArgs e) =>
+        _calendar?.CloseOpenedCommand.Execute(null);
 
     /// <summary>Zatrzymanie kliknięcia na ramce okna, żeby nie doszło do tła.</summary>
-    private void ZatrzymajKlikniecie(object? nadawca, PointerPressedEventArgs e) =>
+    private void StopClick(object? sender, PointerPressedEventArgs e) =>
         e.Handled = true;
 
     /// <summary>
@@ -1182,11 +1182,11 @@ public partial class MainView : UserControl
     /// potem lista „Więcej". Zamykanie wszystkiego naraz zabierałoby okno, którego
     /// nikt nie chciał zamykać.
     /// </remarks>
-    private void NaKlawiszu(object? nadawca, KeyEventArgs e)
+    private void OnKey(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
         {
-            e.Handled = Cofnij();
+            e.Handled = Undo();
         }
     }
 
@@ -1213,14 +1213,14 @@ public partial class MainView : UserControl
     /// bo po zamknięciu przynajmniej widać, że przycisk działa.
     /// </para>
     /// </remarks>
-    private bool Cofnij()
+    private bool Undo()
     {
         if (DataContext is not MainViewModel model)
         {
             return false;
         }
 
-        if (ZamknijKlawiature())
+        if (HideKeyboard())
         {
             return true;
         }
@@ -1239,7 +1239,7 @@ public partial class MainView : UserControl
         }
         else if (model.IsClarify)
         {
-            _ = Probuj("Skrzynka: wyjście z przetwarzania",
+            _ = Try("Skrzynka: wyjście z przetwarzania",
                 () => model.ShowInboxCommand.ExecuteAsync(null));
         }
         else
@@ -1247,22 +1247,22 @@ public partial class MainView : UserControl
             // Nic otwartego nad ekranem — więc cofnięcie znaczy „poprzedni ekran".
             // Pytanie i czynność osobno, bo odpowiedź musi być w tej chwili: Android
             // nie czeka na wczytanie ekranu, tylko na to, czy zajęliśmy się cofnięciem.
-            if (!model.MaDokadWrocic)
+            if (!model.CanGoBack)
             {
                 return false;
             }
 
-            _ = Probuj("Nawigacja: cofnięcie", model.WrocAsync);
+            _ = Try("Nawigacja: cofnięcie", model.BackAsync);
         }
 
         return true;
     }
 
     /// <summary>Korzeń okna. Trzymany, bo klawiatura zabiera mu wysokość od dołu.</summary>
-    private Grid? _korzen;
+    private Grid? _root;
 
     /// <summary>Czy nasłuch klawiatury jest już podpięty. Podpięcie idzie raz.</summary>
-    private bool _klawiaturaPodpieta;
+    private bool _keyboardHooked;
 
     /// <summary>
     /// Podsunięcie treści nad klawiaturę ekranową.
@@ -1288,21 +1288,21 @@ public partial class MainView : UserControl
     /// Na pulpicie zdarzenie nie przychodzi nigdy i wyściółka zostaje zerowa.
     /// </para>
     /// </remarks>
-    private void PodepnijKlawiature()
+    private void HookKeyboard()
     {
-        if (_klawiaturaPodpieta)
+        if (_keyboardHooked)
         {
             return;
         }
 
-        _korzen ??= this.FindControl<Grid>("Korzen");
+        _root ??= this.FindControl<Grid>("Korzen");
 
-        if (TopLevel.GetTopLevel(this)?.InputPane is not { } klawiatura || _korzen is null)
+        if (TopLevel.GetTopLevel(this)?.InputPane is not { } keyboard || _root is null)
         {
             return;
         }
 
-        _klawiaturaPodpieta = true;
+        _keyboardHooked = true;
 
         // Margines, nie wyściółka: Panel w Avalonii wyściółki nie ma, a korzeniem okna
         // jest siatka. Skutek jest ten sam — okno kończy się nad klawiaturą.
@@ -1310,8 +1310,8 @@ public partial class MainView : UserControl
         // Ze stanu, nie z samej wysokości: przy zamykaniu klawiatura potrafi podać
         // ostatni prostokąt zamiast pustego, a margines zostałby wtedy na zawsze
         // i pod oknem zostałby pas, którego nikt by nie umiał wytłumaczyć.
-        klawiatura.StateChanged += (_, e) =>
-            _korzen.Margin = new Thickness(
+        keyboard.StateChanged += (_, e) =>
+            _root.Margin = new Thickness(
                 0, 0, 0, e.NewState == InputPaneState.Open ? e.EndRect.Height : 0);
     }
 
@@ -1331,19 +1331,19 @@ public partial class MainView : UserControl
     /// polu, które nadal ma ognisko, wraca przy pierwszym dotknięciu ekranu.
     /// </para>
     /// </remarks>
-    private bool ZamknijKlawiature()
+    private bool HideKeyboard()
     {
-        if (TopLevel.GetTopLevel(this) is not { FocusManager: { } ognisko })
+        if (TopLevel.GetTopLevel(this) is not { FocusManager: { } focus })
         {
             return false;
         }
 
-        if (ognisko.GetFocusedElement() is not TextBox)
+        if (focus.GetFocusedElement() is not TextBox)
         {
             return false;
         }
 
-        ognisko.ClearFocus();
+        focus.ClearFocus();
 
         return true;
     }
@@ -1363,7 +1363,7 @@ public partial class MainView : UserControl
     /// nieufności do całego menu — a nieufne menu przestaje być skrótem.
     /// </para>
     /// </remarks>
-    private void NaMenu(object? nadawca, ContextRequestedEventArgs e)
+    private void NaMenu(object? sender, ContextRequestedEventArgs e)
     {
         if (DataContext is not MainViewModel model || e.Source is not Control source)
         {
@@ -1372,25 +1372,25 @@ public partial class MainView : UserControl
 
         // Cokolwiek trzymaliśmy w ręku, menu to kończy. Pozycja „Usuń" wyjmuje blok
         // z siatki, więc puszczenie nie miałoby już dokąd trafić.
-        PuscBlok();
+        ReleaseBlock();
 
         if (TaskId(source) is { } task)
         {
             e.Handled = true;
-            _ = Probuj("Menu: otwarcie", () => PokazMenuAsync(model, source, task));
+            _ = Try("Menu: otwarcie", () => ShowMenuAsync(model, source, task));
 
             return;
         }
 
-        if (Wiersz(source) is { } row)
+        if (Row(source) is { } row)
         {
             e.Handled = true;
-            _ = Probuj("Menu: projekt", () => PokazMenuProjektuAsync(model, source, row));
+            _ = Try("Menu: projekt", () => ShowProjectMenuAsync(model, source, row));
 
             return;
         }
 
-        if (Blok(source) is not { } block)
+        if (Block(source) is not { } block)
         {
             return;
         }
@@ -1400,11 +1400,11 @@ public partial class MainView : UserControl
         {
             e.Handled = true;
 
-            _ = Probuj("Menu: otwarcie", async () =>
+            _ = Try("Menu: otwarcie", async () =>
             {
                 if (await model.FindTaskAsync(id) is { } fromDb)
                 {
-                    await PokazMenuAsync(model, source, fromDb);
+                    await ShowMenuAsync(model, source, fromDb);
                 }
             });
 
@@ -1412,7 +1412,7 @@ public partial class MainView : UserControl
         }
 
         e.Handled = true;
-        PokazMenuWydarzenia(model, source, block);
+        ShowEventMenu(model, source, block);
     }
 
     /// <summary>
@@ -1432,84 +1432,84 @@ public partial class MainView : UserControl
     /// Reszta pól też jest na karcie i to ona jest tu prawdziwą odpowiedzią.
     /// </para>
     /// </remarks>
-    private static void PokazMenuWydarzenia(MainViewModel model, Control source, SlotBox block)
+    private static void ShowEventMenu(MainViewModel model, Control source, SlotBox block)
     {
         var calendarId = model.Calendar;
         var rows = new List<MenuItem>();
 
-        var otworz = new MenuItem { Header = "Otwórz" };
-        otworz.Click += (_, _) => calendarId.OpenTaskCommand.Execute(block);
-        rows.Add(otworz);
+        var open = new MenuItem { Header = "Otwórz" };
+        open.Click += (_, _) => calendarId.OpenTaskCommand.Execute(block);
+        rows.Add(open);
 
         if (block.CanComplete)
         {
-            var odhacz = new MenuItem { Header = block.IsDone ? "Zdejmij ptaszek" : "Odhacz" };
-            odhacz.Click += (_, _) => calendarId.ToggleCommand.Execute(block);
-            rows.Add(odhacz);
+            var complete = new MenuItem { Header = block.IsDone ? "Zdejmij ptaszek" : "Odhacz" };
+            complete.Click += (_, _) => calendarId.ToggleCommand.Execute(block);
+            rows.Add(complete);
         }
 
         new ContextMenu { ItemsSource = rows }.Open(source);
     }
 
     /// <summary>Blok siatki spod wskaźnika.</summary>
-    private static SlotBox? Blok(Control source) =>
+    private static SlotBox? Block(Control source) =>
         source.GetSelfAndVisualAncestors()
             .OfType<Control>()
             .Select(k => k.DataContext)
             .OfType<SlotBox>()
             .FirstOrDefault();
 
-    private async Task PokazMenuAsync(MainViewModel model, Control source, TaskItem task)
+    private async Task ShowMenuAsync(MainViewModel model, Control source, TaskItem task)
     {
-        var today = model.Dzisiaj;
+        var today = model.Today;
         var projects = await model.ActiveProjectsAsync();
-        var kalendarze = await model.WritableCalendarsAsync();
+        var calendars = await model.WritableCalendarsAsync();
 
         // Wyrażenie kolekcji, nie `new object[] { … }`: rozwinięcie `..` jest częścią
         // tego pierwszego, a w inicjalizatorze tablicy dwie kropki znaczą zakres.
         object[] rows =
         [
-            Pozycja("Otwórz szczegół", () => model.OpenTaskAsync(task)),
+            Item("Otwórz szczegół", () => model.OpenTaskAsync(task)),
 
             // Jedna pozycja, dwa kierunki — zależnie od tego, jak zadanie stoi.
             // Obie naraz kazałyby czytać, która jest teraz właściwa.
             task.State == TaskState.Done
-                ? Pozycja("Zdejmij ptaszek", () => model.ReopenTaskAsync(task))
-                : Pozycja("Odhacz", () => model.CompleteTaskAsync(task)),
+                ? Item("Zdejmij ptaszek", () => model.ReopenTaskAsync(task))
+                : Item("Odhacz", () => model.CompleteTaskAsync(task)),
 
             new Separator(),
 
-            Galaz("Ustaw dzień", [
-                Pozycja("Dziś", () => model.SetDateAsync(task, today)),
-                Pozycja("Jutro", () => model.SetDateAsync(task, today.AddDays(1))),
-                Pozycja("Za tydzień", () => model.SetDateAsync(task, today.AddDays(7))),
-                Pozycja("Bez dnia", () => model.SetDateAsync(task, null)),
+            Branch("Ustaw dzień", [
+                Item("Dziś", () => model.SetDateAsync(task, today)),
+                Item("Jutro", () => model.SetDateAsync(task, today.AddDays(1))),
+                Item("Za tydzień", () => model.SetDateAsync(task, today.AddDays(7))),
+                Item("Bez dnia", () => model.SetDateAsync(task, null)),
             ]),
 
-            Galaz("Waga", [.. PriorityChoice.All.Select(w =>
-                Pozycja(w.Label, () => model.SetPriorityAsync(task, w.Value)))]),
+            Branch("Waga", [.. PriorityChoice.All.Select(w =>
+                Item(w.Label, () => model.SetPriorityAsync(task, w.Value)))]),
 
             // Oszacowanie i siła są tu, bo bez nich zadanie nigdy nie wypłynie
             // w „Teraz”: ten ekran pyta „ile mam czasu i sił”, a zadanie, które
             // na to nie odpowiada, nie ma jak zostać wybrane. Do dziś dawało się
             // je wpisać tylko przy przetwarzaniu skrzynki albo w szczegółach.
-            Galaz("Ile zajmie", [.. EstimateChoice.All.Select(m =>
-                Pozycja(
+            Branch("Ile zajmie", [.. EstimateChoice.All.Select(m =>
+                Item(
                     // „Bez znaczenia" jest odpowiedzią filtra, nie zadania: tu ta
                     // sama wartość znaczy, że oszacowania **nie ma**.
                     m.Value is null ? "bez oszacowania" : m.Label,
                     () => model.SetEstimateAsync(task, m.Value)))]),
 
-            Galaz("Ile sił", [.. EnergyChoice.All.Select(e =>
-                Pozycja(e.Label, () => model.SetEnergyAsync(task, e.Value)))]),
+            Branch("Ile sił", [.. EnergyChoice.All.Select(e =>
+                Item(e.Label, () => model.SetEnergyAsync(task, e.Value)))]),
 
-            Galaz("Rytm", [.. RepeatChoice.All.Select(r =>
-                Pozycja(r.Label, () => model.SetRecurrenceAsync(task, r.Kind)))]),
+            Branch("Rytm", [.. RepeatChoice.All.Select(r =>
+                Item(r.Label, () => model.SetRecurrenceAsync(task, r.Kind)))]),
 
-            Galaz("Projekt", [
-                Pozycja("Bez projektu", () => model.SetProjectAsync(task, null)),
+            Branch("Projekt", [
+                Item("Bez projektu", () => model.SetProjectAsync(task, null)),
                 .. projects.Select(p =>
-                    Pozycja(p.Outcome, () => model.SetProjectAsync(task, p.Id))),
+                    Item(p.Outcome, () => model.SetProjectAsync(task, p.Id))),
             ]),
 
             new Separator(),
@@ -1518,20 +1518,20 @@ public partial class MainView : UserControl
             // rodzinny mieści i „odebrać dziecko”, i „kupić prezent”, a widzieć
             // je mają różne osoby. Gałąź pokazuje się tylko wtedy, gdy jest dokąd
             // udostępniać — pozycja bez skutku uczy nieufności do całego menu.
-            .. Udostepnianie(model, task, kalendarze),
+            .. Sharing(model, task, calendars),
 
-            Pozycja("Weź na dziś", () => model.FocusTaskAsync(task)),
-            Pozycja("Pokaż w kalendarzu", () => model.ShowInCalendarAsync(task)),
-            Pozycja("Zamień na notatkę", () => model.ToNoteAsync(task)),
+            Item("Weź na dziś", () => model.FocusTaskAsync(task)),
+            Item("Pokaż w kalendarzu", () => model.ShowInCalendarAsync(task)),
+            Item("Zamień na notatkę", () => model.ToNoteAsync(task)),
             new Separator(),
-            Pozycja("Usuń", () => model.TrashTaskAsync(task)),
+            Item("Usuń", () => model.TrashTaskAsync(task)),
         ];
 
         new MenuFlyout { ItemsSource = rows }.ShowAt(source, showAtPointer: true);
     }
 
     /// <summary>Wiersz ekranu „Projekty” spod wskaźnika.</summary>
-    private static ProjectTreeRow? Wiersz(Control source) =>
+    private static ProjectTreeRow? Row(Control source) =>
         source.GetSelfAndVisualAncestors()
             .OfType<Control>()
             .Select(k => k.DataContext)
@@ -1553,10 +1553,10 @@ public partial class MainView : UserControl
     /// przodka znaczyłoby wyrażenie, które kompiluje się i nie działa — a błędne
     /// dowiązanie nie daje żadnego objawu poza przyciskiem, który nic nie robi.
     /// </remarks>
-    private void NaWpisieMiesiaca(object? nadawca, PointerReleasedEventArgs e)
+    private void OnMonthEntry(object? sender, PointerReleasedEventArgs e)
     {
         if (DataContext is not MainViewModel model
-            || nadawca is not Control row
+            || sender is not Control row
             || row.DataContext is not MonthEntry entry)
         {
             return;
@@ -1578,30 +1578,30 @@ public partial class MainView : UserControl
     /// miesiąca. Przejechanie jest zresztą przechwytywane wcześniej i nie dochodzi
     /// tutaj wcale; ta zmiana jest po to, żeby nie polegać na tamtej.
     /// </remarks>
-    private void NaDniuMiesiaca(object? nadawca, PointerReleasedEventArgs e)
+    private void OnMonthDay(object? sender, PointerReleasedEventArgs e)
     {
         if (DataContext is not MainViewModel model
-            || nadawca is not Control komorka
-            || komorka.DataContext is not MonthCell day)
+            || sender is not Control cell
+            || cell.DataContext is not MonthCell day)
         {
             return;
         }
 
         e.Handled = true;
-        _ = Probuj("Kalendarz: dzień z miesiąca", () => model.Calendar.OpenMonthDayCommand.ExecuteAsync(day));
+        _ = Try("Kalendarz: dzień z miesiąca", () => model.Calendar.OpenMonthDayCommand.ExecuteAsync(day));
     }
 
-    private void NaBarwie(object? nadawca, PointerPressedEventArgs e)
+    private void OnColor(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not MainViewModel model
-            || nadawca is not Control kwadracik
-            || kwadracik.DataContext is not ProjectTreeRow row)
+            || sender is not Control checkbox
+            || checkbox.DataContext is not ProjectTreeRow row)
         {
             return;
         }
 
         e.Handled = true;
-        PokazPalete(model, kwadracik, row);
+        ShowPalette(model, checkbox, row);
     }
 
     /// <summary>
@@ -1622,12 +1622,12 @@ public partial class MainView : UserControl
     /// w dzienniku zmian, z którym potem scala się drugie urządzenie.
     /// </para>
     /// </remarks>
-    private void PokazPalete(MainViewModel model, Control source, ProjectTreeRow row)
+    private void ShowPalette(MainViewModel model, Control source, ProjectTreeRow row)
     {
         var kolo = new ColorView
         {
-            Color = Color.TryParse(row.Color ?? string.Empty, out var biezaca)
-                ? biezaca
+            Color = Color.TryParse(row.Color ?? string.Empty, out var current)
+                ? current
                 : Colors.SlateGray,
             IsAlphaEnabled = false,
             IsAlphaVisible = false,
@@ -1636,28 +1636,28 @@ public partial class MainView : UserControl
 
         var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
 
-        var ustaw = new Button { Content = "Ustaw", Padding = new Thickness(14, 6) };
-        var wyczysc = new Button { Content = "Bez barwy", Padding = new Thickness(14, 6) };
+        var set = new Button { Content = "Ustaw", Padding = new Thickness(14, 6) };
+        var clear = new Button { Content = "Bez barwy", Padding = new Thickness(14, 6) };
 
-        ustaw.Click += (_, _) =>
+        set.Click += (_, _) =>
         {
             flyout.Hide();
             var c = kolo.Color;
-            _ = Probuj(
+            _ = Try(
                 "Barwa: ustawienie",
                 () => model.SetRowColorAsync(row, $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
         };
 
-        wyczysc.Click += (_, _) =>
+        clear.Click += (_, _) =>
         {
             flyout.Hide();
-            _ = Probuj("Barwa: zdjęcie", () => model.SetRowColorAsync(row, null));
+            _ = Try("Barwa: zdjęcie", () => model.SetRowColorAsync(row, null));
         };
 
         // Barwy przygotowane zostają nad kołem, jednym kliknięciem. Koło jest po to,
         // żeby dało się wyjść poza listę, a nie po to, żeby za każdym razem trzeba
         // było trafiać myszą w odcień, który i tak jest na liście.
-        var szybkie = new WrapPanel();
+        var quick = new WrapPanel();
 
         foreach (var color in ColorChoice.All.Where(b => b.Value is not null))
         {
@@ -1665,7 +1665,7 @@ public partial class MainView : UserControl
             // Barwa na ramce w środku, nie na tle przycisku: tło przycisku motyw
             // przemalowuje przy najechaniu, a kwadracik, który zmienia kolor pod
             // wskaźnikiem, przestaje pokazywać to, co ma pokazywać.
-            var kwadracik = new Button
+            var checkbox = new Button
             {
                 Margin = new Thickness(0, 0, 6, 6),
                 Padding = new Thickness(3),
@@ -1680,13 +1680,13 @@ public partial class MainView : UserControl
                 },
             };
 
-            kwadracik.Click += (_, _) =>
+            checkbox.Click += (_, _) =>
             {
                 flyout.Hide();
-                _ = Probuj("Barwa: ustawienie", () => model.SetRowColorAsync(row, choice.Value));
+                _ = Try("Barwa: ustawienie", () => model.SetRowColorAsync(row, choice.Value));
             };
 
-            szybkie.Children.Add(kwadracik);
+            quick.Children.Add(checkbox);
         }
 
         flyout.Content = new StackPanel
@@ -1694,13 +1694,13 @@ public partial class MainView : UserControl
             Spacing = 10,
             Children =
             {
-                szybkie,
+                quick,
                 kolo,
                 new StackPanel
                 {
                     Orientation = Avalonia.Layout.Orientation.Horizontal,
                     Spacing = 8,
-                    Children = { ustaw, wyczysc },
+                    Children = { set, clear },
                 },
             },
         };
@@ -1720,31 +1720,31 @@ public partial class MainView : UserControl
     /// Powód odmowy sprawdzany przed pokazaniem menu: pozycja, która po kliknięciu nic
     /// nie robi, uczy nieufności do całego menu.
     /// </remarks>
-    private async Task PokazMenuProjektuAsync(MainViewModel model, Control source, ProjectTreeRow row)
+    private async Task ShowProjectMenuAsync(MainViewModel model, Control source, ProjectTreeRow row)
     {
         var blocker = await model.WhyCannotDeleteRowAsync(row);
 
         var rows = new List<object>
         {
-            Pozycja("Zmień nazwę…", () =>
+            Item("Zmień nazwę…", () =>
             {
-                PokazPoleNazwy(
+                ShowNameField(
                     source, row.Label, "Zapisz",
                     name => model.RenameRowAsync(row, name));
 
                 return Task.CompletedTask;
             }),
-            Pozycja(row.AddLabel, () =>
+            Item(row.AddLabel, () =>
             {
-                PokazPoleNazwy(
+                ShowNameField(
                     source, string.Empty, "Załóż",
                     name => model.AddProjectAsync(row, name));
 
                 return Task.CompletedTask;
             }),
-            Pozycja("Barwa…", () =>
+            Item("Barwa…", () =>
             {
-                PokazPalete(model, source, row);
+                ShowPalette(model, source, row);
                 return Task.CompletedTask;
             }),
         };
@@ -1753,15 +1753,15 @@ public partial class MainView : UserControl
         // jest podziałem odpowiedzialności, a kalendarz Google jest tym samym podziałem
         // widzianym z zewnątrz — projekt jest o poziom za drobny, żeby zakładać dla
         // niego osobny kalendarz.
-        if (row.IsArea && await CalendarForAreaAsync(model, row) is { } kalendarze)
+        if (row.IsArea && await CalendarForAreaAsync(model, row) is { } calendars)
         {
-            rows.Add(kalendarze);
+            rows.Add(calendars);
         }
 
         rows.Add(new Separator());
 
         rows.Add(blocker is null
-            ? Pozycja(row.IsArea ? "Usuń obszar" : "Usuń projekt",
+            ? Item(row.IsArea ? "Usuń obszar" : "Usuń projekt",
                 () => model.DeleteRowAsync(row))
             : new MenuItem { Header = blocker, IsEnabled = false });
 
@@ -1789,9 +1789,9 @@ public partial class MainView : UserControl
     /// </remarks>
     private async Task<MenuItem?> CalendarForAreaAsync(MainViewModel model, ProjectTreeRow row)
     {
-        var kalendarze = await model.WritableCalendarsAsync();
+        var calendars = await model.WritableCalendarsAsync();
 
-        if (kalendarze.Count == 0)
+        if (calendars.Count == 0)
         {
             return null;
         }
@@ -1800,15 +1800,15 @@ public partial class MainView : UserControl
 
         var rows = new List<MenuItem>
         {
-            Pozycja(now is null ? "✓ żaden" : "żaden",
+            Item(now is null ? "✓ żaden" : "żaden",
                 () => model.SetAreaCalendarAsync(row, null)),
         };
 
-        rows.AddRange(kalendarze.Select(k => Pozycja(
+        rows.AddRange(calendars.Select(k => Item(
             now == k.Id ? $"✓ {k.Name}" : k.Name,
             () => model.SetAreaCalendarAsync(row, k.Id))));
 
-        return Galaz("Kalendarz Google", rows);
+        return Branch("Kalendarz Google", rows);
     }
 
     /// <summary>
@@ -1819,17 +1819,17 @@ public partial class MainView : UserControl
     /// kwadracik barwy i liczby — a nazwę zmienia się raz na parę miesięcy. Enter
     /// zapisuje, bo po wpisaniu ręka i tak tam idzie.
     /// </remarks>
-    private void PokazPoleNazwy(
-        Control source, string poczatkowa, string przycisk, Func<string, Task> work)
+    private void ShowNameField(
+        Control source, string initial, string button, Func<string, Task> work)
     {
-        var pole = new TextBox { Text = poczatkowa, Width = 260 };
+        var pole = new TextBox { Text = initial, Width = 260 };
         var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
 
         void Save()
         {
             var name = pole.Text ?? string.Empty;
             flyout.Hide();
-            _ = Probuj($"Struktura: {przycisk}", () => work(name));
+            _ = Try($"Struktura: {button}", () => work(name));
         }
 
         pole.KeyDown += (_, args) =>
@@ -1841,10 +1841,10 @@ public partial class MainView : UserControl
             }
         };
 
-        var zapisz = new Button { Content = przycisk, Padding = new Thickness(14, 6) };
-        zapisz.Click += (_, _) => Save();
+        var save = new Button { Content = button, Padding = new Thickness(14, 6) };
+        save.Click += (_, _) => Save();
 
-        flyout.Content = new StackPanel { Spacing = 8, Children = { pole, zapisz } };
+        flyout.Content = new StackPanel { Spacing = 8, Children = { pole, save } };
         flyout.ShowAt(source);
 
         pole.Focus();
@@ -1860,24 +1860,24 @@ public partial class MainView : UserControl
     /// wyniesione poza główny dostaje dodatkowo powrót — bo to jest jedyny sposób,
     /// żeby zniknęło z cudzego widoku, nie znikając ze swojego.
     /// </remarks>
-    private IReadOnlyList<object> Udostepnianie(
-        MainViewModel model, TaskItem task, IReadOnlyList<CalendarSource> kalendarze)
+    private IReadOnlyList<object> Sharing(
+        MainViewModel model, TaskItem task, IReadOnlyList<CalendarSource> calendars)
     {
-        var gdzieJest = task.SharedCalendarId;
+        var whereIs = task.SharedCalendarId;
         var primary = model.MainCalendarId;
 
-        var pozostale = kalendarze.Where(k => k.Id != gdzieJest).ToList();
+        var rest = calendars.Where(k => k.Id != whereIs).ToList();
         var rows = new List<object>();
 
-        if (pozostale.Count > 0)
+        if (rest.Count > 0)
         {
-            rows.Add(Galaz("Przenieś do kalendarza", [.. pozostale.Select(k =>
-                Pozycja(k.Name, () => model.ShareTaskAsync(task, k.Id)))]));
+            rows.Add(Branch("Przenieś do kalendarza", [.. rest.Select(k =>
+                Item(k.Name, () => model.ShareTaskAsync(task, k.Id)))]));
         }
 
-        if (gdzieJest is not null && primary is not null && gdzieJest != primary)
+        if (whereIs is not null && primary is not null && whereIs != primary)
         {
-            rows.Add(Pozycja(
+            rows.Add(Item(
                 "Z powrotem na kalendarz główny", () => model.UnshareTaskAsync(task)));
         }
 
@@ -1885,27 +1885,27 @@ public partial class MainView : UserControl
     }
 
     /// <summary>Pozycja menu. Woła metodę wprost — wyjątek ma dokąd trafić.</summary>
-    private MenuItem Pozycja(string napis, Func<Task> work)
+    private MenuItem Item(string label, Func<Task> work)
     {
-        var item = new MenuItem { Header = napis };
-        item.Click += (_, _) => _ = Probuj($"Menu: {napis}", work);
+        var item = new MenuItem { Header = label };
+        item.Click += (_, _) => _ = Try($"Menu: {label}", work);
 
         return item;
     }
 
-    private static MenuItem Galaz(string napis, IReadOnlyList<MenuItem> rows) =>
-        new() { Header = napis, ItemsSource = rows };
+    private static MenuItem Branch(string label, IReadOnlyList<MenuItem> rows) =>
+        new() { Header = label, ItemsSource = rows };
 
     /// <summary>Zadanie spod wskaźnika — niezależnie od tego, czym jest wiersz.</summary>
     private static TaskItem? TaskId(Control source)
     {
-        foreach (var przodek in source.GetSelfAndVisualAncestors().OfType<Control>())
+        foreach (var ancestor in source.GetSelfAndVisualAncestors().OfType<Control>())
         {
-            var found = przodek.DataContext switch
+            var found = ancestor.DataContext switch
             {
-                TaskItem wprost => wprost,
+                TaskItem directly => directly,
                 TaskRow row => row.Task,
-                WaitingItem czekajace => czekajace.Task,
+                WaitingItem pending => pending.Task,
                 NowPick choice => choice.Task,
                 _ => null,
             };
@@ -1928,7 +1928,7 @@ public partial class MainView : UserControl
     /// nie miała **żadnej** drogi do edycji: zadanie dało się tam zobaczyć i nic
     /// więcej. Lista, z której nie da się otworzyć tego, co się widzi, jest ślepa.
     /// </remarks>
-    private void OtworzZListy(object? nadawca, RoutedEventArgs e)
+    private void OpenFromList(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel model)
         {
@@ -1938,26 +1938,26 @@ public partial class MainView : UserControl
         // Z zaznaczenia listy, a gdy go nie ma — z wiersza pod wskaźnikiem. Ekran
         // „Teraz" nie jest listą do zaznaczania, tylko odpowiedzią na pytanie, więc
         // jego wiersze nie mają zaznaczenia w ogóle.
-        var task = (nadawca as ListBox)?.SelectedItem switch
+        var task = (sender as ListBox)?.SelectedItem switch
         {
-            TaskItem wprost => wprost,
+            TaskItem directly => directly,
             TaskRow row => row.Task,
-            WaitingItem czekajace => czekajace.Task,
+            WaitingItem pending => pending.Task,
             NowPick choice => choice.Task,
             _ => e.Source is Control source ? TaskId(source) : null,
         };
 
         if (task is not null)
         {
-            _ = Probuj("Lista: otwarcie zadania", () => model.Detail.LoadAsync(task));
+            _ = Try("Lista: otwarcie zadania", () => model.Detail.LoadAsync(task));
         }
     }
 
     /// <summary>Dwuklik na notatce otwiera ją do czytania i poprawiania.</summary>
-    private void OtworzNotatke(object? nadawca, RoutedEventArgs e)
+    private void OpenNote(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel model
-            && nadawca is ListBox list
+            && sender is ListBox list
             && list.SelectedItem is Note note)
         {
             model.Notes.OpenCommand.Execute(note);
@@ -1965,25 +1965,25 @@ public partial class MainView : UserControl
     }
 
     /// <summary>Kliknięcie w pasek całodniowy — zadanie na cały dzień też ma szczegół.</summary>
-    private void OtworzCalodniowe(object? nadawca, RoutedEventArgs e)
+    private void OpenAllDay(object? sender, RoutedEventArgs e)
     {
-        if (nadawca is Control przycisk && przycisk.Tag is AllDayBox entry)
+        if (sender is Control button && button.Tag is AllDayBox entry)
         {
-            _kalendarz?.OpenAllDay(entry);
+            _calendar?.OpenAllDay(entry);
         }
     }
 
     private void TaskId(string co, Func<TaskDetailViewModel, Task> work)
     {
-        if (_szczegol is not { } model)
+        if (_detail is not { } model)
         {
             return;
         }
 
-        _ = Probuj(co, () => work(model));
+        _ = Try(co, () => work(model));
     }
 
-    private async Task Probuj(string co, Func<Task> work)
+    private async Task Try(string co, Func<Task> work)
     {
         try
         {
@@ -1999,10 +1999,10 @@ public partial class MainView : UserControl
         }
     }
 
-    private CalendarViewModel? _kalendarz;
+    private CalendarViewModel? _calendar;
 
     /// <summary>Gdzie i czym zaczęło się dotknięcie pustej siatki.</summary>
-    private (DateOnly Day, Point Skad, IPointer Wskaznik)? _dotknieta;
+    private (DateOnly Day, Point From, IPointer Pointer)? _touched;
 
     /// <summary>
     /// Dotknięcie pustej siatki zakłada nową rzecz na tej godzinie.
@@ -2023,62 +2023,62 @@ public partial class MainView : UserControl
     /// przewijania i nie zakłada niczego.
     /// </para>
     /// </remarks>
-    private void NowaRzeczNaSiatce(object? nadawca, PointerPressedEventArgs e)
+    private void NewThingOnGrid(object? sender, PointerPressedEventArgs e)
     {
-        _dotknieta = null;
+        _touched = null;
 
-        if (nadawca is not Control warstwa || warstwa.Tag is not DateOnly day)
+        if (sender is not Control layer || layer.Tag is not DateOnly day)
         {
             return;
         }
 
         // Tylko lewy przycisk. Prawy i środkowy też dają PointerPressed, a zakładanie
         // zadania menu podręcznym byłoby niespodzianką.
-        if (!e.GetCurrentPoint(warstwa).Properties.IsLeftButtonPressed)
+        if (!e.GetCurrentPoint(layer).Properties.IsLeftButtonPressed)
         {
             return;
         }
 
-        _dotknieta = (day, e.GetPosition(warstwa), e.Pointer);
+        _touched = (day, e.GetPosition(layer), e.Pointer);
     }
 
-    private void SiatkaPuszczona(object? nadawca, PointerReleasedEventArgs e)
+    private void GridReleased(object? sender, PointerReleasedEventArgs e)
     {
-        var start = _dotknieta;
-        _dotknieta = null;
+        var start = _touched;
+        _touched = null;
 
-        if (start is not { } dotyk
-            || nadawca is not Control warstwa
-            || !ReferenceEquals(dotyk.Wskaznik, e.Pointer))
+        if (start is not { } touch
+            || sender is not Control layer
+            || !ReferenceEquals(touch.Pointer, e.Pointer))
         {
             return;
         }
 
-        var end = e.GetPosition(warstwa);
+        var end = e.GetPosition(layer);
 
-        if (Math.Abs(end.X - dotyk.Skad.X) > ProgPrzeciagniecia
-            || Math.Abs(end.Y - dotyk.Skad.Y) > ProgPrzeciagniecia)
+        if (Math.Abs(end.X - touch.From.X) > DragThreshold
+            || Math.Abs(end.Y - touch.From.Y) > DragThreshold)
         {
             return;
         }
 
         // Z miejsca naciśnięcia, nie puszczenia: godzina ma być tą, w którą się trafiło,
         // a nie tą, na którą palec zjechał o trzy punkty.
-        _kalendarz?.NewAt(dotyk.Day, dotyk.Skad.Y);
+        _calendar?.NewAt(touch.Day, touch.From.Y);
     }
 
     /// <summary>Przewijanie przejęło wskaźnik — to nie było dotknięcie siatki.</summary>
-    private void SiatkaPorzucona(object? nadawca, PointerCaptureLostEventArgs e) =>
-        _dotknieta = null;
+    private void GridAbandoned(object? sender, PointerCaptureLostEventArgs e) =>
+        _touched = null;
 
     /// <summary>Szerokość kolumny godzin z lewej. Odpowiednik szerokości w XAML-u.</summary>
-    private const double SlupekGodzin = 52;
+    private const double HourColumn = 52;
 
     /// <summary>Zapas na suwak i odstęp między kolumnami.</summary>
     private const double Capacity = 14;
 
-    private void NaZmianieSzerokosci(object? nadawca, SizeChangedEventArgs e) =>
-        Szerokosc(e.NewSize.Width);
+    private void OnWidthChange(object? sender, SizeChangedEventArgs e) =>
+        Width(e.NewSize.Width);
 
     /// <summary>
     /// Przesuwanie kreski bieżącej godziny.
@@ -2089,53 +2089,53 @@ public partial class MainView : UserControl
     /// godzinę sprzed kilku godzin i wyglądała jak błąd w strefie czasowej.
     /// Co minutę, bo częściej nie ma czego pokazywać: minuta to jeden punkt siatki.
     /// </remarks>
-    private DispatcherTimer? _minutnik;
+    private DispatcherTimer? _timer;
 
     /// <summary>Pasek z nazwami dni. Stoi nad siatką i jedzie z nią tylko w poziomie.</summary>
-    private ScrollViewer? _naglowki;
+    private ScrollViewer? _headings;
 
     private void WireClock(MainViewModel model)
     {
-        _minutnik ??= new DispatcherTimer(
+        _timer ??= new DispatcherTimer(
             TimeSpan.FromMinutes(1),
             DispatcherPriority.Background,
-            (_, _) => Przebieg(model));
+            (_, _) => Run(model));
 
-        _minutnik.Start();
+        _timer.Start();
 
         // Minutnik chodzi wyłącznie wtedy, gdy ktoś patrzy. Zob. Uspienie: w tle ta sama
         // praca jest zbędna, bo robią ją Budzik i pracownik synchronizacji, i ryzykowna,
         // bo schowaną aplikację system zamraża — także w środku zapytania do bazy albo
         // odczytu z sieci. Ustawienie, a nie dopisanie się do zdarzenia: okno bywa
         // składane po raz drugi, a dwa podpięcia znaczyłyby dwa przebiegi na minutę.
-        Uspienie.Zasnij = () => _minutnik?.Stop();
+        Sleep.OnSleep = () => _timer?.Stop();
 
-        Uspienie.Obudz = () =>
+        Sleep.OnWake = () =>
         {
-            _minutnik?.Start();
+            _timer?.Start();
 
             // Od razu, nie za minutę. Wracając po godzinie zastaje się kreskę bieżącej
             // godziny sprzed godziny i listę przypomnień sprzed godziny — czyli ekran,
             // który wygląda na zepsuty, choć czeka tylko na najbliższy przebieg.
-            Przebieg(model);
+            Run(model);
         };
 
-        PodepnijPowrotDoOkna(model);
+        HookWindowReturn(model);
     }
 
     /// <summary>Jeden przebieg minutnika. Osobno, bo powrót na wierzch robi to samo.</summary>
-    private void Przebieg(MainViewModel model)
+    private void Run(MainViewModel model)
     {
         model.Calendar.Tick();
 
         // Przypomnienia razem z kreską „teraz": jedno i drugie jest odpowiedzią
         // na upływ czasu, a drugi minutnik na tę samą minutę byłby drugim
         // miejscem do zatrzymania i do zapomnienia o zatrzymaniu.
-        _ = Probuj("Przypomnienia: sprawdzenie", model.CheckRemindersAsync);
+        _ = Try("Przypomnienia: sprawdzenie", model.CheckRemindersAsync);
     }
 
     /// <summary>Czy powrót do okna jest już podsłuchiwany. Podpięcie idzie raz.</summary>
-    private bool _powrotPodpiety;
+    private bool _returnHooked;
 
     /// <summary>
     /// Powrót do okna sięga na Dysk od razu, bez czekania na przerwę.
@@ -2154,42 +2154,42 @@ public partial class MainView : UserControl
     /// haczyka, żeby nadrobić.
     /// </para>
     /// </remarks>
-    private void PodepnijPowrotDoOkna(MainViewModel model)
+    private void HookWindowReturn(MainViewModel model)
     {
-        if (_powrotPodpiety || TopLevel.GetTopLevel(this) is not Window okno)
+        if (_returnHooked || TopLevel.GetTopLevel(this) is not Window window)
         {
             return;
         }
 
-        _powrotPodpiety = true;
+        _returnHooked = true;
 
-        okno.Activated += (_, _) =>
-            _ = Probuj("Synchronizacja po powrocie", model.SynchronizujPoPowrocieAsync);
+        window.Activated += (_, _) =>
+            _ = Try("Synchronizacja po powrocie", model.SyncAfterReturnAsync);
     }
 
-    private void NaPrzewinieciuSiatki(object? nadawca, ScrollChangedEventArgs e)
+    private void OnGridScroll(object? sender, ScrollChangedEventArgs e)
     {
-        if (_siatka is not null && _naglowki is not null)
+        if (_grid is not null && _headings is not null)
         {
-            _naglowki.Offset = new Vector(_siatka.Offset.X, 0);
+            _headings.Offset = new Vector(_grid.Offset.X, 0);
         }
     }
 
-    private void Szerokosc(double calosc)
+    private void Width(double whole)
     {
-        if (calosc > 0)
+        if (whole > 0)
         {
-            _kalendarz?.SetAvailableWidth(calosc - SlupekGodzin - Capacity);
+            _calendar?.SetAvailableWidth(whole - HourColumn - Capacity);
         }
     }
 
-    private void NaProsbeOPrzewiniecie(double score)
+    private void OnScrollRequest(double score)
     {
-        _docelowe = score;
-        Przewin();
+        _target = score;
+        Scroll();
     }
 
-    private void NaUkladzie(object? nadawca, EventArgs e) => Przewin();
+    private void OnLayout(object? sender, EventArgs e) => Scroll();
 
     /// <summary>
     /// Ustawienie przesunięcia, gdy jest już czym przesuwać.
@@ -2201,17 +2201,17 @@ public partial class MainView : UserControl
     /// cokolwiek się nie udało. Dlatego prośba czeka na pierwszy układ, w którym
     /// siatka ma już rozmiar, i dopiero wtedy jest realizowana — raz.
     /// </remarks>
-    private void Przewin()
+    private void Scroll()
     {
-        if (_docelowe is not { } cel || _siatka is null || _siatka.Extent.Height <= 0)
+        if (_target is not { } target || _grid is null || _grid.Extent.Height <= 0)
         {
             return;
         }
 
-        var zapas = Math.Max(0, _siatka.Extent.Height - _siatka.Viewport.Height);
+        var slack = Math.Max(0, _grid.Extent.Height - _grid.Viewport.Height);
 
-        _siatka.Offset = new Vector(_siatka.Offset.X, Math.Clamp(cel, 0, zapas));
-        _docelowe = null;
+        _grid.Offset = new Vector(_grid.Offset.X, Math.Clamp(target, 0, slack));
+        _target = null;
     }
 
     /// <summary>
@@ -2225,22 +2225,22 @@ public partial class MainView : UserControl
     /// </remarks>
     private void WirePicker()
     {
-        if (DataContext is not MainViewModel model || TopLevel.GetTopLevel(this) is not { } okno)
+        if (DataContext is not MainViewModel model || TopLevel.GetTopLevel(this) is not { } window)
         {
             return;
         }
 
         // Pierwsze rozstrzygnięcie układu: zdarzenie rozmiaru potrafi wypaść przed
         // podstawieniem modelu, a wtedy nie miałby go kto ustawić.
-        model.IsNarrow = Bounds.Width > 0 && Bounds.Width < WidokWaski;
+        model.IsNarrow = Bounds.Width > 0 && Bounds.Width < NarrowView;
 
         WireCalendar(model);
         WireClock(model);
-        PodepnijKlawiature();
+        HookKeyboard();
 
         model.Settings.SaveRequested = async name =>
         {
-            var file = await okno.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            var file = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Kopia zapasowa Marshala",
                 SuggestedFileName = name,
@@ -2253,14 +2253,14 @@ public partial class MainView : UserControl
 
         model.Settings.OpenRequested = async () =>
         {
-            var pliki = await okno.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = "Wczytaj kopię Marshala",
                 AllowMultiple = false,
                 FileTypeFilter = [Json],
             });
 
-            return pliki.Count == 0 ? null : await pliki[0].OpenReadAsync();
+            return files.Count == 0 ? null : await files[0].OpenReadAsync();
         };
     }
 

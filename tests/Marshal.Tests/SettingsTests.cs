@@ -165,10 +165,10 @@ public sealed class SettingsTests : IDisposable
         // i raz na dobę cała aplikacja pracowałaby na wczorajszym dniu.
         // Typ interfejsu, nie klasy: Today jest domyślną implementacją składową
         // interfejsu, a takich nie widać przez typ implementujący.
-        IClock zegar = new StalyMoment(
+        IClock clock = new StalyMoment(
             new DateTimeOffset(2026, 9, 15, 0, 30, 0, TimeSpan.FromHours(2)));
 
-        zegar.Today.Should().Be(new DateOnly(2026, 9, 15));
+        clock.Today.Should().Be(new DateOnly(2026, 9, 15));
     }
 
     public void Dispose()

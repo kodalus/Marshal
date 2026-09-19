@@ -63,12 +63,12 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         nasluch.Start();
 
         // Własny zegar doliczony do odwołania z zewnątrz: bez niego czekanie nie ma końca.
-        using var zegar = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        zegar.CancelAfter(Cierpliwosc);
+        using var clock = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        clock.CancelAfter(Cierpliwosc);
 
         // Zatrzymanie nasłuchu jest tu jedyną drogą przerwania czekania: gniazdo
         // w trakcie przyjmowania połączenia nie ogląda się na znacznik odwołania.
-        await using var przerwanie = zegar.Token.Register(nasluch.Stop);
+        await using var przerwanie = clock.Token.Register(nasluch.Stop);
 
         // Druga droga powrotu, na wypadek gdyby pierwsza nie doszła: adres przepisany
         // z paska przeglądarki. Zgłoszona **przed** otwarciem przeglądarki, żeby okno
@@ -81,14 +81,14 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
 
         try
         {
-            Otworz(url.Build());
+            Open(url.Build());
 
             // Dymek, bo przeglądarka przykrywa aplikację i bez niego nie widać, czy
             // Marshal w ogóle doszedł do tego kroku. Przy nieudanym powrocie to jest
             // pierwsza rzecz, którą trzeba wiedzieć.
             Powiedz($"Czekam na zgodę Google — 127.0.0.1:{_port}");
 
-            var gniazdo = Gniazdo(nasluch, zegar.Token);
+            var gniazdo = Gniazdo(nasluch, clock.Token);
 
             if (await Task.WhenAny(gniazdo, reczny) == reczny)
             {
@@ -128,9 +128,9 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         while (true)
         {
             using var connection = await nasluch.AcceptTcpClientAsync(ct);
-            var strumien = connection.GetStream();
+            var stream = connection.GetStream();
 
-            if (await TaskId(strumien, ct) is not { } address)
+            if (await TaskId(stream, ct) is not { } address)
             {
                 continue;
             }
@@ -141,14 +141,14 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
             // Żądanie bez kodu i bez błędu nie jest powrotem ze zgody.
             if (!pola.ContainsKey("code") && !pola.ContainsKey("error"))
             {
-                await Odpisz(strumien, "Marshal czeka na zgodę.", ct);
+                await Odpisz(stream, "Marshal czeka na zgodę.", ct);
                 continue;
             }
 
-            await Odpisz(strumien, "Zgoda przyjęta. Możesz wrócić do Marshala.", ct);
+            await Odpisz(stream, "Zgoda przyjęta. Możesz wrócić do Marshala.", ct);
 
             // Powrót do aplikacji sam, bez szukania jej w przełączniku okien.
-            Wroc();
+            Back();
 
             return new AuthorizationCodeResponseUrl(pola);
         }
@@ -172,7 +172,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         return port;
     }
 
-    private void Otworz(Uri address)
+    private void Open(Uri address)
     {
         var zamiar = new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(address.ToString()));
 
@@ -181,7 +181,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
         kontekst.StartActivity(zamiar);
     }
 
-    private void Wroc()
+    private void Back()
     {
         var zamiar = new Intent(kontekst, typeof(MainActivity));
         zamiar.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop | ActivityFlags.ClearTop);
@@ -189,10 +189,10 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
     }
 
     /// <summary>Adres z pierwszego wiersza żądania. Reszta rozmowy nas nie obchodzi.</summary>
-    private static async Task<string?> TaskId(NetworkStream strumien, CancellationToken ct)
+    private static async Task<string?> TaskId(NetworkStream stream, CancellationToken ct)
     {
         var buffer = new byte[4096];
-        var count = await strumien.ReadAsync(buffer, ct);
+        var count = await stream.ReadAsync(buffer, ct);
 
         if (count <= 0)
         {
@@ -222,7 +222,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
                 para => para.Length > 1 ? Uri.UnescapeDataString(para[1].Replace('+', ' ')) : string.Empty);
     }
 
-    private static async Task Odpisz(NetworkStream strumien, string content, CancellationToken ct)
+    private static async Task Odpisz(NetworkStream stream, string content, CancellationToken ct)
     {
         var page = $"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\">"
             + "<title>Marshal</title>"
@@ -235,8 +235,8 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n"
             + $"Content-Length: {bajty.Length}\r\nConnection: close\r\n\r\n");
 
-        await strumien.WriteAsync(heading, ct);
-        await strumien.WriteAsync(bajty, ct);
-        await strumien.FlushAsync(ct);
+        await stream.WriteAsync(heading, ct);
+        await stream.WriteAsync(bajty, ct);
+        await stream.FlushAsync(ct);
     }
 }

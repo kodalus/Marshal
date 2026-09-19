@@ -19,7 +19,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class DayRolloverServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
@@ -27,7 +27,7 @@ public sealed class DayRolloverServiceTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly DayRolloverService _usluga;
     private readonly HlcSource _hlc;
     private readonly Guid _obszar = Guid.CreateVersion7();
@@ -52,7 +52,7 @@ public sealed class DayRolloverServiceTests : IDisposable
 
     private static DateOnly D(string iso) => DateOnly.Parse(iso);
 
-    private TaskItem Dodaj(string title, string doDate, RecurrenceRule? rule = null)
+    private TaskItem Add(string title, string doDate, RecurrenceRule? rule = null)
     {
         var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
         task.Schedule(_obszar, D(doDate), _hlc.Next());
@@ -76,7 +76,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     [Fact]
     public async Task Zalegle_zaplanowane_laduja_na_dzis()
     {
-        var id = Dodaj("Zadzwonić", "2026-09-10").Id;
+        var id = Add("Zadzwonić", "2026-09-10").Id;
 
         var report = await _usluga.RunAsync();
 
@@ -98,8 +98,8 @@ public sealed class DayRolloverServiceTests : IDisposable
     [Fact]
     public async Task Drugie_uruchomienie_tego_samego_dnia_nic_nie_zmienia()
     {
-        Dodaj("Zadzwonić", "2026-09-10");
-        Dodaj("Podlać", "2026-09-12", new RecurrenceRule(RecurrenceKind.Daily));
+        Add("Zadzwonić", "2026-09-10");
+        Add("Podlać", "2026-09-12", new RecurrenceRule(RecurrenceKind.Daily));
 
         await _usluga.RunAsync();
         var drugie = await _usluga.RunAsync();
@@ -112,7 +112,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     {
         // Tydzień bez otwierania aplikacji ma dać tydzień pozycji od razu, a nie po
         // jednej na uruchomienie.
-        Dodaj("Trening", "2026-09-09",
+        Add("Trening", "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
 
         var report = await _usluga.RunAsync();
@@ -131,7 +131,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     [Fact]
     public async Task Skip_po_tygodniu_zostawia_jedno_zywe_wystapienie()
     {
-        Dodaj("Wynieść śmieci", "2026-09-09",
+        Add("Wynieść śmieci", "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
 
         var report = await _usluga.RunAsync();
@@ -144,7 +144,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     [Fact]
     public async Task Carry_zostawia_jedna_pozycje_z_data_pierwszego_przegapienia()
     {
-        var id = Dodaj("Zapłacić", "2026-09-09", new RecurrenceRule(RecurrenceKind.Daily)).Id;
+        var id = Add("Zapłacić", "2026-09-09", new RecurrenceRule(RecurrenceKind.Daily)).Id;
 
         await _usluga.RunAsync();
 
@@ -159,7 +159,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     {
         // Reguła idzie do bazy jako tekst. Gdyby odczyt jej nie odtwarzał, przejście
         // dnia widziałoby zwykłe zadanie i cicho zgubiłoby rytm.
-        Dodaj("Podlać", "2026-09-15",
+        Add("Podlać", "2026-09-15",
             new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Tuesday));
 
         _db.ChangeTracker.Clear();

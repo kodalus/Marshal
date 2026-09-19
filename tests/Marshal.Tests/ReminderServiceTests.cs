@@ -17,7 +17,7 @@ namespace Marshal.Tests;
 [Collection("Powiadomienia systemowe")]
 public sealed class ReminderServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
@@ -60,7 +60,7 @@ public sealed class ReminderServiceTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly InAppNotifier _powiadamiacz = new();
     private readonly ReminderService _usluga;
     private readonly HlcSource _hlc;
@@ -89,7 +89,7 @@ public sealed class ReminderServiceTests : IDisposable
     private static DateTimeOffset Moment(string iso) =>
         DateTimeOffset.Parse(iso + "+02:00");
 
-    private TaskItem Dodaj(string title, string? reminder)
+    private TaskItem Add(string title, string? reminder)
     {
         var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
         task.MakeNext(_obszar, _hlc.Next());
@@ -107,7 +107,7 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Przypomnienie_z_przyszlosci_milczy()
     {
-        Dodaj("Zadzwonić", "2026-09-16T18:00:00");
+        Add("Zadzwonić", "2026-09-16T18:00:00");
 
         (await _usluga.RunAsync()).Should().Be(0);
         _powiadamiacz.Drain().Should().BeEmpty();
@@ -116,7 +116,7 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Przypomnienie_wymagalne_odzywa_sie()
     {
-        var id = Dodaj("Zadzwonić do przychodni", "2026-09-16T08:00:00").Id;
+        var id = Add("Zadzwonić do przychodni", "2026-09-16T08:00:00").Id;
 
         (await _usluga.RunAsync()).Should().Be(1);
 
@@ -132,7 +132,7 @@ public sealed class ReminderServiceTests : IDisposable
         // Aplikacja nie chodzi w tle, więc chwila przypomnienia prawie nigdy nie zastaje
         // jej otwartej. Odzywanie się wyłącznie co do minuty znaczyłoby, że przypomnienia
         // nie działają w ogóle.
-        Dodaj("Zapłacić ratę", "2026-09-14T20:00:00");
+        Add("Zapłacić ratę", "2026-09-14T20:00:00");
 
         (await _usluga.RunAsync()).Should().Be(1);
     }
@@ -211,7 +211,7 @@ public sealed class ReminderServiceTests : IDisposable
         zWyprzedzeniem.SetReminderLeads([0, 15, 60], _hlc.Next());
         _db.Tasks.Add(zWyprzedzeniem);
 
-        Dodaj("Zapłacić ratę", "2026-09-14T20:00:00");
+        Add("Zapłacić ratę", "2026-09-14T20:00:00");
 
         (await _usluga.RunAsync()).Should().Be(1, "tylko to z własną chwilą");
     }
@@ -219,7 +219,7 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task To_samo_przypomnienie_nie_odzywa_sie_dwa_razy()
     {
-        Dodaj("Zadzwonić", "2026-09-16T08:00:00");
+        Add("Zadzwonić", "2026-09-16T08:00:00");
 
         await _usluga.RunAsync();
         _powiadamiacz.Drain();
@@ -233,7 +233,7 @@ public sealed class ReminderServiceTests : IDisposable
     {
         // „Przypomnij mi jednak o godzinę później" musi zadziałać. Gdyby zapis
         // pokazania znaczył tylko „o tym zadaniu już było", nowa chwila by przepadła.
-        var task = Dodaj("Zadzwonić", "2026-09-16T08:00:00");
+        var task = Add("Zadzwonić", "2026-09-16T08:00:00");
         await _usluga.RunAsync();
         _powiadamiacz.Drain();
 
@@ -246,7 +246,7 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Wykonane_zadanie_nie_przypomina_o_sobie()
     {
-        var task = Dodaj("Zadzwonić", "2026-09-16T08:00:00");
+        var task = Add("Zadzwonić", "2026-09-16T08:00:00");
         task.Complete(_zegar.Now, _hlc.Next());
         _db.SaveChanges();
 
@@ -256,7 +256,7 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Zadanie_bez_przypomnienia_milczy()
     {
-        Dodaj("Bez przypomnienia", null);
+        Add("Bez przypomnienia", null);
 
         (await _usluga.RunAsync()).Should().Be(0);
     }
@@ -264,9 +264,9 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Zalegle_przypomnienia_ida_w_kolejnosci_chwil()
     {
-        Dodaj("Trzecie", "2026-09-16T08:00:00");
-        Dodaj("Pierwsze", "2026-09-14T08:00:00");
-        Dodaj("Drugie", "2026-09-15T08:00:00");
+        Add("Trzecie", "2026-09-16T08:00:00");
+        Add("Pierwsze", "2026-09-14T08:00:00");
+        Add("Drugie", "2026-09-15T08:00:00");
 
         await _usluga.RunAsync();
 
@@ -279,7 +279,7 @@ public sealed class ReminderServiceTests : IDisposable
     {
         // Gdyby trafiał, drugie urządzenie dowiedziałoby się, że tu już pokazano —
         // i zamilkło, choć telefon leżał w torbie.
-        Dodaj("Zadzwonić", "2026-09-16T08:00:00");
+        Add("Zadzwonić", "2026-09-16T08:00:00");
         var before = _db.Changes.Count();
 
         await _usluga.RunAsync();

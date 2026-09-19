@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="Marshal.UI.Kontrolki.WyborDaty">
+             x:Class="Marshal.UI.Controls.DateField">
   <!--
     Jeden przycisk na obie platformy. Na Androidzie otwiera okienko systemu, na
     pulpicie rozwija kalendarz miesiąca — a że w obu przypadkach wygląda tak samo

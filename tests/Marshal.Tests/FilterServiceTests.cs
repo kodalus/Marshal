@@ -19,7 +19,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class FilterServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
@@ -27,7 +27,7 @@ public sealed class FilterServiceTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly HlcSource _hlc;
     private readonly FilterService _usluga;
     private readonly Guid _obszar = Guid.CreateVersion7();
@@ -52,11 +52,11 @@ public sealed class FilterServiceTests : IDisposable
             _hlc);
     }
 
-    private TaskItem TaskId(string title, Action<TaskItem>? ustaw = null)
+    private TaskItem TaskId(string title, Action<TaskItem>? set = null)
     {
         var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
         task.MakeNext(_obszar, _hlc.Next());
-        ustaw?.Invoke(task);
+        set?.Invoke(task);
 
         _db.Tasks.Add(task);
         _db.SaveChanges();

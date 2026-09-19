@@ -55,9 +55,9 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
     public async Task LoadAsync() => await SearchAsync();
 
     [RelayCommand]
-    private Task SearchAsync() => _queue.RunAsync(SzukajAsync);
+    private Task SearchAsync() => _queue.RunAsync(SearchAsync);
 
-    private async Task SzukajAsync()
+    private async Task SearchAsync()
     {
         Items.Clear();
         foreach (var note in await notes.SearchAsync(Query))

@@ -36,7 +36,7 @@ public sealed partial class FiltersViewModel : ObservableObject
     private readonly IClock _clock;
 
     /// <summary>Wstrzymuje przeliczanie na czas wypełniania pól z zapisanego widoku.</summary>
-    private bool _wczytywanie;
+    private bool _loading;
 
     private readonly LatestOnly _queue = new();
 
@@ -138,7 +138,7 @@ public sealed partial class FiltersViewModel : ObservableObject
 
     public async Task LoadAsync()
     {
-        _wczytywanie = true;
+        _loading = true;
 
         Areas.Clear();
         Areas.Add(ScopeChoice.Any);
@@ -158,7 +158,7 @@ public sealed partial class FiltersViewModel : ObservableObject
         Tags.Clear();
         foreach (var tag in await _tags.AllAsync())
         {
-            Dodaj(Tags, tag.Id.ToString(), tag.Name);
+            Add(Tags, tag.Id.ToString(), tag.Name);
         }
 
         Area ??= ScopeChoice.Any;
@@ -169,62 +169,62 @@ public sealed partial class FiltersViewModel : ObservableObject
 
         await ReloadFavouritesAsync();
 
-        _wczytywanie = false;
+        _loading = false;
         await RunAsync();
     }
 
     /// <summary>Warunki złożone z tego, co w tej chwili włączone.</summary>
     public FilterQuery Build()
     {
-        var warunki = new List<FilterCondition>();
+        var conditions = new List<FilterCondition>();
 
-        Dolacz<TaskState>(warunki, States, FilterCondition.States);
-        Dolacz<Priority>(warunki, Priorities, FilterCondition.Priorities);
-        Dolacz<Energy>(warunki, Energies, FilterCondition.Energies);
+        Attach<TaskState>(conditions, States, FilterCondition.States);
+        Attach<Priority>(conditions, Priorities, FilterCondition.Priorities);
+        Attach<Energy>(conditions, Energies, FilterCondition.Energies);
 
-        if (Wlaczone(Tags) is { Length: > 0 } tagi)
+        if (Enabled(Tags) is { Length: > 0 } tags)
         {
-            warunki.Add(FilterCondition.Tags([.. tagi.Select(Guid.Parse)]));
+            conditions.Add(FilterCondition.Tags([.. tags.Select(Guid.Parse)]));
         }
 
         if (Area?.Id is { } area)
         {
-            warunki.Add(FilterCondition.Areas(area));
+            conditions.Add(FilterCondition.Areas(area));
         }
 
         if (Project?.Id is { } project)
         {
-            warunki.Add(FilterCondition.Projects(project));
+            conditions.Add(FilterCondition.Projects(project));
         }
 
         if (Deadline?.Value is { } deadline)
         {
-            warunki.Add(FilterCondition.Deadline(deadline));
+            conditions.Add(FilterCondition.Deadline(deadline));
         }
 
         if (DoDate?.Value is { } day)
         {
-            warunki.Add(FilterCondition.DoDate(day));
+            conditions.Add(FilterCondition.DoDate(day));
         }
 
         if (Minutes?.Value is { } minutes)
         {
-            warunki.Add(FilterCondition.Estimate(minutes));
+            conditions.Add(FilterCondition.Estimate(minutes));
         }
 
         if (!string.IsNullOrWhiteSpace(Text))
         {
-            warunki.Add(FilterCondition.Contains(Text));
+            conditions.Add(FilterCondition.Contains(Text));
         }
 
-        return new FilterQuery(warunki);
+        return new FilterQuery(conditions);
     }
 
     /// <summary>
     /// Przeliczenie wyników. Jeden przebieg naraz — zob. <see cref="LatestOnly"/>.
     /// </summary>
     [RelayCommand]
-    private Task RunAsync() => _wczytywanie ? Task.CompletedTask : _queue.RunAsync(RunAsync);
+    private Task RunAsync() => _loading ? Task.CompletedTask : _queue.RunAsync(RunAsync);
 
     private async Task RunAsync()
     {
@@ -264,18 +264,18 @@ public sealed partial class FiltersViewModel : ObservableObject
         Status = string.Empty;
         OnPropertyChanged(nameof(HasStatus));
 
-        _wczytywanie = true;
+        _loading = true;
 
-        Wyczysc();
+        Clear();
         OpenId = filter.Id;
         Name = filter.Name;
 
-        foreach (var warunek in query.Conditions)
+        foreach (var condition in query.Conditions)
         {
-            Zastosuj(warunek);
+            Apply(condition);
         }
 
-        _wczytywanie = false;
+        _loading = false;
 
         OnPropertyChanged(nameof(IsSaved));
         await RunAsync();
@@ -321,9 +321,9 @@ public sealed partial class FiltersViewModel : ObservableObject
     [RelayCommand]
     private async Task ResetAsync()
     {
-        _wczytywanie = true;
-        Wyczysc();
-        _wczytywanie = false;
+        _loading = true;
+        Clear();
+        _loading = false;
 
         OnPropertyChanged(nameof(IsSaved));
         await RunAsync();
@@ -340,7 +340,7 @@ public sealed partial class FiltersViewModel : ObservableObject
         OnPropertyChanged(nameof(HasFavourites));
     }
 
-    private void Wyczysc()
+    private void Clear()
     {
         OpenId = Guid.Empty;
         Name = string.Empty;
@@ -351,58 +351,58 @@ public sealed partial class FiltersViewModel : ObservableObject
         DoDate = WindowChoice.All[0];
         Minutes = EstimateChoice.All[0];
 
-        foreach (var przelacznik in States.Concat(Priorities).Concat(Energies).Concat(Tags))
+        foreach (var toggle in States.Concat(Priorities).Concat(Energies).Concat(Tags))
         {
-            przelacznik.IsOn = false;
+            toggle.IsOn = false;
         }
     }
 
-    private void Zastosuj(FilterCondition warunek)
+    private void Apply(FilterCondition condition)
     {
-        switch (warunek.Field)
+        switch (condition.Field)
         {
             case FilterField.State:
-                Wlacz(States, warunek.Values);
+                Enable(States, condition.Values);
                 break;
             case FilterField.Priority:
-                Wlacz(Priorities, warunek.Values);
+                Enable(Priorities, condition.Values);
                 break;
             case FilterField.Energy:
-                Wlacz(Energies, warunek.Values);
+                Enable(Energies, condition.Values);
                 break;
             case FilterField.Tag:
-                Wlacz(Tags, warunek.Values);
+                Enable(Tags, condition.Values);
                 break;
             case FilterField.Area:
-                Area = Znajdz(Areas, warunek.Values);
+                Area = Find(Areas, condition.Values);
                 break;
             case FilterField.Project:
-                Project = Znajdz(Projects, warunek.Values);
+                Project = Find(Projects, condition.Values);
                 break;
             case FilterField.Deadline:
-                Deadline = WindowChoice.All.FirstOrDefault(w => w.Value == warunek.Window);
+                Deadline = WindowChoice.All.FirstOrDefault(w => w.Value == condition.Window);
                 break;
             case FilterField.DoDate:
-                DoDate = WindowChoice.All.FirstOrDefault(w => w.Value == warunek.Window);
+                DoDate = WindowChoice.All.FirstOrDefault(w => w.Value == condition.Window);
                 break;
             case FilterField.Estimate:
                 // Widok zapisany na urządzeniu z inną listą minut ma się otworzyć,
                 // a nie zniknąć: brakująca wartość dokładana do listy na miejscu.
-                Minutes = EstimateChoice.All.FirstOrDefault(m => m.Value == warunek.MaxMinutes)
-                    ?? new EstimateChoice(warunek.MaxMinutes, $"{warunek.MaxMinutes} min");
+                Minutes = EstimateChoice.All.FirstOrDefault(m => m.Value == condition.MaxMinutes)
+                    ?? new EstimateChoice(condition.MaxMinutes, $"{condition.MaxMinutes} min");
                 break;
             case FilterField.Text:
-                Text = warunek.Text ?? string.Empty;
+                Text = condition.Text ?? string.Empty;
                 break;
         }
     }
 
-    private static void Wlacz(
-        IEnumerable<FilterToggle> przelaczniki, IReadOnlyList<string> wartosci)
+    private static void Enable(
+        IEnumerable<FilterToggle> toggles, IReadOnlyList<string> values)
     {
-        foreach (var przelacznik in przelaczniki)
+        foreach (var toggle in toggles)
         {
-            przelacznik.IsOn = wartosci.Contains(przelacznik.Value);
+            toggle.IsOn = values.Contains(toggle.Value);
         }
     }
 
@@ -410,32 +410,32 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// Wartość, której już nie ma — skasowany obszar, projekt z drugiego urządzenia —
     /// wraca jako „dowolny", a nie jako pusta pozycja bez nazwy.
     /// </summary>
-    private static ScopeChoice? Znajdz(
-        IEnumerable<ScopeChoice> rows, IReadOnlyList<string> wartosci) =>
-        rows.FirstOrDefault(p => p.Id is { } id && wartosci.Contains(id.ToString()))
+    private static ScopeChoice? Find(
+        IEnumerable<ScopeChoice> rows, IReadOnlyList<string> values) =>
+        rows.FirstOrDefault(p => p.Id is { } id && values.Contains(id.ToString()))
         ?? ScopeChoice.Any;
 
-    private static string[] Wlaczone(IEnumerable<FilterToggle> przelaczniki) =>
-        przelaczniki.Where(p => p.IsOn).Select(p => p.Value).ToArray();
+    private static string[] Enabled(IEnumerable<FilterToggle> toggles) =>
+        toggles.Where(p => p.IsOn).Select(p => p.Value).ToArray();
 
-    private static void Dolacz<T>(
-        List<FilterCondition> warunki,
-        IEnumerable<FilterToggle> przelaczniki,
-        Func<T[], FilterCondition> zbuduj)
+    private static void Attach<T>(
+        List<FilterCondition> conditions,
+        IEnumerable<FilterToggle> toggles,
+        Func<T[], FilterCondition> build)
         where T : struct, Enum
     {
-        if (Wlaczone(przelaczniki) is { Length: > 0 } wartosci)
+        if (Enabled(toggles) is { Length: > 0 } values)
         {
-            warunki.Add(zbuduj([.. wartosci.Select(Enum.Parse<T>)]));
+            conditions.Add(build([.. values.Select(Enum.Parse<T>)]));
         }
     }
 
     private void Fill(
         ObservableCollection<FilterToggle> where, IEnumerable<(string Value, string Label)> co)
     {
-        foreach (var (value, etykieta) in co)
+        foreach (var (value, label) in co)
         {
-            Dodaj(where, value, etykieta);
+            Add(where, value, label);
         }
     }
 
@@ -445,11 +445,11 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// żeby je podpiąć — a zapomnienie nie daje żadnego objawu poza listą, która
     /// milczy.
     /// </summary>
-    private void Dodaj(ObservableCollection<FilterToggle> where, string value, string etykieta)
+    private void Add(ObservableCollection<FilterToggle> where, string value, string label)
     {
-        var przelacznik = new FilterToggle(etykieta, value);
-        przelacznik.PropertyChanged += async (_, _) => await RunAsync();
-        where.Add(przelacznik);
+        var toggle = new FilterToggle(label, value);
+        toggle.PropertyChanged += async (_, _) => await RunAsync();
+        where.Add(toggle);
     }
 
     partial void OnAreaChanged(ScopeChoice? value) => _ = RunAsync();

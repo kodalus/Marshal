@@ -17,11 +17,11 @@ namespace Marshal.UI;
 /// a to jest gorsze od zamknięcia aplikacji: z zamknięcia widać, że coś się stało.
 /// </para>
 /// </remarks>
-public static class Wstecz
+public static class Back
 {
     /// <summary>Odpowiedź okna na cofnięcie. Pusta, gdy okna jeszcze nie ma.</summary>
-    public static Func<bool>? Obsluga { get; set; }
+    public static Func<bool>? Handler { get; set; }
 
     /// <summary>Czy okno zajęło się cofnięciem.</summary>
-    public static bool Zajeto() => Obsluga?.Invoke() ?? false;
+    public static bool Handled() => Handler?.Invoke() ?? false;
 }

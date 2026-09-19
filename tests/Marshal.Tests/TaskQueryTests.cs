@@ -13,7 +13,7 @@ namespace Marshal.Tests;
 /// <summary>Zapytania stojące za ekranami Dzisiaj, Plany i Archiwum.</summary>
 public sealed class TaskQueryTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; } = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
@@ -37,11 +37,11 @@ public sealed class TaskQueryTests : IDisposable
 
     private Hlc Stamp() => new(_znacznik += 10, 0, "t");
 
-    private TaskItem Dodaj(string title, Action<TaskItem>? ustaw = null)
+    private TaskItem Add(string title, Action<TaskItem>? set = null)
     {
-        var task = TaskItem.Capture(title, new Zegar().Now, Stamp());
+        var task = TaskItem.Capture(title, new Clock().Now, Stamp());
         task.MakeNext(_obszar, Stamp());
-        ustaw?.Invoke(task);
+        set?.Invoke(task);
         _db.Tasks.Add(task);
         _db.SaveChanges();
         return task;
@@ -50,9 +50,9 @@ public sealed class TaskQueryTests : IDisposable
     [Fact]
     public async Task Dzisiaj_bierze_zadania_z_dniem_wykonania_dzis_i_wczesniej()
     {
-        Dodaj("na dziś", t => t.Schedule(_obszar, Dzis, Stamp()));
-        Dodaj("zaległe", t => t.Schedule(_obszar, Dzis.AddDays(-3), Stamp()));
-        Dodaj("na jutro", t => t.Schedule(_obszar, Dzis.AddDays(1), Stamp()));
+        Add("na dziś", t => t.Schedule(_obszar, Dzis, Stamp()));
+        Add("zaległe", t => t.Schedule(_obszar, Dzis.AddDays(-3), Stamp()));
+        Add("na jutro", t => t.Schedule(_obszar, Dzis.AddDays(1), Stamp()));
 
         var result = await _zadania.TodayAsync(Dzis);
 
@@ -62,7 +62,7 @@ public sealed class TaskQueryTests : IDisposable
     [Fact]
     public async Task Dzisiaj_bierze_takze_zadania_po_terminie()
     {
-        Dodaj("termin minął", t => t.SetDeadline(Dzis.AddDays(-1), Stamp()));
+        Add("termin minął", t => t.SetDeadline(Dzis.AddDays(-1), Stamp()));
 
         (await _zadania.TodayAsync(Dzis)).Should().ContainSingle();
     }
@@ -70,8 +70,8 @@ public sealed class TaskQueryTests : IDisposable
     [Fact]
     public async Task Dzisiaj_stawia_terminy_przed_planami()
     {
-        Dodaj("plan na dziś", t => t.Schedule(_obszar, Dzis, Stamp()));
-        Dodaj("termin dziś", t => t.SetDeadline(Dzis, Stamp()));
+        Add("plan na dziś", t => t.Schedule(_obszar, Dzis, Stamp()));
+        Add("termin dziś", t => t.SetDeadline(Dzis, Stamp()));
 
         var result = await _zadania.TodayAsync(Dzis);
 
@@ -81,10 +81,10 @@ public sealed class TaskQueryTests : IDisposable
     [Fact]
     public async Task Dzisiaj_pomija_skrzynke_i_kosz()
     {
-        var wrzut = TaskItem.Capture("w skrzynce", new Zegar().Now, Stamp());
+        var wrzut = TaskItem.Capture("w skrzynce", new Clock().Now, Stamp());
         _db.Tasks.Add(wrzut);
 
-        Dodaj("wyrzucone", t => { t.Schedule(_obszar, Dzis, Stamp()); t.Trash(Stamp()); });
+        Add("wyrzucone", t => { t.Schedule(_obszar, Dzis, Stamp()); t.Trash(Stamp()); });
         _db.SaveChanges();
 
         (await _zadania.TodayAsync(Dzis)).Should().BeEmpty();
@@ -97,16 +97,16 @@ public sealed class TaskQueryTests : IDisposable
         // coraz bardziej pusty w miarę pracy — dokładnie odwrotnie do tego, co się
         // właśnie stało. Zostaje z ptaszkiem, ale tylko na swoim dniu: jutro liczy się
         // już wyłącznie to, co jutrzejsze.
-        Dodaj("zrobione dziś", t =>
+        Add("zrobione dziś", t =>
         {
             t.Schedule(_obszar, Dzis, Stamp());
-            t.Complete(new Zegar().Now, Stamp());
+            t.Complete(new Clock().Now, Stamp());
         });
 
-        Dodaj("zrobione wczoraj", t =>
+        Add("zrobione wczoraj", t =>
         {
             t.Schedule(_obszar, Dzis.AddDays(-1), Stamp());
-            t.Complete(new Zegar().Now, Stamp());
+            t.Complete(new Clock().Now, Stamp());
         });
 
         _db.SaveChanges();
@@ -118,9 +118,9 @@ public sealed class TaskQueryTests : IDisposable
     [Fact]
     public async Task Plany_biora_wylacznie_przyszlosc_w_zadanym_oknie()
     {
-        Dodaj("dziś", t => t.Schedule(_obszar, Dzis, Stamp()));
-        Dodaj("za trzy dni", t => t.Schedule(_obszar, Dzis.AddDays(3), Stamp()));
-        Dodaj("za miesiąc", t => t.Schedule(_obszar, Dzis.AddDays(30), Stamp()));
+        Add("dziś", t => t.Schedule(_obszar, Dzis, Stamp()));
+        Add("za trzy dni", t => t.Schedule(_obszar, Dzis.AddDays(3), Stamp()));
+        Add("za miesiąc", t => t.Schedule(_obszar, Dzis.AddDays(30), Stamp()));
 
         var result = await _zadania.UpcomingAsync(Dzis, Dzis.AddDays(14));
 
@@ -130,10 +130,10 @@ public sealed class TaskQueryTests : IDisposable
     [Fact]
     public async Task Archiwum_zwraca_najnowsze_pierwsze_i_obejmuje_kosz()
     {
-        var zegar = new Zegar();
-        Dodaj("starsze", t => t.Complete(zegar.Now.AddDays(-2), Stamp()));
-        Dodaj("nowsze", t => t.Complete(zegar.Now, Stamp()));
-        Dodaj("wyrzucone", t => t.Trash(Stamp()));
+        var clock = new Clock();
+        Add("starsze", t => t.Complete(clock.Now.AddDays(-2), Stamp()));
+        Add("nowsze", t => t.Complete(clock.Now, Stamp()));
+        Add("wyrzucone", t => t.Trash(Stamp()));
 
         var result = await _zadania.ArchiveAsync(limit: 10);
 
@@ -146,7 +146,7 @@ public sealed class TaskQueryTests : IDisposable
     {
         for (var i = 0; i < 5; i++)
         {
-            Dodaj($"zadanie {i}", t => t.Complete(new Zegar().Now, Stamp()));
+            Add($"zadanie {i}", t => t.Complete(new Clock().Now, Stamp()));
         }
 
         (await _zadania.ArchiveAsync(limit: 2)).Should().HaveCount(2);
@@ -156,8 +156,8 @@ public sealed class TaskQueryTests : IDisposable
     public async Task Obszar_zwraca_tylko_swoje_zadania()
     {
         var other = Guid.CreateVersion7();
-        Dodaj("moje");
-        Dodaj("cudze", t => t.MakeNext(other, Stamp()));
+        Add("moje");
+        Add("cudze", t => t.MakeNext(other, Stamp()));
 
         var result = await _zadania.ByAreaAsync(_obszar);
 

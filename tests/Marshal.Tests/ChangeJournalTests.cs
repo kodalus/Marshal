@@ -13,7 +13,7 @@ namespace Marshal.Tests;
 
 public sealed class ChangeJournalTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; } = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
@@ -39,7 +39,7 @@ public sealed class ChangeJournalTests : IDisposable
 
     private TaskItem Save(string title = "Zadzwonić do przychodni")
     {
-        var task = TaskItem.Capture(title, new Zegar().Now, Stamp());
+        var task = TaskItem.Capture(title, new Clock().Now, Stamp());
         _db.Tasks.Add(task);
         _db.SaveChanges();
         return task;

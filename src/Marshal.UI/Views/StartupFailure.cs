@@ -22,7 +22,7 @@ namespace Marshal.UI.Views;
 /// </remarks>
 internal static class StartupFailure
 {
-    public static Control Build(Exception blad) =>
+    public static Control Build(Exception error) =>
         new ScrollViewer
         {
             Padding = new Avalonia.Thickness(20),
@@ -46,7 +46,7 @@ internal static class StartupFailure
                     },
                     new SelectableTextBlock
                     {
-                        Text = blad.ToString(),
+                        Text = error.ToString(),
                         FontFamily = FontFamily.Parse("monospace"),
                         FontSize = 12,
                         TextWrapping = TextWrapping.Wrap,

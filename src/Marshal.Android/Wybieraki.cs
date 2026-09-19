@@ -24,16 +24,16 @@ namespace Marshal.Android;
 /// „nie zmieniaj", a nie „skasuj" — od kasowania jest osobny przycisk obok pola.
 /// </para>
 /// </remarks>
-internal static class Wybieraki
+internal static class NativePickers
 {
-    public static void Podepnij(Activity okno)
+    public static void Podepnij(Activity window)
     {
-        Pickery.Data = now => PokazAsync<DateOnly?>(okno, zrobione =>
+        Pickers.Data = now => PokazAsync<DateOnly?>(window, zrobione =>
         {
             var od = now ?? DateOnly.FromDateTime(DateTime.Now);
 
             var okienko = new DatePickerDialog(
-                okno,
+                window,
                 (_, e) => zrobione(DateOnly.FromDateTime(e.Date)),
                 od.Year,
 
@@ -47,12 +47,12 @@ internal static class Wybieraki
             okienko.Show();
         });
 
-        Pickery.Hour = now => PokazAsync<TimeOnly?>(okno, zrobione =>
+        Pickers.Hour = now => PokazAsync<TimeOnly?>(window, zrobione =>
         {
             var od = now ?? new TimeOnly(9, 0);
 
             var okienko = new TimePickerDialog(
-                okno,
+                window,
                 (_, e) => zrobione(new TimeOnly(e.HourOfDay, e.Minute)),
                 od.Hour,
                 od.Minute,
@@ -70,8 +70,8 @@ internal static class Wybieraki
     /// <summary>Odpięcie przy zamykaniu okna. Haczyk na nieistniejące okno jest gorszy od pustego.</summary>
     public static void Odepnij()
     {
-        Pickery.Data = null;
-        Pickery.Hour = null;
+        Pickers.Data = null;
+        Pickers.Hour = null;
     }
 
     /// <summary>
@@ -89,12 +89,12 @@ internal static class Wybieraki
     /// zamknięcie. Wygrywa pierwsza.
     /// </para>
     /// </remarks>
-    private static Task<T> PokazAsync<T>(Activity okno, Action<Action<T>> pokaz)
+    private static Task<T> PokazAsync<T>(Activity window, Action<Action<T>> pokaz)
     {
         var response = new TaskCompletionSource<T>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
-        okno.RunOnUiThread(() =>
+        window.RunOnUiThread(() =>
         {
             try
             {

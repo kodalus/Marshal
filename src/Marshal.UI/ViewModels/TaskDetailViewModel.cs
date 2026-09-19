@@ -125,17 +125,17 @@ public sealed partial class TaskDetailViewModel(
                 parts.Add("przypomnienie");
             }
 
-            if (Waga != Priority.None)
+            if (Weight != Priority.None)
             {
                 parts.Add(SelectedPriority!.Label);
             }
 
-            if (Sila != Energy.Unknown)
+            if (Energy != Energy.Unknown)
             {
                 parts.Add(SelectedEnergyLevel!.Label);
             }
 
-            if (Rytm is not null)
+            if (Rhythm is not null)
             {
                 parts.Add("powtarza się");
             }
@@ -195,7 +195,7 @@ public sealed partial class TaskDetailViewModel(
     public ObservableCollection<LeadChoice> Leads { get; } = [];
 
     /// <summary>Zestaw pod ręką. Reszta dopisywana polem obok, bez zaśmiecania listy.</summary>
-    private static readonly int[] Gotowe = [0, 5, 15, 30, 60, 60 * 24];
+    private static readonly int[] Presets = [0, 5, 15, 30, 60, 60 * 24];
 
     /// <summary>Liczba dziesiętna z tego samego powodu co odstęp rytmu: NumericUpDown.</summary>
     [ObservableProperty]
@@ -302,21 +302,21 @@ public sealed partial class TaskDetailViewModel(
     /// zapisuje: polecenie zapisu kończyło się **niczym**. Bez zapisu, bez komunikatu,
     /// bez wpisu w dzienniku, z otwartym oknem wyglądającym jak przed kliknięciem.
     /// </remarks>
-    private RecurrenceKind? Rytm => SelectedRepeat?.Kind;
+    private RecurrenceKind? Rhythm => SelectedRepeat?.Kind;
 
-    private Priority Waga => SelectedPriority?.Value ?? Priority.None;
+    private Priority Weight => SelectedPriority?.Value ?? Priority.None;
 
-    private Energy Sila => SelectedEnergyLevel?.Value ?? Energy.Unknown;
+    private Energy Energy => SelectedEnergyLevel?.Value ?? Energy.Unknown;
 
-    public bool IsRepeating => Rytm is not null;
+    public bool IsRepeating => Rhythm is not null;
 
-    public bool NeedsInterval => Rytm
+    public bool NeedsInterval => Rhythm
         is RecurrenceKind.EveryNDays or RecurrenceKind.Weekly
         or RecurrenceKind.Monthly or RecurrenceKind.Yearly;
 
-    public bool NeedsWeekdays => Rytm == RecurrenceKind.Weekly;
+    public bool NeedsWeekdays => Rhythm == RecurrenceKind.Weekly;
 
-    public bool NeedsDayOfMonth => Rytm == RecurrenceKind.Monthly;
+    public bool NeedsDayOfMonth => Rhythm == RecurrenceKind.Monthly;
 
     public event EventHandler? Saved;
 
@@ -328,12 +328,12 @@ public sealed partial class TaskDetailViewModel(
     /// ekranie — zapamiętana lista zrobiłaby się nieprawdziwa dokładnie wtedy, gdy
     /// ktoś właśnie założył projekt i chce do niego coś wrzucić.
     /// </remarks>
-    private async Task WczytajMiejscaAsync()
+    private async Task LoadSlotsAsync()
     {
-        var drzewko = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
+        var tree = ProjectTree.Build(await areas.ActiveAsync(), await projects.ActiveAsync());
 
         Placements.Clear();
-        foreach (var row in drzewko)
+        foreach (var row in tree)
         {
             Placements.Add(PlacementChoice.From(row));
         }
@@ -347,7 +347,7 @@ public sealed partial class TaskDetailViewModel(
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        await WczytajMiejscaAsync();
+        await LoadSlotsAsync();
         Load(task);
     }
 
@@ -362,7 +362,7 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     public async Task NewAsync(DateOnly day, TimeOnly time)
     {
-        await WczytajMiejscaAsync();
+        await LoadSlotsAsync();
 
         _loading = true;
         _id = Guid.Empty;
@@ -384,7 +384,7 @@ public sealed partial class TaskDetailViewModel(
         // Nowe zadanie z godziny na siatce ma domyślnie odezwać się o tej godzinie.
         // Wpisanie czegoś w kalendarz i niedowiedzenie się o tym jest najczęstszym
         // sposobem na przegapienie — a odznaczenie kosztuje jedno kliknięcie.
-        WczytajWyprzedzenia([0]);
+        LoadLeads([0]);
 
         DoDate = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), clock.Now.Offset);
         DoTime = time.ToTimeSpan();
@@ -420,7 +420,7 @@ public sealed partial class TaskDetailViewModel(
         Deadline = ToOffset(task.Deadline);
         ReminderDay = task.ReminderAt is { } r ? ToOffset(DateOnly.FromDateTime(r.DateTime)) : null;
         ReminderTime = task.ReminderAt?.TimeOfDay;
-        WczytajWyprzedzenia(task.ReminderLeads);
+        LoadLeads(task.ReminderLeads);
         IsDone = task.State == TaskState.Done;
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
         EstimatedMinutes = task.EstimatedMinutes;
@@ -449,8 +449,8 @@ public sealed partial class TaskDetailViewModel(
         ShowMore = Deadline is not null
             || ReminderDay is not null
             || Leads.Any(w => w.IsChecked)
-            || Rytm is not null
-            || Waga != Priority.None;
+            || Rhythm is not null
+            || Weight != Priority.None;
 
         Refresh();
         IsOpen = true;
@@ -560,19 +560,19 @@ public sealed partial class TaskDetailViewModel(
                 ToDate(Deadline),
                 ReminderAt(),
                 rule,
-                Waga,
-                Minuty(),
-                Sila,
+                Weight,
+                Minutes(),
+                Energy,
                 SelectedPlacement?.AreaId,
                 DoTime is { } time ? TimeOnly.FromTimeSpan(time) : null,
-                WybraneWyprzedzenia()));
+                SelectedLeads()));
 
             // Projekt osobnym wywołaniem, a nie kolejnym polem edycji: pole typu
             // Guid? nie umie odróżnić „zostaw jak jest" od „wyjmij z projektu",
             // a drzewko zawsze wyraża pełną decyzję o obu.
-            if (SelectedPlacement is { } miejsce)
+            if (SelectedPlacement is { } slot)
             {
-                await edit.SetProjectAsync(_id, miejsce.ProjectId);
+                await edit.SetProjectAsync(_id, slot.ProjectId);
             }
         }
         catch (Exception e) when (e is not OperationCanceledException)
@@ -610,7 +610,7 @@ public sealed partial class TaskDetailViewModel(
     /// przy tym samym dniu i tej samej godzinie — a oszacowanie mogło zostać z innego
     /// planu. Koniec przed początkiem znaczy przejście przez północ.
     /// </remarks>
-    private int? Minuty() => EstimatedMinutes is { } minutes ? (int)minutes : null;
+    private int? Minutes() => EstimatedMinutes is { } minutes ? (int)minutes : null;
 
     /// <summary>
     /// Długość i godzina zakończenia trzymane zgodnie.
@@ -623,7 +623,7 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     partial void OnEndTimeChanged(TimeSpan? value)
     {
-        if (_loading || _zgodne || DoTime is not { } start || value is not { } end)
+        if (_loading || _matching || DoTime is not { } start || value is not { } end)
         {
             return;
         }
@@ -632,21 +632,21 @@ public sealed partial class TaskDetailViewModel(
             ? end - start
             : end + TimeSpan.FromDays(1) - start;
 
-        _zgodne = true;
+        _matching = true;
         EstimatedMinutes = Math.Max(1, (int)length.TotalMinutes);
-        _zgodne = false;
+        _matching = false;
     }
 
     partial void OnEstimatedMinutesChanged(decimal? value)
     {
-        if (_loading || _zgodne || DoTime is not { } start || value is not { } minutes)
+        if (_loading || _matching || DoTime is not { } start || value is not { } minutes)
         {
             return;
         }
 
-        _zgodne = true;
+        _matching = true;
         EndTime = start + TimeSpan.FromMinutes((double)Math.Max(1, minutes));
-        _zgodne = false;
+        _matching = false;
     }
 
     partial void OnDoTimeChanged(TimeSpan? value)
@@ -669,15 +669,15 @@ public sealed partial class TaskDetailViewModel(
         // ponownym wpisaniu godziny stan, którego zadanie już nie ma.
         if (!_loading && value is null)
         {
-            foreach (var wyprzedzenie in Leads)
+            foreach (var lead in Leads)
             {
-                wyprzedzenie.IsChecked = false;
+                lead.IsChecked = false;
             }
 
             Refresh();
         }
 
-        if (_loading || _zgodne || value is not { } start)
+        if (_loading || _matching || value is not { } start)
         {
             return;
         }
@@ -688,13 +688,13 @@ public sealed partial class TaskDetailViewModel(
             return;
         }
 
-        _zgodne = true;
+        _matching = true;
         EndTime = start + TimeSpan.FromMinutes((double)minutes);
-        _zgodne = false;
+        _matching = false;
     }
 
     /// <summary>Blokada wzajemnego przeliczania, żeby nie goniło się w kółko.</summary>
-    private bool _zgodne;
+    private bool _matching;
 
     /// <summary>
     /// Odhaczenie i zdjęcie ptaszka z okna szczegółu. Zostawia ślad, bo zamyka okno
@@ -793,7 +793,7 @@ public sealed partial class TaskDetailViewModel(
     {
         problem = null;
 
-        if (Rytm is not { } kind)
+        if (Rhythm is not { } kind)
         {
             return null;
         }
@@ -837,11 +837,11 @@ public sealed partial class TaskDetailViewModel(
     /// Lista wyprzedzeń od nowa: gotowy zestaw plus to, co zadanie ma zapisane,
     /// w kolejności czasu. Zaznaczone jest wyłącznie to, co zadanie naprawdę ma.
     /// </summary>
-    private void WczytajWyprzedzenia(IReadOnlyList<int> selected)
+    private void LoadLeads(IReadOnlyList<int> selected)
     {
         Leads.Clear();
 
-        foreach (var minutes in Gotowe.Concat(selected).Distinct().OrderBy(m => m))
+        foreach (var minutes in Presets.Concat(selected).Distinct().OrderBy(m => m))
         {
             Leads.Add(new LeadChoice(minutes) { IsChecked = selected.Contains(minutes) });
         }
@@ -850,9 +850,9 @@ public sealed partial class TaskDetailViewModel(
     /// <summary>Wyprzedzenie na liście — to, które już tam jest, albo świeżo wstawione.</summary>
     private LeadChoice Append(int minutes)
     {
-        if (Leads.FirstOrDefault(w => w.Minutes == minutes) is { } juz)
+        if (Leads.FirstOrDefault(w => w.Minutes == minutes) is { } already)
         {
-            return juz;
+            return already;
         }
 
         var item = new LeadChoice(minutes);
@@ -867,12 +867,12 @@ public sealed partial class TaskDetailViewModel(
     [RelayCommand]
     private void AddLead()
     {
-        if (CustomLead is not { } count || SelectedLeadUnit is not { } jednostka)
+        if (CustomLead is not { } count || SelectedLeadUnit is not { } unit)
         {
             return;
         }
 
-        var minutes = (int)Math.Round(count) * jednostka.Minutes;
+        var minutes = (int)Math.Round(count) * unit.Minutes;
 
         if (minutes < 0)
         {
@@ -888,7 +888,7 @@ public sealed partial class TaskDetailViewModel(
     /// wyprzedzenie liczy się od godziny, więc zabranie jej zabiera to, od czego liczyło.
     /// Przypomnienie, które zostałoby przy zadaniu bez pory, nie miałoby kiedy się odezwać.
     /// </summary>
-    private IReadOnlyList<int> WybraneWyprzedzenia() =>
+    private IReadOnlyList<int> SelectedLeads() =>
         HasTime ? Leads.Where(w => w.IsChecked).Select(w => w.Minutes).ToList() : [];
 
     private void Refresh()

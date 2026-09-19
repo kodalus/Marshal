@@ -12,22 +12,22 @@ namespace Marshal.Tests;
 public sealed class FilterQueryTests
 {
     private static readonly DateOnly Dzis = new(2026, 9, 16);
-    private static readonly DateTimeOffset Teraz = new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
+    private static readonly DateTimeOffset Now = new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
     private static readonly Guid Obszar = Guid.CreateVersion7();
 
     private static int _licznik;
 
-    private static Hlc Stamp() => new(Teraz.ToUnixTimeMilliseconds(), _licznik++, "biurko");
+    private static Hlc Stamp() => new(Now.ToUnixTimeMilliseconds(), _licznik++, "biurko");
 
     private static TaskItem TaskId(string title = "cokolwiek")
     {
-        var z = TaskItem.Capture(title, Teraz, Stamp());
+        var z = TaskItem.Capture(title, Now, Stamp());
         z.MakeNext(Obszar, Stamp());
         return z;
     }
 
-    private static FilterSubject Podmiot(TaskItem task, params Guid[] tagi) =>
-        new(task, tagi);
+    private static FilterSubject Podmiot(TaskItem task, params Guid[] tags) =>
+        new(task, tags);
 
     [Fact]
     public void Filtr_bez_warunkow_nie_pasuje_do_niczego()
@@ -99,12 +99,12 @@ public sealed class FilterQueryTests
     [InlineData(0, DateWindow.Future, false)]
     [InlineData(3, DateWindow.Any, true)]
     [InlineData(3, DateWindow.None, false)]
-    public void Okna_czasowe_liczone_wzgledem_dzisiaj(int przesuniecie, DateWindow okno, bool waiting)
+    public void Okna_czasowe_liczone_wzgledem_dzisiaj(int offset, DateWindow window, bool waiting)
     {
         var task = TaskId();
-        task.SetDeadline(Dzis.AddDays(przesuniecie), Stamp());
+        task.SetDeadline(Dzis.AddDays(offset), Stamp());
 
-        new FilterQuery([FilterCondition.Deadline(okno)])
+        new FilterQuery([FilterCondition.Deadline(window)])
             .Matches(Podmiot(task), Dzis).Should().Be(waiting);
     }
 
@@ -202,7 +202,7 @@ public sealed class FilterQueryTests
     public void Wykonane_i_wyrzucone_nie_wchodza_dopoki_filtr_o_nie_nie_poprosi()
     {
         var zrobione = TaskId();
-        zrobione.Complete(Teraz, Stamp());
+        zrobione.Complete(Now, Stamp());
 
         var wykosz = TaskId();
         wykosz.Trash(Stamp());

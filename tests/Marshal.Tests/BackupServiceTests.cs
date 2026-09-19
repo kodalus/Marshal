@@ -19,13 +19,13 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class BackupServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private sealed class Baza(string device, Zegar zegar) : IDisposable
+    private sealed class Baza(string device, Clock clock) : IDisposable
     {
         private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
 
@@ -35,7 +35,7 @@ public sealed class BackupServiceTests : IDisposable
 
         public BackupService Kopia { get; private set; } = null!;
 
-        public Baza Otworz()
+        public Baza Open()
         {
             _polaczenie.Open();
             Db = new MarshalDbContext(
@@ -44,8 +44,8 @@ public sealed class BackupServiceTests : IDisposable
                     .AddInterceptors(new ChangeJournalInterceptor())
                     .Options);
             Db.Database.Migrate();
-            Hlc = new HlcSource(zegar, device);
-            Kopia = new BackupService(Db, Hlc, zegar, new StaleId(device));
+            Hlc = new HlcSource(clock, device);
+            Kopia = new BackupService(Db, Hlc, clock, new StaleId(device));
 
             return this;
         }
@@ -62,21 +62,21 @@ public sealed class BackupServiceTests : IDisposable
         public string Id { get; } = id;
     }
 
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly Baza _biurko;
 
     public BackupServiceTests()
     {
-        _biurko = new Baza("biurko", _zegar).Otworz();
+        _biurko = new Baza("biurko", _zegar).Open();
     }
 
     private static MemoryStream Plik(byte[] bajty) => new(bajty);
 
     private static async Task<byte[]> EksportAsync(BackupService copy)
     {
-        using var strumien = new MemoryStream();
-        await copy.ExportAsync(strumien);
-        return strumien.ToArray();
+        using var stream = new MemoryStream();
+        await copy.ExportAsync(stream);
+        return stream.ToArray();
     }
 
     private TaskItem TaskId(Baza baza, string title, Guid area)
@@ -107,7 +107,7 @@ public sealed class BackupServiceTests : IDisposable
 
         var file = await EksportAsync(_biurko.Kopia);
 
-        using var telefon = new Baza("telefon", _zegar).Otworz();
+        using var telefon = new Baza("telefon", _zegar).Open();
         var report = await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
 
         report.Applied.Should().BeGreaterThan(0);
@@ -222,7 +222,7 @@ public sealed class BackupServiceTests : IDisposable
         TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
         var file = await EksportAsync(_biurko.Kopia);
 
-        using var telefon = new Baza("telefon", _zegar).Otworz();
+        using var telefon = new Baza("telefon", _zegar).Open();
         await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
 
         telefon.Db.Changes.Should().BeEmpty();
@@ -237,8 +237,8 @@ public sealed class BackupServiceTests : IDisposable
         TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
         var file = await EksportAsync(_biurko.Kopia);
 
-        var wczesniej = new Zegar { Now = _zegar.Now.AddDays(-3) };
-        using var telefon = new Baza("telefon", wczesniej).Otworz();
+        var wczesniej = new Clock { Now = _zegar.Now.AddDays(-3) };
+        using var telefon = new Baza("telefon", wczesniej).Open();
 
         await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
 
@@ -257,7 +257,7 @@ public sealed class BackupServiceTests : IDisposable
 
         var file = await EksportAsync(_biurko.Kopia);
 
-        using var telefon = new Baza("telefon", _zegar).Otworz();
+        using var telefon = new Baza("telefon", _zegar).Open();
         await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
 
         // Usunięcie jest zawsze logiczne (spec 5.1), więc rekord jest w kopii —
@@ -286,7 +286,7 @@ public sealed class BackupServiceTests : IDisposable
         var file = await EksportAsync(_biurko.Kopia);
 
         // Drugie urządzenie nadaje termin — czyli coś, czego oryginał nigdy nie miał.
-        using var telefon = new Baza("telefon", _zegar).Otworz();
+        using var telefon = new Baza("telefon", _zegar).Open();
         await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
 
         _zegar.Now = _zegar.Now.AddHours(1);
@@ -313,7 +313,7 @@ public sealed class BackupServiceTests : IDisposable
         var zepsuty = text.Replace("\"RollCount\": 0", "\"RollCount\": \"nie liczba\"");
         zepsuty.Should().NotBe(text, "podmiana miała trafić w plik");
 
-        using var telefon = new Baza("telefon", _zegar).Otworz();
+        using var telefon = new Baza("telefon", _zegar).Open();
         var report = await telefon.Kopia.ImportAsync(
             Plik(Encoding.UTF8.GetBytes(zepsuty)), ImportMode.Merge);
 

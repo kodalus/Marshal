@@ -18,7 +18,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class DeviceIdentityTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
@@ -76,23 +76,23 @@ public sealed class DeviceIdentityTests : IDisposable
         // Zegar ścienny cofnięty między uruchomieniami — poprawka z serwera czasu
         // albo rozładowana bateria podtrzymania. Bez wznowienia nowa zmiana dostałaby
         // znacznik wcześniejszy od już wysłanej i przepadłaby przy scalaniu.
-        var zegar = new Zegar();
+        var clock = new Clock();
         Hlc last;
 
         using (var pierwsze = Baza())
         {
             var id = new DeviceIdentity(pierwsze).Id;
-            var hlc = new HlcSource(zegar, id, LastHlcStore.Read(pierwsze, id));
-            pierwsze.Tasks.Add(TaskItem.Capture("kupić mleko", zegar.Now, hlc.Next()));
+            var hlc = new HlcSource(clock, id, LastHlcStore.Read(pierwsze, id));
+            pierwsze.Tasks.Add(TaskItem.Capture("kupić mleko", clock.Now, hlc.Next()));
             pierwsze.SaveChanges();
             last = hlc.Last;
         }
 
-        zegar.Now = zegar.Now.AddHours(-5);
+        clock.Now = clock.Now.AddHours(-5);
 
         using var drugie = Baza();
         var id2 = new DeviceIdentity(drugie).Id;
-        var resumed = new HlcSource(zegar, id2, LastHlcStore.Read(drugie, id2));
+        var resumed = new HlcSource(clock, id2, LastHlcStore.Read(drugie, id2));
 
         resumed.Next().Should().BeGreaterThan(last);
     }

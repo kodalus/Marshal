@@ -1,6 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="Marshal.UI.Kontrolki.WyborGodziny">
+             x:Class="Marshal.UI.Controls.TimeField">
   <!-- Jak przy dacie: dwa wybieraki, jeden widoczny, powiązania w kodzie. -->
   <Panel>
     <TimePicker x:Name="Wbudowany" MinWidth="0" HorizontalAlignment="Stretch"

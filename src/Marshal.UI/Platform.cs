@@ -23,8 +23,8 @@ namespace Marshal.UI;
 /// gorsze, ale nie zepsute.
 /// </para>
 /// </remarks>
-public static class Platforma
+public static class Platform
 {
     /// <summary>Czy to platforma dotykowa: bez najechania, z palcem zamiast kursora.</summary>
-    public static bool Dotykowa { get; set; }
+    public static bool Touch { get; set; }
 }

@@ -31,8 +31,8 @@ public sealed partial class LeadChoice(int minutes) : ObservableObject
         }
 
         var days = minutes / (60 * 24);
-        var godziny = minutes / 60 % 24;
-        var reszta = minutes % 60;
+        var hours = minutes / 60 % 24;
+        var rest = minutes % 60;
 
         var parts = new List<string>();
 
@@ -41,14 +41,14 @@ public sealed partial class LeadChoice(int minutes) : ObservableObject
             parts.Add(days == 1 ? "dzień" : $"{days} dni");
         }
 
-        if (godziny > 0)
+        if (hours > 0)
         {
-            parts.Add($"{godziny} godz.");
+            parts.Add($"{hours} godz.");
         }
 
-        if (reszta > 0)
+        if (rest > 0)
         {
-            parts.Add($"{reszta} min");
+            parts.Add($"{rest} min");
         }
 
         return $"{string.Join(' ', parts)} wcześniej";

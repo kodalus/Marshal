@@ -175,7 +175,7 @@ public sealed class StartupTests : IDisposable
         using var uslugi = Zloz();
         await DependencyInjection.PrepareAsync(uslugi);
 
-        var ustawienia = uslugi.GetRequiredService<ISettings>();
+        var settings = uslugi.GetRequiredService<ISettings>();
         var tasks = uslugi.GetRequiredService<Marshal.Application.Repositories.ITaskRepository>();
 
         using var end = new CancellationTokenSource();
@@ -198,10 +198,10 @@ public sealed class StartupTests : IDisposable
         {
             for (var i = 0; i < 30; i++)
             {
-                ustawienia.SetTheme(i % 2 == 0 ? ThemeChoice.Dark : ThemeChoice.Light);
+                settings.SetTheme(i % 2 == 0 ? ThemeChoice.Dark : ThemeChoice.Light);
 
-                _ = ustawienia.Theme;
-                _ = ustawienia.Zone;
+                _ = settings.Theme;
+                _ = settings.Zone;
             }
         };
 

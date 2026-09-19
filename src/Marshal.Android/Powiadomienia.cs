@@ -45,9 +45,9 @@ internal static class Powiadomienia
     /// identycznie: nie założył się kanał, nie ma zgody, albo nie było czego pokazać.
     /// Na telefonie bez kabla to jedyna droga, żeby je rozróżnić.
     /// </remarks>
-    public static void Podepnij(Activity okno)
+    public static void Podepnij(Activity window)
     {
-        Podepnij((Context)okno);
+        Podepnij((Context)window);
 
         try
         {
@@ -56,7 +56,7 @@ internal static class Powiadomienia
             // odbiornik nie mają jak o nic zapytać.
             if (OperatingSystem.IsAndroidVersionAtLeast(33))
             {
-                ZapytajOZgode(okno);
+                ZapytajOZgode(window);
             }
         }
         catch (Exception e)
@@ -113,12 +113,12 @@ internal static class Powiadomienia
     /// liczbą, więc wołanie młodszego API zgłaszał jako błąd mimo poprawnego warunku.
     /// </remarks>
     [SupportedOSPlatform("android33.0")]
-    private static void ZapytajOZgode(Activity okno)
+    private static void ZapytajOZgode(Activity window)
     {
-        if (okno.CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications)
+        if (window.CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications)
             != global::Android.Content.PM.Permission.Granted)
         {
-            okno.RequestPermissions([global::Android.Manifest.Permission.PostNotifications], 1);
+            window.RequestPermissions([global::Android.Manifest.Permission.PostNotifications], 1);
         }
     }
 

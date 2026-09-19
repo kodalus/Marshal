@@ -71,7 +71,7 @@ public sealed class SynchronizacjaWorker : Worker
     {
         try
         {
-            var warunki = new Constraints.Builder()
+            var conditions = new Constraints.Builder()
                 .SetRequiredNetworkType(NetworkType.Connected!)!
                 .Build();
 
@@ -82,7 +82,7 @@ public sealed class SynchronizacjaWorker : Worker
                 Minut,
                 TimeUnit.Minutes!);
 
-            budowniczy.SetConstraints(warunki!);
+            budowniczy.SetConstraints(conditions!);
 
             WorkManager.GetInstance(kontekst).EnqueueUniquePeriodicWork(
                 Name,
@@ -127,9 +127,9 @@ public sealed class SynchronizacjaWorker : Worker
     {
         await AppServices.ReadyAsync();
 
-        var dysk = AppServices.Provider.GetRequiredService<GoogleSyncService>();
+        var drive = AppServices.Provider.GetRequiredService<GoogleSyncService>();
 
-        if (!dysk.HasCredentials || !Directory.Exists(dysk.TokenFolder))
+        if (!drive.HasCredentials || !Directory.Exists(drive.TokenFolder))
         {
             // Ze śladem, bo to jedyna droga, na której przebieg odpala się poprawnie
             // i nie robi nic. Bez wpisu wygląda identycznie jak przebieg, który nie
@@ -141,7 +141,7 @@ public sealed class SynchronizacjaWorker : Worker
             return Result.InvokeSuccess()!;
         }
 
-        var result = await dysk.SyncAsync();
+        var result = await drive.SyncAsync();
 
         if (!result.Ok)
         {

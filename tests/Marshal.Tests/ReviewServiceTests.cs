@@ -21,7 +21,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class ReviewServiceTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 16, 20, 0, 0, TimeSpan.FromHours(2));
@@ -29,7 +29,7 @@ public sealed class ReviewServiceTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly HlcSource _hlc;
     private readonly ReviewService _przeglad;
     private readonly Area _obszar;
@@ -183,9 +183,9 @@ public sealed class ReviewServiceTests : IDisposable
         przeterminowane.SetDeadline(new DateOnly(2026, 9, 1), _hlc.Next());
         _db.Tasks.Add(przeterminowane);
 
-        var czekajace = TaskItem.Capture("na kimś", _zegar.Now, _hlc.Next());
-        czekajace.Delegate(_obszar.Id, "urząd", new DateOnly(2026, 8, 1), null, _hlc.Next());
-        _db.Tasks.Add(czekajace);
+        var pending = TaskItem.Capture("na kimś", _zegar.Now, _hlc.Next());
+        pending.Delegate(_obszar.Id, "urząd", new DateOnly(2026, 8, 1), null, _hlc.Next());
+        _db.Tasks.Add(pending);
         _db.SaveChanges();
 
         var liczniki = await _przeglad.CountsAsync();
@@ -207,9 +207,9 @@ public sealed class ReviewServiceTests : IDisposable
 
         _db.ChangeTracker.Clear();
 
-        var odczytana = _db.ReviewSessions.Single();
-        odczytana.IsProcessed(wrzut.Id).Should().BeTrue();
-        odczytana.ProcessedCount.Should().Be(1);
+        var read = _db.ReviewSessions.Single();
+        read.IsProcessed(wrzut.Id).Should().BeTrue();
+        read.ProcessedCount.Should().Be(1);
     }
 
     public void Dispose()

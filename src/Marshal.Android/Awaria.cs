@@ -59,7 +59,7 @@ internal static class Awaria
             }
 
             var slad = File.ReadAllText(sciezka);
-            Aplikacja.SladPlatformy = $"Poprzednie uruchomienie padło.\n\n{slad}";
+            Aplikacja.PlatformTrace = $"Poprzednie uruchomienie padło.\n\n{slad}";
             File.Delete(sciezka);
 
             // Dymek systemowy, a nie tylko wpis w dzienniku. Dziennik wymaga udanego
@@ -69,7 +69,7 @@ internal static class Awaria
         }
         catch (Exception e)
         {
-            Aplikacja.SladPlatformy = $"Nie udało się odczytać śladu awarii: {e.Message}";
+            Aplikacja.PlatformTrace = $"Nie udało się odczytać śladu awarii: {e.Message}";
         }
     }
 
@@ -77,7 +77,7 @@ internal static class Awaria
     private static string Pierwsze(string slad) =>
         string.Join("\n", slad.Split('\n').Skip(1).Take(2)).Trim();
 
-    private static void Save(Context kontekst, Exception? blad)
+    private static void Save(Context kontekst, Exception? error)
     {
         try
         {
@@ -85,7 +85,7 @@ internal static class Awaria
             {
                 File.WriteAllText(
                     sciezka,
-                    $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}\n{blad?.ToString() ?? "bez wyjątku"}");
+                    $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}\n{error?.ToString() ?? "bez wyjątku"}");
             }
         }
         catch

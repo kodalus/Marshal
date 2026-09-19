@@ -31,24 +31,24 @@ namespace Marshal.UI;
 /// pisać same zera.
 /// </para>
 /// </remarks>
-public static class Rozruch
+public static class Startup
 {
-    private static readonly Stopwatch Zegar = Stopwatch.StartNew();
+    private static readonly Stopwatch Clock = Stopwatch.StartNew();
 
     /// <summary>Ile minęło od pierwszej linijki naszego kodu.</summary>
-    public static long Teraz() => Zegar.ElapsedMilliseconds;
+    public static long Now() => Clock.ElapsedMilliseconds;
 
     /// <summary>Postawienie środowiska okna razem ze złożeniem widoku.</summary>
-    public static long Platforma { get; set; }
+    public static long Platform { get; set; }
 
     /// <summary>Koniec tworzenia okna — z podpięciem powiadomień, cofania i budzika.</summary>
-    public static long Okno { get; set; }
+    public static long Window { get; set; }
 
     /// <summary>Chwila, w której wątek okna doszedł do wczytywania.</summary>
     public static long Model { get; set; }
 
     /// <summary>Czy jest o czym mówić. Na pulpicie nikt tych liczb nie ustawia.</summary>
-    public static bool Zmierzony => Okno > 0;
+    public static bool Measured => Window > 0;
 
     /// <summary>Najdłuższa przerwa w odpowiadaniu wątku okna i chwila, w której minęła.</summary>
     /// <remarks>
@@ -65,30 +65,30 @@ public static class Rozruch
     /// już zwykłym czytaniem.
     /// </para>
     /// </remarks>
-    public static long NajdluzszaPrzerwa { get; private set; }
+    public static long LongestGap { get; private set; }
 
     /// <summary>Kiedy skończyła się ta najdłuższa przerwa, licząc od startu.</summary>
-    public static long PrzerwaMinela { get; private set; }
+    public static long GapPassed { get; private set; }
 
-    private static long _ostatnieBicie;
+    private static long _lastBeat;
 
     /// <summary>Jedno uderzenie serca. Wołane z minutnika wątku okna.</summary>
-    public static void Bicie()
+    public static void Beat()
     {
-        var now = Teraz();
-        var przerwa = now - _ostatnieBicie;
+        var now = Now();
+        var gap = now - _lastBeat;
 
-        if (_ostatnieBicie > 0 && przerwa > NajdluzszaPrzerwa)
+        if (_lastBeat > 0 && gap > LongestGap)
         {
-            NajdluzszaPrzerwa = przerwa;
-            PrzerwaMinela = now;
+            LongestGap = gap;
+            GapPassed = now;
         }
 
-        _ostatnieBicie = now;
+        _lastBeat = now;
     }
 
     public static string Description =>
-        $"postawienie {Platforma} ms, reszta okna {Okno - Platforma} ms, "
-        + $"do wczytywania {Model - Okno} ms, "
-        + $"najdłuższa przerwa {NajdluzszaPrzerwa} ms (minęła w {PrzerwaMinela} ms)";
+        $"postawienie {Platform} ms, reszta okna {Window - Platform} ms, "
+        + $"do wczytywania {Model - Window} ms, "
+        + $"najdłuższa przerwa {LongestGap} ms (minęła w {GapPassed} ms)";
 }

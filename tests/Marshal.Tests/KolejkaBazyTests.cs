@@ -16,7 +16,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class KolejkaBazyTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now => new(2026, 9, 18, 9, 0, 0, TimeSpan.FromHours(2));
     }
@@ -165,8 +165,8 @@ public sealed class KolejkaBazyTests : IDisposable
 
         var work = new UnitOfWork(_db, new DbQueue(), signal);
 
-        var hlc = new HlcSource(new Zegar(), "testy");
-        _db.Areas.Add(new Area(Guid.CreateVersion7(), new Zegar().Now, hlc.Next(), "Dom", 0));
+        var hlc = new HlcSource(new Clock(), "testy");
+        _db.Areas.Add(new Area(Guid.CreateVersion7(), new Clock().Now, hlc.Next(), "Dom", 0));
         await work.SaveChangesAsync();
 
         podniesiony.Should().Be(1, "to jedyny znak, po którym synchronizacja wie, że jest co wysyłać");
@@ -188,19 +188,19 @@ public sealed class KolejkaBazyTests : IDisposable
         podniesiony.Should().Be(0);
     }
 
-    private static void InterlockedMax(ref int cel, int value)
+    private static void InterlockedMax(ref int target, int value)
     {
         int stary;
 
         do
         {
-            stary = Volatile.Read(ref cel);
+            stary = Volatile.Read(ref target);
 
             if (stary >= value)
             {
                 return;
             }
         }
-        while (Interlocked.CompareExchange(ref cel, value, stary) != stary);
+        while (Interlocked.CompareExchange(ref target, value, stary) != stary);
     }
 }

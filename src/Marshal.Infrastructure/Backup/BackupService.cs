@@ -174,7 +174,7 @@ public sealed class BackupService(
                 // albo ustawione konstruktorem. Znacznik encji jest wtedy jedynym,
                 // co o nim wiadomo, i jest prawdziwy: rekord na pewno nie zmienił się
                 // później niż jego własne UpdatedAt.
-                var default = entity.UpdatedAt.ToString();
+                var fallback = entity.UpdatedAt.ToString();
 
                 foreach (var group in properties
                     .Select(p => (
@@ -188,7 +188,7 @@ public sealed class BackupService(
                     // i potrafiłoby skasować wartość nadaną w międzyczasie na drugim
                     // urządzeniu. Brak wiedzy o polu nie jest wiedzą, że jest puste.
                     .Where(x => x.Hlc is not null || x.Value is not null)
-                    .Select(x => (x.Pole, Hlc: x.Hlc ?? default, x.Value))
+                    .Select(x => (x.Pole, Hlc: x.Hlc ?? fallback, x.Value))
                     .GroupBy(x => x.Hlc)
                     .OrderBy(g => g.Key, StringComparer.Ordinal))
                 {

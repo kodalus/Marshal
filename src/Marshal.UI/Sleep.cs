@@ -24,15 +24,15 @@ namespace Marshal.UI;
 /// aplikację za taką, którą warto ubić.
 /// </para>
 /// </remarks>
-public static class Uspienie
+public static class Sleep
 {
     /// <summary>Okno schodzi w tło. Puste, dopóki okna nie ma.</summary>
-    public static Action? Zasnij { get; set; }
+    public static Action? OnSleep { get; set; }
 
     /// <summary>Okno wraca na wierzch.</summary>
-    public static Action? Obudz { get; set; }
+    public static Action? OnWake { get; set; }
 
-    public static void Uspij() => Zasnij?.Invoke();
+    public static void Enter() => OnSleep?.Invoke();
 
-    public static void Ocknij() => Obudz?.Invoke();
+    public static void Leave() => OnWake?.Invoke();
 }

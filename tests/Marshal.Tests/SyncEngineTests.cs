@@ -19,7 +19,7 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class SyncEngineTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
@@ -42,13 +42,13 @@ public sealed class SyncEngineTests : IDisposable
                     .AddInterceptors(new ChangeJournalInterceptor())
                     .Options);
             Db.Database.Migrate();
-            Hlc = new HlcSource(Zegar, id);
+            Hlc = new HlcSource(Clock, id);
             Engine = new SyncEngine(Db, store, Hlc, id);
         }
 
         public string Id { get; }
 
-        public Zegar Zegar { get; } = new();
+        public Clock Clock { get; } = new();
 
         public SqliteConnection Connection { get; }
 
@@ -80,9 +80,9 @@ public sealed class SyncEngineTests : IDisposable
         _telefon = new Device("telefon", _katalog);
     }
 
-    private static Guid Dodaj(Device u, string title)
+    private static Guid Add(Device u, string title)
     {
-        var task = TaskItem.Capture(title, u.Zegar.Now, u.Hlc.Next());
+        var task = TaskItem.Capture(title, u.Clock.Now, u.Hlc.Next());
         u.Db.Tasks.Add(task);
         u.Db.SaveChanges();
         return task.Id;
@@ -91,7 +91,7 @@ public sealed class SyncEngineTests : IDisposable
     [Fact]
     public async Task Zadanie_z_jednego_urzadzenia_pojawia_sie_na_drugim()
     {
-        var id = Dodaj(_biurko, "Zadzwonić do przychodni");
+        var id = Add(_biurko, "Zadzwonić do przychodni");
 
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
@@ -105,7 +105,7 @@ public sealed class SyncEngineTests : IDisposable
     {
         // To jest obietnica z 9.3 i główny powód, dla którego dziennik zapisuje pola,
         // a nie encje. Oba urządzenia pracują bez łączności, każde zmienia co innego.
-        var id = Dodaj(_biurko, "Złożyć wniosek");
+        var id = Add(_biurko, "Złożyć wniosek");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
@@ -132,7 +132,7 @@ public sealed class SyncEngineTests : IDisposable
     [Fact]
     public async Task Przy_zmianie_tego_samego_pola_wygrywa_pozniejszy_znacznik()
     {
-        var id = Dodaj(_biurko, "pierwotny");
+        var id = Add(_biurko, "pierwotny");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
@@ -140,7 +140,7 @@ public sealed class SyncEngineTests : IDisposable
         _biurko.Db.SaveChanges();
 
         // Telefon zmienia później — jego zegar idzie do przodu.
-        _telefon.Zegar.Now = _telefon.Zegar.Now.AddMinutes(5);
+        _telefon.Clock.Now = _telefon.Clock.Now.AddMinutes(5);
         _telefon.Db.Tasks.Single(t => t.Id == id).Rename("z telefonu", _telefon.Hlc.Next());
         _telefon.Db.SaveChanges();
 
@@ -157,7 +157,7 @@ public sealed class SyncEngineTests : IDisposable
     {
         // Bez tego dwa urządzenia odbijałyby sobie te same zmiany bez końca,
         // przy czym każdy obieg z osobna wyglądałby na poprawny.
-        Dodaj(_biurko, "cokolwiek");
+        Add(_biurko, "cokolwiek");
         await _biurko.Engine.SyncAsync();
 
         await _telefon.Engine.SyncAsync();
@@ -168,7 +168,7 @@ public sealed class SyncEngineTests : IDisposable
     [Fact]
     public async Task Powtorna_synchronizacja_bez_zmian_nic_nie_robi()
     {
-        Dodaj(_biurko, "cokolwiek");
+        Add(_biurko, "cokolwiek");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
@@ -183,7 +183,7 @@ public sealed class SyncEngineTests : IDisposable
     {
         // Kursor jest przyspieszeniem, nie warunkiem poprawności — po jego wyzerowaniu
         // porcje czyta się od początku i wynik musi być ten sam.
-        var id = Dodaj(_biurko, "Zadzwonić");
+        var id = Add(_biurko, "Zadzwonić");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
@@ -202,7 +202,7 @@ public sealed class SyncEngineTests : IDisposable
     [Fact]
     public async Task Kosz_dociera_jako_stan_a_nie_jako_zniknięcie()
     {
-        var id = Dodaj(_biurko, "do wyrzucenia");
+        var id = Add(_biurko, "do wyrzucenia");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
@@ -221,13 +221,13 @@ public sealed class SyncEngineTests : IDisposable
         // Porcja z nowszej wersji aplikacji albo uszkodzona przez składnicę.
         // Ma zostać pominięta, a nie przerwać synchronizację — inaczej jedna zła
         // porcja unieruchomiłaby kursor i wszystko, co po niej.
-        Dodaj(_biurko, "pierwsze");
+        Add(_biurko, "pierwsze");
         await _biurko.Engine.SyncAsync();
 
         var store = new LocalFolderTransport(_katalog);
         await store.WriteSegmentAsync("biurko", "000002", "{\"e\":\"Tasks\",\"id\":\n");
 
-        Dodaj(_biurko, "trzecie");
+        Add(_biurko, "trzecie");
         await _biurko.Engine.SyncAsync();
 
         await _telefon.Engine.SyncAsync();
@@ -239,9 +239,9 @@ public sealed class SyncEngineTests : IDisposable
     public async Task Kolejne_wysylki_trafiaja_do_osobnych_porcji()
     {
         // Porcja raz zapisana się nie zmienia, więc druga wysyłka musi założyć nową.
-        Dodaj(_biurko, "pierwsze");
+        Add(_biurko, "pierwsze");
         await _biurko.Engine.SyncAsync();
-        Dodaj(_biurko, "drugie");
+        Add(_biurko, "drugie");
         await _biurko.Engine.SyncAsync();
 
         var chunks = await new LocalFolderTransport(_katalog).ListSegmentsAsync();
@@ -255,11 +255,11 @@ public sealed class SyncEngineTests : IDisposable
     {
         // Kursor przesuwa się per porcja, więc porcja, która pojawiła się po
         // wylistowaniu, zostaje doczytana przy następnej synchronizacji.
-        Dodaj(_biurko, "pierwsze");
+        Add(_biurko, "pierwsze");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
-        Dodaj(_biurko, "drugie");
+        Add(_biurko, "drugie");
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
@@ -272,11 +272,11 @@ public sealed class SyncEngineTests : IDisposable
         // Ten sam scenariusz co przez katalog, ale na kształcie, który narzuca Dysk:
         // płaskie nazwy plików zamiast katalogów na urządzenie. Jeśli scalanie zależy
         // od czegoś, co daje tylko system plików, to pęknie tutaj.
-        var dysk = new FakeDrive();
-        using var biurko = new Device("biurko", new GoogleDriveTransport(dysk));
-        using var telefon = new Device("telefon", new GoogleDriveTransport(dysk));
+        var drive = new FakeDrive();
+        using var biurko = new Device("biurko", new GoogleDriveTransport(drive));
+        using var telefon = new Device("telefon", new GoogleDriveTransport(drive));
 
-        var id = Dodaj(biurko, "Zadzwonić do przychodni");
+        var id = Add(biurko, "Zadzwonić do przychodni");
         await biurko.Engine.SyncAsync();
         await telefon.Engine.SyncAsync();
 
@@ -293,8 +293,8 @@ public sealed class SyncEngineTests : IDisposable
     [Fact]
     public async Task Zegar_lokalny_podnosi_sie_ponad_zdalny()
     {
-        _biurko.Zegar.Now = _biurko.Zegar.Now.AddHours(3);
-        Dodaj(_biurko, "z przyszłości");
+        _biurko.Clock.Now = _biurko.Clock.Now.AddHours(3);
+        Add(_biurko, "z przyszłości");
         await _biurko.Engine.SyncAsync();
 
         var before = _telefon.Hlc.Last;
@@ -307,7 +307,7 @@ public sealed class SyncEngineTests : IDisposable
     [Fact]
     public async Task Wlasny_plik_nie_jest_czytany_przez_samego_siebie()
     {
-        Dodaj(_biurko, "cokolwiek");
+        Add(_biurko, "cokolwiek");
 
         var result = await _biurko.Engine.SyncAsync();
 

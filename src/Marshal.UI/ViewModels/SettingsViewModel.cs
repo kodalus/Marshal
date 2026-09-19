@@ -36,35 +36,35 @@ public sealed record ThemeOption(ThemeChoice Value, string Label)
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettings _settings;
-    private readonly InAppNotifier _powiadomienia;
+    private readonly InAppNotifier _notifications;
     private readonly BackupService _backup;
     private readonly IClock _clock;
-    private readonly GoogleSyncService _dysk;
-    private readonly CalendarSyncService _kalendarze;
+    private readonly GoogleSyncService _drive;
+    private readonly CalendarSyncService _calendars;
     private readonly GoogleCalendarGateway _google;
-    private readonly IActivityLog _dziennik;
+    private readonly IActivityLog _journal;
 
     /// <summary>Wstrzymuje zapis w chwili wypełniania pól wartościami z ustawień.</summary>
-    private bool _wczytywanie;
+    private bool _loading;
 
     public SettingsViewModel(
         ISettings settings,
         BackupService backup,
         IClock clock,
-        GoogleSyncService dysk,
-        CalendarSyncService kalendarze,
+        GoogleSyncService drive,
+        CalendarSyncService calendars,
         GoogleCalendarGateway google,
         IActivityLog journal,
-        InAppNotifier powiadomienia)
+        InAppNotifier notifications)
     {
-        _powiadomienia = powiadomienia;
+        _notifications = notifications;
         _settings = settings;
         _backup = backup;
         _clock = clock;
-        _dysk = dysk;
-        _kalendarze = kalendarze;
+        _drive = drive;
+        _calendars = calendars;
         _google = google;
-        _dziennik = journal;
+        _journal = journal;
     }
 
     /// <summary>
@@ -77,7 +77,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         // Wypełnienie idzie przez właściwości, więc bez tej blokady samo otwarcie
         // ekranu zapisywałoby do bazy motyw i strefę, których nikt nie zmieniał.
-        _wczytywanie = true;
+        _loading = true;
 
         Theme = ThemeOption.All.First(t => t.Value == _settings.Theme);
         Zone = Zones.Contains(_settings.Zone.Id) ? _settings.Zone.Id : Zones[0];
@@ -86,9 +86,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         GoogleCalendar = _settings.GoogleCalendarEnabled;
         AvailableGoogleCalendars.Clear();
         OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
-        WczytajKonta();
+        LoadAccounts();
 
-        _wczytywanie = false;
+        _loading = false;
 
         // Wejście na ekran zawsze zastaje przycisk czynny. Gdyby poprzednia próba
         // utknęła mimo wszystko, wyjście i powrót ma wystarczyć zamiast restartu.
@@ -200,9 +200,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public ObservableCollection<GoogleCalendarInfo> AvailableGoogleCalendars { get; } = [];
 
     /// <summary>Pozycja „nigdzie" na liście kalendarza domyślnego.</summary>
-    private static readonly MainCalendarChoice BezKalendarza = new(null, "nigdzie — tylko w Marshalu");
+    private static readonly MainCalendarChoice NoCalendar = new(null, "nigdzie — tylko w Marshalu");
 
-    private bool _wczytywanieKalendarza;
+    private bool _loadingCalendar;
 
     /// <summary>
     /// Kalendarz, w którym lądują zadania z godziną.
@@ -238,7 +238,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         // Napis bez nazwy systemu. Ta sama aplikacja chodzi na Windowsie i na Androidzie,
         // a powiadomienie mówiące o dymku Windowsa na telefonie wygląda jak wzięte
         // z cudzego programu — i każe szukać czegoś, czego tam nie ma.
-        await _powiadomienia.ShowAsync(new Notification(
+        await _notifications.ShowAsync(new Notification(
             Guid.Empty,
             "Marshal — próba",
             "Jeśli widzisz to poza oknem aplikacji, powiadomienia systemowe działają."));
@@ -252,7 +252,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnMainCalendarChanged(MainCalendarChoice? value)
     {
-        if (_wczytywanieKalendarza)
+        if (_loadingCalendar)
         {
             return;
         }
@@ -268,7 +268,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         CalendarStatus = "Pobieranie listy kalendarzy…";
 
         List<GoogleCalendarInfo> list = [];
-        List<string> klopoty = [];
+        List<string> troubles = [];
 
         // Konto główne i każde dodane — po kolei, a nie „wszystko albo nic". Jedno
         // konto bez zgody na tym urządzeniu nie ma zabierać kalendarzy pozostałych:
@@ -285,8 +285,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
             catch (Exception e)
             {
-                klopoty.Add($"{account ?? "konto główne"}: {e.Message}");
-                await _dziennik.RecordAsync(
+                troubles.Add($"{account ?? "konto główne"}: {e.Message}");
+                await _journal.RecordAsync(
                     "Kalendarze Google: lista",
                     account ?? "konto główne",
                     ActivityLevel.Problem,
@@ -302,17 +302,17 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
 
-        var podsumowanie = list.Count == 0
+        var summary = list.Count == 0
             ? "Żadne konto nie pokazało kalendarzy."
             : $"Znalezione: {list.Count}. Wybierz, które podłączyć.";
 
-        CalendarStatus = klopoty.Count == 0
-            ? podsumowanie
-            : podsumowanie + Environment.NewLine + string.Join(Environment.NewLine, klopoty);
+        CalendarStatus = troubles.Count == 0
+            ? summary
+            : summary + Environment.NewLine + string.Join(Environment.NewLine, troubles);
 
-        if (klopoty.Count == 0)
+        if (troubles.Count == 0)
         {
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kalendarze Google: lista", $"znalezionych {list.Count}");
         }
     }
@@ -342,17 +342,17 @@ public sealed partial class SettingsViewModel : ObservableObject
             var address = await _google.AddAccountAsync();
 
             _settings.AddCalendarAccount(address);
-            WczytajKonta();
+            LoadAccounts();
 
             CalendarStatus = $"Konto {address} dodane. Pobierz kalendarze, żeby je podłączyć.";
-            await _dziennik.RecordAsync("Kalendarz: konto Google", address);
+            await _journal.RecordAsync("Kalendarz: konto Google", address);
 
             await LoadGoogleCalendarsAsync();
         }
         catch (Exception e)
         {
             CalendarStatus = e.Message;
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kalendarz: konto Google", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
@@ -374,13 +374,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         _settings.RemoveCalendarAccount(address);
-        WczytajKonta();
+        LoadAccounts();
 
         CalendarStatus = $"Konto {address} odłączone od tego urządzenia.";
-        await _dziennik.RecordAsync("Kalendarz: konto odłączone", address);
+        await _journal.RecordAsync("Kalendarz: konto odłączone", address);
     }
 
-    private void WczytajKonta()
+    private void LoadAccounts()
     {
         CalendarAccounts.Clear();
         foreach (var account in _settings.CalendarAccounts)
@@ -399,7 +399,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        await DodajAsync(
+        await AddAsync(
             CalendarKind.Google, calendarId.Id, calendarId.Name, calendarId.Color,
             calendarId.Account, calendarId.ReadOnly);
     }
@@ -423,7 +423,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         var name = string.IsNullOrWhiteSpace(NewIcalName) ? "Kanał iCal" : NewIcalName;
 
-        await DodajAsync(CalendarKind.Ical, NewIcalUrl, name);
+        await AddAsync(CalendarKind.Ical, NewIcalUrl, name);
         NewIcalUrl = string.Empty;
         NewIcalName = string.Empty;
     }
@@ -436,7 +436,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        await _kalendarze.RemoveAsync(source.Id);
+        await _calendars.RemoveAsync(source.Id);
         await ReloadCalendarsAsync();
     }
 
@@ -452,7 +452,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var report = await _kalendarze.RefreshAsync(force: true);
+            var report = await _calendars.RefreshAsync(force: true);
 
             if (report.Sources == 0 && report.Failed == 0)
             {
@@ -460,7 +460,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 return;
             }
 
-            var podsumowanie =
+            var summary =
                 $"Odświeżone {report.Sources}, wydarzeń {report.Events}, nieudanych {report.Failed}."
                 + (report.Folded > 0
                     ? $" Odrzucone powtórzone podłączenia: {report.Folded}."
@@ -471,25 +471,25 @@ public sealed partial class SettingsViewModel : ObservableObject
             // do zrobienia. Powtórzone odsiewane, bo sześć kopii jednego zdania nie jest
             // sześcioma informacjami.
             CalendarStatus = report.Problems.Count == 0
-                ? podsumowanie
-                : podsumowanie + Environment.NewLine
+                ? summary
+                : summary + Environment.NewLine
                     + string.Join(Environment.NewLine, report.Problems.Distinct());
 
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kalendarz: pobranie",
-                podsumowanie,
+                summary,
                 report.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
                 string.Join(Environment.NewLine, report.Problems.Distinct()));
         }
         catch (Exception e)
         {
             CalendarStatus = e.Message;
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kalendarz: pobranie", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
 
-    private async Task DodajAsync(
+    private async Task AddAsync(
         CalendarKind kind,
         string externalId,
         string name,
@@ -499,19 +499,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         try
         {
-            await _kalendarze.AddAsync(kind, externalId, name, color, account, readOnly);
+            await _calendars.AddAsync(kind, externalId, name, color, account, readOnly);
 
             // Konto w dzienniku, bo ten sam kalendarz podłączony z dwóch kont daje dwa
             // wiersze o tej samej nazwie — i bez adresu nie widać, który jest który.
-            var skad = string.IsNullOrWhiteSpace(account) ? kind.ToString() : $"{kind}, {account}";
-            await _dziennik.RecordAsync("Kalendarz: podłączenie", $"{name} ({skad})");
+            var from = string.IsNullOrWhiteSpace(account) ? kind.ToString() : $"{kind}, {account}";
+            await _journal.RecordAsync("Kalendarz: podłączenie", $"{name} ({from})");
             await ReloadCalendarsAsync();
             await RefreshCalendarsAsync();
         }
         catch (Exception e)
         {
             CalendarStatus = e.Message;
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kalendarz: podłączenie", $"{name} ({kind}) — nie udało się",
                 ActivityLevel.Problem, e.Message);
         }
@@ -520,7 +520,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private async Task ReloadCalendarsAsync()
     {
         Calendars.Clear();
-        foreach (var source in await _kalendarze.SourcesAsync())
+        foreach (var source in await _calendars.SourcesAsync())
         {
             Calendars.Add(source);
         }
@@ -530,23 +530,23 @@ public sealed partial class SettingsViewModel : ObservableObject
         // do odczytu — postawienie któregokolwiek tutaj byłoby ustawieniem bez skutku,
         // z odmową dopiero przy pierwszym zadaniu z godziną.
         MainCalendars.Clear();
-        MainCalendars.Add(BezKalendarza);
+        MainCalendars.Add(NoCalendar);
 
-        foreach (var source in Calendars.Where(_kalendarze.CanWrite))
+        foreach (var source in Calendars.Where(_calendars.CanWrite))
         {
             MainCalendars.Add(new MainCalendarChoice(source.Id, source.Name));
         }
 
-        _wczytywanieKalendarza = true;
+        _loadingCalendar = true;
         MainCalendar = MainCalendars.FirstOrDefault(w => w.Id == _settings.MainCalendarId)
-            ?? BezKalendarza;
-        _wczytywanieKalendarza = false;
+            ?? NoCalendar;
+        _loadingCalendar = false;
 
         OnPropertyChanged(nameof(HasCalendars));
     }
 
     /// <summary>Gdzie ląduje żeton — żeby dało się go skasować i zalogować od nowa.</summary>
-    public string TokenFolder => _dysk.TokenFolder;
+    public string TokenFolder => _drive.TokenFolder;
 
     public string Now =>
         $"{_clock.Now:dd.MM.yyyy HH:mm zzz} — dzisiaj to {_clock.Today:dd.MM.yyyy}";
@@ -568,16 +568,16 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            await using var strumien = await SaveRequested(name);
+            await using var stream = await SaveRequested(name);
 
-            if (strumien is null)
+            if (stream is null)
             {
                 return;
             }
 
-            await _backup.ExportAsync(strumien);
+            await _backup.ExportAsync(stream);
             Status = $"Zapisane do {name}.";
-            await _dziennik.RecordAsync("Kopia: zapis", name);
+            await _journal.RecordAsync("Kopia: zapis", name);
         }
         catch (Exception e)
         {
@@ -587,7 +587,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             // zapasowej cicha porażka jest gorsza niż brak kopii, bo zostawia
             // przekonanie, że kopia jest. Treść wyjątku, nie „coś poszło nie tak".
             Status = $"Nie udało się zapisać: {e.Message}";
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kopia: zapis", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
@@ -602,21 +602,21 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            await using var strumien = await OpenRequested();
+            await using var stream = await OpenRequested();
 
-            if (strumien is null)
+            if (stream is null)
             {
                 return;
             }
 
-            var tryb = ReplaceOnImport ? ImportMode.Replace : ImportMode.Merge;
-            var report = await _backup.ImportAsync(strumien, tryb);
+            var mode = ReplaceOnImport ? ImportMode.Replace : ImportMode.Merge;
+            var report = await _backup.ImportAsync(stream, mode);
 
             Status = report.Applied == 0
                 ? $"Wczytane {report.Read} wpisów — wszystkie starsze niż to, co już jest."
                 : $"Wczytane {report.Read} wpisów, nałożone {report.Applied}.";
 
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kopia: wczytanie",
                 $"przeczytane {report.Read}, nałożone {report.Applied}, pominięte {report.Skipped}");
 
@@ -627,7 +627,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             // Jak wyżej. Wgranie jest w transakcji, więc baza została w stanie sprzed
             // próby — komunikat jest jedyną rzeczą, której brakuje.
             Status = $"Nie udało się wczytać: {e.Message}";
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Kopia: wczytanie", "nie udało się", ActivityLevel.Problem, e.Message);
         }
     }
@@ -641,9 +641,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// nie będzie — a nie będzie go zawsze, gdy Google odrzuci zgodę, bo wtedy
     /// przeglądarka zostaje na stronie błędu i nie woła nas wcale.
     /// </remarks>
-    private static readonly TimeSpan CzasNaZgode = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan ConsentTimeout = TimeSpan.FromMinutes(5);
 
-    private CancellationTokenSource? _przerwanie;
+    private CancellationTokenSource? _break;
 
     /// <summary>
     /// <summary>
@@ -687,18 +687,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         // opublikowana — przeglądarka zostaje na stronie błędu i **nie wraca nigdy**.
         // Bez ograniczenia czasu i bez przerwania czekanie trwa do zamknięcia
         // aplikacji, a przycisk zostaje martwy: nie da się nawet poprawić poświadczeń.
-        _przerwanie?.Dispose();
-        _przerwanie = new CancellationTokenSource(CzasNaZgode);
+        _break?.Dispose();
+        _break = new CancellationTokenSource(ConsentTimeout);
 
         IsSyncing = true;
         SyncStatus = "Łączenie… przy pierwszym razie otworzy się przeglądarka.";
 
         try
         {
-            var result = await _dysk.SyncAsync(_przerwanie.Token);
+            var result = await _drive.SyncAsync(_break.Token);
             SyncStatus = result.Message;
 
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Synchronizacja",
                 $"wysłane {result.Sent}, nałożone {result.Applied}",
                 result.Ok ? ActivityLevel.Ok : ActivityLevel.Problem,
@@ -709,7 +709,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             SyncStatus = "Przerwane — zgoda w przeglądarce nie wróciła. "
                 + "Jeśli Google pokazał stronę z błędem, popraw ustawienia w konsoli i spróbuj jeszcze raz.";
 
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Synchronizacja", "przerwane po czasie oczekiwania na zgodę",
                 ActivityLevel.Problem);
         }
@@ -718,7 +718,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             // Polecenie wołane bez oczekiwania na wynik — wyjątek, którego tu nie
             // złapiemy, nie ma dokąd trafić.
             SyncStatus = e.Message;
-            await _dziennik.RecordAsync(
+            await _journal.RecordAsync(
                 "Synchronizacja", "nie udało się", ActivityLevel.Problem, e.Message);
         }
         finally
@@ -729,23 +729,23 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>Przerwanie czekania na zgodę. Bez tego jedynym wyjściem jest restart.</summary>
     [RelayCommand]
-    private void CancelSync() => _przerwanie?.Cancel();
+    private void CancelSync() => _break?.Cancel();
 
     /// <summary>Wgranie kopii zmienia wszystko, więc ekran pod spodem musi się przeliczyć.</summary>
     public event EventHandler? Imported;
 
     private static IReadOnlyList<string> BuildZones()
     {
-        string[] czeste =
+        string[] frequent =
         [
             "Europe/Warsaw", "Europe/London", "Europe/Berlin", "Europe/Kyiv",
             "Europe/Lisbon", "Europe/Athens", "UTC",
         ];
 
-        return czeste.Where(Istnieje).ToArray();
+        return frequent.Where(Exists).ToArray();
     }
 
-    private static bool Istnieje(string id)
+    private static bool Exists(string id)
     {
         try
         {
@@ -760,7 +760,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnThemeChanged(ThemeOption? value)
     {
-        if (value is not null && !_wczytywanie)
+        if (value is not null && !_loading)
         {
             _settings.SetTheme(value.Value);
             ThemeChanged?.Invoke(this, value.Value);
@@ -772,7 +772,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     partial void OnZoneChanged(string value)
     {
-        if (_wczytywanie || string.IsNullOrWhiteSpace(value))
+        if (_loading || string.IsNullOrWhiteSpace(value))
         {
             return;
         }

@@ -21,7 +21,7 @@ namespace Marshal.UI;
 /// wybierak wbudowany jest poprawną odpowiedzią, nie zastępczą.
 /// </para>
 /// </remarks>
-public static class Pickery
+public static class Pickers
 {
     /// <summary>Oddaje wybraną datę albo tę podaną, gdy okno zamknięto bez wyboru.</summary>
     public static Func<DateOnly?, Task<DateOnly?>>? Data { get; set; }

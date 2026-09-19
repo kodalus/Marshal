@@ -23,7 +23,7 @@ namespace Marshal.Tests;
 /// </remarks>
 public sealed class StaleCacheTests : IDisposable
 {
-    private sealed class Zegar : IClock
+    private sealed class Clock : IClock
     {
         public DateTimeOffset Now { get; set; } =
             new(2026, 9, 17, 9, 0, 0, TimeSpan.FromHours(2));
@@ -31,7 +31,7 @@ public sealed class StaleCacheTests : IDisposable
 
     private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Zegar _zegar = new();
+    private readonly Clock _zegar = new();
     private readonly HlcSource _hlc;
     private readonly Guid _obszar = Guid.CreateVersion7();
 
