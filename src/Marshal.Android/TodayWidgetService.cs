@@ -70,17 +70,76 @@ public sealed class TodayWidgetService : RemoteViewsService
         {
         }
 
+        /// <summary>
+        /// Wczytanie wierszy na żądanie ekranu domowego.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Nigdy nie czekamy tu na przygotowanie bazy.</b> Ta metoda wykonuje się
+        /// na wątku, którym ekran domowy pyta nasz proces — a pytanie zadaje wtedy,
+        /// gdy proces dopiero wstaje, bo wcześniej go nie było i połączenie z usługą
+        /// trzeba nawiązać od nowa. Czekanie na migracje znaczyło więc trzymanie
+        /// cudzego wątku przez kilka sekund, w chwili, w której nasz własny start
+        /// i tak zajmuje wszystko inne.
+        /// </para>
+        /// <para>
+        /// Zamiast czekać, zostawiamy to, co widget ma, i <b>zamawiamy odświeżenie</b>
+        /// na potem. Do tego czasu na kafelku stoi poprzednia lista albo napis o pustym
+        /// dniu — czyli coś, co wygląda na odpowiedź, a nie na zawieszenie.
+        /// </para>
+        /// <para>
+        /// Sam odczyt też z ogranicznikiem. Baza jest lokalna i mała, więc przekroczenie
+        /// go znaczy, że coś ją akurat trzyma — a wtedy poprzednie wiersze są lepsze
+        /// od pustych: pusty kafelek mówi „nic nie masz", a to jest zdanie nieprawdziwe.
+        /// </para>
+        /// </remarks>
         public void OnDataSetChanged()
         {
+            var przygotowanie = AppServices.ReadyAsync();
+
+            if (!przygotowanie.IsCompleted)
+            {
+                _ = PoPrzygotowaniuAsync(kontekst);
+                return;
+            }
+
             try
             {
-                _wiersze = WczytajAsync(kontekst, widgetId).GetAwaiter().GetResult();
+                _wiersze = WczytajAsync(kontekst, widgetId)
+                    .WaitAsync(TimeSpan.FromSeconds(2))
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (TimeoutException)
+            {
+                // Zostaje to, co było. Następne odświeżenie i tak przyjdzie — po zapisie
+                // albo przy wyjściu z aplikacji.
             }
             catch (Exception e)
             {
                 // Pusta lista zamiast wywrotki: usługa, która rzuci, zostawia na
                 // ekranie domowym komunikat systemu o zepsutym widgecie.
                 _wiersze = [];
+                global::Android.Util.Log.Warn("Marshal", e.ToString());
+            }
+        }
+
+        /// <summary>Ponowna prośba o wiersze, gdy baza będzie już gotowa.</summary>
+        /// <remarks>
+        /// Przez zwykłe odświeżenie widgetu, a nie przez zapisanie wierszy tutaj:
+        /// ta fabryka może już wtedy nie istnieć, a system i tak pyta o wiersze
+        /// wyłącznie tę, którą sam trzyma.
+        /// </remarks>
+        private static async Task PoPrzygotowaniuAsync(Context kontekst)
+        {
+            try
+            {
+                await AppServices.ReadyAsync();
+
+                TodayWidget.Refresh(kontekst);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
                 global::Android.Util.Log.Warn("Marshal", e.ToString());
             }
         }
