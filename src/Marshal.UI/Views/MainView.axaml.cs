@@ -1416,21 +1416,26 @@ public partial class MainView : UserControl
             return;
         }
 
-        // **Przytrzymanie bloku palcem znaczy „biorę go do ręki", a nie „pokaż menu".**
+        // **Na dotyku blok na siatce nie ma menu podręcznego. Ma przeciąganie.**
         //
-        // Na dotyku to jest ten sam gest: system zgłasza żądanie menu po mniej więcej
-        // pół sekundy trzymania, czyli tuż po tym, jak nasze przytrzymanie wzięło blok
-        // w rękę. Menu kończyło ten chwyt pierwszą linijką niżej i przeciąganie palcem
-        // nie miało jak dojść do skutku — najpierw otwierało się menu, a blok wypadał.
+        // Przytrzymanie i żądanie menu to na dotyku ten sam gest: system zgłasza je po
+        // mniej więcej pół sekundy trzymania, czyli tuż po tym, jak nasze przytrzymanie
+        // wzięło blok w rękę. Menu kończy chwyt pierwszą linijką niżej, więc jedno
+        // wyklucza drugie — i trzeba wybrać. Na siatce wybrane jest przeciąganie.
         //
-        // Myszy to nie dotyczy: tam menu bierze się z prawego przycisku, który nie ma
-        // nic wspólnego z ciągnięciem lewym. Warunek pyta o trzymany blok, więc poza
-        // siatką — na listach i w drzewie projektów — przytrzymanie palcem dalej
-        // otwiera menu, bo tam nie ma z czym konkurować.
+        // Pytanie idzie o **platformę i o to, co pod palcem**, a nie o blok trzymany
+        // w tej chwili. Warunek na trzymany blok był za słaby: żądanie menu potrafi
+        // przyjść wtedy, gdy chwyt już się skończył — na przykład po odebraniu
+        // wskaźnika przez przewijanie — i menu otwierało się mimo wszystko.
         //
-        // Czego to nie zabiera: pozycje menu bloku są też w jego karcie, a karta otwiera
-        // się zwykłym dotknięciem.
-        if (_pressed is not null && _pressedPointer?.Type == PointerType.Touch)
+        // Poza siatką nic się nie zmienia: na listach zadań i w drzewie projektów
+        // przytrzymanie palcem dalej otwiera menu, bo tam nie ma z czym konkurować,
+        // a część jego pozycji nie ma na telefonie innej drogi. Na pulpicie menu
+        // zostaje wszędzie — prawy przycisk nie ma nic wspólnego z ciągnięciem lewym.
+        //
+        // Czego to nie zabiera: pozycje menu bloku są też w jego karcie, a karta
+        // otwiera się zwykłym dotknięciem.
+        if (Platform.Touch && Block(source) is not null)
         {
             e.Handled = true;
             return;
