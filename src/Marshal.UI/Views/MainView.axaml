@@ -1623,7 +1623,7 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="dk:Contact">
                   <Button Classes="nav" Margin="0,0,4,4" Content="{Binding Name}"
-                          Command="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).PokazOsobieCommand}"
+                          Command="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ShowPersonCommand}"
                           CommandParameter="{Binding}" />
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
