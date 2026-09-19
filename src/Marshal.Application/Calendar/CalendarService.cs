@@ -82,11 +82,23 @@ public sealed class CalendarSyncService(
             }
         }
 
+        // Całodniowość z brudnopisu, nie fałsz na sztywno.
+        //
+        // Stało tu „nie" dla każdego zapisu i to nie jest drobiazg wyglądu. Wydarzenie
+        // całodniowe ma u nas zapisane granice jako północ bez strefy; zapisane jako
+        // godzinowe przelicza się przy rysowaniu na strefę okna i robi się z niego
+        // bloczek od drugiej w nocy do drugiej w nocy **następnego dnia** — czyli wpis
+        // rozlany na dwie doby, na pierwszej „02:00 – 00:00", na drugiej „00:00 – 02:00".
+        //
+        // Do Google jechało przy tym poprawnie, jako data bez godziny. Rozjeżdżała się
+        // więc wyłącznie nasza kopia — i to najgorszym możliwym sposobem: przy każdym
+        // odświeżeniu wracała z Google prawidłowa, a przy każdym zapisie psuła się
+        // z powrotem.
         await store.UpsertAsync(
             zrodlo.Id,
             [new FeedEvent(
                 identyfikator, draft.Title, draft.Start, draft.End,
-                IsAllDay: false, draft.Location, Cancelled: false)],
+                draft.AllDay, draft.Location, Cancelled: false)],
             ct);
 
         await store.SaveChangesAsync(ct);
@@ -235,7 +247,40 @@ public sealed class CalendarSyncService(
                 wydarzenie.Location, wydarzenie.IsAllDay),
             ct);
 
-        await DeleteEventAsync(sourceId, externalId, ct);
+        try
+        {
+            await DeleteEventAsync(sourceId, externalId, ct);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // Nieudane zdjęcie ze starego kalendarza **cofa** założenie w nowym.
+            //
+            // Objaw, który to wymusił: kalendarz tylko do odczytu — świąteczny, fazy
+            // księżyca, cudzy udostępniony bez prawa zmian. Założenie w nowym udawało
+            // się, bo tam wolno pisać; skasowanie w starym wracało z odmową. Zostawała
+            // odmowa na ekranie **i** kopia w kalendarzu, o którą nikt nie prosił.
+            //
+            // Rozumowanie z komentarza wyżej dalej jest ważne: przy awarii przejściowej
+            // duplikat jest lepszy od skasowanego cudzego wpisu. Ale to nie była awaria
+            // przejściowa, tylko brak prawa, którego powtórzenie nie zmieni — i wtedy
+            // jedyna rzecz, jakiej nikt nie chciał, to właśnie ta kopia.
+            try
+            {
+                await DeleteEventAsync(targetId, nowy, ct);
+            }
+            catch (Exception przyCofaniu) when (przyCofaniu is not OperationCanceledException)
+            {
+                // Nieudane cofnięcie **dopisuje się** do pierwotnego powodu, zamiast go
+                // przykrywać. Powód mówi, czemu przeniesienie nie wyszło; dopisek mówi,
+                // że została po nim kopia — a to dwie różne rzeczy do zrobienia.
+                throw new InvalidOperationException(
+                    $"{e.Message} Do tego kopia założona w nowym kalendarzu została na miejscu "
+                    + $"i nie udało się jej zdjąć ({przyCofaniu.Message}) — usuń ją ręcznie.",
+                    e);
+            }
+
+            throw;
+        }
 
         return nowy;
     }

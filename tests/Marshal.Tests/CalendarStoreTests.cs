@@ -119,6 +119,17 @@ public sealed class CalendarStoreTests : IDisposable
 
         public bool Rzuca { get; set; }
 
+        /// <summary>Podłączenia, do których ten pisarz odmawia zapisu — jak kalendarz świąteczny.</summary>
+        public HashSet<Guid> TylkoDoOdczytu { get; } = [];
+
+        private void Sprawdz(CalendarSource source)
+        {
+            if (TylkoDoOdczytu.Contains(source.Id))
+            {
+                throw new InvalidOperationException("Ten kalendarz jest tylko do odczytu.");
+            }
+        }
+
         public CalendarKind Kind => CalendarKind.Ical;
 
         public Task<string> CreateAsync(
@@ -128,6 +139,8 @@ public sealed class CalendarStoreTests : IDisposable
             {
                 throw new HttpRequestException("kalendarz nie odpowiada");
             }
+
+            Sprawdz(source);
 
             Wyslane.Add(("utworzenie", draft.Title, null, draft.AllDay));
             return Task.FromResult("nowe-1");
@@ -166,6 +179,8 @@ public sealed class CalendarStoreTests : IDisposable
             {
                 throw new HttpRequestException("kalendarz nie odpowiada");
             }
+
+            Sprawdz(source);
 
             Wyslane.Add(("skasowanie", string.Empty, externalId, false));
             return Task.CompletedTask;
@@ -1879,6 +1894,75 @@ public sealed class CalendarStoreTests : IDisposable
 
         drugi.Id.Should().Be(pierwszy.Id);
         (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Calodniowe_zostaje_calodniowym_takze_w_naszej_kopii()
+    {
+        // Nasza kopia zapisywała każde wydarzenie jako godzinowe, niezależnie od tego,
+        // czym było. Do Google jechało przy tym poprawnie, jako data bez godziny —
+        // rozjeżdżała się wyłącznie kopia, i najgorszym możliwym sposobem: przy każdym
+        // odświeżeniu wracała prawidłowa, a przy każdym zapisie psuła się z powrotem.
+        //
+        // Objaw na ekranie: granice całodniowego to północ bez strefy, więc narysowane
+        // jako godzinowe w Warszawie dają bloczek od drugiej w nocy do drugiej w nocy
+        // **następnego dnia** — jeden wpis rozlany na dwie doby.
+        var dzien = new DateOnly(2026, 9, 18);
+
+        await _usluga.SaveEventAsync(
+            _zrodlo.Id,
+            externalId: null,
+            new CalendarDraft(
+                "Pierwsza kwadra",
+                new DateTimeOffset(dzien.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+                new DateTimeOffset(dzien.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+                Location: null,
+                AllDay: true));
+
+        _db.CalendarEvents.Single(e => e.Title == "Pierwsza kwadra")
+            .IsAllDay.Should().BeTrue();
+
+        // I to samo od strony siatki: wpis całodniowy stoi na pasku jednego dnia,
+        // a nie jako bloczek godzinowy rozciągnięty na dwa.
+        var dni = await _usluga.AgendaAsync(dzien, 2);
+
+        dni[0].AllDay.Should().ContainSingle(w => w.Title == "Pierwsza kwadra");
+        dni[0].Timed.Should().NotContain(s => s.Entry.Title == "Pierwsza kwadra");
+        dni[1].Timed.Should().NotContain(s => s.Entry.Title == "Pierwsza kwadra");
+    }
+
+    [Fact]
+    public async Task Nieudane_zdjecie_ze_starego_kalendarza_nie_zostawia_kopii_w_nowym()
+    {
+        // Przenoszenie wydarzenia u Google to założenie w nowym i skasowanie w starym.
+        // Przy kalendarzu tylko do odczytu — świątecznym, fazach księżyca, cudzym bez
+        // prawa zmian — pierwsze się udaje, drugie wraca odmową. Zostawała odmowa
+        // na ekranie **i** kopia, o którą nikt nie prosił.
+        var docelowy = new CalendarSource(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/moj.ics", "Rozwój własny");
+
+        _db.CalendarSources.Add(docelowy);
+        await _db.SaveChangesAsync();
+
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("ksiezyc", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        // Stary kalendarz przestaje przyjmować zapisy — tak jak świąteczny u Google.
+        _pisarz.TylkoDoOdczytu.Add(_zrodlo.Id);
+
+        var proba = async () => await _usluga.MoveEventAsync(_zrodlo.Id, "ksiezyc", docelowy.Id);
+
+        await proba.Should().ThrowAsync<InvalidOperationException>();
+
+        // Kopia w nowym kalendarzu zdjęta z powrotem — u źródła i u nas.
+        _pisarz.Wyslane.Should().Contain(w => w.Co == "skasowanie" && w.Id == "nowe-1");
+
+        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0]
+            .Timed.Should().ContainSingle(
+                "po nieudanym przeniesieniu zostaje samo wydarzenie u źródła");
     }
 
     [Fact]

@@ -200,9 +200,18 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
         var usluga = await UslugaAsync(source.Account, ct);
 
-        var utworzone = await usluga.Events
-            .Insert(Zbuduj(draft), source.ExternalId)
-            .ExecuteAsync(ct);
+        Event utworzone;
+
+        try
+        {
+            utworzone = await usluga.Events
+                .Insert(Zbuduj(draft), source.ExternalId)
+                .ExecuteAsync(ct);
+        }
+        catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new InvalidOperationException(TylkoDoOdczytu, e);
+        }
 
         return utworzone.Id
             ?? throw new InvalidOperationException(
@@ -357,7 +366,27 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         {
             throw new WydarzenieZniknelo();
         }
+        catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Forbidden)
+        {
+            throw new InvalidOperationException(TylkoDoOdczytu, e);
+        }
     }
+
+    /// <summary>
+    /// Odmowa zapisu po polsku.
+    /// </summary>
+    /// <remarks>
+    /// Google oddaje na to zdanie po angielsku, z kodem stanu w środku: „The service
+    /// calendar has thrown an exception. HttpStatusCode is Forbidden." Na karcie
+    /// wydarzenia wyglądało to jak awaria aplikacji, a jest zwyczajną i trwałą
+    /// odpowiedzią: do tego kalendarza nie wolno pisać i powtórzenie tego nie zmieni.
+    /// Kalendarze świąteczne, fazy księżyca i cudze udostępnione bez prawa zmian są
+    /// właśnie takie — a wpisuje się je akurat po to, żeby je tylko czytać.
+    /// </remarks>
+    private const string TylkoDoOdczytu =
+        "Ten kalendarz jest tylko do odczytu — Google nie pozwala w nim nic zmieniać "
+        + "ani kasować. Tak są ustawione kalendarze świąteczne, fazy księżyca i cudze "
+        + "udostępnione bez prawa zmian.";
 
     /// <summary>
     /// Identyfikator wydarzenia zrozumiały dla Google.
