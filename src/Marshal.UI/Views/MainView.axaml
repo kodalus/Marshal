@@ -31,6 +31,35 @@
 
 
 
+  <UserControl.Resources>
+    <!--
+      Ikony przełączników w szczegółach zadania — **rysunki, nie znaki pisma**.
+
+      Stały tu kiedyś emoji i na Androidzie nie pojawiało się nic: krój Inter, którym
+      pisze cała aplikacja, nie ma takich znaków, a podstawienia innego kroju Avalonia
+      tam nie robi. Zostawało pięć pustych kwadracików bez żadnego objawu, że to brak
+      czcionki. Potem były słowa — czytelne, ale zajmowały dwa wiersze na telefonie.
+
+      Ścieżka nie zależy od żadnego kroju: rysuje się tak samo na obu platformach
+      i w obu motywach, bo barwę bierze z przycisku, na którym siedzi. To jest jedyna
+      postać ikony, która nie może zniknąć przez czcionkę.
+
+      Wszystkie w kwadracie 24 na 24 i krzywymi sześciennymi zamiast łuków: zapis łuku
+      w tym języku różni się od tego z SVG i pomyłka w nim kończy się figurą, która
+      albo nie rysuje się wcale, albo rysuje się nie tak — a sprawdzić to da się
+      dopiero na ekranie.
+    -->
+    <StreamGeometry x:Key="IkonaTerminu">M4,5 L20,5 L20,21 L4,21 Z M4,10 L20,10 M8,2 L8,7 M16,2 L16,7</StreamGeometry>
+
+    <StreamGeometry x:Key="IkonaPrzypomnienia">M6,10 C6,6.7 8.7,4 12,4 C15.3,4 18,6.7 18,10 L18,15 L20,18 L4,18 L6,15 Z M10,20 C10.4,21.2 11.1,21.8 12,21.8 C12.9,21.8 13.6,21.2 14,20</StreamGeometry>
+
+    <StreamGeometry x:Key="IkonaWagi">M6,3 L6,22 M6,4 L19,4 L16,9.5 L19,15 L6,15</StreamGeometry>
+
+    <StreamGeometry x:Key="IkonaSil">M13,2 L5,14 L11,14 L11,22 L19,10 L13,10 Z</StreamGeometry>
+
+    <StreamGeometry x:Key="IkonaRytmu">M5,11 C5,7.1 8.1,4 12,4 C14.6,4 16.9,5.4 18.1,7.5 M15,7 L18.5,7.5 L19,4 M19,13 C19,16.9 15.9,20 12,20 C9.4,20 7.1,18.6 5.9,16.5 M9,17 L5.5,16.5 L5,20</StreamGeometry>
+  </UserControl.Resources>
+
   <UserControl.Styles>
     <!-- Pole daty ma własną szerokość najmniejszą, liczoną na trzy panele. W wierszu
          przypomnienia stało obok pola godziny i wypychało je poza krawędź karty —
@@ -91,6 +120,37 @@
     <Style Selector="ToggleButton.ikona:checked /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
       <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+
+    <!-- Przełącznik z samym rysunkiem: kwadratowy, bo nie ma w nim napisu, który
+         rozciągałby go na szerokość. Pięć takich mieści się w jednym wierszu także
+         na telefonie — słowa rozkładały się na dwa. -->
+    <Style Selector="ToggleButton.ikona.rysunek">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Width" Value="44" />
+    </Style>
+
+    <!-- Obrys, nie wypełnienie: przy dwudziestu punktach wypełniona figura zlewa się
+         w plamę, a kreska zostaje czytelna. Grubość i zaokrąglenia dobrane tak, żeby
+         rysunek miał ten sam ciężar co napis obok. -->
+    <Style Selector="Path.ikonka">
+      <Setter Property="Width" Value="20" />
+      <Setter Property="Height" Value="20" />
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="StrokeThickness" Value="1.6" />
+      <Setter Property="StrokeLineCap" Value="Round" />
+      <Setter Property="StrokeJoin" Value="Round" />
+
+      <!-- Barwa z przycisku, nie z zasobu: przycisk zna swój motyw i swój stan,
+           a ikona ma po prostu za nim iść. -->
+      <Setter Property="Stroke" Value="{Binding $parent[ToggleButton].Foreground}" />
+    </Style>
+
+    <!-- Wciśnięty przełącznik barwi też rysunek. Sama ramka w barwie wyróżnienia
+         ginęła na telefonie: przy pięciu kwadracikach obok siebie kreska grubości
+         półtora punkta to za mało, żeby od razu zobaczyć, który jest włączony. -->
+    <Style Selector="ToggleButton.ikona:checked Path.ikonka">
+      <Setter Property="Stroke" Value="{DynamicResource Akcent}" />
     </Style>
 
     <Style Selector="TextBlock.godzina">
@@ -2577,25 +2637,38 @@
           <!-- Pasek przełączników: każdy odsłania swoją rzecz. Dopisanie terminu nie ma
                wywlekać rytmu, wagi i energii, których się nie dotyka.
 
-               **Słowa, nie emoji.** Do dziś stały tu 📅 🔔 ❗ 🔋 🔁 i na Androidzie
-               nie pojawiało się nic: krój Inter, którym pisze cała aplikacja, nie ma
-               znaków emoji, a podstawienia innego kroju Avalonia tam nie robi. Zostawało
-               pięć pustych kwadracików bez żadnego objawu, że to brak czcionki.
+               **Rysunki, nie znaki pisma.** Stały tu najpierw emoji 📅 🔔 ❗ 🔋 🔁
+               i na Androidzie nie pojawiało się nic: krój Inter, którym pisze cała
+               aplikacja, nie ma takich znaków, a podstawienia innego kroju Avalonia
+               tam nie robi. Potem były słowa — czytelne i odporne, ale pięć chipów
+               z napisami rozkładało się na telefonie na dwa wiersze.
 
-               Słowa są zresztą lepsze także tam, gdzie emoji się rysują: znaczenie
-               niosły dotąd podpowiedzi po najechaniu, a na telefonie nie ma czym
-               najechać — symbolu bez podpisu nie da się odgadnąć ani razu. -->
+               Ścieżka rozwiązuje jedno i drugie: rysuje się niezależnie od kroju,
+               a pięć kwadracików mieści się w jednym wierszu. Znaczenia nie niesie
+               sam rysunek — niesie je pełne zdanie, które odsłania się **pod** paskiem
+               zaraz po wciśnięciu. Na dotyku, gdzie nie ma czym najechać po podpowiedź,
+               to jest jedyna droga, którą da się przejść raz i zapamiętać. -->
           <WrapPanel Margin="0,14,0,0">
-            <ToggleButton Classes="ikona" IsChecked="{Binding ShowDeadline}"
-                          Content="termin" ToolTip.Tip="Termin — fakt zewnętrzny" />
-            <ToggleButton Classes="ikona" IsChecked="{Binding ShowReminder}"
-                          Content="przypomni" ToolTip.Tip="Przypomnienie" />
-            <ToggleButton Classes="ikona" IsChecked="{Binding ShowPriority}"
-                          Content="waga" ToolTip.Tip="Waga" />
-            <ToggleButton Classes="ikona" IsChecked="{Binding ShowEnergy}"
-                          Content="siły" ToolTip.Tip="Ile trzeba mieć w sobie" />
-            <ToggleButton Classes="ikona" IsChecked="{Binding ShowRepeat}"
-                          Content="rytm" ToolTip.Tip="Rytm" />
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowDeadline}"
+                          ToolTip.Tip="Termin — fakt zewnętrzny">
+              <Path Classes="ikonka" Data="{StaticResource IkonaTerminu}" />
+            </ToggleButton>
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowReminder}"
+                          ToolTip.Tip="Przypomnienie">
+              <Path Classes="ikonka" Data="{StaticResource IkonaPrzypomnienia}" />
+            </ToggleButton>
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowPriority}"
+                          ToolTip.Tip="Waga">
+              <Path Classes="ikonka" Data="{StaticResource IkonaWagi}" />
+            </ToggleButton>
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowEnergy}"
+                          ToolTip.Tip="Ile trzeba mieć w sobie">
+              <Path Classes="ikonka" Data="{StaticResource IkonaSil}" />
+            </ToggleButton>
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowRepeat}"
+                          ToolTip.Tip="Rytm">
+              <Path Classes="ikonka" Data="{StaticResource IkonaRytmu}" />
+            </ToggleButton>
           </WrapPanel>
 
           <StackPanel>
