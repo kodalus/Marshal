@@ -15,7 +15,7 @@ namespace Marshal.Android;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Podpinane pod <see cref="InAppNotifier.Systemowe"/>, czyli dokładnie tam, gdzie
+/// Podpinane pod <see cref="InAppNotifier.SystemSink"/>, czyli dokładnie tam, gdzie
 /// projekt pulpitu podpina swoje. Warstwa współdzielona nie wie o żadnym z nich
 /// i wiedzieć nie ma: powiadomienie umie pokazać wyłącznie projekt platformy.
 /// </para>
@@ -40,7 +40,7 @@ internal static class Notifications
     /// Kanał, zgoda i podpięcie. Wołane raz, przy starcie okna.
     /// </summary>
     /// <remarks>
-    /// Wynik idzie do <see cref="InAppNotifier.StanSystemowych"/>, czyli do dziennika
+    /// Wynik idzie do <see cref="InAppNotifier.SystemStatus"/>, czyli do dziennika
     /// „Co się działo". Bez tego „nie ma powiadomienia" ma trzy przyczyny wyglądające
     /// identycznie: nie założył się kanał, nie ma zgody, albo nie było czego pokazać.
     /// Na telefonie bez kabla to jedyna droga, żeby je rozróżnić.

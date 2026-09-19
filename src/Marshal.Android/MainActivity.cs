@@ -142,7 +142,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     /// </summary>
     /// <remarks>
     /// Tu, a nie na zdarzeniu okna Avalonii: zejście w tło i powrót to pojęcia Androida
-    /// i tylko Android wie o nich na pewno. Zob. <see cref="Uspienie"/>.
+    /// i tylko Android wie o nich na pewno. Zob. <see cref="Sleep"/>.
     /// </remarks>
     protected override void OnResume()
     {

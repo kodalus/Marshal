@@ -738,9 +738,9 @@ public sealed partial class CalendarViewModel(
     /// Zmienia dokładnie dwie rzeczy — dzień i godzinę — i idzie osobną drogą niż zapis
     /// z okna szczegółu. Długość zostaje: przeciągnięcie przesuwa, a nie skraca.
     /// </remarks>
-    public async Task MoveAsync(Guid taskId, DateOnly day, double score)
+    public async Task MoveAsync(Guid taskId, DateOnly day, double y)
     {
-        var time = Time(score);
+        var time = Time(y);
 
         try
         {
@@ -777,7 +777,7 @@ public sealed partial class CalendarViewModel(
     /// odpowiedzią na omsknięcie ręki.
     /// </para>
     /// </remarks>
-    public async Task MoveEventAsync(SlotBox block, DateOnly day, double score)
+    public async Task MoveEventAsync(SlotBox block, DateOnly day, double y)
     {
         ArgumentNullException.ThrowIfNull(block);
 
@@ -787,7 +787,7 @@ public sealed partial class CalendarViewModel(
         }
 
         var zone = clock.Now.Offset;
-        var start = new DateTimeOffset(day.ToDateTime(Time(score)), zone);
+        var start = new DateTimeOffset(day.ToDateTime(Time(y)), zone);
         var length = TimeSpan.FromHours(Math.Max(0.25, block.Height / HourHeight));
 
         try
@@ -885,9 +885,9 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     private const int Step = 5;
 
-    public static TimeOnly Time(double score)
+    public static TimeOnly Time(double y)
     {
-        var minutes = Math.Clamp(score / HourHeight * 60, 0, (24 * 60) - Step);
+        var minutes = Math.Clamp(y / HourHeight * 60, 0, (24 * 60) - Step);
         var steps = (int)(minutes / Step) * Step;
 
         return new TimeOnly(steps / 60, steps % 60);
@@ -897,15 +897,15 @@ public sealed partial class CalendarViewModel(
     public event Action<DateOnly, TimeOnly>? NewTaskRequested;
 
     /// <summary>
-    /// Zgłoszenie z widoku: klik w puste miejsce kolumny, na wysokości <paramref name="punkty"/>.
+    /// Zgłoszenie z widoku: klik w puste miejsce kolumny, na wysokości <paramref name="y"/>.
     /// </summary>
     /// <remarks>
     /// Godzina zaokrąglana w dół do kwadransa. Minuta wzięta co do punktu byłaby
     /// udawaną precyzją: trafienie w 14:07 nie znaczy, że ktoś planuje na 14:07.
     /// </remarks>
-    public void NewAt(DateOnly day, double score)
+    public void NewAt(DateOnly day, double y)
     {
-        NewTaskRequested?.Invoke(day, Time(score));
+        NewTaskRequested?.Invoke(day, Time(y));
     }
 
     public async Task LoadAsync()
@@ -1568,7 +1568,7 @@ public sealed partial class CalendarViewModel(
     /// ujemną albo blokiem, który zniknął pod palcem.
     /// </para>
     /// </remarks>
-    public async Task ResizeAsync(SlotBox block, double score)
+    public async Task ResizeAsync(SlotBox block, double y)
     {
         ArgumentNullException.ThrowIfNull(block);
 
@@ -1578,7 +1578,7 @@ public sealed partial class CalendarViewModel(
         }
 
         var start = Time(block.Top);
-        var end = Time(score);
+        var end = Time(y);
         var minutes = (int)(end.ToTimeSpan() - start.ToTimeSpan()).TotalMinutes;
 
         try

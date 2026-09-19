@@ -14,7 +14,7 @@ public sealed record SyncOutcome(bool Ok, string Message, int Sent = 0, int Appl
 /// <para>
 /// <b>Sama, ale z bramą.</b> Przebieg rusza teraz również bez kliknięcia — chwilę po
 /// zmianie i co kilka minut przy otwartej aplikacji. Dlatego cała jego praca na bazie
-/// idzie przez <see cref="IKolejkaBazy"/>: kontekst bazy jest w tej aplikacji jeden
+/// idzie przez <see cref="IDbQueue"/>: kontekst bazy jest w tej aplikacji jeden
 /// na proces, a dwie rzeczy naraz na jednym kontekście to nie rzadki pech, tylko
 /// awaria na żądanie. Wynik ręcznego przebiegu nadal widać w oknie; automat milczy,
 /// dopóki się udaje.

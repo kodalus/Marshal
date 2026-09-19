@@ -24,7 +24,7 @@ namespace Marshal.Android;
 /// na pełną odpowiedź.
 /// </para>
 /// <para>
-/// Treść planu liczy <see cref="PlanDniaService"/>, nie ta klasa. Tu zostaje samo
+/// Treść planu liczy <see cref="DayPlanService"/>, nie ta klasa. Tu zostaje samo
 /// rysowanie: rama i wskazanie, skąd brać wiersze.
 /// </para>
 /// <para>

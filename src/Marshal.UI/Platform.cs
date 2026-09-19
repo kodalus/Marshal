@@ -5,8 +5,8 @@ namespace Marshal.UI;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Haczyk w warstwie współdzielonej, w tej samej postaci co <see cref="Wstecz"/>
-/// i <see cref="Uspienie"/>: projekt platformy podstawia odpowiedź, pulpit zostawia
+/// Haczyk w warstwie współdzielonej, w tej samej postaci co <see cref="Back"/>
+/// i <see cref="Sleep"/>: projekt platformy podstawia odpowiedź, pulpit zostawia
 /// domyślną. Pytanie jest o platformę, a nie o rozmiar okna — i to jest tu całe
 /// rozstrzygnięcie.
 /// </para>

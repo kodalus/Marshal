@@ -102,7 +102,7 @@ public sealed class InAppNotifierTests : IDisposable
 }
 
 /// <summary>
-/// Testy ruszające <see cref="InAppNotifier.Systemowe"/> idą jednym zbiorem, bo pole
+/// Testy ruszające <see cref="InAppNotifier.SystemSink"/> idą jednym zbiorem, bo pole
 /// jest statyczne: dwie klasy naraz podstawiałyby sobie nawzajem cudzy haczyk. Zbiór
 /// xUnita nie zrównolegla swoich klas, więc sama przynależność wystarcza.
 /// </summary>

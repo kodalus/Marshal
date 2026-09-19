@@ -12,7 +12,7 @@ namespace Marshal.Infrastructure.Notifications;
 /// na ekranie, gdy dymek się rozpłynął albo Windows go zatrzymał.
 /// </para>
 /// <para>
-/// Dymki podpina projekt platformy przez <see cref="Systemowe"/> — na pulpicie przy
+/// Dymki podpina projekt platformy przez <see cref="SystemSink"/> — na pulpicie przy
 /// starcie okna, na Androidzie przy starcie okna albo odbiornika budzika.
 /// </para>
 /// <para>

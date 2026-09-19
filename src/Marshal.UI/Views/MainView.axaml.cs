@@ -2183,9 +2183,9 @@ public partial class MainView : UserControl
         }
     }
 
-    private void OnScrollRequest(double score)
+    private void OnScrollRequest(double y)
     {
-        _target = score;
+        _target = y;
         Scroll();
     }
 

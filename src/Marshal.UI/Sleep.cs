@@ -5,7 +5,7 @@ namespace Marshal.UI;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Haczyk w warstwie współdzielonej, w tej samej postaci co <see cref="Wstecz"/>:
+/// Haczyk w warstwie współdzielonej, w tej samej postaci co <see cref="Back"/>:
 /// okno wie, <b>co</b> ma przestać robić, a nie wie, kiedy — to wie system. Projekt
 /// Androida podstawia tu wywołania z cyklu życia okna, pulpit zostawia pusto, bo tam
 /// aplikacja niewidoczna dalej jest aplikacją uruchomioną i nic jej nie zamraża.
