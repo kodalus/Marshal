@@ -1972,6 +1972,57 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Karta_wydarzenia_do_odczytu_mowi_o_tym_zamiast_proponowac_zapis()
+    {
+        // Zdanie „tylko do odczytu" stało na karcie od początku, ale pokazywało się po
+        // pytaniu o **rodzaj** kalendarza — „czy umiemy pisać do Google". Dla kalendarza
+        // świątecznego odpowiedź brzmiała „tak", więc zdania nie było widać, a przyciski
+        // „Zapisz" i „Skasuj" owszem. Odmowa przychodziła dopiero po naciśnięciu.
+        _source.SetReadOnly(true);
+        await _db.SaveChangesAsync();
+
+        _feed.Next = new FeedResult(
+            [NewEvent("a", "Pierwsza kwadra", "2026-09-16", 8, 9)], null, true);
+
+        await _service.RefreshAsync(force: true);
+
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
+        await model.LoadAsync();
+
+        var block = model.Columns
+            .SelectMany(k => k.Slots)
+            .Single(b => b.Title == "Pierwsza kwadra");
+
+        model.OpenTaskCommand.Execute(block);
+
+        model.HasOpened.Should().BeTrue();
+        model.CanEditOpened.Should().BeFalse(
+            "kalendarz jest tylko do odczytu, więc karta ma to powiedzieć, a nie proponować zapis");
+    }
+
+    [Fact]
+    public async Task Karta_wydarzenia_z_wlasnego_kalendarza_dalej_pozwala_zapisac()
+    {
+        // Druga strona tego samego: poprawka miała zdjąć przyciski tam, gdzie zapis nie
+        // ma dokąd pójść, a nie wszędzie.
+        _feed.Next = new FeedResult(
+            [NewEvent("b", "Zebranie", "2026-09-16", 10, 11)], null, true);
+
+        await _service.RefreshAsync(force: true);
+
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
+        await model.LoadAsync();
+
+        var block = model.Columns
+            .SelectMany(k => k.Slots)
+            .Single(b => b.Title == "Zebranie");
+
+        model.OpenTaskCommand.Execute(block);
+
+        model.CanEditOpened.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Poziom_dostepu_odswieza_sie_przy_kazdym_pobraniu()
     {
         // Dostęp się zmienia: ktoś dopuszcza do swojego kalendarza albo odbiera dostęp.

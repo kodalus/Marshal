@@ -200,7 +200,10 @@ internal static class Palette
 /// kliknąć. Godzinę można było dopisać tylko przez listę „Następne".
 /// </remarks>
 public sealed record AllDayBox(
-    string Title, Guid? TaskId, Guid? SourceId, string? ExternalId, bool IsDone = false)
+    string Title, Guid? TaskId, Guid? SourceId, string? ExternalId, bool IsDone = false,
+
+    /// <summary>Czy do kalendarza, z którego wpis pochodzi, da się pisać.</summary>
+    bool CanWrite = false)
 {
     /// <summary>
     /// Napis na pasku — z ptaszkiem, gdy wpis jest odhaczony.
@@ -728,7 +731,7 @@ public sealed partial class CalendarViewModel(
             entry.Title, 0, 0, 0, 0, IsTask: false, Color: null,
             StartText: "—", EndText: "—", TaskId: null,
             DayText: Anchor.ToString("dd.MM.yyyy"), entry.SourceId, entry.ExternalId,
-            IsDone: false));
+            entry.IsDone, entry.CanWrite));
     }
 
     /// <summary>
@@ -1441,7 +1444,7 @@ public sealed partial class CalendarViewModel(
             day.Date,
             $"{DayNames[((int)day.Date.DayOfWeek + 6) % 7]} {day.Date.Day}",
             day.AllDay.Select(e => new AllDayBox(
-                e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone)).ToList(),
+                e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone, e.CanWrite)).ToList(),
             day.Timed.Select(Box).ToList(),
             day.Date == today,
             now)).ToList();
@@ -1644,9 +1647,15 @@ public sealed partial class CalendarViewModel(
         OpenedProblem = null;
 
         // Przycisków zapisu nie pokazujemy tam, gdzie zapis i tak nie ma dokąd pójść.
+        //
+        // Pytanie idzie o **to** podłączenie, nie o jego rodzaj. Rodzaj oddawał prawdę
+        // dla każdego kalendarza Google, więc kalendarz tylko do odczytu — świąteczny,
+        // cudzy udostępniony bez prawa zmian — dostawał przyciski „Zapisz" i „Skasuj"
+        // i nie dostawał zdania o tym, że jest do odczytu. Odmowa przychodziła dopiero
+        // po naciśnięciu. Prawo zapisu niesie sam wpis, policzone przy składaniu siatki.
         CanEditOpened = block.SourceId is not null
             && block.ExternalId is not null
-            && calendar.CanWrite(CalendarKind.Google);
+            && block.CanWrite;
 
         OnPropertyChanged(nameof(HasOpenedProblem));
 

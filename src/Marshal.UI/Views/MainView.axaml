@@ -1654,7 +1654,7 @@
           </StackPanel>
 
           <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !CanEditOpened}"
-                     Text="Ten kanał jest tylko do odczytu — zmiany rób tam, gdzie wydarzenie powstało." />
+                     Text="Ten kalendarz jest tylko do odczytu — zmiany rób tam, gdzie wydarzenie powstało." />
 
           <WrapPanel Margin="0,8,0,0" HorizontalAlignment="Right">
             <Button Classes="nav glowny" IsVisible="{Binding CanEditOpened}"
