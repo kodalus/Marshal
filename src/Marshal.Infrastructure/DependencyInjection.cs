@@ -44,6 +44,26 @@ public static class DependencyInjection
     public static IServiceCollection AddMarshal(
         this IServiceCollection services, string databasePath, string? deviceId = null)
     {
+        // **Przełącznik przed czymkolwiek, co dotknie bazy.**
+        //
+        // Skompilowany model buduje się w swoim konstruktorze statycznym, a ten domyślnie
+        // robi to na osobnym wątku ze stosem dziesięciu megabajtów i czeka na jego koniec.
+        // EF robi tak dlatego, że bardzo duże modele przepełniały stos zwykłego wątku.
+        // Na telefonie kosztowało to całą aplikację: wątek nie wstawał, konstruktor
+        // statyczny nie wracał, a taki konstruktor zatrzymuje **bez wyjątku** każdego,
+        // kto dotknie tej klasy. Objawem był ekran „Chwileczkę — otwieram bazę" i cisza:
+        // ani błędu, ani wpisu w dzienniku.
+        //
+        // Ten przełącznik każe budować model na wątku wołającego. Nasz ma dziewiętnaście
+        // encji — o rzędy wielkości mniej niż te, dla których tamto obejście powstało.
+        //
+        // Tutaj, a nie w inicjalizatorze modułu: inicjalizator byłby pewniejszy co do
+        // kolejności, ale w bibliotece jest zaskoczeniem i analiza kodu słusznie to
+        // zgłasza. Składanie zależności i tak jest pierwszą rzeczą w każdym procesie —
+        // także tam, gdzie bazę pierwszy dotknie widget albo odbiornik budzika — a model
+        // czytany jest dopiero z pierwszego zapytania.
+        AppContext.SetSwitch("Microsoft.EntityFrameworkCore.Issue31751", true);
+
         // Jeden kontekst na całą aplikację **dla wszystkiego, co przechodzi przez bramę
         // kolejki**. Przy jednym użytkowniku i pracy wyłącznie lokalnej to najprostsze
         // rozwiązanie, które działa. Do ponownego rozważenia w etapie 3: scalanie
