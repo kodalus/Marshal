@@ -1416,6 +1416,26 @@ public partial class MainView : UserControl
             return;
         }
 
+        // **Przytrzymanie bloku palcem znaczy „biorę go do ręki", a nie „pokaż menu".**
+        //
+        // Na dotyku to jest ten sam gest: system zgłasza żądanie menu po mniej więcej
+        // pół sekundy trzymania, czyli tuż po tym, jak nasze przytrzymanie wzięło blok
+        // w rękę. Menu kończyło ten chwyt pierwszą linijką niżej i przeciąganie palcem
+        // nie miało jak dojść do skutku — najpierw otwierało się menu, a blok wypadał.
+        //
+        // Myszy to nie dotyczy: tam menu bierze się z prawego przycisku, który nie ma
+        // nic wspólnego z ciągnięciem lewym. Warunek pyta o trzymany blok, więc poza
+        // siatką — na listach i w drzewie projektów — przytrzymanie palcem dalej
+        // otwiera menu, bo tam nie ma z czym konkurować.
+        //
+        // Czego to nie zabiera: pozycje menu bloku są też w jego karcie, a karta otwiera
+        // się zwykłym dotknięciem.
+        if (_pressed is not null && _pressedPointer?.Type == PointerType.Touch)
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Cokolwiek trzymaliśmy w ręku, menu to kończy. Pozycja „Usuń" wyjmuje blok
         // z siatki, więc puszczenie nie miałoby już dokąd trafić.
         ReleaseBlock();
