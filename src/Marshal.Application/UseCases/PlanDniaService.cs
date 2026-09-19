@@ -50,6 +50,41 @@ public sealed class PlanDniaService(
     public Task<IReadOnlyList<PozycjaPlanu>> DzisAsync(CancellationToken ct = default) =>
         DlaDniaAsync(clock.Today, ct);
 
+    /// <summary>
+    /// Które dni w podanym zakresie mają cokolwiek w planie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Na kropki paska tygodnia w widgecie: kafelek ma jednym spojrzeniem mówić, gdzie
+    /// w tygodniu jest gęsto, a gdzie pusto. Bez tego pasek pokazywałby same numery
+    /// i żeby dowiedzieć się czegokolwiek, trzeba by dotknąć każdego dnia po kolei.
+    /// </para>
+    /// <para>
+    /// <b>Ten sam plan, zapytany siedem razy</b>, a nie osobne, tańsze zapytanie.
+    /// Tańsze byłoby drugą definicją tego, co znaczy „dzień zajęty" — a dwie definicje
+    /// rozjeżdżają się przy pierwszej zmianie w jednej z nich i kropka zaczyna kłamać
+    /// względem listy pod nią. Zakres to tydzień, baza jest lokalna i mała, a kafelek
+    /// przerysowuje się po zmianie, nie w pętli.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlySet<DateOnly>> ZajeteAsync(
+        DateOnly od, int dni, CancellationToken ct = default)
+    {
+        var zajete = new HashSet<DateOnly>();
+
+        for (var i = 0; i < dni; i++)
+        {
+            var dzien = od.AddDays(i);
+
+            if ((await DlaDniaAsync(dzien, ct)).Count > 0)
+            {
+                zajete.Add(dzien);
+            }
+        }
+
+        return zajete;
+    }
+
     /// <summary>Plan dowolnego dnia — do przeglądania w przód i wstecz.</summary>
     /// <remarks>
     /// Dziś różni się od pozostałych dni jednym: bierze także <b>zaległe</b>. Zaległe

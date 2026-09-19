@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.Versioning;
 using Android.App;
 using Marshal.Application.Abstractions;
@@ -106,9 +107,11 @@ public sealed class TodayWidget : AppWidgetProvider
 
         var nowe = Przesuniecie(kontekst, widgetId) + delta;
 
-        // Granica po obu stronach: kilkanaście dotknięć strzałki w jedną stronę nie ma
-        // wyprowadzać widgetu w miejsce, z którego nie widać, jak wrócić.
-        nowe = Math.Clamp(nowe, -14, 14);
+        // Granica po obu stronach: kilkadziesiąt dotknięć strzałki w jedną stronę nie ma
+        // wyprowadzać widgetu w miejsce, z którego nie widać, jak wrócić. Rok w każdą
+        // stronę, bo strzałka przesuwa teraz o tydzień, a nie o dzień — przy dawnych
+        // dwóch tygodniach druga strzałka już nic by nie robiła.
+        nowe = Math.Clamp(nowe, -366, 366);
 
         zapis.Edit()?.PutInt($"dzien-{widgetId}", nowe)?.Apply();
     }
@@ -148,8 +151,20 @@ public sealed class TodayWidget : AppWidgetProvider
 
     private const int KodWrzutu = 2;
 
-    /// <summary>Od tego numeru w górę idą strzałki dni — po dwie na każdy kafelek.</summary>
+    /// <summary>Od tego numeru w górę idą dotknięcia dni — po dziewięć na każdy kafelek.</summary>
+    /// <remarks>
+    /// Dziewięć: siedem kolumn paska tygodnia i dwie strzałki. Numer musi być różny dla
+    /// każdego z nich i dla każdego kafelka osobno, bo system porównuje zamiary
+    /// <b>bez patrzenia na dodatkowe dane</b> — przy wspólnym numerze wszystkie
+    /// dotknięcia byłyby dla niego jednym zamiarem i każde przesuwałoby to samo.
+    /// </remarks>
     private const int KodDnia = 1000;
+
+    /// <summary>Ile numerów żądania przypada na jeden kafelek.</summary>
+    private const int KodowNaKafelek = 16;
+
+    /// <summary>Ile dni pokazuje pasek. Tydzień, bo tydzień jest jednostką planowania.</summary>
+    private const int DniTygodnia = 7;
 
     /// <summary>Każe systemowi przerysować wszystkie osadzone widgety.</summary>
     public static void Refresh(Context context)
@@ -219,10 +234,19 @@ public sealed class TodayWidget : AppWidgetProvider
             {
                 var services = await ServicesAsync(okno.ApplicationContext ?? okno);
                 var dzis = services.GetRequiredService<IClock>().Today;
+                var plan = services.GetRequiredService<PlanDniaService>();
 
                 foreach (var id in identyfikatory)
                 {
-                    menedzer.UpdateAppWidget(id, Rama(okno, id, dzis));
+                    // Kropki liczone na kafelek, nie raz na wszystkie: dwa kafelki obok
+                    // siebie mają prawo oglądać dwa różne tygodnie — po to się je stawia
+                    // dwa — a wspólny tydzień oznaczyłby kropki jednego z nich na drugim.
+                    var ogladany = dzis.AddDays(Przesuniecie(okno, id));
+                    var poniedzialek = ogladany.AddDays(-(((int)ogladany.DayOfWeek + 6) % 7));
+
+                    var zajete = await plan.ZajeteAsync(poniedzialek, DniTygodnia);
+
+                    menedzer.UpdateAppWidget(id, Rama(okno, id, dzis, zajete));
                 }
             }
             catch (Exception e)
@@ -248,17 +272,24 @@ public sealed class TodayWidget : AppWidgetProvider
     /// i jedną listę na spółkę. Stąd też adres w zamiarze: jest po to, żeby dwa
     /// zamiary do tej samej usługi różniły się czymś, co system porównuje.
     /// </remarks>
-    private static RemoteViews Rama(Context context, int widgetId, DateOnly dzis)
+    private static RemoteViews Rama(
+        Context context, int widgetId, DateOnly dzis, IReadOnlySet<DateOnly> zajete)
     {
         var widok = new RemoteViews(context.PackageName, Resource.Layout.widget_marshal);
         var przesuniecie = Przesuniecie(context, widgetId);
+        var ogladany = dzis.AddDays(przesuniecie);
 
-        widok.SetTextViewText(Resource.Id.naglowek, Nazwa(przesuniecie, dzis));
+        widok.SetTextViewText(Resource.Id.naglowek, Miesiac(ogladany, dzis));
 
+        // Strzałki po tygodniu, bo pasek pokazuje tydzień. Przesuwanie o dzień przy
+        // widocznym tygodniu znaczyłoby, że pierwsze dotknięcie prawie nic nie zmienia
+        // — a druga strzałka przesuwa to, co już widać.
         widok.SetOnClickPendingIntent(
-            Resource.Id.wstecz, DzienIntent(context, widgetId, -1));
+            Resource.Id.wstecz, DzienIntent(context, widgetId, -DniTygodnia, 7));
         widok.SetOnClickPendingIntent(
-            Resource.Id.naprzod, DzienIntent(context, widgetId, +1));
+            Resource.Id.naprzod, DzienIntent(context, widgetId, +DniTygodnia, 8));
+
+        PasekTygodnia(context, widok, widgetId, ogladany, dzis, zajete);
 
         // Dotknięcie samego kafelka otwiera kalendarz: widget odpowiada na pytanie
         // „co dziś", a kalendarz jest tym samym pytaniem zadanym szerzej. Na pustym
@@ -296,18 +327,121 @@ public sealed class TodayWidget : AppWidgetProvider
         return widok;
     }
 
-    /// <summary>Nazwa oglądanego dnia. Słowo, gdy jest; data, gdy słowa nie ma.</summary>
+    /// <summary>
+    /// Nagłówek: miesiąc oglądanego dnia, z rokiem tylko wtedy, gdy nie jest bieżący.
+    /// </summary>
     /// <remarks>
-    /// „Na dziś" i „Jutro" czyta się bez liczenia, a o to chodzi przy kafelku, na który
-    /// się zerka. Dalej niż o dzień słowo przestaje pomagać i lepsza jest data.
+    /// Był tu dzień — „Na dziś", „Jutro", data. Odkąd pod nagłówkiem stoi pasek tygodnia
+    /// z numerami dni, powtarzanie w nim dnia byłoby drugą odpowiedzią na to samo,
+    /// a miesiąca nie mówiło nic: same numery od 14 do 20 nie mówią, czy to wrzesień,
+    /// czy październik, akurat wtedy, gdy tydzień wypada na przełomie.
+    ///
+    /// Rok tylko nie-bieżący, bo dopisany zawsze byłby stałą, którą się przestaje czytać
+    /// — a wtedy przestaje się ją czytać także wtedy, gdy naprawdę coś mówi.
     /// </remarks>
-    private static string Nazwa(int przesuniecie, DateOnly dzis) => przesuniecie switch
+    private static string Miesiac(DateOnly ogladany, DateOnly dzis)
     {
-        0 => "Na dziś",
-        1 => "Jutro",
-        -1 => "Wczoraj",
-        _ => $"{dzis.AddDays(przesuniecie):ddd d.MM}",
-    };
+        var nazwa = ogladany.ToString("MMMM", CultureInfo.CurrentCulture);
+
+        var zWielkiej = nazwa.Length > 0
+            ? char.ToUpper(nazwa[0], CultureInfo.CurrentCulture) + nazwa[1..]
+            : nazwa;
+
+        return ogladany.Year == dzis.Year ? zWielkiej : $"{zWielkiej} {ogladany.Year}";
+    }
+
+    /// <summary>
+    /// Pasek tygodnia: siedem kolumn, oglądany dzień podkreślony, zajęte z kropką.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tydzień zaczyna się w poniedziałek niezależnie od ustawień systemu. To nie jest
+    /// przeoczenie: plan tygodnia w tej aplikacji jest tygodniem roboczym z weekendem na
+    /// końcu, a pasek ma stać tak samo jak siatka tygodnia w samej aplikacji. Dwa różne
+    /// początki tygodnia w jednym programie to dwa różne tygodnie.
+    /// </para>
+    /// <para>
+    /// Kropka i kreska znikają przez podmianę tła na przezroczyste, a nie przez ukrycie.
+    /// Ukryty widok oddaje swoje miejsce, a oddane miejsce przesuwa numery w kolumnach
+    /// obok — pasek przestałby być siatką i numery skakałyby przy każdej zmianie planu.
+    /// </para>
+    /// </remarks>
+    private static void PasekTygodnia(
+        Context context,
+        RemoteViews widok,
+        int widgetId,
+        DateOnly ogladany,
+        DateOnly dzis,
+        IReadOnlySet<DateOnly> zajete)
+    {
+        var poniedzialek = ogladany.AddDays(-(((int)ogladany.DayOfWeek + 6) % 7));
+
+        for (var i = 0; i < DniTygodnia; i++)
+        {
+            var dzien = poniedzialek.AddDays(i);
+            var wybrany = dzien == ogladany;
+
+            widok.SetTextViewText(Nazwy[i], dzien.ToString("ddd", CultureInfo.CurrentCulture));
+            widok.SetTextViewText(Numery[i], dzien.Day.ToString(CultureInfo.CurrentCulture));
+
+            // Dzisiejszy dzień w barwie wyróżnienia nawet wtedy, gdy ogląda się inny:
+            // kafelek stoi na ekranie domowym i pierwsze pytanie do niego brzmi
+            // „gdzie jestem", a dopiero drugie „na co patrzę".
+            //
+            // Przez SetInt na setTextColor, a nie przez SetTextColor: to drugie chce
+            // typu barwy Androida, a zasób oddaje liczbę. Jedna droga mniej do pomylenia.
+            widok.SetInt(
+                Numery[i],
+                "setTextColor",
+                context.GetColor(dzien == dzis ? Resource.Color.akcent : Resource.Color.tekst));
+
+            widok.SetInt(
+                Kropki[i],
+                "setBackgroundResource",
+                zajete.Contains(dzien) ? Resource.Drawable.kropka_widgetu : Resource.Drawable.przezroczyste);
+
+            widok.SetInt(
+                Kreski[i],
+                "setBackgroundResource",
+                wybrany ? Resource.Drawable.kreska_widgetu : Resource.Drawable.przezroczyste);
+
+            // Dotknięcie kolumny przestawia widget na ten dzień. Przez różnicę, bo
+            // przesunięcie liczone jest od dzisiejszego dnia i tak je zapisujemy.
+            widok.SetOnClickPendingIntent(
+                Kolumny[i],
+                DzienIntent(context, widgetId, dzien.DayNumber - ogladany.DayNumber, i));
+        }
+    }
+
+    private static readonly int[] Kolumny =
+    [
+        Resource.Id.dzien0, Resource.Id.dzien1, Resource.Id.dzien2, Resource.Id.dzien3,
+        Resource.Id.dzien4, Resource.Id.dzien5, Resource.Id.dzien6,
+    ];
+
+    private static readonly int[] Nazwy =
+    [
+        Resource.Id.nazwa0, Resource.Id.nazwa1, Resource.Id.nazwa2, Resource.Id.nazwa3,
+        Resource.Id.nazwa4, Resource.Id.nazwa5, Resource.Id.nazwa6,
+    ];
+
+    private static readonly int[] Numery =
+    [
+        Resource.Id.numer0, Resource.Id.numer1, Resource.Id.numer2, Resource.Id.numer3,
+        Resource.Id.numer4, Resource.Id.numer5, Resource.Id.numer6,
+    ];
+
+    private static readonly int[] Kropki =
+    [
+        Resource.Id.kropka0, Resource.Id.kropka1, Resource.Id.kropka2, Resource.Id.kropka3,
+        Resource.Id.kropka4, Resource.Id.kropka5, Resource.Id.kropka6,
+    ];
+
+    private static readonly int[] Kreski =
+    [
+        Resource.Id.kreska0, Resource.Id.kreska1, Resource.Id.kreska2, Resource.Id.kreska3,
+        Resource.Id.kreska4, Resource.Id.kreska5, Resource.Id.kreska6,
+    ];
 
     /// <summary>
     /// Wzorzec zamiaru dla wierszy listy.
@@ -355,7 +489,7 @@ public sealed class TodayWidget : AppWidgetProvider
     /// <b>bez patrzenia na dodatkowe dane</b>. Przy wspólnym kodzie obie strzałki
     /// wszystkich kafelków byłyby dla niego jednym zamiarem i każda przesuwałaby to samo.
     /// </remarks>
-    private static PendingIntent? DzienIntent(Context context, int widgetId, int delta)
+    private static PendingIntent? DzienIntent(Context context, int widgetId, int delta, int gniazdo)
     {
         var zamiar = new Intent(context, typeof(TodayWidget));
         zamiar.SetAction(CompleteAction);
@@ -365,7 +499,7 @@ public sealed class TodayWidget : AppWidgetProvider
 
         return PendingIntent.GetBroadcast(
             context,
-            KodDnia + (widgetId * 2) + (delta > 0 ? 1 : 0),
+            KodDnia + (widgetId * KodowNaKafelek) + gniazdo,
             zamiar,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }

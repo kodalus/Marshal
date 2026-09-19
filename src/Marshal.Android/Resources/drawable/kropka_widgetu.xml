@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Znak „ten dzień ma coś zaplanowane". Kropka, nie liczba: pasek tygodnia jest
+     rzutem oka, a liczba wymaga przeczytania i przy siedmiu kolumnach zmienia go
+     w tabelę. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="oval">
+  <solid android:color="@color/akcent" />
+</shape>

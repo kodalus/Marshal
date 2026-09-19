@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Podkreślenie oglądanego dnia. Kreska pod spodem, a nie wypełnienie kolumny:
+     wypełnienie w barwie wyróżnienia wygrałoby z kropkami sąsiadów i pasek przestałby
+     odpowiadać na pytanie, gdzie w tygodniu jest gęsto. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+       android:shape="rectangle">
+  <solid android:color="@color/akcent" />
+  <corners android:radius="2dp" />
+</shape>

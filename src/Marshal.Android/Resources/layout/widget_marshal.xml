@@ -1,16 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Lista przewijana, nie wiersze wpisane na sztywno.
+  Pasek tygodnia nad listą.
 
-  Do dziś było tu osiem wierszy wprost, bo przy stałym limicie pięciu pozycji cała
-  machina listy obsługiwałaby liczbę, która się nie zmienia. Plan całego dnia nie ma
-  takiego limitu: bierze też rzeczy umówione i zaległe, a tych bywa dowolnie wiele.
-  Wiersz, którego nie widać, jest w planie dnia tym samym co wiersz, którego nie ma.
+  Widget odpowiadał na pytanie „co mam dziś" i na nic więcej: żeby zobaczyć czwartek,
+  trzeba było trafić strzałkę cztery razy i po drodze nie było widać, dokąd się idzie.
+  Tydzień na wierzchu odpowiada na to jednym spojrzeniem — który dzień jest oglądany,
+  które dni mają cokolwiek i jak daleko do soboty.
 
-  ListView w widgecie znaczy osobną usługę (TodayWidgetService) i osobną fabrykę
-  widoków — system rozwija wiersze w procesie ekranu domowego, a nie w naszym.
-  Stąd też inny sposób na kliknięcie: wzorzec zamiaru na liście i uzupełnienie
-  przy wierszu, bo pojedynczemu wierszowi listy nie da się dać własnego zamiaru.
+  Siedem kolumn wypisanych wprost, bo RemoteViews nie zna pętli: system rozwija ten
+  układ w procesie ekranu domowego i wolno tu wyłącznie to, co umie rozwinąć. Stąd
+  też znikanie kropki i kreski przez podmianę tła na przezroczyste, a nie przez
+  ukrycie — ukryty widok oddaje miejsce, a oddane miejsce przesuwa numery w kolumnach
+  obok i pasek przestaje być siatką.
 
   updatePeriodMillis zostaje zerem świadomie: system i tak nie odświeża częściej
   niż co pół godziny, a widget ma być aktualny **po zmianie**, nie co pół godziny.
@@ -20,7 +21,7 @@
               android:layout_width="match_parent"
               android:layout_height="match_parent"
               android:orientation="vertical"
-              android:padding="12dp"
+              android:padding="10dp"
               android:background="@drawable/tlo_widgetu">
 
   <LinearLayout
@@ -35,8 +36,8 @@
         android:layout_height="wrap_content"
         android:minWidth="0dp"
         android:minHeight="0dp"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
         android:paddingTop="2dp"
         android:paddingBottom="2dp"
         android:background="@drawable/przycisk_widgetu"
@@ -55,8 +56,8 @@
         android:maxLines="1"
         android:ellipsize="end"
         android:textColor="@color/tekst"
-        android:textSize="15sp"
-        android:text="Na dziś" />
+        android:textSize="16sp"
+        android:text="Wrzesień" />
 
     <Button
         android:id="@+id/naprzod"
@@ -64,8 +65,8 @@
         android:layout_height="wrap_content"
         android:minWidth="0dp"
         android:minHeight="0dp"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
         android:paddingTop="2dp"
         android:paddingBottom="2dp"
         android:layout_marginEnd="6dp"
@@ -80,11 +81,316 @@
         android:layout_height="wrap_content"
         android:minWidth="0dp"
         android:minHeight="0dp"
-        android:padding="6dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
         android:background="@drawable/przycisk_widgetu"
         android:textColor="@color/tekst"
-        android:textSize="13sp"
-        android:text="Wrzuć" />
+        android:textSize="15sp"
+        android:text="+" />
+  </LinearLayout>
+
+  <LinearLayout
+      android:id="@+id/tydzien"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginTop="8dp"
+      android:orientation="horizontal">
+
+    <LinearLayout
+        android:id="@+id/dzien0"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+      <TextView
+          android:id="@+id/nazwa0"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:maxLines="1"
+          android:textColor="@color/tekst_przygaszony"
+          android:textSize="11sp" />
+
+      <TextView
+          android:id="@+id/numer0"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="1dp"
+          android:maxLines="1"
+          android:textColor="@color/tekst"
+          android:textSize="16sp" />
+
+      <ImageView
+          android:id="@+id/kropka0"
+          android:layout_width="5dp"
+          android:layout_height="5dp"
+          android:layout_marginTop="3dp"
+          android:background="@drawable/przezroczyste" />
+
+      <ImageView
+          android:id="@+id/kreska0"
+          android:layout_width="match_parent"
+          android:layout_height="3dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:background="@drawable/przezroczyste" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dzien1"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+      <TextView
+          android:id="@+id/nazwa1"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:maxLines="1"
+          android:textColor="@color/tekst_przygaszony"
+          android:textSize="11sp" />
+
+      <TextView
+          android:id="@+id/numer1"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="1dp"
+          android:maxLines="1"
+          android:textColor="@color/tekst"
+          android:textSize="16sp" />
+
+      <ImageView
+          android:id="@+id/kropka1"
+          android:layout_width="5dp"
+          android:layout_height="5dp"
+          android:layout_marginTop="3dp"
+          android:background="@drawable/przezroczyste" />
+
+      <ImageView
+          android:id="@+id/kreska1"
+          android:layout_width="match_parent"
+          android:layout_height="3dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:background="@drawable/przezroczyste" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dzien2"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+      <TextView
+          android:id="@+id/nazwa2"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:maxLines="1"
+          android:textColor="@color/tekst_przygaszony"
+          android:textSize="11sp" />
+
+      <TextView
+          android:id="@+id/numer2"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="1dp"
+          android:maxLines="1"
+          android:textColor="@color/tekst"
+          android:textSize="16sp" />
+
+      <ImageView
+          android:id="@+id/kropka2"
+          android:layout_width="5dp"
+          android:layout_height="5dp"
+          android:layout_marginTop="3dp"
+          android:background="@drawable/przezroczyste" />
+
+      <ImageView
+          android:id="@+id/kreska2"
+          android:layout_width="match_parent"
+          android:layout_height="3dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:background="@drawable/przezroczyste" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dzien3"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+      <TextView
+          android:id="@+id/nazwa3"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:maxLines="1"
+          android:textColor="@color/tekst_przygaszony"
+          android:textSize="11sp" />
+
+      <TextView
+          android:id="@+id/numer3"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="1dp"
+          android:maxLines="1"
+          android:textColor="@color/tekst"
+          android:textSize="16sp" />
+
+      <ImageView
+          android:id="@+id/kropka3"
+          android:layout_width="5dp"
+          android:layout_height="5dp"
+          android:layout_marginTop="3dp"
+          android:background="@drawable/przezroczyste" />
+
+      <ImageView
+          android:id="@+id/kreska3"
+          android:layout_width="match_parent"
+          android:layout_height="3dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:background="@drawable/przezroczyste" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dzien4"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+      <TextView
+          android:id="@+id/nazwa4"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:maxLines="1"
+          android:textColor="@color/tekst_przygaszony"
+          android:textSize="11sp" />
+
+      <TextView
+          android:id="@+id/numer4"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="1dp"
+          android:maxLines="1"
+          android:textColor="@color/tekst"
+          android:textSize="16sp" />
+
+      <ImageView
+          android:id="@+id/kropka4"
+          android:layout_width="5dp"
+          android:layout_height="5dp"
+          android:layout_marginTop="3dp"
+          android:background="@drawable/przezroczyste" />
+
+      <ImageView
+          android:id="@+id/kreska4"
+          android:layout_width="match_parent"
+          android:layout_height="3dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:background="@drawable/przezroczyste" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dzien5"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+      <TextView
+          android:id="@+id/nazwa5"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:maxLines="1"
+          android:textColor="@color/tekst_przygaszony"
+          android:textSize="11sp" />
+
+      <TextView
+          android:id="@+id/numer5"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="1dp"
+          android:maxLines="1"
+          android:textColor="@color/tekst"
+          android:textSize="16sp" />
+
+      <ImageView
+          android:id="@+id/kropka5"
+          android:layout_width="5dp"
+          android:layout_height="5dp"
+          android:layout_marginTop="3dp"
+          android:background="@drawable/przezroczyste" />
+
+      <ImageView
+          android:id="@+id/kreska5"
+          android:layout_width="match_parent"
+          android:layout_height="3dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:background="@drawable/przezroczyste" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/dzien6"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:gravity="center_horizontal"
+        android:orientation="vertical">
+
+      <TextView
+          android:id="@+id/nazwa6"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:maxLines="1"
+          android:textColor="@color/tekst_przygaszony"
+          android:textSize="11sp" />
+
+      <TextView
+          android:id="@+id/numer6"
+          android:layout_width="wrap_content"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="1dp"
+          android:maxLines="1"
+          android:textColor="@color/tekst"
+          android:textSize="16sp" />
+
+      <ImageView
+          android:id="@+id/kropka6"
+          android:layout_width="5dp"
+          android:layout_height="5dp"
+          android:layout_marginTop="3dp"
+          android:background="@drawable/przezroczyste" />
+
+      <ImageView
+          android:id="@+id/kreska6"
+          android:layout_width="match_parent"
+          android:layout_height="3dp"
+          android:layout_marginTop="4dp"
+          android:layout_marginStart="4dp"
+          android:layout_marginEnd="4dp"
+          android:background="@drawable/przezroczyste" />
+    </LinearLayout>
   </LinearLayout>
 
   <TextView
@@ -95,7 +401,7 @@
       android:layout_marginTop="10dp"
       android:textColor="@color/tekst_przygaszony"
       android:textSize="13sp"
-      android:text="Na dziś nic nie zaplanowane." />
+      android:text="Nic na ten dzień." />
 
   <ListView
       android:id="@+id/lista"
