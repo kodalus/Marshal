@@ -196,12 +196,13 @@
       <Setter Property="Background" Value="#25FFFFFF" />
     </Style>
 
-    <!-- Pasek dolny: pole dotyku na całą szerokość kolumny i wysokość, w którą trafia
-         kciuk. Przycisk wielkości napisu jest na telefonie celem, nie przyciskiem. -->
+    <!-- Pasek dolny: każda zakładka szeroka na tyle, ile ma treści — równe piąte
+         części ucinały odznakę skrzynki. Wysokość i tak łapie kciuk, a wolne
+         miejsce rozdzielają przerwy między zakładkami. -->
     <Style Selector="Button.tab">
       <Setter Property="HorizontalAlignment" Value="Stretch" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
-      <Setter Property="Padding" Value="4,12" />
+      <Setter Property="Padding" Value="6,12" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="CornerRadius" Value="0" />
@@ -438,25 +439,31 @@
          od nowa. -->
     <Border DockPanel.Dock="Bottom" IsVisible="{Binding ShowBottomNav}"
             Margin="-12,8,-12,-12" Padding="4,0,4,2" Background="{DynamicResource TloBoczne}">
-      <Grid ColumnDefinitions="*,*,*,*,*">
-        <Button Grid.Column="0" Classes="tab" Classes.wybrany="{Binding IsCalendar}"
+      <!-- Kolumny „Auto” z gwiazdkami pomiędzy: zakładka jest szeroka na swoją
+           treść, a nadmiar szerokości rozchodzi się po przerwach. Skrajne przerwy
+           są o połowę węższe, żeby brzegi paska nie odstawały od środka. -->
+      <Grid ColumnDefinitions="0.5*,Auto,*,Auto,*,Auto,*,Auto,*,Auto,0.5*">
+        <Button Grid.Column="1" Classes="tab" Classes.wybrany="{Binding IsCalendar}"
                 Content="Kalendarz" Command="{Binding ShowCalendarCommand}" />
-        <Button Grid.Column="1" Classes="tab" Classes.wybrany="{Binding IsToday}"
+        <Button Grid.Column="3" Classes="tab" Classes.wybrany="{Binding IsToday}"
                 Content="Dzisiaj" Command="{Binding ShowTodayCommand}" />
-        <Button Grid.Column="2" Classes="tab" Classes.wybrany="{Binding IsNow}"
+        <Button Grid.Column="5" Classes="tab" Classes.wybrany="{Binding IsNow}"
                 Content="Teraz" Command="{Binding ShowNowCommand}" />
-        <Button Grid.Column="3" Classes="tab" Classes.wybrany="{Binding IsInbox}"
+        <Button Grid.Column="7" Classes="tab" Classes.wybrany="{Binding IsInbox}"
                 Command="{Binding ShowInboxCommand}">
           <StackPanel Orientation="Horizontal" Spacing="5">
             <TextBlock Text="Skrzynka" VerticalAlignment="Center" />
-            <!-- Liczba tylko wtedy, gdy jest niezerowa, i bez czerwieni (spec 11.1). -->
-            <Border Background="{DynamicResource Odznaka}" CornerRadius="9" Padding="6,1"
-                    IsVisible="{Binding HasInbox}">
-              <TextBlock Text="{Binding InboxCount}" FontSize="11" />
+            <!-- Liczba tylko wtedy, gdy jest niezerowa, i bez czerwieni (spec 11.1).
+                 Krążek ma swoje minimum szerokości, żeby jedno- i dwucyfrowa liczba
+                 wyglądały tak samo. -->
+            <Border Background="{DynamicResource Odznaka}" CornerRadius="9" Padding="5,1"
+                    MinWidth="18" VerticalAlignment="Center" IsVisible="{Binding HasInbox}">
+              <TextBlock Text="{Binding InboxCount}" FontSize="11"
+                         TextAlignment="Center" HorizontalAlignment="Center" />
             </Border>
           </StackPanel>
         </Button>
-        <Button Grid.Column="4" Classes="tab" Classes.wybrany="{Binding IsMoreOpen}"
+        <Button Grid.Column="9" Classes="tab" Classes.wybrany="{Binding IsMoreOpen}"
                 Content="Więcej" Command="{Binding ToggleMoreCommand}" />
       </Grid>
     </Border>
