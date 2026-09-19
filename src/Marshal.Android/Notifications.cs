@@ -6,7 +6,7 @@ using Marshal.Infrastructure.Notifications;
 // Nazwa własna, bo „Notification" znaczy tu dwie różne rzeczy: naszą i androidową.
 // „Application" też jest zajęte przez Android.App.Application, więc pełna ścieżka
 // do naszego typu i tak by się nie skompilowała.
-using Przypomnienie = Marshal.Application.Abstractions.Notification;
+using Reminder = Marshal.Application.Abstractions.Notification;
 
 namespace Marshal.Android;
 
@@ -31,10 +31,10 @@ namespace Marshal.Android;
 /// rzecz do zrobienia i osobna do sprawdzenia na sprzęcie.
 /// </para>
 /// </remarks>
-internal static class Powiadomienia
+internal static class Notifications
 {
     /// <summary>Kanał. Jeden, bo aplikacja mówi o jednej rzeczy: że coś się zaczyna.</summary>
-    private const string Kanal = "przypomnienia";
+    private const string Channel = "przypomnienia";
 
     /// <summary>
     /// Kanał, zgoda i podpięcie. Wołane raz, przy starcie okna.
@@ -45,9 +45,9 @@ internal static class Powiadomienia
     /// identycznie: nie założył się kanał, nie ma zgody, albo nie było czego pokazać.
     /// Na telefonie bez kabla to jedyna droga, żeby je rozróżnić.
     /// </remarks>
-    public static void Podepnij(Activity window)
+    public static void Hook(Activity window)
     {
-        Podepnij((Context)window);
+        Hook((Context)window);
 
         try
         {
@@ -56,7 +56,7 @@ internal static class Powiadomienia
             // odbiornik nie mają jak o nic zapytać.
             if (OperatingSystem.IsAndroidVersionAtLeast(33))
             {
-                ZapytajOZgode(window);
+                AskForConsent(window);
             }
         }
         catch (Exception e)
@@ -74,25 +74,25 @@ internal static class Powiadomienia
     /// kanału i haczyka tak samo jak okno. O zgodę pytać wtedy nie ma jak i nie ma po co
     /// — bez niej i tak nic nie wyjdzie, a pytanie bez ekranu jest niewidoczne.
     /// </remarks>
-    public static void Podepnij(Context kontekst)
+    public static void Hook(Context context)
     {
         try
         {
-            if (kontekst.GetSystemService(Context.NotificationService) is not NotificationManager menedzer)
+            if (context.GetSystemService(Context.NotificationService) is not NotificationManager manager)
             {
                 InAppNotifier.SystemStatus = "system nie dał menedżera powiadomień";
                 return;
             }
 
-            menedzer.CreateNotificationChannel(
-                new NotificationChannel(Kanal, "Przypomnienia", NotificationImportance.Default)
+            manager.CreateNotificationChannel(
+                new NotificationChannel(Channel, "Przypomnienia", NotificationImportance.Default)
                 {
                     Description = "Zadania, o których Marshal ma się odezwać.",
                 });
 
             InAppNotifier.SystemSink = (reminder, _) =>
             {
-                Pokaz(kontekst, menedzer, reminder);
+                Show(context, manager, reminder);
                 return Task.CompletedTask;
             };
 
@@ -113,7 +113,7 @@ internal static class Powiadomienia
     /// liczbą, więc wołanie młodszego API zgłaszał jako błąd mimo poprawnego warunku.
     /// </remarks>
     [SupportedOSPlatform("android33.0")]
-    private static void ZapytajOZgode(Activity window)
+    private static void AskForConsent(Activity window)
     {
         if (window.CheckSelfPermission(global::Android.Manifest.Permission.PostNotifications)
             != global::Android.Content.PM.Permission.Granted)
@@ -122,25 +122,25 @@ internal static class Powiadomienia
         }
     }
 
-    private static void Pokaz(
-        Context kontekst,
-        NotificationManager menedzer,
-        Przypomnienie reminder)
+    private static void Show(
+        Context context,
+        NotificationManager manager,
+        Reminder reminder)
     {
         // Dotknięcie otwiera aplikację, a nie nic. SingleTop, więc wraca do okna,
         // które już stoi, zamiast zakładać drugie.
-        var wejscie = new Intent(kontekst, typeof(MainActivity));
+        var wejscie = new Intent(context, typeof(MainActivity));
         wejscie.SetFlags(ActivityFlags.SingleTop | ActivityFlags.ClearTop);
 
-        var zamiar = PendingIntent.GetActivity(
-            kontekst, 0, wejscie,
+        var intent = PendingIntent.GetActivity(
+            context, 0, wejscie,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
 
-        var powiadomienie = new Notification.Builder(kontekst, Kanal)
+        var notification = new Notification.Builder(context, Channel)
             .SetContentTitle(reminder.Title)
             .SetContentText(reminder.Body ?? string.Empty)
-            .SetSmallIcon(Resource.Drawable.znak_powiadomienia)
-            .SetContentIntent(zamiar)
+            .SetSmallIcon(Resource.Drawable.notification_mark)
+            .SetContentIntent(intent)
             .SetAutoCancel(true)
             .Build();
 
@@ -148,6 +148,6 @@ internal static class Powiadomienia
         // swoje powiadomienie, a nie układać ich stos. Zgaszony bit znaku, a nie
         // wartość bezwzględna — ta na najmniejszej liczbie całkowitej rzuca wyjątkiem,
         // a skrót może ją zwrócić.
-        menedzer.Notify(reminder.TaskId.GetHashCode() & 0x7FFFFFFF, powiadomienie);
+        manager.Notify(reminder.TaskId.GetHashCode() & 0x7FFFFFFF, notification);
     }
 }

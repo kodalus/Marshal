@@ -31,36 +31,36 @@ namespace Marshal.Android;
 /// więc aplikacja schodzi na niedokładny zamiast prosić o zgodę na siłę.
 /// </para>
 /// </remarks>
-internal static class Budzik
+internal static class Alarm
 {
-    public const string Akcja = "com.kodalus.marshal.PRZYPOMNIENIE";
+    public const string Action = "com.kodalus.marshal.PRZYPOMNIENIE";
 
-    private const int Numer = 7101;
+    private const int Number = 7101;
 
     /// <summary>Przestawienie budzika na najbliższą chwilę. Wołane po każdej zmianie.</summary>
-    public static async Task PrzestawAsync(Context kontekst)
+    public static async Task RescheduleAsync(Context context)
     {
         try
         {
             await AppServices.ReadyAsync();
 
-            var najblizsza = await AppServices.Provider
+            var nearest = await AppServices.Provider
                 .GetRequiredService<ReminderService>()
                 .NextUpAsync();
 
-            if (kontekst.GetSystemService(Context.AlarmService) is not AlarmManager clock)
+            if (context.GetSystemService(Context.AlarmService) is not AlarmManager clock)
             {
                 return;
             }
 
-            var zamiar = Zamiar(kontekst);
+            var intent = Intent(context);
 
             var journal = AppServices.Provider.GetRequiredService<IActivityLog>();
 
-            if (najblizsza is not { } moment)
+            if (nearest is not { } moment)
             {
                 // Nic nie czeka — budzik skasowany, żeby system nie budził nas po nic.
-                clock.Cancel(zamiar);
+                clock.Cancel(intent);
                 await journal.RecordAsync("Przypomnienia: budzik", "nic nie czeka");
                 return;
             }
@@ -70,15 +70,15 @@ internal static class Budzik
             // „AllowWhileIdle", bo bez tego drzemka systemu przesuwa przypomnienia
             // ustawione na noc na rano — czyli dokładnie wtedy, gdy przestają być
             // potrzebne.
-            var dokladny = Dokladny(clock);
+            var exact = Exact(clock);
 
-            if (dokladny)
+            if (exact)
             {
-                clock.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
+                clock.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, when, intent);
             }
             else
             {
-                clock.SetAndAllowWhileIdle(AlarmType.RtcWakeup, when, zamiar);
+                clock.SetAndAllowWhileIdle(AlarmType.RtcWakeup, when, intent);
             }
 
             // Ślad w dzienniku, bo przy zamkniętej aplikacji nie ma **żadnego** innego
@@ -87,7 +87,7 @@ internal static class Budzik
             await journal.RecordAsync(
                 "Przypomnienia: budzik",
                 $"nastawiony na {moment:yyyy-MM-dd HH:mm zzz}"
-                    + (dokladny ? string.Empty : " (niedokładny — system nie dał zgody)"));
+                    + (exact ? string.Empty : " (niedokładny — system nie dał zgody)"));
         }
         catch (Exception e)
         {
@@ -114,17 +114,17 @@ internal static class Budzik
         }
     }
 
-    private static bool Dokladny(AlarmManager clock) =>
+    private static bool Exact(AlarmManager clock) =>
         !OperatingSystem.IsAndroidVersionAtLeast(31) || clock.CanScheduleExactAlarms();
 
-    private static PendingIntent Zamiar(Context kontekst)
+    private static PendingIntent Intent(Context context)
     {
-        var zamiar = new Intent(kontekst, typeof(OdbiorcaBudzika)).SetAction(Akcja);
+        var intent = new Intent(context, typeof(AlarmReceiver)).SetAction(Action);
 
         // „Immutable", bo nic w tym zamiarze nie ma być dopisywane z zewnątrz;
         // od Androida 12 jeden z tych dwóch znaczników jest zresztą wymagany.
         return PendingIntent.GetBroadcast(
-            kontekst, Numer, zamiar,
+            context, Number, intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable)!;
     }
 }
@@ -140,7 +140,7 @@ internal static class Budzik
 /// aplikacji prawo budzenia naszej.
 /// </remarks>
 [BroadcastReceiver(Enabled = true, Exported = false)]
-internal sealed class OdbiorcaBudzika : BroadcastReceiver
+internal sealed class AlarmReceiver : BroadcastReceiver
 {
     public override void OnReceive(Context? context, Intent? intent)
     {
@@ -149,8 +149,8 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
             return;
         }
 
-        var kontekst = context.ApplicationContext ?? context;
-        var oczekiwanie = GoAsync();
+        var context = context.ApplicationContext ?? context;
+        var waiting = GoAsync();
 
         _ = Task.Run(async () =>
         {
@@ -160,17 +160,17 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
                 // obudzony budzikiem nie ma okna — a samo składanie nadrabia zaległe
                 // przypomnienia. Podpięte po nim znaczyło, że to, po co budzik przyszedł,
                 // zostawało zapisane jako pokazane i nie pokazywało się nigdzie.
-                Powiadomienia.Podepnij(kontekst);
+                Notifications.Hook(context);
 
                 await AppServices.ReadyAsync();
 
-                if (intent?.Action == Budzik.Akcja)
+                if (intent?.Action == Alarm.Action)
                 {
                     var count = await AppServices.Provider
                         .GetRequiredService<ReminderService>()
                         .RunAsync();
 
-                    await Budzik.Save(
+                    await Alarm.Save(
                         "Przypomnienia: budzik odebrany",
                         count == 0 ? "nie było czego pokazać" : $"pokazane: {count}");
                 }
@@ -178,7 +178,7 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
                 // Następny budzik liczony na końcu: musi znać bazę, bo najbliższa chwila
                 // bierze się z zadań. Zaglądaniem na Dysk zajmuje się osobno
                 // SynchronizacjaWorker — budzik nie jest narzędziem do pracy okresowej.
-                await Budzik.PrzestawAsync(kontekst);
+                await Alarm.RescheduleAsync(context);
             }
             catch (Exception e)
             {
@@ -186,16 +186,16 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
             }
             finally
             {
-                oczekiwanie?.Finish();
+                waiting?.Finish();
             }
         });
     }
 
     /// <summary>Wołane także po starcie telefonu — patrz OdbiorcaStartu.</summary>
-    internal static void OnWake(Context kontekst)
+    internal static void OnWake(Context context)
     {
-        _ = Budzik.PrzestawAsync(kontekst);
-        SynchronizacjaWorker.Nastaw(kontekst);
+        _ = Alarm.RescheduleAsync(context);
+        SyncWorker.Schedule(context);
     }
 }
 
@@ -212,7 +212,7 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
 /// </remarks>
 [BroadcastReceiver(Enabled = true, Exported = true)]
 [IntentFilter([Intent.ActionBootCompleted])]
-internal sealed class OdbiorcaStartu : BroadcastReceiver
+internal sealed class BootReceiver : BroadcastReceiver
 {
     public override void OnReceive(Context? context, Intent? intent)
     {
@@ -221,8 +221,8 @@ internal sealed class OdbiorcaStartu : BroadcastReceiver
             return;
         }
 
-        var kontekst = context.ApplicationContext ?? context;
-        var oczekiwanie = GoAsync();
+        var context = context.ApplicationContext ?? context;
+        var waiting = GoAsync();
 
         _ = Task.Run(async () =>
         {
@@ -230,11 +230,11 @@ internal sealed class OdbiorcaStartu : BroadcastReceiver
             {
                 // Jak wyżej: składanie nadrabia zaległe przypomnienia, więc haczyk
                 // musi już być. Po starcie telefonu zaległych bywa najwięcej.
-                Powiadomienia.Podepnij(kontekst);
+                Notifications.Hook(context);
 
                 await AppServices.ReadyAsync();
-                await Budzik.Save("Przypomnienia: start telefonu", "budziki nastawione od nowa");
-                OdbiorcaBudzika.OnWake(kontekst);
+                await Alarm.Save("Przypomnienia: start telefonu", "budziki nastawione od nowa");
+                AlarmReceiver.OnWake(context);
             }
             catch (Exception e)
             {
@@ -242,7 +242,7 @@ internal sealed class OdbiorcaStartu : BroadcastReceiver
             }
             finally
             {
-                oczekiwanie?.Finish();
+                waiting?.Finish();
             }
         });
     }

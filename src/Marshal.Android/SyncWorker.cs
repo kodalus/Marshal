@@ -39,7 +39,7 @@ namespace Marshal.Android;
 /// pierwszoplanową i nie ma czego pokazywać. Widać ją w dzienniku, gdy coś przeniosła.
 /// </para>
 /// </remarks>
-public sealed class SynchronizacjaWorker : Worker
+public sealed class SyncWorker : Worker
 {
     /// <summary>
     /// Nazwa zlecenia. Jedna, bo zlecenie ma być jedno.
@@ -51,10 +51,10 @@ public sealed class SynchronizacjaWorker : Worker
     private const string Name = "marshal-synchronizacja";
 
     /// <summary>Co ile zaglądać. Kwadrans to dolna granica narzucona przez system.</summary>
-    private const long Minut = 30;
+    private const long Minutes = 30;
 
-    public SynchronizacjaWorker(Context kontekst, WorkerParameters parametry)
-        : base(kontekst, parametry)
+    public SyncWorker(Context context, WorkerParameters parametry)
+        : base(context, parametry)
     {
     }
 
@@ -67,7 +67,7 @@ public sealed class SynchronizacjaWorker : Worker
     /// przebieg w tle nie ruszyłby ani razu. Wołanie tego wielokrotnie jest wtedy
     /// bezpieczne i o to chodzi: nie ma jednego miejsca, o które trzeba by zadbać.
     /// </remarks>
-    public static void Nastaw(Context kontekst)
+    public static void Schedule(Context context)
     {
         try
         {
@@ -77,17 +77,22 @@ public sealed class SynchronizacjaWorker : Worker
 
             // Budowniczy trzymany w zmiennej, a nie łączony w łańcuch: w Javie te metody
             // oddają typ nadrzędny i łańcuch kończyłby się zleceniem bez okresu.
-            var budowniczy = new PeriodicWorkRequest.Builder(
-                Java.Lang.Class.FromType(typeof(SynchronizacjaWorker)),
-                Minut,
+            var builder = new PeriodicWorkRequest.Builder(
+                Java.Lang.Class.FromType(typeof(SyncWorker)),
+                Minutes,
                 TimeUnit.Minutes!);
 
-            budowniczy.SetConstraints(conditions!);
+            builder.SetConstraints(conditions!);
 
-            WorkManager.GetInstance(kontekst).EnqueueUniquePeriodicWork(
+            // „Update", nie „Keep": WorkManager zapamiętuje **nazwę klasy** zlecenia
+            // w swojej bazie, a ta klasa zmieniła nazwę. Zlecenie zapisane przez
+            // poprzednie wydanie wskazuje więc na klasę, której już nie ma, i „Keep"
+            // zostawiłby je takim na zawsze — synchronizacja w tle stanęłaby po cichu.
+            // „Update" podmienia treść zlecenia, zachowując jego rytm.
+            WorkManager.GetInstance(context).EnqueueUniquePeriodicWork(
                 Name,
-                ExistingPeriodicWorkPolicy.Keep!,
-                (PeriodicWorkRequest)budowniczy.Build());
+                ExistingPeriodicWorkPolicy.Update!,
+                (PeriodicWorkRequest)builder.Build());
         }
         catch (Exception e)
         {
@@ -109,7 +114,7 @@ public sealed class SynchronizacjaWorker : Worker
         {
             // Haczyk na dymki przed składaniem zależności: składanie nadrabia zaległe
             // przypomnienia, a tu nie ma okna, które by je odebrało.
-            Powiadomienia.Podepnij(ApplicationContext!);
+            Notifications.Hook(ApplicationContext!);
 
             return RunAsync().GetAwaiter().GetResult();
         }
@@ -134,7 +139,7 @@ public sealed class SynchronizacjaWorker : Worker
             // Ze śladem, bo to jedyna droga, na której przebieg odpala się poprawnie
             // i nie robi nic. Bez wpisu wygląda identycznie jak przebieg, który nie
             // ruszył — a to dwie różne rzeczy do naprawienia.
-            await Budzik.Save(
+            await Alarm.Save(
                 "Synchronizacja w tle", "brak poświadczeń albo żetonu",
                 level: ActivityLevel.Problem);
 
@@ -145,7 +150,7 @@ public sealed class SynchronizacjaWorker : Worker
 
         if (!result.Ok)
         {
-            await Budzik.Save(
+            await Alarm.Save(
                 "Synchronizacja w tle", result.Message, level: ActivityLevel.Problem);
 
             return Result.InvokeRetry()!;
@@ -160,7 +165,7 @@ public sealed class SynchronizacjaWorker : Worker
                 .GetRequiredService<ReminderService>()
                 .RunAsync();
 
-            await Budzik.Save(
+            await Alarm.Save(
                 "Synchronizacja w tle",
                 $"przyjęte {result.Applied}"
                     + (count > 0 ? $", przypomnienia pokazane: {count}" : string.Empty));
@@ -170,7 +175,7 @@ public sealed class SynchronizacjaWorker : Worker
 
         // Budzik przypomnień przestawiany po każdym przebiegu, także pustym: najbliższa
         // godzina mogła się zmienić, a przy zamkniętej aplikacji nie ma kto jej sprawdzić.
-        await Budzik.PrzestawAsync(ApplicationContext!);
+        await Alarm.RescheduleAsync(ApplicationContext!);
 
         return Result.InvokeSuccess()!;
     }

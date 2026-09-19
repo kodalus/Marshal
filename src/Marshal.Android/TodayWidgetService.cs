@@ -30,7 +30,7 @@ namespace Marshal.Android;
 public sealed class TodayWidgetService : RemoteViewsService
 {
     public override IRemoteViewsFactory OnGetViewFactory(Intent? intent) =>
-        new Fabryka(
+        new Factory(
             ApplicationContext!,
             intent?.GetIntExtra(
                 AppWidgetManager.ExtraAppwidgetId, AppWidgetManager.InvalidAppwidgetId)
@@ -52,12 +52,12 @@ public sealed class TodayWidgetService : RemoteViewsService
     /// się o co zakleszczyć. Robota i tak musi się skończyć, zanim ta metoda wróci.
     /// </para>
     /// </remarks>
-    private sealed class Fabryka(Context kontekst, int widgetId)
+    private sealed class Factory(Context context, int widgetId)
         : Java.Lang.Object, IRemoteViewsFactory
     {
-        private IReadOnlyList<PlanRow> _wiersze = [];
+        private IReadOnlyList<PlanRow> _rows = [];
 
-        public int Count => _wiersze.Count;
+        public int Count => _rows.Count;
 
         public bool HasStableIds => true;
 
@@ -105,12 +105,12 @@ public sealed class TodayWidgetService : RemoteViewsService
                 // to naprawdę boli: zamknięcie aplikacji zabija proces razem z tą
                 // fabryką, więc nowa nie ma **nic**. Kafelek gasł wtedy na dwie sekundy
                 // i wracał — czyli przez dwie sekundy mówił „nic dziś nie masz".
-                if (_wiersze.Count == 0)
+                if (_rows.Count == 0)
                 {
-                    _wiersze = Zapamietane(kontekst, widgetId);
+                    _rows = Remembered(context, widgetId);
                 }
 
-                _ = PoPrzygotowaniuAsync(kontekst);
+                _ = AfterPrepareAsync(context);
                 return;
             }
 
@@ -118,12 +118,12 @@ public sealed class TodayWidgetService : RemoteViewsService
 
             try
             {
-                _wiersze = WczytajAsync(kontekst, widgetId)
+                _rows = LoadAsync(context, widgetId)
                     .WaitAsync(TimeSpan.FromSeconds(2))
                     .GetAwaiter()
                     .GetResult();
 
-                Zapamietaj(kontekst, widgetId, _wiersze);
+                Remember(context, widgetId, _rows);
 
                 // Ta metoda wykonuje się na wątku, którym ekran domowy pyta nasz proces,
                 // więc każda jej sekunda jest sekundą cudzego czekania. Dopisywane tylko
@@ -149,7 +149,7 @@ public sealed class TodayWidgetService : RemoteViewsService
             {
                 // Pusta lista zamiast wywrotki: usługa, która rzuci, zostawia na
                 // ekranie domowym komunikat systemu o zepsutym widgecie.
-                _wiersze = [];
+                _rows = [];
                 global::Android.Util.Log.Warn("Marshal", e.ToString());
             }
         }
@@ -175,18 +175,18 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// nie mają jak.
         /// </para>
         /// </remarks>
-        private const char Miedzy = '\u001f';
+        private const char Between = '\u001f';
 
         private const char Row = '\u001e';
 
         private static string Key(int widgetId) => $"wiersze-{widgetId}";
 
-        private static IReadOnlyList<PlanRow> Zapamietane(Context kontekst, int widgetId)
+        private static IReadOnlyList<PlanRow> Remembered(Context context, int widgetId)
         {
             try
             {
-                var patch = kontekst
-                    .GetSharedPreferences(TodayWidget.Pamiec, FileCreationMode.Private)
+                var patch = context
+                    .GetSharedPreferences(TodayWidget.Memory, FileCreationMode.Private)
                     ?.GetString(Key(widgetId), null);
 
                 if (string.IsNullOrEmpty(patch))
@@ -196,7 +196,7 @@ public sealed class TodayWidgetService : RemoteViewsService
 
                 return patch
                     .Split(Row, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(w => w.Split(Miedzy))
+                    .Select(w => w.Split(Between))
                     .Where(p => p.Length == 4)
                     .Select(p => new PlanRow(
                         Guid.TryParse(p[0], out var task) ? task : null,
@@ -215,21 +215,21 @@ public sealed class TodayWidgetService : RemoteViewsService
             }
         }
 
-        private static void Zapamietaj(
-            Context kontekst, int widgetId, IReadOnlyList<PlanRow> rows)
+        private static void Remember(
+            Context context, int widgetId, IReadOnlyList<PlanRow> rows)
         {
             try
             {
                 var patch = string.Join(
                     Row,
                     rows.Select(w => string.Join(
-                        Miedzy,
+                        Between,
                         w.TaskId?.ToString() ?? string.Empty,
-                        Czysto(w.Title),
-                        Czysto(w.Caption),
-                        Czysto(w.Color ?? string.Empty))));
+                        Clear(w.Title),
+                        Clear(w.Caption),
+                        Clear(w.Color ?? string.Empty))));
 
-                kontekst.GetSharedPreferences(TodayWidget.Pamiec, FileCreationMode.Private)
+                context.GetSharedPreferences(TodayWidget.Memory, FileCreationMode.Private)
                     ?.Edit()?.PutString(Key(widgetId), patch)?.Apply();
             }
             catch (Exception e) when (e is not OperationCanceledException)
@@ -239,8 +239,8 @@ public sealed class TodayWidgetService : RemoteViewsService
         }
 
         /// <summary>Bez znaków rozdzielających — tytuł jest cudzym tekstem.</summary>
-        private static string Czysto(string text) =>
-            text.Replace(Miedzy, ' ').Replace(Row, ' ');
+        private static string Clear(string text) =>
+            text.Replace(Between, ' ').Replace(Row, ' ');
 
         /// <summary>Ponowna prośba o wiersze, gdy baza będzie już gotowa.</summary>
         /// <remarks>
@@ -248,13 +248,13 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// ta fabryka może już wtedy nie istnieć, a system i tak pyta o wiersze
         /// wyłącznie tę, którą sam trzyma.
         /// </remarks>
-        private static async Task PoPrzygotowaniuAsync(Context kontekst)
+        private static async Task AfterPrepareAsync(Context context)
         {
             try
             {
                 await AppServices.ReadyAsync();
 
-                TodayWidget.Refresh(kontekst);
+                TodayWidget.Refresh(context);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
@@ -262,21 +262,21 @@ public sealed class TodayWidgetService : RemoteViewsService
             }
         }
 
-        public void OnDestroy() => _wiersze = [];
+        public void OnDestroy() => _rows = [];
 
         public RemoteViews? GetViewAt(int position)
         {
-            if (position < 0 || position >= _wiersze.Count)
+            if (position < 0 || position >= _rows.Count)
             {
                 return null;
             }
 
-            var item = _wiersze[position];
-            var view = new RemoteViews(kontekst.PackageName, Resource.Layout.widget_wiersz);
+            var item = _rows[position];
+            var view = new RemoteViews(context.PackageName, Resource.Layout.widget_wiersz);
 
             view.SetTextViewText(Resource.Id.title, item.Title);
-            view.SetTextViewText(Resource.Id.podpis, item.Caption);
-            view.SetInt(Resource.Id.pasek, "setBackgroundColor", Color(item.Color));
+            view.SetTextViewText(Resource.Id.caption, item.Caption);
+            view.SetInt(Resource.Id.strip, "setBackgroundColor", Color(item.Color));
 
             // Uzupełnienie wzorca, nie własny zamiar: wierszowi listy nie da się dać
             // osobnego zamiaru oczekującego — system trzyma jeden wzorzec na całą listę
@@ -289,16 +289,16 @@ public sealed class TodayWidgetService : RemoteViewsService
             // miały wspólną krawędź tekstu.
             if (item.TaskId is { } task)
             {
-                view.SetViewVisibility(Resource.Id.zrobione, ViewStates.Visible);
+                view.SetViewVisibility(Resource.Id.done, ViewStates.Visible);
 
-                var odhaczenie = new Intent();
-                odhaczenie.PutExtra(TodayWidget.TaskIdExtra, task.ToString());
+                var completion = new Intent();
+                completion.PutExtra(TodayWidget.TaskIdExtra, task.ToString());
 
-                view.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
+                view.SetOnClickFillInIntent(Resource.Id.done, completion);
             }
             else
             {
-                view.SetViewVisibility(Resource.Id.zrobione, ViewStates.Invisible);
+                view.SetViewVisibility(Resource.Id.done, ViewStates.Invisible);
             }
 
             // Treść wiersza otwiera aplikację. **Rodzeństwo kwadracika, nie jego rodzic:**
@@ -309,15 +309,15 @@ public sealed class TodayWidgetService : RemoteViewsService
             //
             // Przy wydarzeniu bez identyfikatora zadania otwiera się sam kalendarz —
             // czyli to samo miejsce, tyle że bez wskazania na konkretny wpis.
-            var otwarcie = new Intent();
-            otwarcie.PutExtra(TodayWidget.CoOtworzExtra, TodayWidget.CoOtworz);
+            var opening = new Intent();
+            opening.PutExtra(TodayWidget.OpenWhatExtra, TodayWidget.OpenWhat);
 
             if (item.TaskId is { } otwierane)
             {
-                otwarcie.PutExtra(TodayWidget.TaskIdExtra, otwierane.ToString());
+                opening.PutExtra(TodayWidget.TaskIdExtra, otwierane.ToString());
             }
 
-            view.SetOnClickFillInIntent(Resource.Id.content, otwarcie);
+            view.SetOnClickFillInIntent(Resource.Id.content, opening);
 
             return view;
         }
@@ -335,16 +335,16 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// zawsze dzisiaj. Wyglądało to na nieodświeżoną listę, a było listą, która
         /// nigdy nie wiedziała, o który dzień pytać.
         /// </remarks>
-        private static async Task<IReadOnlyList<PlanRow>> WczytajAsync(
-            Context kontekst, int widgetId)
+        private static async Task<IReadOnlyList<PlanRow>> LoadAsync(
+            Context context, int widgetId)
         {
             await AppServices.ReadyAsync();
 
-            var uslugi = AppServices.Provider;
-            var day = uslugi.GetRequiredService<IClock>().Today
-                .AddDays(TodayWidget.Przesuniecie(kontekst, widgetId));
+            var services = AppServices.Provider;
+            var day = services.GetRequiredService<IClock>().Today
+                .AddDays(TodayWidget.Offset(context, widgetId));
 
-            return await uslugi.GetRequiredService<DayPlanService>().ForDayAsync(day);
+            return await services.GetRequiredService<DayPlanService>().ForDayAsync(day);
         }
 
         /// <summary>
@@ -359,7 +359,7 @@ public sealed class TodayWidgetService : RemoteViewsService
         {
             if (string.IsNullOrWhiteSpace(patch))
             {
-                return Akcent;
+                return Accent;
             }
 
             try
@@ -368,11 +368,11 @@ public sealed class TodayWidgetService : RemoteViewsService
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                return Akcent;
+                return Accent;
             }
         }
 
         /// <summary>Barwa domyślna paska — ta sama, co akcent aplikacji.</summary>
-        private const int Akcent = unchecked((int)0xFF7C6CF5);
+        private const int Accent = unchecked((int)0xFF7C6CF5);
     }
 }

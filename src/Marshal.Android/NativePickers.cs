@@ -26,15 +26,15 @@ namespace Marshal.Android;
 /// </remarks>
 internal static class NativePickers
 {
-    public static void Podepnij(Activity window)
+    public static void Hook(Activity window)
     {
-        Pickers.Data = now => PokazAsync<DateOnly?>(window, zrobione =>
+        Pickers.Data = now => ShowAsync<DateOnly?>(window, done =>
         {
             var od = now ?? DateOnly.FromDateTime(DateTime.Now);
 
-            var okienko = new DatePickerDialog(
+            var dialog = new DatePickerDialog(
                 window,
-                (_, e) => zrobione(DateOnly.FromDateTime(e.Date)),
+                (_, e) => done(DateOnly.FromDateTime(e.Date)),
                 od.Year,
 
                 // Miesiące liczone od zera — jedyne miejsce w tym pliku, w którym
@@ -42,18 +42,18 @@ internal static class NativePickers
                 od.Month - 1,
                 od.Day);
 
-            okienko.CancelEvent += (_, _) => zrobione(now);
-            okienko.DismissEvent += (_, _) => zrobione(now);
-            okienko.Show();
+            dialog.CancelEvent += (_, _) => done(now);
+            dialog.DismissEvent += (_, _) => done(now);
+            dialog.Show();
         });
 
-        Pickers.Hour = now => PokazAsync<TimeOnly?>(window, zrobione =>
+        Pickers.Hour = now => ShowAsync<TimeOnly?>(window, done =>
         {
             var od = now ?? new TimeOnly(9, 0);
 
-            var okienko = new TimePickerDialog(
+            var dialog = new TimePickerDialog(
                 window,
-                (_, e) => zrobione(new TimeOnly(e.HourOfDay, e.Minute)),
+                (_, e) => done(new TimeOnly(e.HourOfDay, e.Minute)),
                 od.Hour,
                 od.Minute,
 
@@ -61,14 +61,14 @@ internal static class NativePickers
                 // tak samo, a dwa zapisy tej samej godziny to jeden za dużo.
                 true);
 
-            okienko.CancelEvent += (_, _) => zrobione(now);
-            okienko.DismissEvent += (_, _) => zrobione(now);
-            okienko.Show();
+            dialog.CancelEvent += (_, _) => done(now);
+            dialog.DismissEvent += (_, _) => done(now);
+            dialog.Show();
         });
     }
 
     /// <summary>Odpięcie przy zamykaniu okna. Haczyk na nieistniejące okno jest gorszy od pustego.</summary>
-    public static void Odepnij()
+    public static void Unhook()
     {
         Pickers.Data = null;
         Pickers.Hour = null;
@@ -89,7 +89,7 @@ internal static class NativePickers
     /// zamknięcie. Wygrywa pierwsza.
     /// </para>
     /// </remarks>
-    private static Task<T> PokazAsync<T>(Activity window, Action<Action<T>> pokaz)
+    private static Task<T> ShowAsync<T>(Activity window, Action<Action<T>> pokaz)
     {
         var response = new TaskCompletionSource<T>(
             TaskCreationOptions.RunContinuationsAsynchronously);

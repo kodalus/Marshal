@@ -130,7 +130,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
                 // Poziom dostępu prosto z listy: świąteczne, fazy księżyca i cudze
                 // udostępnione bez prawa zmian są tu czytelnikami.
-                ReadOnly(k.AccessRole)))
+                IsReadOnly(k.AccessRole)))
             .OrderBy(k => k.Name, StringComparer.CurrentCulture)
             .ToArray();
     }
@@ -228,7 +228,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Forbidden)
         {
-            throw new InvalidOperationException(ReadOnly, e);
+            throw new InvalidOperationException(ReadOnlyMessage, e);
         }
 
         return created.Id
@@ -386,7 +386,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Forbidden)
         {
-            throw new InvalidOperationException(ReadOnly, e);
+            throw new InvalidOperationException(ReadOnlyMessage, e);
         }
     }
 
@@ -401,7 +401,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// Kalendarze świąteczne, fazy księżyca i cudze udostępnione bez prawa zmian są
     /// właśnie takie — a wpisuje się je akurat po to, żeby je tylko czytać.
     /// </remarks>
-    private const string ReadOnly =
+    private const string ReadOnlyMessage =
         "Ten kalendarz jest tylko do odczytu — Google nie pozwala w nim nic zmieniać "
         + "ani kasować. Tak są ustawione kalendarze świąteczne, fazy księżyca i cudze "
         + "udostępnione bez prawa zmian.";
@@ -493,7 +493,7 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// „wolno": nowa nazwa poziomu zablokowałaby zapis do kalendarza, do którego wolno,
     /// a objawem byłoby pole nie do kliknięcia bez żadnego wyjaśnienia.
     /// </remarks>
-    private static bool ReadOnly(string? level) =>
+    private static bool IsReadOnly(string? level) =>
         level is { Length: > 0 }
             && !string.Equals(level, "owner", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(level, "writer", StringComparison.OrdinalIgnoreCase);

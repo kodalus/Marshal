@@ -31,35 +31,35 @@ namespace Marshal.Android;
 [Service(
     Exported = false,
     ForegroundServiceType = ForegroundService.TypeDataSync)]
-internal sealed class UslugaLogowania : Service
+internal sealed class SignInService : Service
 {
-    private const string Kanal = "logowanie";
-    private const int Numer = 7001;
+    private const string Channel = "logowanie";
+    private const int Number = 7001;
 
     public override IBinder? OnBind(Intent? intent) => null;
 
     public override StartCommandResult OnStartCommand(
         Intent? intent, StartCommandFlags flags, int startId)
     {
-        if (GetSystemService(NotificationService) is NotificationManager menedzer)
+        if (GetSystemService(NotificationService) is NotificationManager manager)
         {
             // Niska waga: to jest znak życia, a nie wiadomość. Dźwięk przy czymś,
             // co użytkownik właśnie sam uruchomił, byłby hałasem.
-            menedzer.CreateNotificationChannel(
-                new NotificationChannel(Kanal, "Logowanie", NotificationImportance.Low)
+            manager.CreateNotificationChannel(
+                new NotificationChannel(Channel, "Logowanie", NotificationImportance.Low)
                 {
                     Description = "Widoczne tylko wtedy, gdy Marshal czeka na zgodę Google.",
                 });
         }
 
-        var powiadomienie = new Notification.Builder(this, Kanal)
+        var notification = new Notification.Builder(this, Channel)
             .SetContentTitle("Marshal — logowanie")
             .SetContentText("Czekam na zgodę w przeglądarce.")
-            .SetSmallIcon(Resource.Drawable.znak_powiadomienia)
+            .SetSmallIcon(Resource.Drawable.notification_mark)
             .SetOngoing(true)
             .Build();
 
-        StartForeground(Numer, powiadomienie, ForegroundService.TypeDataSync);
+        StartForeground(Number, notification, ForegroundService.TypeDataSync);
 
         // Nie wskrzeszamy po zabiciu: zgoda, która przepadła razem z procesem,
         // i tak wymaga zaczęcia od nowa, a wskrzeszona usługa wisiałaby bez powodu.
@@ -67,19 +67,19 @@ internal sealed class UslugaLogowania : Service
     }
 
     /// <summary>Zapalenie i zgaszenie usługi. Wołane z odbiorcy kodu zgody.</summary>
-    public static void Pilnuj(Context kontekst, bool wlacz)
+    public static void Watch(Context context, bool enable)
     {
-        var zamiar = new Intent(kontekst, typeof(UslugaLogowania));
+        var intent = new Intent(context, typeof(SignInService));
 
         try
         {
-            if (wlacz)
+            if (enable)
             {
-                kontekst.StartForegroundService(zamiar);
+                context.StartForegroundService(intent);
             }
             else
             {
-                kontekst.StopService(zamiar);
+                context.StopService(intent);
             }
         }
         catch (Exception)

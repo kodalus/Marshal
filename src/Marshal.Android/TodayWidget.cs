@@ -70,13 +70,13 @@ public sealed class TodayWidget : AppWidgetProvider
     private const string CoExtra = "co";
 
     /// <summary>Nazwa dodatku — jawna, bo wypełnia ją fabryka wierszy z drugiego pliku.</summary>
-    public const string CoOtworzExtra = CoExtra;
+    public const string OpenWhatExtra = CoExtra;
 
-    private const string CoZrobione = "zrobione";
+    private const string WhatDone = "zrobione";
 
-    public const string CoOtworz = "otworz";
+    public const string OpenWhat = "otworz";
 
-    private const string CoDzien = "dzien";
+    private const string Daily = "dzien";
 
     private const string DeltaExtra = "delta";
 
@@ -93,7 +93,7 @@ public sealed class TodayWidget : AppWidgetProvider
     /// pokazywać dwa różne dni — po to się je stawia dwa.
     /// </para>
     /// </remarks>
-    private const string Ustawienia = "widget";
+    private const string Settings = "widget";
 
     /// <summary>Ta sama składnica dla wierszy zapamiętanych przez listę kafelka.</summary>
     /// <remarks>
@@ -101,20 +101,20 @@ public sealed class TodayWidget : AppWidgetProvider
     /// tylko to, co jeden prostokąt na jednym ekranie domowym ma o sobie pamiętać.
     /// Zapomina się o tym razem z nim, w jednym miejscu.
     /// </remarks>
-    internal const string Pamiec = Ustawienia;
+    internal const string Memory = Settings;
 
-    internal static int Przesuniecie(Context kontekst, int widgetId) =>
-        kontekst.GetSharedPreferences(Ustawienia, FileCreationMode.Private)
+    internal static int Offset(Context context, int widgetId) =>
+        context.GetSharedPreferences(Settings, FileCreationMode.Private)
             ?.GetInt($"dzien-{widgetId}", 0) ?? 0;
 
-    private static void Move(Context kontekst, int widgetId, int delta)
+    private static void Move(Context context, int widgetId, int delta)
     {
-        if (kontekst.GetSharedPreferences(Ustawienia, FileCreationMode.Private) is not { } patch)
+        if (context.GetSharedPreferences(Settings, FileCreationMode.Private) is not { } patch)
         {
             return;
         }
 
-        var fresh = Przesuniecie(kontekst, widgetId) + delta;
+        var fresh = Offset(context, widgetId) + delta;
 
         // Granica po obu stronach: kilkadziesiąt dotknięć strzałki w jedną stronę nie ma
         // wyprowadzać widgetu w miejsce, z którego nie widać, jak wrócić. Rok w każdą
@@ -130,21 +130,21 @@ public sealed class TodayWidget : AppWidgetProvider
     {
         base.OnDeleted(context, appWidgetIds);
 
-        if (context?.GetSharedPreferences(Ustawienia, FileCreationMode.Private) is not { } patch
+        if (context?.GetSharedPreferences(Settings, FileCreationMode.Private) is not { } patch
             || appWidgetIds is null)
         {
             return;
         }
 
-        var edycja = patch.Edit();
+        var edit = patch.Edit();
 
         foreach (var id in appWidgetIds)
         {
-            edycja?.Remove($"dzien-{id}");
-            edycja?.Remove($"wiersze-{id}");
+            edit?.Remove($"dzien-{id}");
+            edit?.Remove($"wiersze-{id}");
         }
 
-        edycja?.Apply();
+        edit?.Apply();
     }
 
     /// <summary>
@@ -155,11 +155,11 @@ public sealed class TodayWidget : AppWidgetProvider
     /// wspólnym kodzie wzorzec odhaczenia i otwarcie aplikacji byłyby dla niego jednym
     /// zamiarem, a drugie zastępowałoby pierwsze.
     /// </remarks>
-    private const int KodWiersza = 0;
+    private const int RowCode = 0;
 
-    private const int KodOtwarcia = 1;
+    private const int OpenCode = 1;
 
-    private const int KodWrzutu = 2;
+    private const int CaptureCode = 2;
 
     /// <summary>Od tego numeru w górę idą dotknięcia dni — po dziewięć na każdy kafelek.</summary>
     /// <remarks>
@@ -168,13 +168,13 @@ public sealed class TodayWidget : AppWidgetProvider
     /// <b>bez patrzenia na dodatkowe dane</b> — przy wspólnym numerze wszystkie
     /// dotknięcia byłyby dla niego jednym zamiarem i każde przesuwałoby to samo.
     /// </remarks>
-    private const int KodDnia = 1000;
+    private const int DayCode = 1000;
 
     /// <summary>Ile numerów żądania przypada na jeden kafelek.</summary>
-    private const int KodowNaKafelek = 16;
+    private const int CodesPerTile = 16;
 
     /// <summary>Ile dni pokazuje pasek. Tydzień, bo tydzień jest jednostką planowania.</summary>
-    private const int DniTygodnia = 7;
+    private const int WeekDays = 7;
 
     /// <summary>Każe systemowi przerysować wszystkie osadzone widgety.</summary>
     public static void Refresh(Context context)
@@ -200,11 +200,11 @@ public sealed class TodayWidget : AppWidgetProvider
         manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.list);
 #pragma warning restore CA1422
 
-        var zamiar = new Intent(context, typeof(TodayWidget));
-        zamiar.SetAction(AppWidgetManager.ActionAppwidgetUpdate);
-        zamiar.PutExtra(AppWidgetManager.ExtraAppwidgetIds, ids);
+        var intent = new Intent(context, typeof(TodayWidget));
+        intent.SetAction(AppWidgetManager.ActionAppwidgetUpdate);
+        intent.PutExtra(AppWidgetManager.ExtraAppwidgetIds, ids);
 
-        context.SendBroadcast(zamiar);
+        context.SendBroadcast(intent);
     }
 
     public override void OnUpdate(
@@ -215,7 +215,7 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
-        Przerysuj(context, appWidgetManager, appWidgetIds);
+        Redraw(context, appWidgetManager, appWidgetIds);
     }
 
     /// <summary>
@@ -233,10 +233,10 @@ public sealed class TodayWidget : AppWidgetProvider
     /// <b>tego</b> odbiornika i nie ma znaczenia w oderwaniu od niego.
     /// </para>
     /// </remarks>
-    private void Przerysuj(Context context, AppWidgetManager menedzer, int[] identyfikatory)
+    private void Redraw(Context context, AppWidgetManager manager, int[] ids)
     {
         var window = context;
-        var oczekiwanie = GoAsync();
+        var waiting = GoAsync();
 
         _ = Task.Run(async () =>
         {
@@ -245,22 +245,22 @@ public sealed class TodayWidget : AppWidgetProvider
                 var clock = System.Diagnostics.Stopwatch.StartNew();
 
                 var services = await ServicesAsync(window.ApplicationContext ?? window);
-                var gotowe = clock.ElapsedMilliseconds;
+                var ready = clock.ElapsedMilliseconds;
 
                 var today = services.GetRequiredService<IClock>().Today;
                 var plan = services.GetRequiredService<DayPlanService>();
 
-                foreach (var id in identyfikatory)
+                foreach (var id in ids)
                 {
                     // Kropki liczone na kafelek, nie raz na wszystkie: dwa kafelki obok
                     // siebie mają prawo oglądać dwa różne tygodnie — po to się je stawia
                     // dwa — a wspólny tydzień oznaczyłby kropki jednego z nich na drugim.
-                    var ogladany = today.AddDays(Przesuniecie(window, id));
-                    var poniedzialek = ogladany.AddDays(-(((int)ogladany.DayOfWeek + 6) % 7));
+                    var shown = today.AddDays(Offset(window, id));
+                    var monday = shown.AddDays(-(((int)shown.DayOfWeek + 6) % 7));
 
-                    var busy = await plan.BusyAsync(poniedzialek, DniTygodnia);
+                    var busy = await plan.BusyAsync(monday, WeekDays);
 
-                    menedzer.UpdateAppWidget(id, Rama(window, id, today, busy));
+                    manager.UpdateAppWidget(id, Frame(window, id, today, busy));
                 }
 
                 // Przerysowanie kafelka idzie w odbiorniku rozgłoszenia, czyli z budżetem
@@ -273,8 +273,8 @@ public sealed class TodayWidget : AppWidgetProvider
                 {
                     await services.GetRequiredService<IActivityLog>().RecordAsync(
                         "Widget: przerysowanie",
-                        $"{clock.ElapsedMilliseconds} ms na {identyfikatory.Length}, "
-                            + $"w tym czekanie na bazę {gotowe} ms",
+                        $"{clock.ElapsedMilliseconds} ms na {ids.Length}, "
+                            + $"w tym czekanie na bazę {ready} ms",
                         ActivityLevel.Problem);
                 }
             }
@@ -286,7 +286,7 @@ public sealed class TodayWidget : AppWidgetProvider
             }
             finally
             {
-                oczekiwanie?.Finish();
+                waiting?.Finish();
             }
         });
     }
@@ -301,30 +301,30 @@ public sealed class TodayWidget : AppWidgetProvider
     /// i jedną listę na spółkę. Stąd też adres w zamiarze: jest po to, żeby dwa
     /// zamiary do tej samej usługi różniły się czymś, co system porównuje.
     /// </remarks>
-    private static RemoteViews Rama(
+    private static RemoteViews Frame(
         Context context, int widgetId, DateOnly today, IReadOnlySet<DateOnly> busy)
     {
         var view = new RemoteViews(context.PackageName, Resource.Layout.widget_marshal);
-        var offset = Przesuniecie(context, widgetId);
-        var ogladany = today.AddDays(offset);
+        var offset = Offset(context, widgetId);
+        var shown = today.AddDays(offset);
 
-        view.SetTextViewText(Resource.Id.heading, Month(ogladany, today));
+        view.SetTextViewText(Resource.Id.heading, Month(shown, today));
 
         // Strzałki po tygodniu, bo pasek pokazuje tydzień. Przesuwanie o dzień przy
         // widocznym tygodniu znaczyłoby, że pierwsze dotknięcie prawie nic nie zmienia
         // — a druga strzałka przesuwa to, co już widać.
         view.SetOnClickPendingIntent(
-            Resource.Id.wstecz, DzienIntent(context, widgetId, -DniTygodnia, 7));
+            Resource.Id.back, DayIntent(context, widgetId, -WeekDays, 7));
         view.SetOnClickPendingIntent(
-            Resource.Id.naprzod, DzienIntent(context, widgetId, +DniTygodnia, 8));
+            Resource.Id.forward, DayIntent(context, widgetId, +WeekDays, 8));
 
-        PasekTygodnia(context, view, widgetId, ogladany, today, busy);
+        WeekStrip(context, view, widgetId, shown, today, busy);
 
         // Dotknięcie samego kafelka otwiera kalendarz: widget odpowiada na pytanie
         // „co dziś", a kalendarz jest tym samym pytaniem zadanym szerzej. Na pustym
         // planie kafelek zakrywa napis „nic nie zaplanowane", więc i on prowadzi tam samo.
-        view.SetOnClickPendingIntent(Resource.Id.korzen, OtworzIntent(context));
-        view.SetOnClickPendingIntent(Resource.Id.pusto, OtworzIntent(context));
+        view.SetOnClickPendingIntent(Resource.Id.root, OpenIntent(context));
+        view.SetOnClickPendingIntent(Resource.Id.empty, OpenIntent(context));
 
         // Wrzut otwiera aplikację, a nie pole tekstowe w widgecie: RemoteViews nie zna
         // pola do wpisywania, a wszystko inne znaczy drugi ekran do utrzymywania.
@@ -332,11 +332,11 @@ public sealed class TodayWidget : AppWidgetProvider
         // Wypadło przy przebudowie na listę i przez to przycisk nie robił nic — a nic
         // nie robi też przycisk, którego zapomniano podpiąć, i przycisk zasłonięty przez
         // cudze dotknięcie. Z zewnątrz wyglądają identycznie.
-        view.SetOnClickPendingIntent(Resource.Id.wrzut, LaunchIntent(context));
+        view.SetOnClickPendingIntent(Resource.Id.capture, LaunchIntent(context));
 
-        var doUslugi = new Intent(context, typeof(TodayWidgetService));
-        doUslugi.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
-        doUslugi.SetData(global::Android.Net.Uri.Parse(doUslugi.ToUri(IntentUriType.Scheme)));
+        var toService = new Intent(context, typeof(TodayWidgetService));
+        toService.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
+        toService.SetData(global::Android.Net.Uri.Parse(toService.ToUri(IntentUriType.Scheme)));
 
         // Wskazanie usługi zamiarem jest od Androida 15 oznaczone jako przestarzałe na
         // rzecz podawania wierszy wprost w RemoteViews. Tamta droga nie zna usługi
@@ -344,14 +344,14 @@ public sealed class TodayWidget : AppWidgetProvider
         // bazę — jest zamiennikiem dla listy krótkiej i znanej z góry. Nadal działa
         // i nadal jest jedyną drogą dla listy budowanej po stronie aplikacji.
 #pragma warning disable CA1422
-        view.SetRemoteAdapter(Resource.Id.list, doUslugi);
+        view.SetRemoteAdapter(Resource.Id.list, toService);
 #pragma warning restore CA1422
 
         // Napis zamiast pustej listy — system podmienia je sam, więc nie trzeba
         // zgadywać, czy plan jest pusty, zanim lista go wczyta.
-        view.SetEmptyView(Resource.Id.list, Resource.Id.pusto);
+        view.SetEmptyView(Resource.Id.list, Resource.Id.empty);
 
-        view.SetPendingIntentTemplate(Resource.Id.list, WzorzecWiersza(context));
+        view.SetPendingIntentTemplate(Resource.Id.list, RowTemplate(context));
 
         return view;
     }
@@ -368,15 +368,15 @@ public sealed class TodayWidget : AppWidgetProvider
     /// Rok tylko nie-bieżący, bo dopisany zawsze byłby stałą, którą się przestaje czytać
     /// — a wtedy przestaje się ją czytać także wtedy, gdy naprawdę coś mówi.
     /// </remarks>
-    private static string Month(DateOnly ogladany, DateOnly today)
+    private static string Month(DateOnly shown, DateOnly today)
     {
-        var name = ogladany.ToString("MMMM", CultureInfo.CurrentCulture);
+        var name = shown.ToString("MMMM", CultureInfo.CurrentCulture);
 
-        var zWielkiej = name.Length > 0
+        var capitalized = name.Length > 0
             ? char.ToUpper(name[0], CultureInfo.CurrentCulture) + name[1..]
             : name;
 
-        return ogladany.Year == today.Year ? zWielkiej : $"{zWielkiej} {ogladany.Year}";
+        return shown.Year == today.Year ? capitalized : $"{capitalized} {shown.Year}";
     }
 
     /// <summary>
@@ -395,23 +395,23 @@ public sealed class TodayWidget : AppWidgetProvider
     /// obok — pasek przestałby być siatką i numery skakałyby przy każdej zmianie planu.
     /// </para>
     /// </remarks>
-    private static void PasekTygodnia(
+    private static void WeekStrip(
         Context context,
         RemoteViews view,
         int widgetId,
-        DateOnly ogladany,
+        DateOnly shown,
         DateOnly today,
         IReadOnlySet<DateOnly> busy)
     {
-        var poniedzialek = ogladany.AddDays(-(((int)ogladany.DayOfWeek + 6) % 7));
+        var monday = shown.AddDays(-(((int)shown.DayOfWeek + 6) % 7));
 
-        for (var i = 0; i < DniTygodnia; i++)
+        for (var i = 0; i < WeekDays; i++)
         {
-            var day = poniedzialek.AddDays(i);
-            var selected = day == ogladany;
+            var day = monday.AddDays(i);
+            var selected = day == shown;
 
-            view.SetTextViewText(Nazwy[i], day.ToString("ddd", CultureInfo.CurrentCulture));
-            view.SetTextViewText(Numery[i], day.Day.ToString(CultureInfo.CurrentCulture));
+            view.SetTextViewText(Names[i], day.ToString("ddd", CultureInfo.CurrentCulture));
+            view.SetTextViewText(Numbers[i], day.Day.ToString(CultureInfo.CurrentCulture));
 
             // Dzisiejszy dzień w barwie wyróżnienia nawet wtedy, gdy ogląda się inny:
             // kafelek stoi na ekranie domowym i pierwsze pytanie do niego brzmi
@@ -420,53 +420,53 @@ public sealed class TodayWidget : AppWidgetProvider
             // Przez SetInt na setTextColor, a nie przez SetTextColor: to drugie chce
             // typu barwy Androida, a zasób oddaje liczbę. Jedna droga mniej do pomylenia.
             view.SetInt(
-                Numery[i],
+                Numbers[i],
                 "setTextColor",
-                context.GetColor(day == today ? Resource.Color.akcent : Resource.Color.text));
+                context.GetColor(day == today ? Resource.Color.accent : Resource.Color.text));
 
             view.SetInt(
-                Kropki[i],
+                Dots[i],
                 "setBackgroundResource",
-                busy.Contains(day) ? Resource.Drawable.kropka_widgetu : Resource.Drawable.przezroczyste);
+                busy.Contains(day) ? Resource.Drawable.kropka_widgetu : Resource.Drawable.transparent);
 
             view.SetInt(
-                Kreski[i],
+                Dashes[i],
                 "setBackgroundResource",
-                selected ? Resource.Drawable.kreska_widgetu : Resource.Drawable.przezroczyste);
+                selected ? Resource.Drawable.kreska_widgetu : Resource.Drawable.transparent);
 
             // Dotknięcie kolumny przestawia widget na ten dzień. Przez różnicę, bo
             // przesunięcie liczone jest od dzisiejszego dnia i tak je zapisujemy.
             view.SetOnClickPendingIntent(
-                Kolumny[i],
-                DzienIntent(context, widgetId, day.DayNumber - ogladany.DayNumber, i));
+                Columns[i],
+                DayIntent(context, widgetId, day.DayNumber - shown.DayNumber, i));
         }
     }
 
-    private static readonly int[] Kolumny =
+    private static readonly int[] Columns =
     [
         Resource.Id.dzien0, Resource.Id.dzien1, Resource.Id.dzien2, Resource.Id.dzien3,
         Resource.Id.dzien4, Resource.Id.dzien5, Resource.Id.dzien6,
     ];
 
-    private static readonly int[] Nazwy =
+    private static readonly int[] Names =
     [
         Resource.Id.nazwa0, Resource.Id.nazwa1, Resource.Id.nazwa2, Resource.Id.nazwa3,
         Resource.Id.nazwa4, Resource.Id.nazwa5, Resource.Id.nazwa6,
     ];
 
-    private static readonly int[] Numery =
+    private static readonly int[] Numbers =
     [
         Resource.Id.numer0, Resource.Id.numer1, Resource.Id.numer2, Resource.Id.numer3,
         Resource.Id.numer4, Resource.Id.numer5, Resource.Id.numer6,
     ];
 
-    private static readonly int[] Kropki =
+    private static readonly int[] Dots =
     [
         Resource.Id.kropka0, Resource.Id.kropka1, Resource.Id.kropka2, Resource.Id.kropka3,
         Resource.Id.kropka4, Resource.Id.kropka5, Resource.Id.kropka6,
     ];
 
-    private static readonly int[] Kreski =
+    private static readonly int[] Dashes =
     [
         Resource.Id.kreska0, Resource.Id.kreska1, Resource.Id.kreska2, Resource.Id.kreska3,
         Resource.Id.kreska4, Resource.Id.kreska5, Resource.Id.kreska6,
@@ -483,13 +483,13 @@ public sealed class TodayWidget : AppWidgetProvider
     /// Nie ma tu czego nadużyć: wzorzec nie wskazuje niczego poza naszym odbiornikiem,
     /// a dokładane jest wyłącznie to, co wiersz zgłasza.
     /// </remarks>
-    private static PendingIntent? WzorzecWiersza(Context context)
+    private static PendingIntent? RowTemplate(Context context)
     {
-        var zamiar = new Intent(context, typeof(TodayWidget));
-        zamiar.SetAction(CompleteAction);
+        var intent = new Intent(context, typeof(TodayWidget));
+        intent.SetAction(CompleteAction);
 
         return PendingIntent.GetBroadcast(
-            context, KodWiersza, zamiar, ZnacznikiWzorca());
+            context, RowCode, intent, TemplateMarks());
     }
 
     /// <summary>
@@ -501,14 +501,14 @@ public sealed class TodayWidget : AppWidgetProvider
     /// której nie znają, byłoby tylko liczbą bez znaczenia, a analizator zgodności
     /// słusznie tego nie przepuszcza.
     /// </remarks>
-    private static PendingIntentFlags ZnacznikiWzorca() =>
+    private static PendingIntentFlags TemplateMarks() =>
         OperatingSystem.IsAndroidVersionAtLeast(31)
-            ? PendingIntentFlags.UpdateCurrent | Zmienny()
+            ? PendingIntentFlags.UpdateCurrent | Inexact()
             : PendingIntentFlags.UpdateCurrent;
 
     /// <summary>Osobno i z adnotacją wydania — inaczej analizator czyta to jako zwykłą liczbę.</summary>
     [SupportedOSPlatform("android31.0")]
-    private static PendingIntentFlags Zmienny() => PendingIntentFlags.Mutable;
+    private static PendingIntentFlags Inexact() => PendingIntentFlags.Mutable;
 
     /// <summary>
     /// Strzałka przesuwająca dzień.
@@ -518,29 +518,29 @@ public sealed class TodayWidget : AppWidgetProvider
     /// <b>bez patrzenia na dodatkowe dane</b>. Przy wspólnym kodzie obie strzałki
     /// wszystkich kafelków byłyby dla niego jednym zamiarem i każda przesuwałaby to samo.
     /// </remarks>
-    private static PendingIntent? DzienIntent(Context context, int widgetId, int delta, int gniazdo)
+    private static PendingIntent? DayIntent(Context context, int widgetId, int delta, int socket)
     {
-        var zamiar = new Intent(context, typeof(TodayWidget));
-        zamiar.SetAction(CompleteAction);
-        zamiar.PutExtra(CoExtra, CoDzien);
-        zamiar.PutExtra(DeltaExtra, delta);
-        zamiar.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
+        var intent = new Intent(context, typeof(TodayWidget));
+        intent.SetAction(CompleteAction);
+        intent.PutExtra(CoExtra, Daily);
+        intent.PutExtra(DeltaExtra, delta);
+        intent.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
 
         return PendingIntent.GetBroadcast(
             context,
-            KodDnia + (widgetId * KodowNaKafelek) + gniazdo,
-            zamiar,
+            DayCode + (widgetId * CodesPerTile) + socket,
+            intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
 
-    private static PendingIntent? OtworzIntent(Context context)
+    private static PendingIntent? OpenIntent(Context context)
     {
-        var zamiar = new Intent(context, typeof(MainActivity));
-        zamiar.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
-        zamiar.PutExtra(MainActivity.KalendarzExtra, true);
+        var intent = new Intent(context, typeof(MainActivity));
+        intent.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
+        intent.PutExtra(MainActivity.CalendarExtra, true);
 
         return PendingIntent.GetActivity(
-            context, KodOtwarcia, zamiar,
+            context, OpenCode, intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
 
@@ -556,36 +556,36 @@ public sealed class TodayWidget : AppWidgetProvider
         // więc to, co wiersz chce zgłosić, może przyjechać wyłącznie jako dodatek.
         // Skoro tak, to i strzałki dni idą tą samą drogą — dwie drogi do jednego
         // odbiornika znaczyłyby dwa miejsca, w których trzeba pamiętać o tej regule.
-        var co = intent.GetStringExtra(CoExtra) ?? CoZrobione;
+        var co = intent.GetStringExtra(CoExtra) ?? WhatDone;
         var window = context.ApplicationContext ?? context;
 
-        if (co == CoOtworz)
+        if (co == OpenWhat)
         {
             // Z odbiornika, a nie zamiarem oczekującym: wiersz listy nie ma własnego
             // zamiaru, a wzorzec jest rozgłoszeniem i okna nie otworzy.
-            var doOkna = new Intent(window, typeof(MainActivity));
-            doOkna.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
-            doOkna.PutExtra(MainActivity.KalendarzExtra, true);
+            var toWindow = new Intent(window, typeof(MainActivity));
+            toWindow.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
+            toWindow.PutExtra(MainActivity.CalendarExtra, true);
 
             // Zadanie, jeśli dotknięto pozycji, a nie samego kafelka. Wejście „gdzieś
             // w okolice" znaczyło szukanie wzrokiem po siatce tego, co przed chwilą
             // stało pod palcem.
             if (intent.GetStringExtra(TaskIdExtra) is { Length: > 0 } task)
             {
-                doOkna.PutExtra(MainActivity.ZadanieExtra, task);
+                toWindow.PutExtra(MainActivity.TaskExtra, task);
             }
 
-            window.StartActivity(doOkna);
+            window.StartActivity(toWindow);
             return;
         }
 
-        if (co == CoDzien)
+        if (co == Daily)
         {
             var widgetId = intent.GetIntExtra(
                 AppWidgetManager.ExtraAppwidgetId, AppWidgetManager.InvalidAppwidgetId);
 
             if (widgetId == AppWidgetManager.InvalidAppwidgetId
-                || AppWidgetManager.GetInstance(window) is not { } menedzer)
+                || AppWidgetManager.GetInstance(window) is not { } manager)
             {
                 return;
             }
@@ -594,16 +594,16 @@ public sealed class TodayWidget : AppWidgetProvider
 
             // Rama **i** dane listy: rama niesie nazwę dnia, lista jego zawartość.
             // Jedno bez drugiego pokazałoby nagłówek „Jutro" nad planem na dziś.
-            Przerysuj(window, menedzer, [widgetId]);
+            Redraw(window, manager, [widgetId]);
 
 #pragma warning disable CA1422
-            menedzer.NotifyAppWidgetViewDataChanged(new[] { widgetId }, Resource.Id.list);
+            manager.NotifyAppWidgetViewDataChanged(new[] { widgetId }, Resource.Id.list);
 #pragma warning restore CA1422
             return;
         }
 
         var id = intent.GetStringExtra(TaskIdExtra);
-        var oczekiwanie = GoAsync();
+        var waiting = GoAsync();
 
         _ = Task.Run(async () =>
         {
@@ -625,18 +625,18 @@ public sealed class TodayWidget : AppWidgetProvider
             {
                 // GoAsync zwraca wartość pustą, gdy odbiornik nie działa w tle —
                 // wtedy nie ma czego kończyć.
-                oczekiwanie?.Finish();
+                waiting?.Finish();
             }
         });
     }
 
     private static PendingIntent? LaunchIntent(Context context)
     {
-        var zamiar = new Intent(context, typeof(MainActivity));
-        zamiar.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
+        var intent = new Intent(context, typeof(MainActivity));
+        intent.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
 
         return PendingIntent.GetActivity(
-            context, KodWrzutu, zamiar,
+            context, CaptureCode, intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
 
@@ -650,13 +650,13 @@ public sealed class TodayWidget : AppWidgetProvider
     /// widget na świeżo zainstalowanej aplikacji sięgałby do bazy, której nikt jeszcze
     /// nie założył.
     /// </remarks>
-    private static async Task<IServiceProvider> ServicesAsync(Context kontekst)
+    private static async Task<IServiceProvider> ServicesAsync(Context context)
     {
         // Haczyk na dymki **przed** składaniem: składanie nadrabia zaległe przypomnienia,
         // a widget potrafi być pierwszy w procesie i jedyny. Bez tego odświeżenie widgetu
         // o siódmej rano zjadało przypomnienie ustawione na siódmą — zapisywało je jako
         // pokazane i nie pokazywało.
-        Powiadomienia.Podepnij(kontekst);
+        Notifications.Hook(context);
 
         await AppServices.ReadyAsync();
         return AppServices.Provider;

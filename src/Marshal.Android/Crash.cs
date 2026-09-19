@@ -4,7 +4,7 @@ using Android.Widget;
 
 // Nazwa własna: sama „App" w tej przestrzeni mogłaby oznaczać przestrzeń Android.App,
 // a chodzi o naszą aplikację Avalonii.
-using Aplikacja = Marshal.UI.App;
+using Application = Marshal.UI.App;
 
 namespace Marshal.Android;
 
@@ -29,18 +29,18 @@ namespace Marshal.Android;
 /// wiadomo, i kolejne objawy prowadzą już donikąd. Lepiej, żeby padła i powiedziała.
 /// </para>
 /// </remarks>
-internal static class Awaria
+internal static class Crash
 {
-    private const string Plik = "ostatnia-awaria.txt";
+    private const string FileName = "ostatnia-awaria.txt";
 
     /// <summary>Podpięcie pod nieobsłużone wyjątki. Wołane przed stawianiem Avalonii.</summary>
-    public static void Pilnuj(Context kontekst)
+    public static void Watch(Context context)
     {
         // Dwa źródła, bo to dwie różne drogi: jedna z wątków Javy, druga z zarządzanych.
-        AndroidEnvironment.UnhandledExceptionRaiser += (_, e) => Save(kontekst, e.Exception);
+        AndroidEnvironment.UnhandledExceptionRaiser += (_, e) => Save(context, e.Exception);
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-            Save(kontekst, e.ExceptionObject as Exception);
+            Save(context, e.ExceptionObject as Exception);
     }
 
     /// <summary>Odczyt i skasowanie śladu po poprzednim uruchomieniu.</summary>
@@ -49,42 +49,42 @@ internal static class Awaria
     /// przy każdym starcie, plik odtworzy się sam. Zostawiony opowiadałby w kółko
     /// o awarii sprzed tygodnia.
     /// </remarks>
-    public static void Odczytaj(Context kontekst)
+    public static void Read(Context context)
     {
         try
         {
-            if (Sciezka(kontekst) is not { } sciezka || !File.Exists(sciezka))
+            if (PathOf(context) is not { } path || !File.Exists(path))
             {
                 return;
             }
 
-            var slad = File.ReadAllText(sciezka);
-            Aplikacja.PlatformTrace = $"Poprzednie uruchomienie padło.\n\n{slad}";
-            File.Delete(sciezka);
+            var trace = File.ReadAllText(path);
+            Application.PlatformTrace = $"Poprzednie uruchomienie padło.\n\n{trace}";
+            File.Delete(path);
 
             // Dymek systemowy, a nie tylko wpis w dzienniku. Dziennik wymaga udanego
             // startu i bazy — a przy awarii, która wraca za każdym razem, żadnego
             // udanego startu nie będzie i ślad nie miałby jak dojść do oczu.
-            Toast.MakeText(kontekst, Pierwsze(slad), ToastLength.Long)?.Show();
+            Toast.MakeText(context, First(trace), ToastLength.Long)?.Show();
         }
         catch (Exception e)
         {
-            Aplikacja.PlatformTrace = $"Nie udało się odczytać śladu awarii: {e.Message}";
+            Application.PlatformTrace = $"Nie udało się odczytać śladu awarii: {e.Message}";
         }
     }
 
     /// <summary>Rodzaj i treść błędu — pierwsze dwa wiersze śladu, bo dymek nie zmieści więcej.</summary>
-    private static string Pierwsze(string slad) =>
-        string.Join("\n", slad.Split('\n').Skip(1).Take(2)).Trim();
+    private static string First(string trace) =>
+        string.Join("\n", trace.Split('\n').Skip(1).Take(2)).Trim();
 
-    private static void Save(Context kontekst, Exception? error)
+    private static void Save(Context context, Exception? error)
     {
         try
         {
-            if (Sciezka(kontekst) is { } sciezka)
+            if (PathOf(context) is { } path)
             {
                 File.WriteAllText(
-                    sciezka,
+                    path,
                     $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}\n{error?.ToString() ?? "bez wyjątku"}");
             }
         }
@@ -95,6 +95,6 @@ internal static class Awaria
         }
     }
 
-    private static string? Sciezka(Context kontekst) =>
-        kontekst.FilesDir is { AbsolutePath: { } folder } ? Path.Combine(folder, Plik) : null;
+    private static string? PathOf(Context context) =>
+        context.FilesDir is { AbsolutePath: { } folder } ? Path.Combine(folder, FileName) : null;
 }

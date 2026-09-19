@@ -20,10 +20,10 @@ namespace Marshal.Android;
 public sealed class MainActivity : AvaloniaMainActivity<App>
 {
     /// <summary>Prośba z widgetu, żeby wejść od razu na kalendarz.</summary>
-    public const string KalendarzExtra = "kalendarz";
+    public const string CalendarExtra = "kalendarz";
 
     /// <summary>Zadanie do otwarcia razem z kalendarzem. Puste, gdy dotknięto samego kafelka.</summary>
-    public const string ZadanieExtra = "zadanie-kalendarza";
+    public const string TaskExtra = "zadanie-kalendarza";
 
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder).WithInterFont();
@@ -48,39 +48,39 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 
         // Przed bazowym, bo to ono stawia Avalonię — a awaria przy stawianiu jest
         // dokładnie tą, o której najtrudniej się czegokolwiek dowiedzieć.
-        Awaria.Pilnuj(this);
-        Awaria.Odczytaj(this);
+        Crash.Watch(this);
+        Crash.Read(this);
 
         // **Przed bazowym**, bo to ono stawia Avalonię, a Avalonia od razu składa okno
         // razem z polami daty i godziny. Pole pyta przy powstawaniu, czy jest czym
         // pokazać okienko systemu; podpięte linijkę później znaczyło, że odpowiedź
         // zawsze brzmiała „nie" i wszystkie pola zostawały przy wybieraku wbudowanym.
         // Samo podpięcie niczego nie otwiera, więc nie potrzebuje gotowego okna.
-        NativePickers.Podepnij(this);
+        NativePickers.Hook(this);
 
         // Bazowe stawia Avalonię i składa cały widok — to jest ta część rozruchu,
         // której dotąd nie mierzyłem, a która idzie wątkiem okna w całości.
         base.OnCreate(savedInstanceState);
         Startup.Platform = Startup.Now();
 
-        Powiadomienia.Podepnij(this);
+        Notifications.Hook(this);
 
         // Po bazowym, bo dopiero ono stawia okno — a nasza odpowiedź na cofnięcie
         // pyta o to, co w tym oknie jest otwarte.
-        OnBackPressedDispatcher.AddCallback(this, new ObslugaWstecz(this));
+        OnBackPressedDispatcher.AddCallback(this, new BackHandler(this));
 
-        Rozpatrz(Intent);
+        Handle(Intent);
 
         // Droga po zgodę Google. Kontekst aplikacji, nie okna: zgoda przeżywa obrót
         // telefonu i zamknięcie okna, a okno zapamiętane w polu statycznym zostałoby
         // w pamięci na długo po tym, jak przestało istnieć.
-        GoogleDriveFactory.CodeReceiver = () => new OdbiorcaKoduAndroid(ApplicationContext!);
+        GoogleDriveFactory.CodeReceiver = () => new CodeReceiverAndroid(ApplicationContext!);
 
         // Budziki nastawiane także przy otwieraniu, nie tylko przy wychodzeniu.
         // Wyjście bywa gwałtowne — zdjęcie aplikacji z listy ostatnich potrafi zabić
         // proces, zanim nastawianie dobiegnie końca — a wtedy budzik nie istnieje
         // i nie widać tego po niczym. Otwarcie jest chwilą, w której da się to nadrobić.
-        OdbiorcaBudzika.OnWake(ApplicationContext!);
+        AlarmReceiver.OnWake(ApplicationContext!);
 
         Startup.Window = Startup.Now();
     }
@@ -110,12 +110,12 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Zapamiętany, bo system nie podmienia go sam: bez tego kolejne odczyty
         // widziałyby wciąż zamiar, którym okno zostało otwarte za pierwszym razem.
         Intent = intent;
-        Rozpatrz(intent);
+        Handle(intent);
     }
 
-    private static void Rozpatrz(Intent? zamiar)
+    private static void Handle(Intent? intent)
     {
-        if (zamiar?.GetBooleanExtra(KalendarzExtra, false) != true)
+        if (intent?.GetBooleanExtra(CalendarExtra, false) != true)
         {
             return;
         }
@@ -123,7 +123,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Nieczytelny identyfikator traktowany jak jego brak: wejście na kalendarz jest
         // wtedy nadal sensowną odpowiedzią, a odmowa całego wejścia — nie.
         App.AskForCalendar(
-            Guid.TryParse(zamiar.GetStringExtra(ZadanieExtra), out var task)
+            Guid.TryParse(intent.GetStringExtra(TaskExtra), out var task)
                 ? task
                 : null);
     }
@@ -132,7 +132,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     {
         // Haczyk wskazujący na zamknięte okno jest gorszy od pustego: pusty znaczy
         // „użyj wbudowanego", a wskazujący na nic wywraca się dopiero przy dotknięciu.
-        NativePickers.Odepnij();
+        NativePickers.Unhook();
 
         base.OnDestroy();
     }
@@ -164,7 +164,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Budzik nastawiany przy wychodzeniu z aplikacji, bo to jedyna chwila, o której
         // wiadomo na pewno, że lista przypomnień jest już taka, jaka ma być — i zaraz
         // przestanie być komu jej pilnować.
-        _ = Budzik.PrzestawAsync(ApplicationContext!);
-        SynchronizacjaWorker.Nastaw(ApplicationContext!);
+        _ = Alarm.RescheduleAsync(ApplicationContext!);
+        SyncWorker.Schedule(ApplicationContext!);
     }
 }

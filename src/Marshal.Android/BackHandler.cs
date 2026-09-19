@@ -21,7 +21,7 @@ namespace Marshal.Android;
 /// zamknięcie otwartego menu podręcznego.
 /// </para>
 /// </remarks>
-internal sealed class ObslugaWstecz(ComponentActivity window) : OnBackPressedCallback(true)
+internal sealed class BackHandler(ComponentActivity window) : OnBackPressedCallback(true)
 {
     public override void HandleOnBackPressed()
     {
