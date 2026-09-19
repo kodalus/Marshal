@@ -16,6 +16,8 @@ jobs:
   rdzen:
     name: Rdzeń — budowanie i testy
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +64,24 @@ jobs:
             -s src/Marshal.Infrastructure \
             -o Data/Compiled \
             -n Marshal.Infrastructure.Data.Compiled
+
+      # Wynik odkładany na osobną gałąź, a nie tylko jako artefakt: artefakty GitHub
+      # wydaje spod adresu, którego pośrednik sieciowy tej sesji nie przepuszcza,
+      # a gałąź pobiera się zwykłym gitem. Gałąź jest tylko skrzynką na wynik —
+      # do „main" wciąga go człowiek, osobnym commitem.
+      #
+      # Przebieg tego pliku rusza wyłącznie przy zmianach w „main", więc zapis tutaj
+      # nie zapętla CI.
+      - name: Model skompilowany — na gałąź
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan model-wygenerowany
+          git rm -rf --cached . > /dev/null
+          git add -f src/Marshal.Infrastructure/Data/Compiled
+          git commit -m "Model skompilowany z $GITHUB_SHA"
+          git push -f origin model-wygenerowany
 
       - name: Model skompilowany — do pobrania
         if: always()
