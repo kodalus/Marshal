@@ -55,7 +55,13 @@ jobs:
       # Model bazy budowany przy starcie z odbicia typów kosztuje na telefonie 1,6 s
       # przy **każdym** uruchomieniu (dziennik, wpis „Start: przygotowanie"). Skompilowany
       # z góry kosztuje tyle, ile jego wczytanie. Generowany tutaj, bo wymaga narzędzi EF
-      # i SDK, a wynik leży w repozytorium.
+      # i SDK.
+      #
+      # **W repozytorium go teraz nie ma**: na telefonie aplikacja wisiała na nim przy
+      # starcie. Jego statyczny konstruktor uruchamia wątek ze stosem 10 MB i czeka na
+      # niego, a konstruktor statyczny, który nie wróci, zatrzymuje bez wyjątku każdego,
+      # kto dotknie tej klasy. Generowanie zostaje, żeby dało się wrócić jednym commitem,
+      # gdy będzie wiadomo, jak go tam uruchomić.
       #
       # Kasowany przed wygenerowaniem, żeby porównanie niżej widziało także plik, który
       # przestał być potrzebny — nie tylko zmieniony.
@@ -81,6 +87,15 @@ jobs:
           # zapalałoby się **zawsze**, czyli przestałoby cokolwiek znaczyć. Przepisujemy
           # go więc na ten z repozytorium i porównujemy całą resztę.
           builder=src/Marshal.Infrastructure/Data/Compiled/MarshalDbContextModelBuilder.cs
+
+          # Model bywa wyłączony — wtedy nie ma z czym porównywać. Zob. komentarz przy
+          # jego generowaniu: na Androidzie wisiał na starcie i leży poza repozytorium,
+          # dopóki to się nie rozstrzygnie.
+          if ! git ls-tree -r HEAD --name-only -- "$builder" | grep -q .; then
+            echo "Skompilowany model nie jest w repozytorium — porównanie pominięte."
+            exit 0
+          fi
+
           poprzedni=$(git show "HEAD:$builder" | grep -oP 'modelId: new Guid\("\K[^"]+' || true)
 
           if [ -n "$poprzedni" ]; then
