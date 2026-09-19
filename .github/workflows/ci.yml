@@ -55,15 +55,31 @@ jobs:
       # Model bazy budowany przy starcie z odbicia typów kosztuje na telefonie 1,6 s
       # przy **każdym** uruchomieniu (dziennik, wpis „Start: przygotowanie"). Skompilowany
       # z góry kosztuje tyle, ile jego wczytanie. Generowany tutaj, bo wymaga narzędzi EF
-      # i SDK; wynik wchodzi do repozytorium i jest sprawdzany krokiem niżej.
+      # i SDK, a wynik leży w repozytorium.
+      #
+      # Kasowany przed wygenerowaniem, żeby porównanie niżej widziało także plik, który
+      # przestał być potrzebny — nie tylko zmieniony.
       - name: Model skompilowany — wygenerowanie
         run: |
           export PATH="$PATH:$HOME/.dotnet/tools"
+          rm -rf src/Marshal.Infrastructure/Data/Compiled
           dotnet ef dbcontext optimize \
             -p src/Marshal.Infrastructure \
             -s src/Marshal.Infrastructure \
             -o Data/Compiled \
             -n Marshal.Infrastructure.Data.Compiled
+
+      # Skompilowany model, który rozjechał się z encjami, jest **groźniejszy niż jego
+      # brak**: EF przestaje budować model z kodu, więc zmiana pola, której nikt nie
+      # przegenerował, przestaje istnieć dla bazy — i widać to dopiero po danych.
+      # Stąd ten krok jest zaporą, a nie ozdobą: świeżo wygenerowany musi być co do
+      # znaku taki sam jak ten w repozytorium.
+      - name: Model skompilowany zgodny z encjami
+        run: |
+          if ! git diff --exit-code -- src/Marshal.Infrastructure/Data/Compiled; then
+            echo "::error::Skompilowany model rozjechał się z encjami. Świeżo wygenerowany leży na gałęzi „model-wygenerowany" — wciągnij go do main."
+            exit 1
+          fi
 
       # Wynik odkładany na osobną gałąź, a nie tylko jako artefakt: artefakty GitHub
       # wydaje spod adresu, którego pośrednik sieciowy tej sesji nie przepuszcza,
