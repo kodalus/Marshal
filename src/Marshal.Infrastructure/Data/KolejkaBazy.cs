@@ -16,6 +16,25 @@ namespace Marshal.Infrastructure.Data;
 /// i ominie kolejkę. Dlatego roboty w tle zaczynają się poza bramą — a te, które
 /// muszą ruszyć ze środka, mają własną kolejkę (odbicie do kalendarza).
 /// </para>
+/// <para>
+/// <b>Praca idzie wątkiem z puli, nie wątkiem, który o nią poprosił.</b> To jest tutaj
+/// drugie zadanie tej klasy i wzięło się z okienka „Marshal nie odpowiada" przy starcie.
+/// Odczyt z bazy wygląda na czynność asynchroniczną i nią nie jest: SQLite nie ma
+/// prawdziwego odczytu asynchronicznego, a budowanie modelu Entity Framework na telefonie
+/// idzie sekundami. Każde „await" wracało więc natychmiast na ten sam wątek i trzymało
+/// go do końca — a wątkiem było okno, bo stamtąd woła się wczytanie ekranu.
+/// </para>
+/// <para>
+/// Przeniesienie tego do jednego miejsca zamiast do kilkunastu wywołujących jest całym
+/// powodem, dla którego brama istnieje: przechodzi przez nią <b>każdy</b> odczyt i zapis,
+/// więc wystarczy raz. Oczekiwanie wraca tam, skąd wyszło, czyli na wątek okna — a to
+/// znaczy, że wołający dalej może zaraz po nim wypełniać kolekcje ekranu.
+/// </para>
+/// <para>
+/// Znacznik ustawiany <b>przed</b> odpaleniem pracy, bo to jego wartość z tej chwili
+/// jedzie razem z nią. Ustawiony po — nie dojechałby, a wtedy repozytorium wołane
+/// w środku czekałoby na bramę trzymaną przez siebie samego.
+/// </para>
 /// </remarks>
 public sealed class KolejkaBazy : IKolejkaBazy
 {
@@ -39,7 +58,7 @@ public sealed class KolejkaBazy : IKolejkaBazy
 
         try
         {
-            await praca();
+            await Task.Run(praca, ct);
         }
         finally
         {
@@ -62,7 +81,7 @@ public sealed class KolejkaBazy : IKolejkaBazy
 
         try
         {
-            return await praca();
+            return await Task.Run(praca, ct);
         }
         finally
         {

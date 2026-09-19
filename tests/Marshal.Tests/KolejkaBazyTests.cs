@@ -96,9 +96,16 @@ public sealed class KolejkaBazyTests : IDisposable
         // drodze: synchronizacja bierze bramę na całą porcję i woła w środku
         // repozytoria, a te wołają bramę. Bez wznawiania czekałaby na zwolnienie
         // przez samą siebie — czyli zawisłaby, i to cicho.
+        //
+        // Odkąd praca idzie wątkiem z puli, ten test pilnuje jeszcze jednej rzeczy:
+        // że znacznik „jestem w środku" **dojeżdża** do niej razem z przepływem
+        // wywołania. Ustawiony po odpaleniu pracy nie dojechałby, a objawem byłoby
+        // dokładnie to zawiśnięcie.
         var kolejka = new KolejkaBazy();
         var doszlo = false;
 
+        // Z ogranicznikiem czasu, bo objawem tej usterki jest zawiśnięcie, a test,
+        // który wisi, nie mówi nic — blokuje tylko przebieg aż do jego limitu.
         await kolejka.WykonajAsync(async () =>
         {
             await kolejka.WykonajAsync(() =>
@@ -106,7 +113,7 @@ public sealed class KolejkaBazyTests : IDisposable
                 doszlo = true;
                 return Task.CompletedTask;
             });
-        });
+        }).WaitAsync(TimeSpan.FromSeconds(10));
 
         doszlo.Should().BeTrue("brama ma wpuszczać ponownie ten sam przepływ wywołania");
 
