@@ -157,16 +157,16 @@ public partial class MainView : UserControl
     /// przeniesiona o warstwę niżej.
     /// </remarks>
     private void SaveTask(object? sender, RoutedEventArgs e) =>
-        TaskId("Zadanie: zapis z okna", m => m.SaveAsync());
+        OnDetail("Zadanie: zapis z okna", m => m.SaveAsync());
 
     private void CompleteTask(object? sender, RoutedEventArgs e) =>
-        TaskId("Zadanie: odhaczenie z okna", m => m.CompleteAsync());
+        OnDetail("Zadanie: odhaczenie z okna", m => m.CompleteAsync());
 
     private void DeleteTask(object? sender, RoutedEventArgs e) =>
-        TaskId("Zadanie: do kosza z okna", m => m.TrashAsync());
+        OnDetail("Zadanie: do kosza z okna", m => m.TrashAsync());
 
     private void CloseTask(object? sender, RoutedEventArgs e) =>
-        TaskId("Zadanie: zamknięcie okna", m =>
+        OnDetail("Zadanie: zamknięcie okna", m =>
         {
             m.Close();
             return Task.CompletedTask;
@@ -178,7 +178,7 @@ public partial class MainView : UserControl
         if (e.Key is Key.Enter or Key.Return)
         {
             e.Handled = true;
-            TaskId("Zadanie: zapis z klawisza", m => m.SaveAsync());
+            OnDetail("Zadanie: zapis z klawisza", m => m.SaveAsync());
         }
     }
 
@@ -358,12 +358,12 @@ public partial class MainView : UserControl
     {
         _gesture += e.Delta;
 
-        var wBok = -_gesture.X;
+        var sideways = -_gesture.X;
         var vertical = -_gesture.Y;
 
         // W bok wyraźnie bardziej niż w pionie — inaczej dojeżdżanie do wieczora
         // ciągnęłoby siatkę w bok przy każdym ukośnym ruchu.
-        if (Math.Abs(wBok) < TrackThreshold || Math.Abs(wBok) < 1.5 * Math.Abs(vertical))
+        if (Math.Abs(sideways) < TrackThreshold || Math.Abs(sideways) < 1.5 * Math.Abs(vertical))
         {
             return;
         }
@@ -376,21 +376,21 @@ public partial class MainView : UserControl
         {
             if (!_gestureSpent)
             {
-                _gestureSpent = Skip(wBok, vertical);
+                _gestureSpent = Skip(sideways, vertical);
             }
 
             return;
         }
 
         Watch();
-        Move(wBok);
+        Move(sideways);
     }
 
     private void AreaGestureDone(object? sender, ScrollGestureEndedEventArgs e) =>
         FinishGesture();
 
     /// <summary>Ustawienie siatki na zadanym przesunięciu — bez animacji, wprost za palcem.</summary>
-    private void Move(double wBok)
+    private void Move(double sideways)
     {
         if (_calendarArea is not { Bounds.Width: > 0 } area)
         {
@@ -404,7 +404,7 @@ public partial class MainView : UserControl
 
         // Ograniczone do szerokości: dalej i tak nie ma czego odsłaniać, a siatka
         // wyjechana poza ekran wygląda na zgubioną.
-        _gridOffset.X = Math.Clamp(wBok, -area.Bounds.Width, area.Bounds.Width);
+        _gridOffset.X = Math.Clamp(sideways, -area.Bounds.Width, area.Bounds.Width);
     }
 
     /// <summary>
@@ -492,7 +492,7 @@ public partial class MainView : UserControl
     /// </remarks>
     private void FinishGesture()
     {
-        var wBok = -_gesture.X;
+        var sideways = -_gesture.X;
         var vertical = -_gesture.Y;
 
         _gesture = default;
@@ -513,7 +513,7 @@ public partial class MainView : UserControl
             return;
         }
 
-        Skip(wBok, vertical);
+        Skip(sideways, vertical);
         SlideBack(from);
     }
 
@@ -573,15 +573,15 @@ public partial class MainView : UserControl
         var to = e.GetPosition(area);
         _swipe = touch with { To = to };
 
-        var wBok = to.X - touch.From.X;
+        var sideways = to.X - touch.From.X;
         var vertical = to.Y - touch.From.Y;
 
         // Mysz idzie za ręką tak samo jak palec — ten sam próg i ten sam warunek.
         if (!_dragging
-            && Math.Abs(wBok) >= TrackThreshold
-            && Math.Abs(wBok) >= 1.5 * Math.Abs(vertical))
+            && Math.Abs(sideways) >= TrackThreshold
+            && Math.Abs(sideways) >= 1.5 * Math.Abs(vertical))
         {
-            Move(wBok);
+            Move(sideways);
         }
     }
 
@@ -600,14 +600,14 @@ public partial class MainView : UserControl
 
         var to = sender is Control area ? e.GetPosition(area) : touch.To;
 
-        var wBok = to.X - touch.From.X;
+        var sideways = to.X - touch.From.X;
         var vertical = to.Y - touch.From.Y;
 
         var from = _gridOffset?.X ?? 0;
 
         // Obsłużone tylko wtedy, gdy naprawdę przejechano — inaczej zwykłe kliknięcie
         // bloku przestałoby go otwierać.
-        e.Handled = Skip(wBok, vertical);
+        e.Handled = Skip(sideways, vertical);
 
         if (Math.Abs(from) >= 0.5)
         {
@@ -616,7 +616,7 @@ public partial class MainView : UserControl
     }
 
     /// <summary>Czy ruch o tyle punktów jest przejechaniem — i jeśli tak, przeskakuje.</summary>
-    private bool Skip(double wBok, double vertical)
+    private bool Skip(double sideways, double vertical)
     {
         // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, nie zakres.
         if (_dragging || _calendar is null)
@@ -626,7 +626,7 @@ public partial class MainView : UserControl
 
         // W bok **wyraźnie bardziej** niż w pionie: ukośny ruch przy przewijaniu dnia
         // przeskakiwałby tydzień przy każdej próbie dojechania do wieczora.
-        if (Math.Abs(wBok) < SwipeThreshold || Math.Abs(wBok) < 1.5 * Math.Abs(vertical))
+        if (Math.Abs(sideways) < SwipeThreshold || Math.Abs(sideways) < 1.5 * Math.Abs(vertical))
         {
             return false;
         }
@@ -635,7 +635,7 @@ public partial class MainView : UserControl
         // zachowuje się każda lista, po której się przejeżdża.
         _ = Try(
             "Kalendarz: przejechanie",
-            () => wBok < 0
+            () => sideways < 0
                 ? _calendar.NextCommand.ExecuteAsync(null)
                 : _calendar.PreviousCommand.ExecuteAsync(null));
 
@@ -785,6 +785,8 @@ public partial class MainView : UserControl
         }
 
         _pressed = slot;
+        _pressedBlock = block;
+        _pressedPointer = e.Pointer;
         _from = e.GetPosition(this);
         _dragging = false;
 
@@ -801,7 +803,7 @@ public partial class MainView : UserControl
                 LongPress, DispatcherPriority.Input, (clock, _) =>
                 {
                     (clock as DispatcherTimer)?.Stop();
-                    _dragAllowed = true;
+                    LongPressElapsed();
                 });
 
             _longPress.Start();
@@ -855,10 +857,54 @@ public partial class MainView : UserControl
 
     private bool _dragAllowed = true;
 
+    /// <summary>Blok pod ręką i wskaźnik, którym go trzymamy — potrzebne po przytrzymaniu.</summary>
+    private Control? _pressedBlock;
+
+    private IPointer? _pressedPointer;
+
+    /// <summary>
+    /// Przytrzymanie minęło: blok jest w ręku.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wskaźnik przejmowany jest <b>tutaj</b>, a nie przy pierwszym ruchu. To jest
+    /// różnica między „da się przeciągnąć" a „nie da się" na dotyku: siatka godzinowa
+    /// i pasek zakresu mają własne rozpoznawacze gestów, które przejmują wskaźnik,
+    /// gdy tylko palec ruszy dalej niż ich próg. Przejęcie dopiero przy ruchu znaczyło,
+    /// że ten wyścig wygrywało przewijanie — a przegrany chwyt zgłasza utratę
+    /// przechwycenia, czyli blok wypada z ręki i nie dzieje się nic.
+    /// </para>
+    /// <para>
+    /// Blok przygasa od razu po przytrzymaniu, jeszcze przed ruchem. Bez tego jedyną
+    /// odpowiedzią na dobrze wykonane przytrzymanie jest brak odpowiedzi — a wtedy
+    /// nie da się odróżnić „trzymam za krótko" od „to w ogóle nie działa".
+    /// </para>
+    /// </remarks>
+    private void LongPressElapsed()
+    {
+        _dragAllowed = true;
+
+        if (_pressed is null || _pressedBlock is not { } block)
+        {
+            return;
+        }
+
+        _pressedPointer?.Capture(block);
+        block.Opacity = 0.7;
+    }
+
     private void ReleaseBlock()
     {
         _longPress?.Stop();
         _dragAllowed = true;
+
+        if (_pressedBlock is { } block)
+        {
+            block.Opacity = 1;
+        }
+
+        _pressedBlock = null;
+        _pressedPointer = null;
         _pressed = null;
         _dragging = false;
         _stretching = false;
@@ -1374,7 +1420,7 @@ public partial class MainView : UserControl
         // z siatki, więc puszczenie nie miałoby już dokąd trafić.
         ReleaseBlock();
 
-        if (TaskId(source) is { } task)
+        if (TaskOf(source) is { } task)
         {
             e.Handled = true;
             _ = Try("Menu: otwarcie", () => ShowMenuAsync(model, source, task));
@@ -1897,7 +1943,7 @@ public partial class MainView : UserControl
         new() { Header = label, ItemsSource = rows };
 
     /// <summary>Zadanie spod wskaźnika — niezależnie od tego, czym jest wiersz.</summary>
-    private static TaskItem? TaskId(Control source)
+    private static TaskItem? TaskOf(Control source)
     {
         foreach (var ancestor in source.GetSelfAndVisualAncestors().OfType<Control>())
         {
@@ -1944,7 +1990,7 @@ public partial class MainView : UserControl
             TaskRow row => row.Task,
             WaitingItem pending => pending.Task,
             NowPick choice => choice.Task,
-            _ => e.Source is Control source ? TaskId(source) : null,
+            _ => e.Source is Control source ? TaskOf(source) : null,
         };
 
         if (task is not null)
@@ -1973,17 +2019,17 @@ public partial class MainView : UserControl
         }
     }
 
-    private void TaskId(string co, Func<TaskDetailViewModel, Task> work)
+    private void OnDetail(string what, Func<TaskDetailViewModel, Task> work)
     {
         if (_detail is not { } model)
         {
             return;
         }
 
-        _ = Try(co, () => work(model));
+        _ = Try(what, () => work(model));
     }
 
-    private async Task Try(string co, Func<Task> work)
+    private async Task Try(string what, Func<Task> work)
     {
         try
         {
@@ -1994,7 +2040,7 @@ public partial class MainView : UserControl
             if (DataContext is MainViewModel model)
             {
                 await model.Journal.RecordAsync(
-                    co, "nie udało się", $"{e.GetType().Name}: {e.Message}");
+                    what, "nie udało się", $"{e.GetType().Name}: {e.Message}");
             }
         }
     }
