@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -149,9 +150,27 @@ public partial class App : Avalonia.Application
         {
             try
             {
-                await AppServices.ReadyAsync();
+                // **Na wątku puli, nie na wątku okna.** Przygotowanie to migracje bazy,
+                // zasiew obszarów, przejście dnia i przypomnienia. Wygląda na czynność
+                // asynchroniczną i nią nie jest: SQLite nie ma prawdziwego odczytu
+                // asynchronicznego, a budowanie modelu Entity Framework na telefonie
+                // idzie sekundami — więc „await" wracało natychmiast na ten sam wątek
+                // i trzymało go do końca. Android po pięciu sekundach pyta, czy nie
+                // ubić aplikacji, i pytał przy każdym uruchomieniu.
+                //
+                // Wolno stąd, bo to jest wyłącznie praca na danych: żadnej kolekcji
+                // związanej z ekranem, żadnej kontrolki. Kontekst bazy jest pojedynczy,
+                // ale pilnuje go brama kolejki, więc widget i budzik mogą w tym czasie
+                // sięgać po swoje.
+                var zegarStartu = Stopwatch.StartNew();
+
+                await Task.Run(AppServices.ReadyAsync);
+
+                var przygotowanie = zegarStartu.ElapsedMilliseconds;
 
                 var viewModel = services.GetRequiredService<MainViewModel>();
+
+                var zlozenie = zegarStartu.ElapsedMilliseconds - przygotowanie;
 
                 // Motyw przestawia aplikacja, bo dotyczy całego okna, a nie ekranu
                 // ustawień. Zapisany motyw leży w bazie, więc dopiero teraz.
@@ -173,6 +192,8 @@ public partial class App : Avalonia.Application
 
                 await viewModel.InitializeAsync();
 
+                var wczytanie = zegarStartu.ElapsedMilliseconds - przygotowanie - zlozenie;
+
                 PodepnijKalendarz(
                     zadanie => Dispatcher.UIThread.Post(
                         () => viewModel.PokazKalendarz(zadanie)));
@@ -187,7 +208,12 @@ public partial class App : Avalonia.Application
                     $"strefa {ustawienia.Zone.Id}, teraz {zegar.Now:yyyy-MM-dd HH:mm zzz}, "
                         + $"wydanie {Wydanie()}, "
                         + $"powiadomienia systemowe: {InAppNotifier.StanSystemowych}, "
-                        + $"kalendarz główny: {ustawienia.MainCalendarId?.ToString() ?? "nieustawiony"}",
+                        + $"kalendarz główny: {ustawienia.MainCalendarId?.ToString() ?? "nieustawiony"}, "
+
+                        // Czasy startu w dzienniku, bo „aplikacja się zawiesza przy
+                        // otwarciu" nie mówi, co ją trzyma — a trzy liczby mówią.
+                        + $"start: przygotowanie {przygotowanie} ms, "
+                        + $"złożenie {zlozenie} ms, wczytanie {wczytanie} ms",
                     ustawienia.ZoneProblem is null && SladPlatformy is null
                         ? ActivityLevel.Ok : ActivityLevel.Problem,
                     string.Join("\n\n", new[] { ustawienia.ZoneProblem, SladPlatformy }
@@ -200,7 +226,7 @@ public partial class App : Avalonia.Application
                 // objawem jest zniknięcie okna — bez śladu, do którego da się dojść
                 // bez kabla. Awaria startu ma być widoczna na ekranie, bo tylko wtedy
                 // da się ją zgłosić.
-                System.Diagnostics.Debug.WriteLine(ex);
+                Debug.WriteLine(ex);
 
                 // Do dziennika też, o ile baza w ogóle stoi — a przy awarii startu
                 // bardzo często nie stoi, więc ekran awarii zostaje jedyną drogą
