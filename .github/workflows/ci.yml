@@ -76,6 +76,17 @@ jobs:
       # znaku taki sam jak ten w repozytorium.
       - name: Model skompilowany zgodny z encjami
         run: |
+          # Identyfikator modelu jest losowany przy każdym generowaniu i nie niesie nic
+          # poza tożsamością wpisu w pamięci podręcznej EF. Bez tej linijki porównanie
+          # zapalałoby się **zawsze**, czyli przestałoby cokolwiek znaczyć. Przepisujemy
+          # go więc na ten z repozytorium i porównujemy całą resztę.
+          builder=src/Marshal.Infrastructure/Data/Compiled/MarshalDbContextModelBuilder.cs
+          poprzedni=$(git show "HEAD:$builder" | grep -oP 'modelId: new Guid\("\K[^"]+' || true)
+
+          if [ -n "$poprzedni" ]; then
+            sed -i "s/modelId: new Guid(\"[^\"]*\")/modelId: new Guid(\"$poprzedni\")/" "$builder"
+          fi
+
           if ! git diff --exit-code -- src/Marshal.Infrastructure/Data/Compiled; then
             echo "::error::Skompilowany model rozjechał się z encjami. Świeżo wygenerowany leży na gałęzi model-wygenerowany — wciągnij go do main."
             exit 1
