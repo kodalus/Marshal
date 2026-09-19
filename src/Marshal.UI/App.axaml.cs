@@ -159,6 +159,11 @@ public partial class App : Avalonia.Application
                 // Ta liczba mierzy więc **czekanie**, nie pracę. Przy pierwszym starcie
                 // po zmianie schematu bazy będzie duża i to jest w porządku: w tym czasie
                 // okno jest już narysowane i odpowiada.
+                // Chwila, w której wątek okna w ogóle doszedł do wczytywania. Między
+                // końcem tworzenia okna a tym miejscem stoi kolejka zdarzeń wątku okna
+                // — a jeśli coś ją zapycha, widać to wyłącznie jako tę różnicę.
+                Rozruch.Model = Rozruch.Teraz();
+
                 var zegarStartu = Stopwatch.StartNew();
 
                 await AppServices.ReadyAsync();
@@ -210,7 +215,8 @@ public partial class App : Avalonia.Application
                         // Czasy startu w dzienniku, bo „aplikacja się zawiesza przy
                         // otwarciu" nie mówi, co ją trzyma — a trzy liczby mówią.
                         + $"start: przygotowanie {przygotowanie} ms, "
-                        + $"złożenie {zlozenie} ms, wczytanie {wczytanie} ms",
+                        + $"złożenie {zlozenie} ms, wczytanie {wczytanie} ms"
+                        + (Rozruch.Zmierzony ? $", {Rozruch.Opis}" : string.Empty),
                     ustawienia.ZoneProblem is null && SladPlatformy is null
                         ? ActivityLevel.Ok : ActivityLevel.Problem,
                     string.Join("\n\n", new[] { ustawienia.ZoneProblem, SladPlatformy }

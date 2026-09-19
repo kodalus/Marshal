@@ -38,6 +38,10 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     /// </remarks>
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        // Zegar rozruchu jako pierwsza czynność — zob. Rozruch. Wcześniej jest już
+        // tylko start procesu i środowiska, czego stąd zmierzyć się nie da.
+        _ = Rozruch.Teraz();
+
         // Przed wszystkim: okno składa się już z tą wiedzą, a od niej zależy, czy
         // w ogóle rysować rzeczy pomyślane pod kursor. Zob. Platforma.
         Platforma.Dotykowa = true;
@@ -54,7 +58,11 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Samo podpięcie niczego nie otwiera, więc nie potrzebuje gotowego okna.
         Wybieraki.Podepnij(this);
 
+        // Bazowe stawia Avalonię i składa cały widok — to jest ta część rozruchu,
+        // której dotąd nie mierzyłem, a która idzie wątkiem okna w całości.
         base.OnCreate(savedInstanceState);
+        Rozruch.Platforma = Rozruch.Teraz();
+
         Powiadomienia.Podepnij(this);
 
         // Po bazowym, bo dopiero ono stawia okno — a nasza odpowiedź na cofnięcie
@@ -73,6 +81,8 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // proces, zanim nastawianie dobiegnie końca — a wtedy budzik nie istnieje
         // i nie widać tego po niczym. Otwarcie jest chwilą, w której da się to nadrobić.
         OdbiorcaBudzika.Obudz(ApplicationContext!);
+
+        Rozruch.Okno = Rozruch.Teraz();
     }
 
     /// <summary>
