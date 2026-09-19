@@ -1343,7 +1343,7 @@ public partial class MainView : UserControl
             return false;
         }
 
-        ognisko.Focus(null);
+        ognisko.ClearFocus();
 
         return true;
     }
