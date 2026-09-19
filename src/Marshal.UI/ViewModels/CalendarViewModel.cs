@@ -220,12 +220,22 @@ public sealed record AllDayBox(
 /// <summary>Jeden dzień siatki gotowy do narysowania.</summary>
 public sealed record CalendarColumn(
     DateOnly Date,
-    string Header,
+    string DayName,
     IReadOnlyList<AllDayBox> AllDay,
     IReadOnlyList<SlotBox> Slots,
     bool IsToday,
     double NowTop)
 {
+    /// <summary>
+    /// Liczba dnia — osobno od nazwy, bo nagłówek pisze je jedna pod drugą.
+    /// </summary>
+    /// <remarks>
+    /// Sklejone w jeden napis („pon 14") nie mieściły się w kolumnie przy siedmiu
+    /// dniach na telefonie i obcinały się dokładnie na liczbie — czyli na jedynej
+    /// części, która odróżnia ten tydzień od każdego innego.
+    /// </remarks>
+    public string DayNumber => Date.Day.ToString(CultureInfo.CurrentCulture);
+
     public bool HasAllDay => AllDay.Count > 0;
 
 
@@ -1467,7 +1477,7 @@ public sealed partial class CalendarViewModel(
 
         return days.Select(day => new CalendarColumn(
             day.Date,
-            $"{DayNames[((int)day.Date.DayOfWeek + 6) % 7]} {day.Date.Day}",
+            DayNames[((int)day.Date.DayOfWeek + 6) % 7],
             day.AllDay.Select(e => new AllDayBox(
                 e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone, e.CanWrite)).ToList(),
             day.Timed.Select(Box).ToList(),

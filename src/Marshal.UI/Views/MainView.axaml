@@ -992,10 +992,21 @@
                 <StackPanel Margin="0,0,2,0"
                             Width="{Binding $parent[ItemsControl].((vm:CalendarViewModel)DataContext).ColumnWidth}">
 
-                  <Border CornerRadius="10" Padding="10,2" Margin="0,0,0,4"
+                  <!-- Nazwa dnia nad liczbą, nie obok niej: przy siedmiu kolumnach
+                       na telefonie „pon 14" nie mieściło się w szerokości kolumny
+                       i ucinało się na liczbie — czyli na jedynej części nagłówka,
+                       która odróżnia ten tydzień od każdego innego. Nazwa mniejsza
+                       i przygaszona, bo powtarza się co tydzień; liczba jaśniejsza,
+                       bo to po niej szuka się dnia. -->
+                  <Border CornerRadius="10" Padding="8,2,8,3" Margin="0,0,0,4"
                           HorizontalAlignment="Center"
                           Classes.dzis="{Binding IsToday}">
-                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" Opacity="0.7" />
+                    <StackPanel HorizontalAlignment="Center">
+                      <TextBlock Text="{Binding DayName}" FontSize="11" Opacity="0.6"
+                                 HorizontalAlignment="Center" />
+                      <TextBlock Text="{Binding DayNumber}" FontWeight="SemiBold"
+                                 Opacity="0.85" HorizontalAlignment="Center" />
+                    </StackPanel>
                   </Border>
 
                   <!-- Pasek całodniowy nad siatką, nie w niej: wydarzenie bez godziny
