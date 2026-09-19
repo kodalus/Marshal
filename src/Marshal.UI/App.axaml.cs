@@ -150,21 +150,18 @@ public partial class App : Avalonia.Application
         {
             try
             {
-                // **Na wątku puli, nie na wątku okna.** Przygotowanie to migracje bazy,
-                // zasiew obszarów, przejście dnia i przypomnienia. Wygląda na czynność
-                // asynchroniczną i nią nie jest: SQLite nie ma prawdziwego odczytu
-                // asynchronicznego, a budowanie modelu Entity Framework na telefonie
-                // idzie sekundami — więc „await" wracało natychmiast na ten sam wątek
-                // i trzymało go do końca. Android po pięciu sekundach pyta, czy nie
-                // ubić aplikacji, i pytał przy każdym uruchomieniu.
+                // Przeniesienie przygotowania na wątek z puli siedzi w ReadyAsync,
+                // a nie tutaj — bo okno nie jest jedynym, kto tam wchodzi, ani nawet
+                // pierwszym. Stało tu kiedyś Task.Run i nie pomagało: budzik przypomnień
+                // budzony w OnCreate sięgał po to samo zadanie wcześniej, z wątku okna,
+                // i to on wykonywał całą migrację.
                 //
-                // Wolno stąd, bo to jest wyłącznie praca na danych: żadnej kolekcji
-                // związanej z ekranem, żadnej kontrolki. Kontekst bazy jest pojedynczy,
-                // ale pilnuje go brama kolejki, więc widget i budzik mogą w tym czasie
-                // sięgać po swoje.
+                // Ta liczba mierzy więc **czekanie**, nie pracę. Przy pierwszym starcie
+                // po zmianie schematu bazy będzie duża i to jest w porządku: w tym czasie
+                // okno jest już narysowane i odpowiada.
                 var zegarStartu = Stopwatch.StartNew();
 
-                await Task.Run(AppServices.ReadyAsync);
+                await AppServices.ReadyAsync();
 
                 var przygotowanie = zegarStartu.ElapsedMilliseconds;
 

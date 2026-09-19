@@ -58,15 +58,36 @@ public static class AppServices
     /// dnia. Raz na proces, choćby wołane z kilku miejsc naraz.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Zadanie zapamiętane, a nie flaga „zrobione": okno i widget potrafią wejść tu
     /// w tej samej chwili, a flaga przepuściłaby drugiego przed końcem migracji.
     /// Czekanie na to samo zadanie znaczy, że drugi po prostu poczeka.
+    /// </para>
+    /// <para>
+    /// <b>Praca rusza wątkiem z puli, a nie tym, który przyszedł pierwszy.</b> Bez tego
+    /// przygotowanie wykonywał w całości ten, kto zawołał wcześniej — bo migracja
+    /// i budowanie modelu Entity Framework wyglądają na czynność asynchroniczną i nią
+    /// nie są, więc pierwsze „await" wracało natychmiast i trzymało wątek do końca.
+    /// </para>
+    /// <para>
+    /// Kto woła pierwszy, nie jest naszą decyzją i nie da się jej podjąć z jednego
+    /// miejsca. Okno przenosiło to sobie na pulę samo — ale <c>MainActivity.OnCreate</c>
+    /// budzi wcześniej budzik przypomnień, a ten sięga tutaj z <b>wątku okna</b>, zanim
+    /// Avalonia zdąży cokolwiek postawić. Przygotowanie szło więc wątkiem okna mimo
+    /// przeniesienia go po stronie okna, a zmierzony czas wyglądał niewinnie, bo okno
+    /// mierzyło <b>czekanie na cudze zadanie</b>, a nie własną pracę.
+    /// </para>
+    /// <para>
+    /// Stąd przeniesienie jest tutaj, a nie u wołających. To jedyne miejsce, przez które
+    /// przechodzą wszyscy: okno, budzik, widget i pracownik synchronizacji. Czterech
+    /// wołających to cztery okazje, żeby o tym zapomnieć — i jedna wystarczyła.
+    /// </para>
     /// </remarks>
     public static Task ReadyAsync()
     {
         lock (Gate)
         {
-            return _ready ??= DependencyInjection.PrepareAsync(Build());
+            return _ready ??= Task.Run(() => DependencyInjection.PrepareAsync(Build()));
         }
     }
 }
