@@ -48,10 +48,10 @@ public sealed class GoogleDriveTransport(IDriveClient drive, string folderName =
     public async Task<string> ReadSegmentAsync(LogSegment segment, CancellationToken ct = default)
     {
         var folder = await FolderAsync(ct);
-        var nazwa = NameOf(segment.DeviceId, segment.Name);
+        var name = NameOf(segment.DeviceId, segment.Name);
 
         var plik = (await drive.ListAsync(folder, ct))
-            .FirstOrDefault(f => f.Name == nazwa);
+            .FirstOrDefault(f => f.Name == name);
 
         return plik is null ? string.Empty : await drive.DownloadAsync(plik.Id, ct);
     }
@@ -59,19 +59,19 @@ public sealed class GoogleDriveTransport(IDriveClient drive, string folderName =
     public async Task WriteSegmentAsync(
         string deviceId, string name, string content, CancellationToken ct = default)
     {
-        var nazwa = NameOf(deviceId, name);
+        var name = NameOf(deviceId, name);
         var folder = await FolderAsync(ct);
 
         // Dysk nie ma „utwórz, jeśli nie istnieje", więc sprawdzenie i zapis nie są
         // jedną operacją. To nie szkodzi: nazwy porcji nadaje wyłącznie to urządzenie,
         // więc nikt inny nie może wejść w tę nazwę pomiędzy jednym a drugim.
-        if ((await drive.ListAsync(folder, ct)).Any(f => f.Name == nazwa))
+        if ((await drive.ListAsync(folder, ct)).Any(f => f.Name == name))
         {
             throw new InvalidOperationException(
                 $"Porcja '{name}' urządzenia '{deviceId}' już istnieje.");
         }
 
-        await drive.CreateAsync(folder, nazwa, content, ct);
+        await drive.CreateAsync(folder, name, content, ct);
     }
 
     private async Task<string> FolderAsync(CancellationToken ct) =>

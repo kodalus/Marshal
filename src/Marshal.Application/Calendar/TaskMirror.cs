@@ -31,11 +31,11 @@ public sealed class TaskMirror(
     IUnitOfWork unitOfWork,
     IHlcSource hlc,
     ISettings settings,
-    IActivityLog dziennik,
+    IActivityLog journal,
     IAreaRepository areas) : ITaskMirror
 {
     /// <summary>Ile trwa udostępnione zadanie bez podanej długości.</summary>
-    private const int DomyslneMinuty = 30;
+    private const int DefaultMinutes = 30;
 
     /// <summary>Kalendarz, w którym zadania lądują domyślnie. Na potrzeby menu w oknie.</summary>
     public Guid? MainCalendarId => settings.MainCalendarId;
@@ -50,7 +50,7 @@ public sealed class TaskMirror(
         // Dawniej wymagana była godzina. Znaczyło to, że wszystko, co ma dzień, ale nie
         // ma pory — wzięte na dziś, „zrobić w czwartek" — istniało wyłącznie w Marshalu
         // i nikt poza nim tego nie widział.
-        if (task.State == TaskState.Trashed || Dzien(task) is null)
+        if (task.State == TaskState.Trashed || Day(task) is null)
         {
             await RemoveAsync(task, ct);
             return;
@@ -64,21 +64,21 @@ public sealed class TaskMirror(
         // Wskazanie rozstrzygane przed użyciem: zadanie udostępnione na drugim urządzeniu
         // przyjeżdża ze wskazaniem na **tamtejszy** wiersz kalendarza, a składanie
         // duplikatów robi z niego nagrobek. To jest stare imię tej samej rzeczy, nie brak.
-        var wskazane = task.SharedCalendarId ?? await KalendarzObszaruAsync(task, ct);
+        var chosen = task.SharedCalendarId ?? await CalendarForAreaAsync(task, ct);
 
-        if (wskazane is { } surowy
-            && await calendar.ZywyKalendarzAsync(surowy, ct) is { } zywy
-            && zywy != surowy)
+        if (chosen is { } raw
+            && await calendar.LiveCalendarAsync(raw, ct) is { } live
+            && live != raw)
         {
-            wskazane = zywy;
+            chosen = live;
         }
 
-        if (wskazane is not { } kalendarz)
+        if (chosen is not { } calendarId)
         {
             // Zapisane, bo brak kalendarza głównego i awaria wysyłki wyglądają z zewnątrz
             // identycznie: zadanie jest w Marshalu, a w Google go nie ma. Pierwsze jest
             // do ustawienia w dwie sekundy, drugie do naprawienia w kodzie.
-            await dziennik.RecordAsync(
+            await journal.RecordAsync(
                 "Kalendarz: wysłanie zadania",
                 $"{task.Title} — pominięte",
                 ActivityLevel.Ok,
@@ -89,20 +89,20 @@ public sealed class TaskMirror(
 
         try
         {
-            var identyfikator = await calendar.SaveEventAsync(
-                kalendarz, task.SharedEventId, Szkic(task), ct);
+            var id = await calendar.SaveEventAsync(
+                calendarId, task.SharedEventId, Draft(task), ct);
 
-            if (identyfikator != task.SharedEventId || task.SharedCalendarId != kalendarz)
+            if (id != task.SharedEventId || task.SharedCalendarId != calendarId)
             {
-                task.Share(kalendarz, identyfikator, hlc.Next());
+                task.Share(calendarId, id, hlc.Next());
                 await unitOfWork.SaveChangesAsync(ct);
             }
 
-            await dziennik.RecordAsync("Kalendarz: wysłanie zadania", task.Title);
+            await journal.RecordAsync("Kalendarz: wysłanie zadania", task.Title);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            await dziennik.RecordAsync(
+            await journal.RecordAsync(
                 "Kalendarz: wysłanie zadania", task.Title, ActivityLevel.Problem,
                 $"{e.GetType().Name}: {e.Message}");
 
@@ -137,12 +137,12 @@ public sealed class TaskMirror(
     /// zadań bez obszaru — czyli dla wrzutów, których jeszcze nikt nie rozstrzygnął.
     /// </para>
     /// </remarks>
-    private async Task<Guid?> KalendarzObszaruAsync(TaskItem task, CancellationToken ct)
+    private async Task<Guid?> CalendarForAreaAsync(TaskItem task, CancellationToken ct)
     {
-        if (task.AreaId is { } obszar
-            && await areas.FindAsync(obszar, ct) is { CalendarId: { } kalendarz })
+        if (task.AreaId is { } area
+            && await areas.FindAsync(area, ct) is { CalendarId: { } calendarId })
         {
-            return kalendarz;
+            return calendarId;
         }
 
         return settings.MainCalendarId;
@@ -152,7 +152,7 @@ public sealed class TaskMirror(
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        if (task.SharedCalendarId is not { } wskazany || task.SharedEventId is not { } wydarzenie)
+        if (task.SharedCalendarId is not { } pointed || task.SharedEventId is not { } ev)
         {
             // Bez wpisu: zadanie nieudostępnione przechodzi tędy przy każdym zapisie,
             // bo wysyłanie kieruje tu wszystko, co przestało mieć dzień. Nie ma czego
@@ -163,7 +163,7 @@ public sealed class TaskMirror(
         // Jak przy wysyłaniu: wskazanie na odrzucony duplikat to stare imię żyjącego
         // podłączenia. Bez tego zadania z drugiego urządzenia nie dawały się skasować,
         // bo kasowanie odbicia wywracało się na kalendarzu, którego „już nie ma".
-        if (await calendar.ZywyKalendarzAsync(wskazany, ct) is not { } kalendarz)
+        if (await calendar.LiveCalendarAsync(pointed, ct) is not { } calendarId)
         {
             // Podłączenia naprawdę nie ma — odbicia nie ma jak skasować, ale zadanie
             // ma przestać na nie wskazywać, inaczej próba wracałaby przy każdej zmianie.
@@ -173,12 +173,12 @@ public sealed class TaskMirror(
             task.Unshare(hlc.Next());
             await unitOfWork.SaveChangesAsync(ct);
 
-            await dziennik.RecordAsync(
+            await journal.RecordAsync(
                 "Kalendarz: skasowanie odbicia",
                 task.Title,
                 ActivityLevel.Problem,
-                $"Kalendarza {wskazany} nie ma już na liście podłączonych — "
-                + $"wydarzenie {wydarzenie} zostaje w nim i trzeba je skasować ręcznie.");
+                $"Kalendarza {pointed} nie ma już na liście podłączonych — "
+                + $"wydarzenie {ev} zostaje w nim i trzeba je skasować ręcznie.");
 
             return;
         }
@@ -186,16 +186,16 @@ public sealed class TaskMirror(
         // Najpierw u źródła, potem u nas — jak przy każdym zapisie na zewnątrz.
         // Odwrotna kolejność zostawiałaby przy nieudanym kasowaniu wydarzenie,
         // do którego nie mamy już żadnego wskazania.
-        await calendar.DeleteEventAsync(kalendarz, wydarzenie, ct);
+        await calendar.DeleteEventAsync(calendarId, ev, ct);
 
         task.Unshare(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
-        await dziennik.RecordAsync("Kalendarz: skasowanie odbicia", task.Title);
+        await journal.RecordAsync("Kalendarz: skasowanie odbicia", task.Title);
     }
 
     /// <summary>Ostatni kłopot z dokańczaniem. Do tego, żeby nie pisać go co minutę.</summary>
-    private string? _ostatniKlopot;
+    private string? _lastTrouble;
 
     /// <summary>
     /// Dokończenie kasowań odbić, które się nie udały.
@@ -221,38 +221,38 @@ public sealed class TaskMirror(
     /// z dziennika wszystko inne i zamienił go w miejsce, do którego się nie zagląda.
     /// </para>
     /// </remarks>
-    public async Task DokonczKasowaniaAsync(CancellationToken ct = default)
+    public async Task FinishDeletionAsync(CancellationToken ct = default)
     {
-        var zalegle = await tasks.PendingMirrorRemovalsAsync(ct);
+        var overdue = await tasks.PendingMirrorRemovalsAsync(ct);
 
-        if (zalegle.Count == 0)
+        if (overdue.Count == 0)
         {
-            _ostatniKlopot = null;
+            _lastTrouble = null;
             return;
         }
 
-        foreach (var zadanie in zalegle)
+        foreach (var task in overdue)
         {
             try
             {
-                await RemoveAsync(zadanie, ct);
+                await RemoveAsync(task, ct);
 
-                _ostatniKlopot = null;
+                _lastTrouble = null;
 
-                await dziennik.RecordAsync(
-                    "Kalendarz: dokończone kasowanie odbicia", zadanie.Title);
+                await journal.RecordAsync(
+                    "Kalendarz: dokończone kasowanie odbicia", task.Title);
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                var tresc = $"{e.GetType().Name}: {e.Message}";
+                var content = $"{e.GetType().Name}: {e.Message}";
 
-                if (_ostatniKlopot != tresc)
+                if (_lastTrouble != content)
                 {
-                    _ostatniKlopot = tresc;
+                    _lastTrouble = content;
 
-                    await dziennik.RecordAsync(
+                    await journal.RecordAsync(
                         "Kalendarz: zaległe kasowanie odbicia",
-                        zadanie.Title, ActivityLevel.Problem, tresc);
+                        task.Title, ActivityLevel.Problem, content);
                 }
 
                 // Reszta zaległych zostaje na następny raz: skoro to nie poszło, kolejne
@@ -272,42 +272,42 @@ public sealed class TaskMirror(
     /// </remarks>
     public async Task<string?> ShareAsync(Guid taskId, Guid calendarId, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(taskId, ct) is not { } zadanie)
+        if (await tasks.FindAsync(taskId, ct) is not { } task)
         {
             return null;
         }
 
         if ((await calendar.SourcesAsync(ct)).FirstOrDefault(z => z.Id == calendarId)
-            is not { } zrodlo)
+            is not { } source)
         {
             return "Tego kalendarza nie ma już na liście podłączonych.";
         }
 
-        if (!calendar.CanWrite(zrodlo.Kind))
+        if (!calendar.CanWrite(source.Kind))
         {
-            return $"Do kalendarza „{zrodlo.Name}” umiemy tylko czytać.";
+            return $"Do kalendarza „{source.Name}” umiemy tylko czytać.";
         }
 
         // Dzień wystarczy. Dawniej wymagana była też godzina, bo bez niej nie było
         // wiadomo, gdzie postawić blok — ale zadanie bez pory nie jest blokiem, tylko
         // wpisem całodniowym, i to jest odpowiedź, której wtedy brakowało.
-        if (Dzien(zadanie) is null)
+        if (Day(task) is null)
         {
             return "Najpierw dzień — kalendarz nie ma gdzie postawić zadania bez daty.";
         }
 
-        if (zadanie.SharedCalendarId == calendarId)
+        if (task.SharedCalendarId == calendarId)
         {
             return null;
         }
 
         // Ze starego miejsca najpierw, żeby nie zostały dwa wpisy, gdyby zapis
         // w nowym padł. Kolejność odwrotna kosztowałaby duplikat w cudzym kalendarzu.
-        await RemoveAsync(zadanie, ct);
+        await RemoveAsync(task, ct);
 
-        var identyfikator = await calendar.SaveEventAsync(calendarId, null, Szkic(zadanie), ct);
+        var id = await calendar.SaveEventAsync(calendarId, null, Draft(task), ct);
 
-        zadanie.Share(calendarId, identyfikator, hlc.Next());
+        task.Share(calendarId, id, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
         return null;
@@ -324,21 +324,21 @@ public sealed class TaskMirror(
     /// </remarks>
     public async Task UnshareAsync(Guid taskId, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(taskId, ct) is not { IsShared: true } zadanie)
+        if (await tasks.FindAsync(taskId, ct) is not { IsShared: true } task)
         {
             return;
         }
 
         // Wraca do kalendarza swojego obszaru, a gdy ten go nie ma — do głównego.
-        if (await KalendarzObszaruAsync(zadanie, ct) is { } wlasny
-            && zadanie.SharedCalendarId != wlasny)
+        if (await CalendarForAreaAsync(task, ct) is { } own
+            && task.SharedCalendarId != own)
         {
-            await ShareAsync(taskId, wlasny, ct);
+            await ShareAsync(taskId, own, ct);
             return;
         }
 
         // Bez kalendarza obszaru i bez głównego nie ma dokąd wracać — zostaje zdjęcie wpisu.
-        await RemoveAsync(zadanie, ct);
+        await RemoveAsync(task, ct);
     }
 
     /// <summary>
@@ -354,14 +354,14 @@ public sealed class TaskMirror(
     /// Ta sama reguła co na siatce w Marshalu: zadanie umówione na czwartek i wzięte
     /// na dziś stoi w czwartek, bo tam jest umówione.
     /// </remarks>
-    private static DateOnly? Dzien(TaskItem task) => task.DoDate ?? task.FocusDate;
+    private static DateOnly? Day(TaskItem task) => task.DoDate ?? task.FocusDate;
 
-    private CalendarDraft Szkic(TaskItem task)
+    private CalendarDraft Draft(TaskItem task)
     {
-        var strefa = settings.Zone;
-        var dzien = Dzien(task)!.Value;
+        var zone = settings.Zone;
+        var day = Day(task)!.Value;
 
-        var nazwa = task.State == TaskState.Done
+        var name = task.State == TaskState.Done
             ? EventMark.Apply(task.Title)
             : EventMark.Strip(task.Title);
 
@@ -369,16 +369,16 @@ public sealed class TaskMirror(
         // spotkanie: w cudzym kalendarzu wyglądałoby jak coś umówionego na ósmą rano,
         // czego nikt nie umawiał. Koniec dnia później, bo u Google koniec całodniowego
         // jest wyłączny — ten sam dzień w obu polach daje wydarzenie zerowej długości.
-        if (task.DoTime is not { } pora)
+        if (task.DoTime is not { } time)
         {
-            var poczatek = new DateTimeOffset(dzien.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-            return new CalendarDraft(nazwa, poczatek, poczatek.AddDays(1), AllDay: true);
+            var start = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+            return new CalendarDraft(name, start, start.AddDays(1), AllDay: true);
         }
 
-        var lokalny = dzien.ToDateTime(pora);
-        var start = new DateTimeOffset(lokalny, strefa.GetUtcOffset(lokalny));
-        var dlugosc = TimeSpan.FromMinutes(task.EstimatedMinutes ?? DomyslneMinuty);
+        var local = day.ToDateTime(time);
+        var start = new DateTimeOffset(local, zone.GetUtcOffset(local));
+        var length = TimeSpan.FromMinutes(task.EstimatedMinutes ?? DefaultMinutes);
 
-        return new CalendarDraft(nazwa, start, start + dlugosc);
+        return new CalendarDraft(name, start, start + length);
     }
 }

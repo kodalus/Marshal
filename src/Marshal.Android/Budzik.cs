@@ -46,7 +46,7 @@ internal static class Budzik
 
             var najblizsza = await AppServices.Provider
                 .GetRequiredService<ReminderService>()
-                .NajblizszaAsync();
+                .NextUpAsync();
 
             if (kontekst.GetSystemService(Context.AlarmService) is not AlarmManager zegar)
             {
@@ -55,17 +55,17 @@ internal static class Budzik
 
             var zamiar = Zamiar(kontekst);
 
-            var dziennik = AppServices.Provider.GetRequiredService<IActivityLog>();
+            var journal = AppServices.Provider.GetRequiredService<IActivityLog>();
 
-            if (najblizsza is not { } chwila)
+            if (najblizsza is not { } moment)
             {
                 // Nic nie czeka — budzik skasowany, żeby system nie budził nas po nic.
                 zegar.Cancel(zamiar);
-                await dziennik.RecordAsync("Przypomnienia: budzik", "nic nie czeka");
+                await journal.RecordAsync("Przypomnienia: budzik", "nic nie czeka");
                 return;
             }
 
-            var kiedy = chwila.ToUnixTimeMilliseconds();
+            var kiedy = moment.ToUnixTimeMilliseconds();
 
             // „AllowWhileIdle", bo bez tego drzemka systemu przesuwa przypomnienia
             // ustawione na noc na rano — czyli dokładnie wtedy, gdy przestają być
@@ -84,9 +84,9 @@ internal static class Budzik
             // Ślad w dzienniku, bo przy zamkniętej aplikacji nie ma **żadnego** innego
             // sposobu, żeby odróżnić trzy rzeczy wyglądające tak samo: budzik nienastawiony,
             // nastawiony i niedostarczony przez system, dostarczony i bez czego pokazać.
-            await dziennik.RecordAsync(
+            await journal.RecordAsync(
                 "Przypomnienia: budzik",
-                $"nastawiony na {chwila:yyyy-MM-dd HH:mm zzz}"
+                $"nastawiony na {moment:yyyy-MM-dd HH:mm zzz}"
                     + (dokladny ? string.Empty : " (niedokładny — system nie dał zgody)"));
         }
         catch (Exception e)
@@ -99,12 +99,12 @@ internal static class Budzik
 
     /// <summary>Wpis do dziennika, który nie wywraca wołającego, gdy baza nie stoi.</summary>
     public static async Task Zapisz(
-        string co, string tresc, Exception? blad = null, ActivityLevel? poziom = null)
+        string co, string content, Exception? blad = null, ActivityLevel? poziom = null)
     {
         try
         {
             await AppServices.Provider.GetRequiredService<IActivityLog>().RecordAsync(
-                co, tresc,
+                co, content,
                 poziom ?? (blad is null ? ActivityLevel.Ok : ActivityLevel.Problem),
                 blad?.ToString());
         }
@@ -166,13 +166,13 @@ internal sealed class OdbiorcaBudzika : BroadcastReceiver
 
                 if (intent?.Action == Budzik.Akcja)
                 {
-                    var ile = await AppServices.Provider
+                    var count = await AppServices.Provider
                         .GetRequiredService<ReminderService>()
                         .RunAsync();
 
                     await Budzik.Zapisz(
                         "Przypomnienia: budzik odebrany",
-                        ile == 0 ? "nie było czego pokazać" : $"pokazane: {ile}");
+                        count == 0 ? "nie było czego pokazać" : $"pokazane: {count}");
                 }
 
                 // Następny budzik liczony na końcu: musi znać bazę, bo najbliższa chwila

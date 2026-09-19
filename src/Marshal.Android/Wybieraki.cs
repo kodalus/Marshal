@@ -28,9 +28,9 @@ internal static class Wybieraki
 {
     public static void Podepnij(Activity okno)
     {
-        Pickery.Data = teraz => PokazAsync<DateOnly?>(okno, zrobione =>
+        Pickery.Data = now => PokazAsync<DateOnly?>(okno, zrobione =>
         {
-            var od = teraz ?? DateOnly.FromDateTime(DateTime.Now);
+            var od = now ?? DateOnly.FromDateTime(DateTime.Now);
 
             var okienko = new DatePickerDialog(
                 okno,
@@ -42,14 +42,14 @@ internal static class Wybieraki
                 od.Month - 1,
                 od.Day);
 
-            okienko.CancelEvent += (_, _) => zrobione(teraz);
-            okienko.DismissEvent += (_, _) => zrobione(teraz);
+            okienko.CancelEvent += (_, _) => zrobione(now);
+            okienko.DismissEvent += (_, _) => zrobione(now);
             okienko.Show();
         });
 
-        Pickery.Godzina = teraz => PokazAsync<TimeOnly?>(okno, zrobione =>
+        Pickery.Hour = now => PokazAsync<TimeOnly?>(okno, zrobione =>
         {
-            var od = teraz ?? new TimeOnly(9, 0);
+            var od = now ?? new TimeOnly(9, 0);
 
             var okienko = new TimePickerDialog(
                 okno,
@@ -61,8 +61,8 @@ internal static class Wybieraki
                 // tak samo, a dwa zapisy tej samej godziny to jeden za dużo.
                 true);
 
-            okienko.CancelEvent += (_, _) => zrobione(teraz);
-            okienko.DismissEvent += (_, _) => zrobione(teraz);
+            okienko.CancelEvent += (_, _) => zrobione(now);
+            okienko.DismissEvent += (_, _) => zrobione(now);
             okienko.Show();
         });
     }
@@ -71,7 +71,7 @@ internal static class Wybieraki
     public static void Odepnij()
     {
         Pickery.Data = null;
-        Pickery.Godzina = null;
+        Pickery.Hour = null;
     }
 
     /// <summary>
@@ -98,7 +98,7 @@ internal static class Wybieraki
         {
             try
             {
-                pokaz(wynik => odpowiedz.TrySetResult(wynik));
+                pokaz(result => odpowiedz.TrySetResult(result));
             }
             catch (Exception e)
             {

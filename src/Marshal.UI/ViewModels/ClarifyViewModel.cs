@@ -250,15 +250,15 @@ public sealed partial class ClarifyViewModel(
     /// <summary>Dopisanie długości i sił do zadania, które właśnie wyszło ze skrzynki.</summary>
     private async Task ZapiszOszacowanieAsync(Guid id)
     {
-        var minuty = EstimatedMinutes is { } liczba ? (int)liczba : (int?)null;
+        var minutes = EstimatedMinutes is { } liczba ? (int)liczba : (int?)null;
         var sila = SelectedEnergy?.Value ?? Energy.Unknown;
 
-        if (minuty is null && sila == Energy.Unknown)
+        if (minutes is null && sila == Energy.Unknown)
         {
             return;
         }
 
-        await edit.SetEstimateAsync(id, minuty, sila);
+        await edit.SetEstimateAsync(id, minutes, sila);
     }
 
     private async Task Run(Func<Guid, Task> action, bool needsArea = true, Func<string?>? validate = null)
@@ -282,13 +282,13 @@ public sealed partial class ClarifyViewModel(
 
         Problem = null;
 
-        var identyfikator = Current.Id;
+        var id = Current.Id;
 
-        await action(identyfikator);
+        await action(id);
 
         // Oszacowanie po przejściu stanu, nie przed: gałęzie kosza i notatki nie mają
         // czego szacować, a zadanie przeniesione do projektu ma już własny byt.
-        await ZapiszOszacowanieAsync(identyfikator);
+        await ZapiszOszacowanieAsync(id);
 
         await NextAsync();
 

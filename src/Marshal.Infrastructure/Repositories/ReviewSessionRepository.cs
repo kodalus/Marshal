@@ -6,20 +6,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Repositories;
 
-public sealed class ReviewSessionRepository(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+public sealed class ReviewSessionRepository(MarshalDbContext db, IDbQueue? queue = null)
     : IReviewSessionRepository
 {
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     public async Task<ReviewSession?> OpenAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.ReviewSessions
+        await _kolejka.RunAsync(() => db.ReviewSessions
             .Where(r => r.CompletedAt == null && !r.Deleted)
             .OrderByDescending(r => r.StartedAt)
             .FirstOrDefaultAsync(ct), ct);
 
     public async Task<IReadOnlyList<ReviewSession>> RecentAsync(
         int limit, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.ReviewSessions
+        await _kolejka.RunAsync(() => db.ReviewSessions
             .Where(r => !r.Deleted)
             .OrderByDescending(r => r.StartedAt)
             .Take(limit)

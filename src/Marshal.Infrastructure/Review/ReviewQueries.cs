@@ -9,13 +9,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Review;
 
-public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+public sealed class ReviewQueries(MarshalDbContext db, IDbQueue? queue = null)
     : IReviewQueries
 {
     // Każde zapytanie osobno przez bramę, a nie cała metoda: przegląd składa się
     // z kilku odczytów, między którymi i tak nic nie trzyma, a chodzi o to, żeby
     // żadne z nich nie ruszyło w chwili, gdy kontekst robi co innego.
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     /// <summary>Stany, w których zadanie jest **akcją do przodu**.</summary>
     private static readonly TaskState[] Forward =
@@ -24,11 +24,11 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
     public async Task<IReadOnlyList<BlockedProject>> BlockedProjectsAsync(
         CancellationToken ct = default)
     {
-        var obszary = await _kolejka.WykonajAsync(() => db.Areas.AsNoTracking()
+        var areas = await _kolejka.RunAsync(() => db.Areas.AsNoTracking()
             .Where(a => !a.Deleted)
             .ToDictionaryAsync(a => a.Id, a => a.Name, ct), ct);
 
-        var zablokowane = await _kolejka.WykonajAsync(() => db.Projects.AsNoTracking()
+        var zablokowane = await _kolejka.RunAsync(() => db.Projects.AsNoTracking()
             .Where(p => p.State == ProjectState.Active && !p.Deleted)
 
             // Brak własnej akcji do przodu.
@@ -48,7 +48,7 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
 
         return zablokowane
             .Select(p => new BlockedProject(
-                p.Id, p.Outcome, p.AreaId, obszary.GetValueOrDefault(p.AreaId, "—")))
+                p.Id, p.Outcome, p.AreaId, areas.GetValueOrDefault(p.AreaId, "—")))
             .ToList();
     }
 
@@ -58,18 +58,18 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
         // Projekt „utknięty na kimś" to taki, w którym **każda** akcja do przodu jest
         // oczekiwaniem, i to oczekiwaniem starym. Projekt z choćby jedną akcją własną
         // nie utknął — ma co robić.
-        var akcje = await _kolejka.WykonajAsync(() => db.Tasks.AsNoTracking()
+        var akcje = await _kolejka.RunAsync(() => db.Tasks.AsNoTracking()
             .Where(t => !t.Deleted && t.ProjectId != null && Forward.Contains(t.State))
             .Select(t => new { t.ProjectId, t.State, t.WaitingSince, t.WaitingForWho })
             .ToListAsync(ct), ct);
 
-        var projekty = await _kolejka.WykonajAsync(() => db.Projects.AsNoTracking()
+        var projects = await _kolejka.RunAsync(() => db.Projects.AsNoTracking()
             .Where(p => p.State == ProjectState.Active && !p.Deleted)
             .ToDictionaryAsync(p => p.Id, p => p.Outcome, ct), ct);
 
         return akcje
             .GroupBy(t => t.ProjectId!.Value)
-            .Where(g => projekty.ContainsKey(g.Key))
+            .Where(g => projects.ContainsKey(g.Key))
             .Where(g => g.All(t => t.State == TaskState.Waiting))
             .Select(g => new
             {
@@ -79,18 +79,18 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
             })
             .Where(x => x.Dni >= days)
             .OrderByDescending(x => x.Dni)
-            .Select(x => new StuckOnSomeone(x.Id, projekty[x.Id], x.Dni, x.Kto))
+            .Select(x => new StuckOnSomeone(x.Id, projects[x.Id], x.Dni, x.Kto))
             .ToList();
     }
 
     public async Task<IReadOnlyList<WaitingItem>> WaitingAsync(
         DateOnly today, CancellationToken ct = default)
     {
-        var progi = await _kolejka.WykonajAsync(() => db.Areas.AsNoTracking()
+        var progi = await _kolejka.RunAsync(() => db.Areas.AsNoTracking()
             .Where(a => !a.Deleted)
             .ToDictionaryAsync(a => a.Id, a => a.DefaultNudgeDays, ct), ct);
 
-        var oczekiwane = await _kolejka.WykonajAsync(() => db.Tasks
+        var oczekiwane = await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.State == TaskState.Waiting && !t.Deleted)
             .ToListAsync(ct), ct);
 
@@ -99,12 +99,12 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
         // i przepadłaby po cichu.
         int Prog(TaskItem t)
         {
-            if (t.WaitingNudgeDays is { } wlasny)
+            if (t.WaitingNudgeDays is { } own)
             {
-                return wlasny;
+                return own;
             }
 
-            var obszaru = t.AreaId is { } obszar ? progi.GetValueOrDefault(obszar) : 0;
+            var obszaru = t.AreaId is { } area ? progi.GetValueOrDefault(area) : 0;
             return obszaru > 0 ? obszaru : Area.DefaultNudgeDaysValue;
         }
 
@@ -117,12 +117,12 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
     public async Task<IReadOnlyList<AreaBalance>> BalanceAsync(
         DateOnly today, CancellationToken ct = default)
     {
-        var obszary = await _kolejka.WykonajAsync(() => db.Areas.AsNoTracking()
+        var areas = await _kolejka.RunAsync(() => db.Areas.AsNoTracking()
             .Where(a => a.IsActive && !a.Deleted)
             .OrderBy(a => a.SortOrder)
             .ToListAsync(ct), ct);
 
-        var projekty = await _kolejka.WykonajAsync(() => db.Projects.AsNoTracking()
+        var projects = await _kolejka.RunAsync(() => db.Projects.AsNoTracking()
             .Where(p => !p.Deleted)
             .Select(p => new { p.AreaId, p.State, p.UpdatedAt })
             .ToListAsync(ct), ct);
@@ -132,22 +132,22 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
         // w bazie tekstem po konwerterze, więc liczenie maksimum po stronie bazy
         // zależałoby od tego, jak dana wersja EF przetłumaczy agregat na typ
         // konwertowany. Do zmiany, gdy tabela urośnie na tyle, że to będzie widać.
-        var zadania = await _kolejka.WykonajAsync(() => db.Tasks.AsNoTracking()
+        var tasks = await _kolejka.RunAsync(() => db.Tasks.AsNoTracking()
             .Where(t => !t.Deleted && t.AreaId != null)
             .Select(t => new { t.AreaId, t.UpdatedAt })
             .ToListAsync(ct), ct);
 
-        var ruch = projekty
+        var ruch = projects
             .Select(p => (Area: p.AreaId, p.UpdatedAt))
-            .Concat(zadania.Select(t => (Area: t.AreaId!.Value, t.UpdatedAt)))
+            .Concat(tasks.Select(t => (Area: t.AreaId!.Value, t.UpdatedAt)))
             .GroupBy(x => x.Area)
             .ToDictionary(g => g.Key, g => g.Max(x => x.UpdatedAt.WallMs));
 
-        return obszary
+        return areas
             .Select(a => new AreaBalance(
                 a.Id,
                 a.Name,
-                projekty.Count(p => p.AreaId == a.Id && p.State == ProjectState.Active),
+                projects.Count(p => p.AreaId == a.Id && p.State == ProjectState.Active),
                 ruch.TryGetValue(a.Id, out var kiedy) ? DaysSince(kiedy, today) : null,
                 a.QuietDays))
 
@@ -160,14 +160,14 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
 
     public async Task<IReadOnlyList<TaskItem>> OverdueAsync(
         DateOnly today, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => Open()
+        await _kolejka.RunAsync(() => Open()
             .Where(t => t.Deadline != null && t.Deadline < today)
             .OrderBy(t => t.Deadline)
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> MaturedSomedayAsync(
         DateOnly today, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.State == TaskState.Someday && !t.Deleted
                      && t.DeferUntil != null && t.DeferUntil <= today)
             .OrderBy(t => t.DeferUntil)
@@ -176,7 +176,7 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
     public async Task<IReadOnlyList<Project>> StaleProjectsAsync(
         DateOnly today, int days, CancellationToken ct = default)
     {
-        var aktywne = await _kolejka.WykonajAsync(() => db.Projects
+        var aktywne = await _kolejka.RunAsync(() => db.Projects
             .Where(p => p.State == ProjectState.Active && !p.Deleted)
             .ToListAsync(ct), ct);
 
@@ -189,38 +189,38 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
     public async Task<IReadOnlyList<CounterFlag>> CounterFlagsAsync(
         DateOnly today, CancellationToken ct = default)
     {
-        var otwarte = await _kolejka.WykonajAsync(() => Open()
+        var otwarte = await _kolejka.RunAsync(() => Open()
             .Where(t => t.RollCount >= 4 || t.FocusMissCount >= 4 || t.CarriedSince != null)
             .ToListAsync(ct), ct);
 
         var flagi = new List<CounterFlag>();
 
-        foreach (var zadanie in otwarte)
+        foreach (var task in otwarte)
         {
             // N12: przenoszone dłużej niż trzydzieści dni.
-            if (zadanie.CarriedSince is { } od && today.DayNumber - od.DayNumber > 30)
+            if (task.CarriedSince is { } od && today.DayNumber - od.DayNumber > 30)
             {
                 flagi.Add(new CounterFlag(
-                    zadanie,
+                    task,
                     $"zaległe od {od:yyyy-MM-dd} — rytm do zmiany czy do skasowania?"));
                 continue;
             }
 
             // N15: przesunięte cztery razy.
-            if (zadanie.RollCount >= 4)
+            if (task.RollCount >= 4)
             {
                 flagi.Add(new CounterFlag(
-                    zadanie,
-                    $"przesunięte {zadanie.RollCount} razy — czy to jest prawdziwe zadanie?"));
+                    task,
+                    $"przesunięte {task.RollCount} razy — czy to jest prawdziwe zadanie?"));
                 continue;
             }
 
             // N13: wybierane co tydzień i nierobione.
-            if (zadanie.FocusMissCount >= 4)
+            if (task.FocusMissCount >= 4)
             {
                 flagi.Add(new CounterFlag(
-                    zadanie,
-                    $"wybrane na dziś {zadanie.FocusMissCount} razy i nierobione — czy to nie jest projekt?"));
+                    task,
+                    $"wybrane na dziś {task.FocusMissCount} razy i nierobione — czy to nie jest projekt?"));
             }
         }
 
@@ -229,7 +229,7 @@ public sealed class ReviewQueries(MarshalDbContext db, IKolejkaBazy? kolejka = n
 
     public async Task<int> StaleInboxCountAsync(DateOnly today, CancellationToken ct = default)
     {
-        var wrzuty = await _kolejka.WykonajAsync(() => db.Tasks.AsNoTracking()
+        var wrzuty = await _kolejka.RunAsync(() => db.Tasks.AsNoTracking()
             .Where(t => t.State == TaskState.Inbox && !t.Deleted)
             .Select(t => t.CreatedAt)
             .ToListAsync(ct), ct);

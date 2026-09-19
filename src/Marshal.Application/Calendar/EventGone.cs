@@ -16,5 +16,5 @@ namespace Marshal.Application.Calendar;
 /// zrobić samemu — zdjąć ducha z siatki.
 /// </para>
 /// </remarks>
-public sealed class WydarzenieZniknelo(string? komunikat = null)
-    : InvalidOperationException(komunikat ?? "Tego wydarzenia nie ma już w kalendarzu Google.");
+public sealed class EventGone(string? message = null)
+    : InvalidOperationException(message ?? "Tego wydarzenia nie ma już w kalendarzu Google.");

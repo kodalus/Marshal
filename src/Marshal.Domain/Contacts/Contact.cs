@@ -60,14 +60,14 @@ public sealed class Contact : Entity
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
-        var czysty = email.Trim();
+        var trimmed = email.Trim();
 
-        if (!MailAddress.TryCreate(czysty, out _))
+        if (!MailAddress.TryCreate(trimmed, out _))
         {
-            throw new ArgumentException($"„{czysty}” nie wygląda na adres e-mail.", nameof(email));
+            throw new ArgumentException($"„{trimmed}” nie wygląda na adres e-mail.", nameof(email));
         }
 
-        return czysty;
+        return trimmed;
     }
 
     private static string NormalizeName(string name)

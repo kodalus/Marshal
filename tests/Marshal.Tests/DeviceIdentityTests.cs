@@ -62,12 +62,12 @@ public sealed class DeviceIdentityTests : IDisposable
     [InlineData("localhost")]
     [InlineData("")]
     [InlineData("Ala-ma-kota 2!")]
-    public void Dwa_urzadzenia_o_tej_samej_nazwie_dostaja_rozne_identyfikatory(string nazwa)
+    public void Dwa_urzadzenia_o_tej_samej_nazwie_dostaja_rozne_identyfikatory(string name)
     {
         // Na Androidzie MachineName zwraca „localhost" na każdym urządzeniu. Gdyby
         // identyfikator brał się z niej wprost, dwa telefony pisałyby do tego samego
         // dziennika i każdy uznawałby dziennik drugiego za własny.
-        DeviceIdentity.Generate(nazwa).Should().NotBe(DeviceIdentity.Generate(nazwa));
+        DeviceIdentity.Generate(name).Should().NotBe(DeviceIdentity.Generate(name));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public sealed class DeviceIdentityTests : IDisposable
         // albo rozładowana bateria podtrzymania. Bez wznowienia nowa zmiana dostałaby
         // znacznik wcześniejszy od już wysłanej i przepadłaby przy scalaniu.
         var zegar = new Zegar();
-        Hlc ostatni;
+        Hlc last;
 
         using (var pierwsze = Baza())
         {
@@ -85,7 +85,7 @@ public sealed class DeviceIdentityTests : IDisposable
             var hlc = new HlcSource(zegar, id, LastHlcStore.Read(pierwsze, id));
             pierwsze.Tasks.Add(TaskItem.Capture("kupić mleko", zegar.Now, hlc.Next()));
             pierwsze.SaveChanges();
-            ostatni = hlc.Last;
+            last = hlc.Last;
         }
 
         zegar.Now = zegar.Now.AddHours(-5);
@@ -94,7 +94,7 @@ public sealed class DeviceIdentityTests : IDisposable
         var id2 = new DeviceIdentity(drugie).Id;
         var wznowiony = new HlcSource(zegar, id2, LastHlcStore.Read(drugie, id2));
 
-        wznowiony.Next().Should().BeGreaterThan(ostatni);
+        wznowiony.Next().Should().BeGreaterThan(last);
     }
 
     [Fact]

@@ -142,17 +142,17 @@ public sealed partial class FiltersViewModel : ObservableObject
 
         Areas.Clear();
         Areas.Add(ScopeChoice.Any);
-        foreach (var obszar in await _areas.AllAsync())
+        foreach (var area in await _areas.AllAsync())
         {
-            Areas.Add(new ScopeChoice(obszar.Id, obszar.Name));
+            Areas.Add(new ScopeChoice(area.Id, area.Name));
         }
 
         Projects.Clear();
         Projects.Add(ScopeChoice.Any);
         Projects.Add(ScopeChoice.None);
-        foreach (var projekt in await _projects.AllAsync())
+        foreach (var project in await _projects.AllAsync())
         {
-            Projects.Add(new ScopeChoice(projekt.Id, projekt.Outcome));
+            Projects.Add(new ScopeChoice(project.Id, project.Outcome));
         }
 
         Tags.Clear();
@@ -187,29 +187,29 @@ public sealed partial class FiltersViewModel : ObservableObject
             warunki.Add(FilterCondition.Tags([.. tagi.Select(Guid.Parse)]));
         }
 
-        if (Area?.Id is { } obszar)
+        if (Area?.Id is { } area)
         {
-            warunki.Add(FilterCondition.Areas(obszar));
+            warunki.Add(FilterCondition.Areas(area));
         }
 
-        if (Project?.Id is { } projekt)
+        if (Project?.Id is { } project)
         {
-            warunki.Add(FilterCondition.Projects(projekt));
+            warunki.Add(FilterCondition.Projects(project));
         }
 
-        if (Deadline?.Value is { } termin)
+        if (Deadline?.Value is { } deadline)
         {
-            warunki.Add(FilterCondition.Deadline(termin));
+            warunki.Add(FilterCondition.Deadline(deadline));
         }
 
-        if (DoDate?.Value is { } dzien)
+        if (DoDate?.Value is { } day)
         {
-            warunki.Add(FilterCondition.DoDate(dzien));
+            warunki.Add(FilterCondition.DoDate(day));
         }
 
-        if (Minutes?.Value is { } minuty)
+        if (Minutes?.Value is { } minutes)
         {
-            warunki.Add(FilterCondition.Estimate(minuty));
+            warunki.Add(FilterCondition.Estimate(minutes));
         }
 
         if (!string.IsNullOrWhiteSpace(Text))
@@ -224,16 +224,16 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// Przeliczenie wyników. Jeden przebieg naraz — zob. <see cref="LatestOnly"/>.
     /// </summary>
     [RelayCommand]
-    private Task RunAsync() => _wczytywanie ? Task.CompletedTask : _kolejka.RunAsync(WykonajAsync);
+    private Task RunAsync() => _wczytywanie ? Task.CompletedTask : _kolejka.RunAsync(RunAsync);
 
-    private async Task WykonajAsync()
+    private async Task RunAsync()
     {
-        var dzis = _clock.Today;
+        var today = _clock.Today;
 
         Results.Clear();
-        foreach (var zadanie in await _filters.RunAsync(Build()))
+        foreach (var task in await _filters.RunAsync(Build()))
         {
-            Results.Add(TaskRow.From(zadanie, dzis));
+            Results.Add(TaskRow.From(task, today));
         }
 
         OnPropertyChanged(nameof(HasResults));
@@ -332,9 +332,9 @@ public sealed partial class FiltersViewModel : ObservableObject
     private async Task ReloadFavouritesAsync()
     {
         Favourites.Clear();
-        foreach (var filtr in await _filters.FavouritesAsync())
+        foreach (var filter in await _filters.FavouritesAsync())
         {
-            Favourites.Add(filtr);
+            Favourites.Add(filter);
         }
 
         OnPropertyChanged(nameof(HasFavourites));
@@ -411,8 +411,8 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// wraca jako „dowolny", a nie jako pusta pozycja bez nazwy.
     /// </summary>
     private static ScopeChoice? Znajdz(
-        IEnumerable<ScopeChoice> pozycje, IReadOnlyList<string> wartosci) =>
-        pozycje.FirstOrDefault(p => p.Id is { } id && wartosci.Contains(id.ToString()))
+        IEnumerable<ScopeChoice> rows, IReadOnlyList<string> wartosci) =>
+        rows.FirstOrDefault(p => p.Id is { } id && wartosci.Contains(id.ToString()))
         ?? ScopeChoice.Any;
 
     private static string[] Wlaczone(IEnumerable<FilterToggle> przelaczniki) =>
@@ -431,11 +431,11 @@ public sealed partial class FiltersViewModel : ObservableObject
     }
 
     private void Fill(
-        ObservableCollection<FilterToggle> gdzie, IEnumerable<(string Value, string Label)> co)
+        ObservableCollection<FilterToggle> where, IEnumerable<(string Value, string Label)> co)
     {
         foreach (var (wartosc, etykieta) in co)
         {
-            Dodaj(gdzie, wartosc, etykieta);
+            Dodaj(where, wartosc, etykieta);
         }
     }
 
@@ -445,11 +445,11 @@ public sealed partial class FiltersViewModel : ObservableObject
     /// żeby je podpiąć — a zapomnienie nie daje żadnego objawu poza listą, która
     /// milczy.
     /// </summary>
-    private void Dodaj(ObservableCollection<FilterToggle> gdzie, string wartosc, string etykieta)
+    private void Dodaj(ObservableCollection<FilterToggle> where, string wartosc, string etykieta)
     {
         var przelacznik = new FilterToggle(etykieta, wartosc);
         przelacznik.PropertyChanged += async (_, _) => await RunAsync();
-        gdzie.Add(przelacznik);
+        where.Add(przelacznik);
     }
 
     partial void OnAreaChanged(ScopeChoice? value) => _ = RunAsync();

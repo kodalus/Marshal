@@ -37,12 +37,12 @@ public sealed class ChangeJournalTests : IDisposable
 
     private Hlc Stamp() => new(_znacznik += 10, 0, "biurko");
 
-    private TaskItem Zapisz(string tytul = "Zadzwonić do przychodni")
+    private TaskItem Zapisz(string title = "Zadzwonić do przychodni")
     {
-        var zadanie = TaskItem.Capture(tytul, new Zegar().Now, Stamp());
-        _db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture(title, new Zegar().Now, Stamp());
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
     [Fact]
@@ -50,10 +50,10 @@ public sealed class ChangeJournalTests : IDisposable
     {
         Zapisz();
 
-        var wpisy = _db.Changes.ToList();
-        wpisy.Should().NotBeEmpty();
-        wpisy.Should().OnlyContain(w => w.EntityType == "Tasks");
-        wpisy.Select(w => w.Field).Should().Contain(["Title", "State", "CreatedAt", "UpdatedAt"]);
+        var entries = _db.Changes.ToList();
+        entries.Should().NotBeEmpty();
+        entries.Should().OnlyContain(w => w.EntityType == "Tasks");
+        entries.Select(w => w.Field).Should().Contain(["Title", "State", "CreatedAt", "UpdatedAt"]);
     }
 
     /// <summary>
@@ -70,20 +70,20 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Znacznik_dopisany_i_niezapisany_nie_powiela_sie_przy_zapisie()
     {
-        var zadanie = Zapisz();
+        var task = Zapisz();
 
         // Notatka jest pusta przy zakładaniu, więc **nie ma jeszcze swojego znacznika** —
         // ani w bazie, ani w śledzeniu. To jest dokładnie ten stan, w którym nakładanie
         // zmian z synchronizacji dokłada znacznik i zostawia go do wspólnego zapisu.
-        _db.Add(new FieldStamp("Tasks", zadanie.Id, "Note", new Hlc(9999, 0, "telefon").ToString()));
+        _db.Add(new FieldStamp("Tasks", task.Id, "Note", new Hlc(9999, 0, "telefon").ToString()));
 
-        zadanie.SetNote("z drugiego urządzenia", Stamp());
+        task.SetNote("z drugiego urządzenia", Stamp());
 
         // Bez poprawki leci tu wyjątek o instancji, której nie da się śledzić:
         // zapytanie o znaczniki szło wyłącznie do bazy i tego dopisanego nie widziało.
         _db.Invoking(baza => baza.SaveChanges()).Should().NotThrow();
 
-        _db.FieldStamps.Count(z => z.EntityId == zadanie.Id && z.Field == "Note")
+        _db.FieldStamps.Count(z => z.EntityId == task.Id && z.Field == "Note")
             .Should().Be(1, "jeden znacznik na pole, niezależnie od tego, kto go dopisał");
     }
 
@@ -106,14 +106,14 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Zmiana_zapisuje_wylacznie_pola_faktycznie_zmienione()
     {
-        var zadanie = Zapisz();
+        var task = Zapisz();
         var poDodaniu = _db.Changes.Count();
 
-        zadanie.Rename("Zadzwonić do przychodni po skierowanie", Stamp());
+        task.Rename("Zadzwonić do przychodni po skierowanie", Stamp());
         _db.SaveChanges();
 
-        var nowe = _db.Changes.Skip(poDodaniu).ToList();
-        nowe.Select(w => w.Field).Should().BeEquivalentTo("Title", "UpdatedAt");
+        var fresh = _db.Changes.Skip(poDodaniu).ToList();
+        fresh.Select(w => w.Field).Should().BeEquivalentTo("Title", "UpdatedAt");
     }
 
     [Fact]
@@ -144,18 +144,18 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Znacznik_wpisu_jest_znacznikiem_encji()
     {
-        var zadanie = Zapisz();
+        var task = Zapisz();
 
-        _db.Changes.Should().OnlyContain(w => w.Hlc == zadanie.UpdatedAt.ToString());
+        _db.Changes.Should().OnlyContain(w => w.Hlc == task.UpdatedAt.ToString());
     }
 
     [Fact]
     public void Znaczniki_pol_powstaja_i_sa_podnoszone_przy_zmianie()
     {
-        var zadanie = Zapisz();
+        var task = Zapisz();
         var tytulPrzed = _db.FieldStamps.Single(f => f.Field == "Title").Hlc;
 
-        zadanie.Rename("inny tytuł", Stamp());
+        task.Rename("inny tytuł", Stamp());
         _db.SaveChanges();
 
         var tytulPo = _db.FieldStamps.Single(f => f.Field == "Title").Hlc;
@@ -168,10 +168,10 @@ public sealed class ChangeJournalTests : IDisposable
     {
         // To jest cały sens tabeli: bez niej po zmianie tytułu nie dałoby się
         // stwierdzić, że lokalna waga pochodzi sprzed tej zmiany.
-        var zadanie = Zapisz();
+        var task = Zapisz();
         var stanPrzed = _db.FieldStamps.Single(f => f.Field == "State").Hlc;
 
-        zadanie.Rename("inny tytuł", Stamp());
+        task.Rename("inny tytuł", Stamp());
         _db.SaveChanges();
 
         _db.FieldStamps.Single(f => f.Field == "State").Hlc.Should().Be(stanPrzed);
@@ -180,10 +180,10 @@ public sealed class ChangeJournalTests : IDisposable
     [Fact]
     public void Kazde_pole_ma_dokladnie_jeden_znacznik()
     {
-        var zadanie = Zapisz();
-        zadanie.Rename("raz", Stamp());
+        var task = Zapisz();
+        task.Rename("raz", Stamp());
         _db.SaveChanges();
-        zadanie.Rename("dwa", Stamp());
+        task.Rename("dwa", Stamp());
         _db.SaveChanges();
 
         _db.FieldStamps.Count(f => f.Field == "Title").Should().Be(1);

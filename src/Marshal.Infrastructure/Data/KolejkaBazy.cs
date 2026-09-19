@@ -36,20 +36,20 @@ namespace Marshal.Infrastructure.Data;
 /// w środku czekałoby na bramę trzymaną przez siebie samego.
 /// </para>
 /// </remarks>
-public sealed class KolejkaBazy : IKolejkaBazy
+public sealed class KolejkaBazy : IDbQueue
 {
     private readonly SemaphoreSlim _brama = new(1, 1);
 
     /// <summary>Czy ten przepływ wywołania jest już w środku bramy.</summary>
     private readonly AsyncLocal<bool> _wSrodku = new();
 
-    public async Task WykonajAsync(Func<Task> praca, CancellationToken ct = default)
+    public async Task RunAsync(Func<Task> work, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(praca);
+        ArgumentNullException.ThrowIfNull(work);
 
         if (_wSrodku.Value)
         {
-            await praca();
+            await work();
             return;
         }
 
@@ -58,7 +58,7 @@ public sealed class KolejkaBazy : IKolejkaBazy
 
         try
         {
-            await Task.Run(praca, ct);
+            await Task.Run(work, ct);
         }
         finally
         {
@@ -67,13 +67,13 @@ public sealed class KolejkaBazy : IKolejkaBazy
         }
     }
 
-    public async Task<T> WykonajAsync<T>(Func<Task<T>> praca, CancellationToken ct = default)
+    public async Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken ct = default)
     {
-        ArgumentNullException.ThrowIfNull(praca);
+        ArgumentNullException.ThrowIfNull(work);
 
         if (_wSrodku.Value)
         {
-            return await praca();
+            return await work();
         }
 
         await _brama.WaitAsync(ct);
@@ -81,7 +81,7 @@ public sealed class KolejkaBazy : IKolejkaBazy
 
         try
         {
-            return await Task.Run(praca, ct);
+            return await Task.Run(work, ct);
         }
         finally
         {
@@ -99,11 +99,11 @@ public sealed class KolejkaBazy : IKolejkaBazy
 /// zmieniła poza czasem — a wstawiona domyślnie w konstruktorach oszczędza
 /// przepisywania kilkunastu miejsc, które o niej nie muszą wiedzieć.
 /// </remarks>
-public sealed class KolejkaWprost : IKolejkaBazy
+public sealed class KolejkaWprost : IDbQueue
 {
-    public Task WykonajAsync(Func<Task> praca, CancellationToken ct = default) =>
-        praca is null ? throw new ArgumentNullException(nameof(praca)) : praca();
+    public Task RunAsync(Func<Task> work, CancellationToken ct = default) =>
+        work is null ? throw new ArgumentNullException(nameof(work)) : work();
 
-    public Task<T> WykonajAsync<T>(Func<Task<T>> praca, CancellationToken ct = default) =>
-        praca is null ? throw new ArgumentNullException(nameof(praca)) : praca();
+    public Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken ct = default) =>
+        work is null ? throw new ArgumentNullException(nameof(work)) : work();
 }

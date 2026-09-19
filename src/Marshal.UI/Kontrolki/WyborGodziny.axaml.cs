@@ -51,13 +51,13 @@ public partial class WyborGodziny : UserControl
 
         _otwarcie.Click += async (_, _) =>
         {
-            if (Pickery.Godzina is not { } zapytaj)
+            if (Pickery.Hour is not { } zapytaj)
             {
                 return;
             }
 
             var wybrana = await zapytaj(
-                Wartosc is { } teraz ? TimeOnly.FromTimeSpan(teraz) : null);
+                Wartosc is { } now ? TimeOnly.FromTimeSpan(now) : null);
 
             Wartosc = wybrana?.ToTimeSpan();
         };
@@ -109,8 +109,8 @@ public partial class WyborGodziny : UserControl
 
         // Doba, nie dwunastka z dopiskiem: kalendarz obok liczy godziny tak samo,
         // a dwa zapisy tej samej godziny w jednym oknie to jeden za dużo.
-        _otwarcie.Content = Wartosc is { } pora
-            ? pora.ToString(@"hh\:mm", CultureInfo.InvariantCulture)
+        _otwarcie.Content = Wartosc is { } time
+            ? time.ToString(@"hh\:mm", CultureInfo.InvariantCulture)
             : "wybierz";
     }
 
@@ -127,10 +127,10 @@ public partial class WyborGodziny : UserControl
     /// Odczyt po nazwie nie zależy od generatora i jest tym, co reszta okna robi od
     /// początku.
     /// </remarks>
-    private static T Znajdz<T>(UserControl gdzie, string nazwa)
+    private static T Znajdz<T>(UserControl where, string name)
         where T : Control =>
-        gdzie.FindControl<T>(nazwa)
-            ?? throw new InvalidOperationException($"Brak elementu „{nazwa}” w układzie.");
+        where.FindControl<T>(name)
+            ?? throw new InvalidOperationException($"Brak elementu „{name}” w układzie.");
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 }

@@ -37,14 +37,14 @@ public sealed class TaskQueryTests : IDisposable
 
     private Hlc Stamp() => new(_znacznik += 10, 0, "t");
 
-    private TaskItem Dodaj(string tytul, Action<TaskItem>? ustaw = null)
+    private TaskItem Dodaj(string title, Action<TaskItem>? ustaw = null)
     {
-        var zadanie = TaskItem.Capture(tytul, new Zegar().Now, Stamp());
-        zadanie.MakeNext(_obszar, Stamp());
-        ustaw?.Invoke(zadanie);
-        _db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture(title, new Zegar().Now, Stamp());
+        task.MakeNext(_obszar, Stamp());
+        ustaw?.Invoke(task);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
     [Fact]
@@ -54,9 +54,9 @@ public sealed class TaskQueryTests : IDisposable
         Dodaj("zaległe", t => t.Schedule(_obszar, Dzis.AddDays(-3), Stamp()));
         Dodaj("na jutro", t => t.Schedule(_obszar, Dzis.AddDays(1), Stamp()));
 
-        var wynik = await _zadania.TodayAsync(Dzis);
+        var result = await _zadania.TodayAsync(Dzis);
 
-        wynik.Select(t => t.Title).Should().BeEquivalentTo("na dziś", "zaległe");
+        result.Select(t => t.Title).Should().BeEquivalentTo("na dziś", "zaległe");
     }
 
     [Fact]
@@ -73,9 +73,9 @@ public sealed class TaskQueryTests : IDisposable
         Dodaj("plan na dziś", t => t.Schedule(_obszar, Dzis, Stamp()));
         Dodaj("termin dziś", t => t.SetDeadline(Dzis, Stamp()));
 
-        var wynik = await _zadania.TodayAsync(Dzis);
+        var result = await _zadania.TodayAsync(Dzis);
 
-        wynik.First().Title.Should().Be("termin dziś");
+        result.First().Title.Should().Be("termin dziś");
     }
 
     [Fact]
@@ -122,9 +122,9 @@ public sealed class TaskQueryTests : IDisposable
         Dodaj("za trzy dni", t => t.Schedule(_obszar, Dzis.AddDays(3), Stamp()));
         Dodaj("za miesiąc", t => t.Schedule(_obszar, Dzis.AddDays(30), Stamp()));
 
-        var wynik = await _zadania.UpcomingAsync(Dzis, Dzis.AddDays(14));
+        var result = await _zadania.UpcomingAsync(Dzis, Dzis.AddDays(14));
 
-        wynik.Select(t => t.Title).Should().Equal("za trzy dni");
+        result.Select(t => t.Title).Should().Equal("za trzy dni");
     }
 
     [Fact]
@@ -135,10 +135,10 @@ public sealed class TaskQueryTests : IDisposable
         Dodaj("nowsze", t => t.Complete(zegar.Now, Stamp()));
         Dodaj("wyrzucone", t => t.Trash(Stamp()));
 
-        var wynik = await _zadania.ArchiveAsync(limit: 10);
+        var result = await _zadania.ArchiveAsync(limit: 10);
 
-        wynik.Should().HaveCount(3);
-        wynik.First().Title.Should().Be("nowsze");
+        result.Should().HaveCount(3);
+        result.First().Title.Should().Be("nowsze");
     }
 
     [Fact]
@@ -155,13 +155,13 @@ public sealed class TaskQueryTests : IDisposable
     [Fact]
     public async Task Obszar_zwraca_tylko_swoje_zadania()
     {
-        var inny = Guid.CreateVersion7();
+        var other = Guid.CreateVersion7();
         Dodaj("moje");
-        Dodaj("cudze", t => t.MakeNext(inny, Stamp()));
+        Dodaj("cudze", t => t.MakeNext(other, Stamp()));
 
-        var wynik = await _zadania.ByAreaAsync(_obszar);
+        var result = await _zadania.ByAreaAsync(_obszar);
 
-        wynik.Select(t => t.Title).Should().Equal("moje");
+        result.Select(t => t.Title).Should().Equal("moje");
     }
 
     public void Dispose()

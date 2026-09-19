@@ -6,27 +6,27 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Calendar;
 
-public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+public sealed class CalendarStore(MarshalDbContext db, IDbQueue? queue = null)
     : ICalendarStore
 {
     // Ten sam wspólny kontekst, co wszędzie — a odświeżenie kalendarza chodzi po sieci
     // między odczytem a zapisem. To jest dokładnie ta szczelina, w którą potrafi wejść
     // synchronizacja ruszająca sama, więc przez bramę idą i odczyty, i zapisy.
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     public async Task<IReadOnlyList<CalendarSource>> SourcesAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.CalendarSources
+        await _kolejka.RunAsync(() => db.CalendarSources
             .Where(s => !s.Deleted)
             .OrderBy(s => s.Name)
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<CalendarSource>> AllSourcesAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.CalendarSources
+        await _kolejka.RunAsync(() => db.CalendarSources
             .OrderBy(s => s.Name)
             .ToListAsync(ct), ct);
 
     public Task<CalendarCursor?> CursorAsync(Guid sourceId, CancellationToken ct = default) =>
-        _kolejka.WykonajAsync(
+        _kolejka.RunAsync(
             () => db.CalendarCursors.FirstOrDefaultAsync(c => c.SourceId == sourceId, ct), ct);
 
     public void SaveCursor(Guid sourceId, string? syncToken, DateTimeOffset fetchedAt)
@@ -49,7 +49,7 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
     public async Task<IReadOnlyList<CalendarEvent>> EventsAsync(
         DateTimeOffset from, DateTimeOffset until, CancellationToken ct = default)
     {
-        return await _kolejka.WykonajAsync<IReadOnlyList<CalendarEvent>>(async () =>
+        return await _kolejka.RunAsync<IReadOnlyList<CalendarEvent>>(async () =>
         {
             var widoczne = await db.CalendarSources
                 .Where(s => s.IsVisible && !s.Deleted)
@@ -77,24 +77,24 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
         // Jedno zapytanie na całą porcję, nie jedno na wydarzenie. Kalendarz po pełnym
         // odczycie potrafi mieć kilkaset pozycji, a każda osobno to kilkaset zapytań.
         var klucze = events.Select(e => e.ExternalId).ToList();
-        var istniejace = await _kolejka.WykonajAsync(() => db.CalendarEvents
+        var existing = await _kolejka.RunAsync(() => db.CalendarEvents
             .Where(e => e.SourceId == sourceId && klucze.Contains(e.ExternalId))
             .ToDictionaryAsync(e => e.ExternalId, ct), ct);
 
-        foreach (var wydarzenie in events)
+        foreach (var ev in events)
         {
-            if (istniejace.TryGetValue(wydarzenie.ExternalId, out var zapisane))
+            if (existing.TryGetValue(ev.ExternalId, out var zapisane))
             {
                 zapisane.Update(
-                    wydarzenie.Title, wydarzenie.StartsAt, wydarzenie.EndsAt,
-                    wydarzenie.IsAllDay, wydarzenie.Location, wydarzenie.Cancelled);
+                    ev.Title, ev.StartsAt, ev.EndsAt,
+                    ev.IsAllDay, ev.Location, ev.Cancelled);
             }
             else
             {
                 db.CalendarEvents.Add(new CalendarEvent(
-                    sourceId, wydarzenie.ExternalId, wydarzenie.Title,
-                    wydarzenie.StartsAt, wydarzenie.EndsAt, wydarzenie.IsAllDay,
-                    wydarzenie.Location, wydarzenie.Cancelled));
+                    sourceId, ev.ExternalId, ev.Title,
+                    ev.StartsAt, ev.EndsAt, ev.IsAllDay,
+                    ev.Location, ev.Cancelled));
             }
         }
     }
@@ -104,18 +104,18 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
     {
         var widziane = seen.ToHashSet(StringComparer.Ordinal);
 
-        var zniknione = await _kolejka.WykonajAsync(() => db.CalendarEvents
+        var zniknione = await _kolejka.RunAsync(() => db.CalendarEvents
             .Where(e => e.SourceId == sourceId && !e.Cancelled)
             .ToListAsync(ct), ct);
 
         var policzone = 0;
 
-        foreach (var wydarzenie in zniknione.Where(e => !widziane.Contains(e.ExternalId)))
+        foreach (var ev in zniknione.Where(e => !widziane.Contains(e.ExternalId)))
         {
             // Nagrobek, nie usunięcie — tak samo jak wszędzie indziej w tym modelu.
-            wydarzenie.Update(
-                wydarzenie.Title, wydarzenie.StartsAt, wydarzenie.EndsAt,
-                wydarzenie.IsAllDay, wydarzenie.Location, cancelled: true);
+            ev.Update(
+                ev.Title, ev.StartsAt, ev.EndsAt,
+                ev.IsAllDay, ev.Location, cancelled: true);
             policzone++;
         }
 
@@ -123,15 +123,15 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
     }
 
     public Task<int> CountAsync(CancellationToken ct = default) =>
-        _kolejka.WykonajAsync(() => db.CalendarEvents.CountAsync(e => !e.Cancelled, ct), ct);
+        _kolejka.RunAsync(() => db.CalendarEvents.CountAsync(e => !e.Cancelled, ct), ct);
 
     public void AddSource(CalendarSource source) => db.CalendarSources.Add(source);
 
     public async Task<int> ForgetEventsAsync(Guid sourceId, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(
+        await _kolejka.RunAsync(
             async () =>
             {
-                var ile = await db.CalendarEvents
+                var count = await db.CalendarEvents
                     .Where(e => e.SourceId == sourceId)
                     .ExecuteDeleteAsync(ct);
 
@@ -139,10 +139,10 @@ public sealed class CalendarStore(MarshalDbContext db, IKolejkaBazy? kolejka = n
                     .Where(c => c.SourceId == sourceId)
                     .ExecuteDeleteAsync(ct);
 
-                return ile;
+                return count;
             },
             ct);
 
     public Task SaveChangesAsync(CancellationToken ct = default) =>
-        _kolejka.WykonajAsync(() => db.SaveChangesAsync(ct), ct);
+        _kolejka.RunAsync(() => db.SaveChangesAsync(ct), ct);
 }

@@ -30,14 +30,14 @@ public sealed class GoogleDriveClient(DriveService service) : IDriveClient
         // założeniu na dwóch urządzeniach mogą powstać dwa. Wybór najmniejszego
         // identyfikatora jest arbitralny, ale **jednakowy na wszystkich urządzeniach**,
         // więc rozjazd sam się schodzi po jednej synchronizacji.
-        var wybrany = znalezione
+        var selected = znalezione
             .Select(f => f.Id)
             .OrderBy(id => id, StringComparer.Ordinal)
             .FirstOrDefault();
 
-        if (wybrany is not null)
+        if (selected is not null)
         {
-            return wybrany;
+            return selected;
         }
 
         var zaloz = service.Files.Create(new GoogleFile { Name = name, MimeType = FolderMime });
@@ -49,7 +49,7 @@ public sealed class GoogleDriveClient(DriveService service) : IDriveClient
     public async Task<IReadOnlyList<DriveFile>> ListAsync(
         string folderId, CancellationToken ct = default)
     {
-        var wynik = new List<DriveFile>();
+        var result = new List<DriveFile>();
         string? strona = null;
 
         do
@@ -61,29 +61,29 @@ public sealed class GoogleDriveClient(DriveService service) : IDriveClient
             zapytanie.PageToken = strona;
 
             var odpowiedz = await zapytanie.ExecuteAsync(ct);
-            wynik.AddRange((odpowiedz.Files ?? []).Select(f => new DriveFile(f.Id, f.Name)));
+            result.AddRange((odpowiedz.Files ?? []).Select(f => new DriveFile(f.Id, f.Name)));
             strona = odpowiedz.NextPageToken;
         }
         while (!string.IsNullOrEmpty(strona));
 
-        return wynik;
+        return result;
     }
 
     public async Task<string> DownloadAsync(string fileId, CancellationToken ct = default)
     {
-        using var bufor = new MemoryStream();
-        await service.Files.Get(fileId).DownloadAsync(bufor, ct);
+        using var buffer = new MemoryStream();
+        await service.Files.Get(fileId).DownloadAsync(buffer, ct);
 
-        return Encoding.UTF8.GetString(bufor.ToArray());
+        return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
     public async Task CreateAsync(
         string folderId, string name, string content, CancellationToken ct = default)
     {
         var opis = new GoogleFile { Name = name, Parents = [folderId] };
-        using var tresc = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        using var content = new MemoryStream(Encoding.UTF8.GetBytes(content));
 
-        var wyslij = service.Files.Create(opis, tresc, "application/json");
+        var wyslij = service.Files.Create(opis, content, "application/json");
         wyslij.Fields = "id";
 
         var postep = await wyslij.UploadAsync(ct);

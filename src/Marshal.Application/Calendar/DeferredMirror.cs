@@ -48,23 +48,23 @@ namespace Marshal.Application.Calendar;
 /// od razu. Nieudane odbicie zostawia ślad w dzienniku, więc nie znika bez śladu.
 /// </para>
 /// </remarks>
-public sealed class OdlozoneOdbicie(ITaskMirror odbicie, IActivityLog dziennik) : ITaskMirror
+public sealed class DeferredMirror(ITaskMirror mirror, IActivityLog journal) : ITaskMirror
 {
-    private readonly Lock _zamek = new();
+    private readonly Lock _lock = new();
 
     /// <summary>Ostatnia zgłoszona praca. Następna doczepia się do niej.</summary>
-    private Task _ogon = Task.CompletedTask;
+    private Task _tail = Task.CompletedTask;
 
     public Task PushAsync(TaskItem task, CancellationToken ct = default)
     {
-        Odloz("Kalendarz: wysłanie zadania", task, (t, c) => odbicie.PushAsync(t, c));
+        Defer("Kalendarz: wysłanie zadania", task, (t, c) => mirror.PushAsync(t, c));
 
         return Task.CompletedTask;
     }
 
     public Task RemoveAsync(TaskItem task, CancellationToken ct = default)
     {
-        Odloz("Kalendarz: skasowanie odbicia", task, (t, c) => odbicie.RemoveAsync(t, c));
+        Defer("Kalendarz: skasowanie odbicia", task, (t, c) => mirror.RemoveAsync(t, c));
 
         return Task.CompletedTask;
     }
@@ -77,11 +77,11 @@ public sealed class OdlozoneOdbicie(ITaskMirror odbicie, IActivityLog dziennik) 
     /// kto ją zlecił, już się rozłączył — o to właśnie chodzi w odłożeniu. Odwołanie
     /// przekazane tutaj znaczyłoby odbicie przerwane w połowie przez zamknięcie ekranu.
     /// </remarks>
-    private void Odloz(string co, TaskItem task, Func<TaskItem, CancellationToken, Task> praca)
+    private void Defer(string co, TaskItem task, Func<TaskItem, CancellationToken, Task> work)
     {
         ArgumentNullException.ThrowIfNull(task);
 
-        var tytul = task.Title;
+        var title = task.Title;
 
         // Bez dziedziczenia kontekstu wywołania. Brama na bazę pozna po nim, że dany
         // przepływ jest już w środku, i wpuści go ponownie bez czekania — a praca
@@ -89,33 +89,33 @@ public sealed class OdlozoneOdbicie(ITaskMirror odbicie, IActivityLog dziennik) 
         // odkładanie zaczyna się poza bramą, więc różnicy nie widać; jutro wystarczy
         // jedno wywołanie wyżej, żeby zaczęło się w środku, i wtedy ta linijka jest
         // jedyną rzeczą stojącą między tym a odczytem w poprzek cudzego zapisu.
-        using var bezKontekstu = ExecutionContext.SuppressFlow();
+        using var withoutContext = ExecutionContext.SuppressFlow();
 
-        lock (_zamek)
+        lock (_lock)
         {
             // Poprzedniczka wyznaczona **tutaj**, czyli w kolejności zgłoszeń. To jest
             // cała różnica wobec semafora: tam kolejność wychodziła z tego, kto pierwszy
             // dobiegł, a tu jest ustalona, zanim cokolwiek ruszy.
-            var poprzednia = _ogon;
+            var previous = _tail;
 
-            _ogon = Task.Run(() => PoKoleiAsync(poprzednia, co, tytul, task, praca));
+            _tail = Task.Run(() => OneByOneAsync(previous, co, title, task, work));
         }
     }
 
-    private async Task PoKoleiAsync(
-        Task poprzednia,
+    private async Task OneByOneAsync(
+        Task previous,
         string co,
-        string tytul,
+        string title,
         TaskItem task,
-        Func<TaskItem, CancellationToken, Task> praca)
+        Func<TaskItem, CancellationToken, Task> work)
     {
         // Poprzedniczka nigdy nie rzuca — wyjątek zostaje w niej, w dzienniku. Inaczej
         // jedno nieudane odbicie zrywałoby cały ogon kolejki.
-        await poprzednia;
+        await previous;
 
         try
         {
-            await praca(task, CancellationToken.None);
+            await work(task, CancellationToken.None);
         }
         catch (Exception e)
         {
@@ -124,8 +124,8 @@ public sealed class OdlozoneOdbicie(ITaskMirror odbicie, IActivityLog dziennik) 
             // nie było nieodróżnialne od wysłanego.
             try
             {
-                await dziennik.RecordAsync(
-                    co, tytul, ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
+                await journal.RecordAsync(
+                    co, title, ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
             }
             catch
             {

@@ -93,15 +93,15 @@ public sealed record FilterCondition
     internal static FilterCondition? FromWire(
         FilterField field, IReadOnlyList<string>? values, DateWindow? window, int? minutes, string? text)
     {
-        var wartosci = values?.Where(v => !string.IsNullOrWhiteSpace(v)).ToArray() ?? [];
+        var cleaned = values?.Where(v => !string.IsNullOrWhiteSpace(v)).ToArray() ?? [];
 
         return field switch
         {
             FilterField.State or FilterField.Priority or FilterField.Energy
                 or FilterField.Area or FilterField.Project or FilterField.Tag =>
-                    wartosci.Length == 0
+                    cleaned.Length == 0
                         ? null
-                        : new FilterCondition(field, wartosci, null, null, null),
+                        : new FilterCondition(field, cleaned, null, null, null),
 
             FilterField.Deadline or FilterField.DoDate =>
                 window is null ? null : new FilterCondition(field, [], window, null, null),
@@ -136,14 +136,14 @@ public sealed record FilterCondition
 
     private static FilterCondition Set(FilterField field, IEnumerable<string> values)
     {
-        var wartosci = values.Distinct().ToArray();
+        var cleaned = values.Distinct().ToArray();
 
-        if (wartosci.Length == 0)
+        if (cleaned.Length == 0)
         {
             throw new ArgumentException("Warunek bez żadnej wartości nie zawęża niczego.", nameof(values));
         }
 
-        return new FilterCondition(field, wartosci, null, null, null);
+        return new FilterCondition(field, cleaned, null, null, null);
     }
 
     private static FilterCondition Ids(FilterField field, Guid[] ids) =>

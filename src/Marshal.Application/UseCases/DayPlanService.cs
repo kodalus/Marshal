@@ -16,7 +16,7 @@ namespace Marshal.Application.UseCases;
 /// <param name="Tytul">Nazwa zadania albo wydarzenia.</param>
 /// <param name="Podpis">Druga linijka: godziny i przynależność.</param>
 /// <param name="Barwa">Zapis barwy paska albo puste, gdy nic nie ustawiono.</param>
-public sealed record PozycjaPlanu(Guid? Zadanie, string Tytul, string Podpis, string? Barwa);
+public sealed record PlanRow(Guid? TaskId, string Title, string Caption, string? Color);
 
 /// <summary>
 /// Plan dzisiejszego dnia: co jest umówione, co zaległe i co wzięte na dziś.
@@ -40,15 +40,15 @@ public sealed record PozycjaPlanu(Guid? Zadanie, string Tytul, string Podpis, st
 /// Na siatce kalendarza zostają, bo tam pytanie brzmi inaczej: co się z dniem stało.
 /// </para>
 /// </remarks>
-public sealed class PlanDniaService(
+public sealed class DayPlanService(
     ITaskRepository tasks,
     IProjectRepository projects,
     IAreaRepository areas,
     IClock clock,
-    CalendarSyncService? kalendarz = null)
+    CalendarSyncService? calendarId = null)
 {
-    public Task<IReadOnlyList<PozycjaPlanu>> DzisAsync(CancellationToken ct = default) =>
-        DlaDniaAsync(clock.Today, ct);
+    public Task<IReadOnlyList<PlanRow>> TodayAsync(CancellationToken ct = default) =>
+        ForDayAsync(clock.Today, ct);
 
     /// <summary>
     /// Które dni w podanym zakresie mają cokolwiek w planie.
@@ -67,22 +67,22 @@ public sealed class PlanDniaService(
     /// przerysowuje się po zmianie, nie w pętli.
     /// </para>
     /// </remarks>
-    public async Task<IReadOnlySet<DateOnly>> ZajeteAsync(
-        DateOnly od, int dni, CancellationToken ct = default)
+    public async Task<IReadOnlySet<DateOnly>> BusyAsync(
+        DateOnly od, int days, CancellationToken ct = default)
     {
-        var zajete = new HashSet<DateOnly>();
+        var busy = new HashSet<DateOnly>();
 
-        for (var i = 0; i < dni; i++)
+        for (var i = 0; i < days; i++)
         {
-            var dzien = od.AddDays(i);
+            var day = od.AddDays(i);
 
-            if ((await DlaDniaAsync(dzien, ct)).Count > 0)
+            if ((await ForDayAsync(day, ct)).Count > 0)
             {
-                zajete.Add(dzien);
+                busy.Add(day);
             }
         }
 
-        return zajete;
+        return busy;
     }
 
     /// <summary>Plan dowolnego dnia — do przeglądania w przód i wstecz.</summary>
@@ -91,40 +91,40 @@ public sealed class PlanDniaService(
     /// należą do dzisiejszego dnia, bo to dziś trzeba z nimi coś zrobić; dołożone do
     /// czwartku udawałyby, że ktoś je na czwartek zaplanował.
     /// </remarks>
-    public async Task<IReadOnlyList<PozycjaPlanu>> DlaDniaAsync(
-        DateOnly dzien, CancellationToken ct = default)
+    public async Task<IReadOnlyList<PlanRow>> ForDayAsync(
+        DateOnly day, CancellationToken ct = default)
     {
-        var dzis = clock.Today;
+        var today = clock.Today;
 
-        var umowione = dzien == dzis
-            ? await tasks.TodayAsync(dzis, ct)
-            : await tasks.UpcomingAsync(dzien.AddDays(-1), dzien, ct);
+        var upcoming = day == today
+            ? await tasks.TodayAsync(today, ct)
+            : await tasks.UpcomingAsync(day.AddDays(-1), day, ct);
 
-        var wybrane = await tasks.ByFocusDateAsync(dzien, ct);
+        var selected = await tasks.ByFocusDateAsync(day, ct);
 
-        var razem = umowione
-            .Concat(wybrane.Where(w => umowione.All(u => u.Id != w.Id)))
+        var total = upcoming
+            .Concat(selected.Where(w => upcoming.All(u => u.Id != w.Id)))
             .Where(z => z.State != TaskState.Done)
             .ToList();
 
-        var projektyWg = (await projects.AllAsync(ct)).ToDictionary(p => p.Id);
-        var obszaryWg = (await areas.AllAsync(ct)).ToDictionary(o => o.Id);
+        var projectsById = (await projects.AllAsync(ct)).ToDictionary(p => p.Id);
+        var areasById = (await areas.AllAsync(ct)).ToDictionary(o => o.Id);
 
-        var pozycje = razem
+        var rows = total
             .Select(z => (
-                Pora: Pora(z, dzien),
-                Wpis: new PozycjaPlanu(
+                Time: Time(z, day),
+                Entry: new PlanRow(
                     z.Id,
                     z.Title,
-                    Podpis(z, dzien, dzis, Nalezy(z, projektyWg, obszaryWg)),
-                    Barwa(z, projektyWg, obszaryWg))))
-            .Concat(await WydarzeniaAsync(dzien, ct))
-            .OrderBy(p => p.Pora is null)
-            .ThenBy(p => p.Pora)
-            .ThenBy(p => p.Wpis.Tytul, StringComparer.CurrentCulture)
+                    Caption(z, day, today, Belongs(z, projectsById, areasById)),
+                    Color(z, projectsById, areasById))))
+            .Concat(await EventsAsync(day, ct))
+            .OrderBy(p => p.Time is null)
+            .ThenBy(p => p.Time)
+            .ThenBy(p => p.Entry.Title, StringComparer.CurrentCulture)
             .ToList();
 
-        return pozycje.Select(p => p.Wpis).ToList();
+        return rows.Select(p => p.Entry).ToList();
     }
 
     /// <summary>
@@ -146,40 +146,40 @@ public sealed class PlanDniaService(
     /// Odhaczone pomijane tak samo jak zadania: plan mówi, co jeszcze przed tobą.
     /// </para>
     /// </remarks>
-    private async Task<IEnumerable<(TimeOnly? Pora, PozycjaPlanu Wpis)>> WydarzeniaAsync(
-        DateOnly dzien, CancellationToken ct)
+    private async Task<IEnumerable<(TimeOnly? Time, PlanRow Entry)>> EventsAsync(
+        DateOnly day, CancellationToken ct)
     {
-        if (kalendarz is null)
+        if (calendarId is null)
         {
             return [];
         }
 
-        var dni = await kalendarz.AgendaAsync(dzien, 1, ct);
+        var days = await calendarId.AgendaAsync(day, 1, ct);
 
-        if (dni.Count == 0)
+        if (days.Count == 0)
         {
             return [];
         }
 
-        var dzienSiatki = dni[0];
+        var gridDay = days[0];
 
-        var calodniowe = dzienSiatki.AllDay
+        var allDay = gridDay.AllDay
             .Where(e => e.Kind == AgendaKind.Event && !e.IsDone)
-            .Select(e => ((TimeOnly?)null, new PozycjaPlanu(null, e.Title, "cały dzień", e.Color)));
+            .Select(e => ((TimeOnly?)null, new PlanRow(null, e.Title, "cały dzień", e.Color)));
 
-        var zGodzina = dzienSiatki.Timed
+        var withHour = gridDay.Timed
             .Select(s => s.Entry)
             .Where(e => e.Kind == AgendaKind.Event && !e.IsDone)
             .Select(e => (
                 (TimeOnly?)TimeOnly.FromTimeSpan(e.Start.TimeOfDay),
-                new PozycjaPlanu(
+                new PlanRow(
                     null,
                     e.Title,
-                    $"{Godzina(TimeOnly.FromTimeSpan(e.Start.TimeOfDay))} – "
-                        + $"{Godzina(TimeOnly.FromTimeSpan(e.End.TimeOfDay))}",
+                    $"{Hour(TimeOnly.FromTimeSpan(e.Start.TimeOfDay))} – "
+                        + $"{Hour(TimeOnly.FromTimeSpan(e.End.TimeOfDay))}",
                     e.Color)));
 
-        return calodniowe.Concat(zGodzina);
+        return allDay.Concat(withHour);
     }
 
     /// <summary>Godzina, o której to stoi w dzisiejszym planie. Pusta, gdy bez godziny.</summary>
@@ -187,36 +187,36 @@ public sealed class PlanDniaService(
     /// Wyłącznie dla dnia, który się ogląda. Zadanie zaległe ma godzinę sprzed paru dni
     /// i wstawiona między dzisiejsze udawałaby, że jest na nią umówione dziś.
     /// </remarks>
-    private static TimeOnly? Pora(TaskItem zadanie, DateOnly dzien) =>
-        zadanie.DoDate == dzien ? zadanie.DoTime : null;
+    private static TimeOnly? Time(TaskItem task, DateOnly day) =>
+        task.DoDate == day ? task.DoTime : null;
 
-    private static string Podpis(TaskItem zadanie, DateOnly dzien, DateOnly dzis, string? gdzie)
+    private static string Caption(TaskItem task, DateOnly day, DateOnly today, string? where)
     {
-        var czesci = new List<string>();
+        var parts = new List<string>();
 
-        if (Pora(zadanie, dzien) is { } pora)
+        if (Time(task, day) is { } time)
         {
             // Koniec liczony z oszacowania, gdy jest. „16:00 – 16:30" mówi, ile dnia
             // to zajmie; samo „16:00" zostawia to do policzenia w głowie.
-            czesci.Add(zadanie.EstimatedMinutes is { } minut && minut > 0
-                ? $"{Godzina(pora)} – {Godzina(pora.AddMinutes(minut))}"
-                : Godzina(pora));
+            parts.Add(task.EstimatedMinutes is { } minutes && minutes > 0
+                ? $"{Hour(time)} – {Hour(time.AddMinutes(minutes))}"
+                : Hour(time));
         }
-        else if (zadanie.DoDate is { } termin && termin < dzien)
+        else if (task.DoDate is { } deadline && deadline < day)
         {
-            czesci.Add($"zaległe z {termin:d.MM}");
+            parts.Add($"zaległe z {deadline:d.MM}");
         }
-        else if (zadanie.FocusDate == dzien)
+        else if (task.FocusDate == day)
         {
-            czesci.Add(dzien == dzis ? "wzięte na dziś" : "wzięte na ten dzień");
+            parts.Add(day == today ? "wzięte na dziś" : "wzięte na ten dzień");
         }
 
-        if (gdzie is not null)
+        if (where is not null)
         {
-            czesci.Add(gdzie);
+            parts.Add(where);
         }
 
-        return string.Join(" / ", czesci);
+        return string.Join(" / ", parts);
     }
 
     /// <summary>Godzina jako „16:00".</summary>
@@ -225,20 +225,20 @@ public sealed class PlanDniaService(
     /// do podmiany. Kultura systemowa potrafi wstawić w to miejsce kropkę albo
     /// dwunastkę z „PM", a plan ma wyglądać tak samo jak siatka kalendarza obok.
     /// </remarks>
-    private static string Godzina(TimeOnly pora) =>
-        $"{pora.Hour:D2}:{pora.Minute:D2}";
+    private static string Hour(TimeOnly time) =>
+        $"{time.Hour:D2}:{time.Minute:D2}";
 
-    private static string? Nalezy(
-        TaskItem zadanie,
-        IReadOnlyDictionary<Guid, Project> projekty,
-        IReadOnlyDictionary<Guid, Area> obszary)
+    private static string? Belongs(
+        TaskItem task,
+        IReadOnlyDictionary<Guid, Project> projects,
+        IReadOnlyDictionary<Guid, Area> areas)
     {
-        if (zadanie.ProjectId is { } projekt && projekty.TryGetValue(projekt, out var p))
+        if (task.ProjectId is { } project && projects.TryGetValue(project, out var p))
         {
             return p.Outcome;
         }
 
-        return zadanie.AreaId is { } obszar && obszary.TryGetValue(obszar, out var o)
+        return task.AreaId is { } area && areas.TryGetValue(area, out var o)
             ? o.Name
             : null;
     }
@@ -247,25 +247,25 @@ public sealed class PlanDniaService(
     /// Barwa paska: zadania, a gdy go nie ma — projektu, a gdy i tego nie ma — obszaru.
     /// Ta sama zasada, co na siatce kalendarza.
     /// </summary>
-    private static string? Barwa(
-        TaskItem zadanie,
-        IReadOnlyDictionary<Guid, Project> projekty,
-        IReadOnlyDictionary<Guid, Area> obszary)
+    private static string? Color(
+        TaskItem task,
+        IReadOnlyDictionary<Guid, Project> projects,
+        IReadOnlyDictionary<Guid, Area> areas)
     {
-        if (!string.IsNullOrWhiteSpace(zadanie.Color))
+        if (!string.IsNullOrWhiteSpace(task.Color))
         {
-            return zadanie.Color;
+            return task.Color;
         }
 
-        if (zadanie.ProjectId is { } projekt
-            && projekty.TryGetValue(projekt, out var p)
+        if (task.ProjectId is { } project
+            && projects.TryGetValue(project, out var p)
             && !string.IsNullOrWhiteSpace(p.Color))
         {
             return p.Color;
         }
 
-        return zadanie.AreaId is { } obszar
-            && obszary.TryGetValue(obszar, out var o)
+        return task.AreaId is { } area
+            && areas.TryGetValue(area, out var o)
             && !string.IsNullOrWhiteSpace(o.Color)
                 ? o.Color
                 : null;

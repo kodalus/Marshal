@@ -51,14 +51,14 @@ public sealed class AttachmentServiceTests : IDisposable
             new AttachmentRepository(_db), _skladnica, new UnitOfWork(_db), _zegar, _hlc);
     }
 
-    private static MemoryStream Plik(string tresc) => new(Encoding.UTF8.GetBytes(tresc));
+    private static MemoryStream Plik(string content) => new(Encoding.UTF8.GetBytes(content));
 
     [Fact]
     public async Task Dodany_plik_da_sie_otworzyc()
     {
-        var zalacznik = await _usluga.AddAsync(Plik("zawartość"), "notatka.txt", taskId: _zadanie);
+        var attachment = await _usluga.AddAsync(Plik("zawartość"), "notatka.txt", taskId: _zadanie);
 
-        await using var strumien = await _usluga.OpenAsync(zalacznik);
+        await using var strumien = await _usluga.OpenAsync(attachment);
         strumien.Should().NotBeNull();
 
         using var czytnik = new StreamReader(strumien!);
@@ -68,10 +68,10 @@ public sealed class AttachmentServiceTests : IDisposable
     [Fact]
     public async Task Skrot_jest_adresem_i_wyglada_jak_skrot()
     {
-        var zalacznik = await _usluga.AddAsync(Plik("cokolwiek"), "a.txt", taskId: _zadanie);
+        var attachment = await _usluga.AddAsync(Plik("cokolwiek"), "a.txt", taskId: _zadanie);
 
-        zalacznik.Sha256.Should().HaveLength(64);
-        zalacznik.Sha256.Should().MatchRegex("^[0-9a-f]{64}$");
+        attachment.Sha256.Should().HaveLength(64);
+        attachment.Sha256.Should().MatchRegex("^[0-9a-f]{64}$");
     }
 
     [Fact]
@@ -101,10 +101,10 @@ public sealed class AttachmentServiceTests : IDisposable
     {
         // Ścieżka z jednego urządzenia nie znaczy nic na drugim, a bywa, że zdradza
         // więcej, niż trzeba.
-        var zalacznik = await _usluga.AddAsync(
+        var attachment = await _usluga.AddAsync(
             Plik("x"), "/home/kto/Dokumenty/skan.pdf", taskId: _zadanie);
 
-        zalacznik.FileName.Should().Be("skan.pdf");
+        attachment.FileName.Should().Be("skan.pdf");
     }
 
     [Fact]
@@ -112,10 +112,10 @@ public sealed class AttachmentServiceTests : IDisposable
     {
         // Wpis wędruje dziennikiem, treść osobną drogą — więc na drugim urządzeniu wpis
         // potrafi być przed plikiem. To stan normalny, nie awaria.
-        var zalacznik = await _usluga.AddAsync(Plik("treść"), "a.txt", taskId: _zadanie);
-        File.Delete(Path.Combine(_katalog, "files", zalacznik.Sha256));
+        var attachment = await _usluga.AddAsync(Plik("treść"), "a.txt", taskId: _zadanie);
+        File.Delete(Path.Combine(_katalog, "files", attachment.Sha256));
 
-        (await _usluga.OpenAsync(zalacznik)).Should().BeNull();
+        (await _usluga.OpenAsync(attachment)).Should().BeNull();
     }
 
     [Fact]
@@ -135,12 +135,12 @@ public sealed class AttachmentServiceTests : IDisposable
     {
         // Dwa wpisy mogą wskazywać ten sam plik; liczenie, który był ostatni, kosztowałoby
         // przejście po całej bazie przy każdym usunięciu.
-        var zalacznik = await _usluga.AddAsync(Plik("treść"), "a.txt", taskId: _zadanie);
+        var attachment = await _usluga.AddAsync(Plik("treść"), "a.txt", taskId: _zadanie);
 
-        await _usluga.RemoveAsync(zalacznik.Id);
+        await _usluga.RemoveAsync(attachment.Id);
 
         (await _usluga.ForTaskAsync(_zadanie)).Should().BeEmpty();
-        (await _skladnica.ExistsAsync(zalacznik.Sha256)).Should().BeTrue();
+        (await _skladnica.ExistsAsync(attachment.Sha256)).Should().BeTrue();
     }
 
     [Fact]
@@ -165,10 +165,10 @@ public sealed class AttachmentServiceTests : IDisposable
     [Fact]
     public async Task Powtorne_wgranie_tej_samej_tresci_nie_psuje_pliku()
     {
-        var zalacznik = await _usluga.AddAsync(Plik("treść"), "a.txt", taskId: _zadanie);
-        await _skladnica.PutAsync(zalacznik.Sha256, Plik("treść"));
+        var attachment = await _usluga.AddAsync(Plik("treść"), "a.txt", taskId: _zadanie);
+        await _skladnica.PutAsync(attachment.Sha256, Plik("treść"));
 
-        await using var strumien = await _skladnica.OpenAsync(zalacznik.Sha256);
+        await using var strumien = await _skladnica.OpenAsync(attachment.Sha256);
         using var czytnik = new StreamReader(strumien!);
         (await czytnik.ReadToEndAsync()).Should().Be("treść");
     }

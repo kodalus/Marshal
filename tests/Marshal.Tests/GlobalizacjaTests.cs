@@ -37,14 +37,14 @@ public sealed class GlobalizacjaTests
     [Fact]
     public void Strefa_warszawska_jest_do_znalezienia()
     {
-        var strefa = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
 
         // Lipiec +2, grudzień +1. Jedno i drugie, bo sama nazwa strefy nie mówi jeszcze,
         // czy przesunięcia są prawdziwe.
-        strefa.GetUtcOffset(new DateTime(2026, 7, 15, 12, 0, 0, DateTimeKind.Unspecified))
+        zone.GetUtcOffset(new DateTime(2026, 7, 15, 12, 0, 0, DateTimeKind.Unspecified))
             .Should().Be(TimeSpan.FromHours(2));
 
-        strefa.GetUtcOffset(new DateTime(2026, 12, 15, 12, 0, 0, DateTimeKind.Unspecified))
+        zone.GetUtcOffset(new DateTime(2026, 12, 15, 12, 0, 0, DateTimeKind.Unspecified))
             .Should().Be(TimeSpan.FromHours(1));
     }
 }

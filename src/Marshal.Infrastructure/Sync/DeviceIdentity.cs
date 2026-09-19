@@ -41,11 +41,11 @@ public sealed class DeviceIdentity(MarshalDbContext db) : IDeviceIdentity
             return zapisany.Value;
         }
 
-        var nowy = Generate(Environment.MachineName);
-        db.LocalSettings.Add(new LocalSetting(LocalSetting.DeviceIdKey, nowy));
+        var created = Generate(Environment.MachineName);
+        db.LocalSettings.Add(new LocalSetting(LocalSetting.DeviceIdKey, created));
         db.SaveChanges();
 
-        return nowy;
+        return created;
     }
 
     /// <summary>

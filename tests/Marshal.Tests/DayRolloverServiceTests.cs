@@ -52,19 +52,19 @@ public sealed class DayRolloverServiceTests : IDisposable
 
     private static DateOnly D(string iso) => DateOnly.Parse(iso);
 
-    private TaskItem Dodaj(string tytul, string doDate, RecurrenceRule? regula = null)
+    private TaskItem Dodaj(string title, string doDate, RecurrenceRule? rule = null)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
-        zadanie.Schedule(_obszar, D(doDate), _hlc.Next());
+        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        task.Schedule(_obszar, D(doDate), _hlc.Next());
 
-        if (regula is not null)
+        if (rule is not null)
         {
-            zadanie.SetRecurrence(regula, _hlc.Next());
+            task.SetRecurrence(rule, _hlc.Next());
         }
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
     [Fact]
@@ -148,9 +148,9 @@ public sealed class DayRolloverServiceTests : IDisposable
 
         await _usluga.RunAsync();
 
-        var zadanie = _db.Tasks.Single(t => t.Id == id);
-        zadanie.DoDate.Should().Be(D("2026-09-16"));
-        zadanie.CarriedSince.Should().Be(D("2026-09-09"));
+        var task = _db.Tasks.Single(t => t.Id == id);
+        task.DoDate.Should().Be(D("2026-09-16"));
+        task.CarriedSince.Should().Be(D("2026-09-09"));
         _db.Tasks.Should().ContainSingle();
     }
 

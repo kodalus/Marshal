@@ -35,7 +35,7 @@ public sealed record FilterQuery
     /// filtrem napisanym od tyłu. Wpisanie stanu do warunku nadal działa dosłownie:
     /// „pokaż wykonane" pokaże wykonane.
     /// </remarks>
-    private static readonly TaskState[] Uklyte = [TaskState.Done, TaskState.Trashed];
+    private static readonly TaskState[] Hidden = [TaskState.Done, TaskState.Trashed];
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -78,7 +78,7 @@ public sealed record FilterQuery
             return false;
         }
 
-        if (Uklyte.Contains(subject.Task.State) && !PytaOStan(subject.Task.State))
+        if (Hidden.Contains(subject.Task.State) && !AsksForState(subject.Task.State))
         {
             return false;
         }
@@ -107,7 +107,7 @@ public sealed record FilterQuery
 
         try
         {
-            if (JsonSerializer.Deserialize<Wire[]>(json, Json) is not { } wpisy)
+            if (JsonSerializer.Deserialize<Wire[]>(json, Json) is not { } entries)
             {
                 return null;
             }
@@ -115,12 +115,12 @@ public sealed record FilterQuery
             // Warunki nieczytelne odpadają pojedynczo. Widok zapisany na urządzeniu
             // z nowszą wersją aplikacji ma tu zadziałać w tej części, którą ta wersja
             // rozumie — zamiast zniknąć w całości.
-            var warunki = wpisy
+            var conditions = entries
                 .Select(w => FilterCondition.FromWire(w.Field, w.Values, w.Window, w.MaxMinutes, w.Text))
                 .OfType<FilterCondition>()
                 .ToArray();
 
-            return warunki.Length == 0 ? null : new FilterQuery(warunki);
+            return conditions.Length == 0 ? null : new FilterQuery(conditions);
         }
         catch (Exception e) when (e is JsonException or ArgumentException or ArgumentOutOfRangeException)
         {
@@ -128,7 +128,7 @@ public sealed record FilterQuery
         }
     }
 
-    private bool PytaOStan(TaskState state) =>
+    private bool AsksForState(TaskState state) =>
         Conditions.Any(c => c.Field == FilterField.State && c.Values.Contains(state.ToString()));
 
     /// <summary>Postać zapisu, oddzielona od typu domenowego — zob. <see cref="Recurrence.RecurrenceRule"/>.</summary>

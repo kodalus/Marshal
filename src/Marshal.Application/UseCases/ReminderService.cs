@@ -43,44 +43,44 @@ public sealed class ReminderService(
     /// przypomnienia nie działają w ogóle.
     /// </para>
     /// </remarks>
-    private static readonly TimeSpan Przeterminowanie = TimeSpan.FromDays(1);
+    private static readonly TimeSpan Overdue = TimeSpan.FromDays(1);
 
     public async Task<int> RunAsync(CancellationToken ct = default)
     {
-        var teraz = clock.Now;
-        var strefa = settings.Zone;
-        var pokazane = 0;
+        var now = clock.Now;
+        var zone = settings.Zone;
+        var shown = 0;
 
         // Wszystkie chwile zebrane i uporządkowane **razem**, nie zadanie po zadaniu.
         // Gdy uzbierało się kilka zaległych, kolejność ma być taka, w jakiej miały się
         // odezwać — a nie taka, w jakiej zadania wyszły z bazy.
-        var doPokazania = (await tasks.WithRemindersAsync(ct))
-            .SelectMany(z => Chwile(z, strefa).Select(c => (Zadanie: z, c.Chwila, c.ZWyprzedzenia)))
-            .Where(w => w.Chwila <= teraz)
-            .Where(w => !w.ZWyprzedzenia || teraz - w.Chwila <= Przeterminowanie)
-            .OrderBy(w => w.Chwila)
+        var toShow = (await tasks.WithRemindersAsync(ct))
+            .SelectMany(z => Moments(z, zone).Select(c => (TaskId: z, c.Moment, c.WithLead)))
+            .Where(w => w.Moment <= now)
+            .Where(w => !w.WithLead || now - w.Moment <= Overdue)
+            .OrderBy(w => w.Moment)
             .ToList();
 
-        foreach (var (zadanie, chwila, _) in doPokazania)
+        foreach (var (task, moment, _) in toShow)
         {
-            if (await log.WasShownAsync(zadanie.Id, chwila, ct))
+            if (await log.WasShownAsync(task.Id, moment, ct))
             {
                 continue;
             }
 
             await notifier.ShowAsync(
-                new Notification(zadanie.Id, zadanie.Title, Podpis(zadanie, chwila, strefa)), ct);
+                new Notification(task.Id, task.Title, Caption(task, moment, zone)), ct);
 
-            log.Record(zadanie.Id, chwila, teraz);
-            pokazane++;
+            log.Record(task.Id, moment, now);
+            shown++;
         }
 
-        if (pokazane > 0)
+        if (shown > 0)
         {
             await unitOfWork.SaveChangesAsync(ct);
         }
 
-        return pokazane;
+        return shown;
     }
 
     /// <summary>
@@ -92,68 +92,68 @@ public sealed class ReminderService(
     /// konkretną godzinę. Po każdym odezwaniu liczy się ją od nowa — budzik jest
     /// zawsze na **najbliższą** rzecz, a nie na wszystkie naraz.
     /// </remarks>
-    public async Task<DateTimeOffset?> NajblizszaAsync(CancellationToken ct = default)
+    public async Task<DateTimeOffset?> NextUpAsync(CancellationToken ct = default)
     {
-        var teraz = clock.Now;
-        var strefa = settings.Zone;
+        var now = clock.Now;
+        var zone = settings.Zone;
 
-        var chwile = (await tasks.WithRemindersAsync(ct))
-            .SelectMany(z => Chwile(z, strefa))
-            .Select(c => c.Chwila)
-            .Where(c => c > teraz)
+        var moments = (await tasks.WithRemindersAsync(ct))
+            .SelectMany(z => Moments(z, zone))
+            .Select(c => c.Moment)
+            .Where(c => c > now)
             .OrderBy(c => c)
             .ToList();
 
-        return chwile.Count > 0 ? chwile[0] : null;
+        return moments.Count > 0 ? moments[0] : null;
     }
 
     /// <summary>Wszystkie chwile, w których to zadanie ma się odezwać. Najdawniejsze pierwsze.</summary>
-    private static IEnumerable<(DateTimeOffset Chwila, bool ZWyprzedzenia)> Chwile(
-        TaskItem zadanie, TimeZoneInfo strefa)
+    private static IEnumerable<(DateTimeOffset Moment, bool WithLead)> Moments(
+        TaskItem task, TimeZoneInfo zone)
     {
-        var chwile = new List<(DateTimeOffset, bool)>();
+        var moments = new List<(DateTimeOffset, bool)>();
 
-        if (zadanie.ReminderAt is { } bezwzgledna)
+        if (task.ReminderAt is { } absolute)
         {
-            chwile.Add((bezwzgledna, false));
+            moments.Add((absolute, false));
         }
 
-        if (zadanie is { DoDate: { } dzien, DoTime: { } pora } && zadanie.ReminderLeads.Count > 0)
+        if (task is { DoDate: { } day, DoTime: { } time } && task.ReminderLeads.Count > 0)
         {
             // Strefa liczona dla **tej** chwili, nie bieżąca: przypomnienie o zadaniu
             // za trzy tygodnie ma wypaść o właściwej godzinie także wtedy, gdy po drodze
             // zmienia się czas.
-            var lokalna = dzien.ToDateTime(pora);
-            var start = new DateTimeOffset(lokalna, strefa.GetUtcOffset(lokalna));
+            var local = day.ToDateTime(time);
+            var start = new DateTimeOffset(local, zone.GetUtcOffset(local));
 
-            chwile.AddRange(
-                zadanie.ReminderLeads.Select(m => (start - TimeSpan.FromMinutes(m), true)));
+            moments.AddRange(
+                task.ReminderLeads.Select(m => (start - TimeSpan.FromMinutes(m), true)));
         }
 
-        return chwile.DistinctBy(c => c.Item1).OrderBy(c => c.Item1);
+        return moments.DistinctBy(c => c.Item1).OrderBy(c => c.Item1);
     }
 
     /// <summary>Treść pod tytułem: o czym to przypomnienie mówi.</summary>
-    private static string Podpis(TaskItem zadanie, DateTimeOffset chwila, TimeZoneInfo strefa)
+    private static string Caption(TaskItem task, DateTimeOffset moment, TimeZoneInfo zone)
     {
-        if (zadanie is not { DoDate: { } dzien, DoTime: { } pora })
+        if (task is not { DoDate: { } day, DoTime: { } time })
         {
-            return zadanie.Note ?? string.Empty;
+            return task.Note ?? string.Empty;
         }
 
-        var lokalna = dzien.ToDateTime(pora);
-        var start = new DateTimeOffset(lokalna, strefa.GetUtcOffset(lokalna));
-        var przed = start - chwila;
+        var local = day.ToDateTime(time);
+        var start = new DateTimeOffset(local, zone.GetUtcOffset(local));
+        var before = start - moment;
 
-        return przed <= TimeSpan.Zero
-            ? $"Teraz — {pora:HH}:{pora:mm}"
-            : $"Za {Ile(przed)} — {pora:HH}:{pora:mm}";
+        return before <= TimeSpan.Zero
+            ? $"Teraz — {time:HH}:{time:mm}"
+            : $"Za {Count(before)} — {time:HH}:{time:mm}";
     }
 
-    private static string Ile(TimeSpan przed) => przed.TotalMinutes switch
+    private static string Count(TimeSpan before) => before.TotalMinutes switch
     {
-        < 60 => $"{(int)przed.TotalMinutes} min",
-        < 60 * 24 => $"{(int)przed.TotalHours} godz.",
-        _ => $"{(int)przed.TotalDays} dni",
+        < 60 => $"{(int)before.TotalMinutes} min",
+        < 60 * 24 => $"{(int)before.TotalHours} godz.",
+        _ => $"{(int)before.TotalDays} dni",
     };
 }

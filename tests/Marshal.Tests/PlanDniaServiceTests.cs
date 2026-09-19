@@ -33,7 +33,7 @@ public sealed class PlanDniaServiceTests : IDisposable
     private readonly MarshalDbContext _db;
     private readonly Zegar _zegar = new();
     private readonly HlcSource _hlc;
-    private readonly PlanDniaService _plan;
+    private readonly DayPlanService _plan;
     private readonly Area _obszar;
 
     public PlanDniaServiceTests()
@@ -51,7 +51,7 @@ public sealed class PlanDniaServiceTests : IDisposable
         _db.Areas.Add(_obszar);
         _db.SaveChanges();
 
-        _plan = new PlanDniaService(
+        _plan = new DayPlanService(
             new TaskRepository(_db), new ProjectRepository(_db), new AreaRepository(_db), _zegar);
     }
 
@@ -63,19 +63,19 @@ public sealed class PlanDniaServiceTests : IDisposable
 
     private DateOnly Dzis => ((IClock)_zegar).Today;
 
-    private TaskItem Dodaj(string tytul, DateOnly? dzien = null, TimeOnly? pora = null)
+    private TaskItem Dodaj(string title, DateOnly? day = null, TimeOnly? time = null)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
-        zadanie.Schedule(_obszar.Id, dzien ?? Dzis, _hlc.Next());
+        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        task.Schedule(_obszar.Id, day ?? Dzis, _hlc.Next());
 
-        if (pora is { } godzina)
+        if (time is { } hour)
         {
-            zadanie.SetDoTime(godzina, _hlc.Next());
+            task.SetDoTime(hour, _hlc.Next());
         }
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
     [Fact]
@@ -83,27 +83,27 @@ public sealed class PlanDniaServiceTests : IDisposable
     {
         // Godzina jest jedyną rzeczą, która narzuca dniowi porządek z zewnątrz.
         Dodaj("Bez godziny");
-        Dodaj("Zebranie", pora: new TimeOnly(16, 0));
-        Dodaj("Zakupy", pora: new TimeOnly(8, 0));
+        Dodaj("Zebranie", time: new TimeOnly(16, 0));
+        Dodaj("Zakupy", time: new TimeOnly(8, 0));
 
-        var wiersze = await _plan.DzisAsync();
+        var wiersze = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Tytul).Should().Equal("Zakupy", "Zebranie", "Bez godziny");
+        wiersze.Select(w => w.Title).Should().Equal("Zakupy", "Zebranie", "Bez godziny");
     }
 
     [Fact]
     public async Task Odhaczone_nie_stoi_w_planie()
     {
         // Plan odpowiada na pytanie „co jeszcze przede mną", nie „co dziś było".
-        var zrobione = Dodaj("Zakupy", pora: new TimeOnly(8, 0));
+        var zrobione = Dodaj("Zakupy", time: new TimeOnly(8, 0));
         zrobione.Complete(_zegar.Now, _hlc.Next());
         _db.SaveChanges();
 
-        Dodaj("Zebranie", pora: new TimeOnly(16, 0));
+        Dodaj("Zebranie", time: new TimeOnly(16, 0));
 
-        var wiersze = await _plan.DzisAsync();
+        var wiersze = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Tytul).Should().Equal("Zebranie");
+        wiersze.Select(w => w.Title).Should().Equal("Zebranie");
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public sealed class PlanDniaServiceTests : IDisposable
     {
         // Zadanie umówione na dziś i **jednocześnie** wzięte na dziś wychodzi z dwóch
         // zapytań. Bez odsiewu po identyfikatorze stałoby w planie dwa razy.
-        var oba = Dodaj("Zebranie", pora: new TimeOnly(16, 0));
+        var oba = Dodaj("Zebranie", time: new TimeOnly(16, 0));
         oba.Focus(Dzis, _hlc.Next());
 
         var samWybor = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
@@ -119,10 +119,10 @@ public sealed class PlanDniaServiceTests : IDisposable
         _db.Tasks.Add(samWybor);
         _db.SaveChanges();
 
-        var wiersze = await _plan.DzisAsync();
+        var wiersze = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Tytul).Should().Equal("Zebranie", "Zadzwonić");
-        wiersze.Single(w => w.Tytul == "Zadzwonić").Podpis.Should().Be("wzięte na dziś");
+        wiersze.Select(w => w.Title).Should().Equal("Zebranie", "Zadzwonić");
+        wiersze.Single(w => w.Title == "Zadzwonić").Caption.Should().Be("wzięte na dziś");
     }
 
     [Fact]
@@ -130,34 +130,34 @@ public sealed class PlanDniaServiceTests : IDisposable
     {
         // Zaległe ma godzinę sprzed paru dni. Wstawiona między dzisiejsze udawałaby,
         // że jest na nią umówione dziś — stąd osobny podpis i miejsce na końcu.
-        Dodaj("Rozliczenie", dzien: Dzis.AddDays(-3), pora: new TimeOnly(7, 0));
-        Dodaj("Zebranie", pora: new TimeOnly(16, 0));
+        Dodaj("Rozliczenie", day: Dzis.AddDays(-3), time: new TimeOnly(7, 0));
+        Dodaj("Zebranie", time: new TimeOnly(16, 0));
 
-        var wiersze = await _plan.DzisAsync();
+        var wiersze = await _plan.TodayAsync();
 
-        wiersze.Select(w => w.Tytul).Should().Equal("Zebranie", "Rozliczenie");
-        wiersze.Single(w => w.Tytul == "Rozliczenie").Podpis.Should().StartWith("zaległe z 15.09");
+        wiersze.Select(w => w.Title).Should().Equal("Zebranie", "Rozliczenie");
+        wiersze.Single(w => w.Title == "Rozliczenie").Caption.Should().StartWith("zaległe z 15.09");
     }
 
     [Fact]
     public async Task Podpis_niesie_godziny_i_przynaleznosc()
     {
-        var zadanie = Dodaj("Zebranie", pora: new TimeOnly(16, 0));
-        zadanie.SetEstimate(30, Energy.Medium, _hlc.Next());
+        var task = Dodaj("Zebranie", time: new TimeOnly(16, 0));
+        task.SetEstimate(30, Energy.Medium, _hlc.Next());
         _db.SaveChanges();
 
-        var wiersz = (await _plan.DzisAsync()).Single();
+        var wiersz = (await _plan.TodayAsync()).Single();
 
-        wiersz.Podpis.Should().Be("16:00 – 16:30 / Dom");
+        wiersz.Caption.Should().Be("16:00 – 16:30 / Dom");
     }
 
     [Fact]
     public async Task Bez_oszacowania_zostaje_sama_godzina_rozpoczecia()
     {
         // Zgadywanie długości zrobiłoby z planu harmonogram, którego nikt nie ustalał.
-        Dodaj("Zebranie", pora: new TimeOnly(16, 0));
+        Dodaj("Zebranie", time: new TimeOnly(16, 0));
 
-        (await _plan.DzisAsync()).Single().Podpis.Should().Be("16:00 / Dom");
+        (await _plan.TodayAsync()).Single().Caption.Should().Be("16:00 / Dom");
     }
 
     [Fact]
@@ -166,27 +166,27 @@ public sealed class PlanDniaServiceTests : IDisposable
         _obszar.SetColor("#FF8800", _hlc.Next());
         _db.SaveChanges();
 
-        Dodaj("Zebranie", pora: new TimeOnly(16, 0));
+        Dodaj("Zebranie", time: new TimeOnly(16, 0));
 
-        (await _plan.DzisAsync()).Single().Barwa.Should().Be("#FF8800");
+        (await _plan.TodayAsync()).Single().Color.Should().Be("#FF8800");
     }
 
     [Fact]
     public async Task Pusty_dzien_daje_pusty_plan()
     {
-        (await _plan.DzisAsync()).Should().BeEmpty();
+        (await _plan.TodayAsync()).Should().BeEmpty();
     }
 
     [Fact]
     public async Task Jutro_pokazuje_swoje_zadania_a_nie_dzisiejsze()
     {
-        Dodaj("Dzisiejsze", pora: new TimeOnly(9, 0));
-        Dodaj("Jutrzejsze", dzien: Dzis.AddDays(1), pora: new TimeOnly(10, 0));
+        Dodaj("Dzisiejsze", time: new TimeOnly(9, 0));
+        Dodaj("Jutrzejsze", day: Dzis.AddDays(1), time: new TimeOnly(10, 0));
 
-        var jutro = await _plan.DlaDniaAsync(Dzis.AddDays(1));
+        var jutro = await _plan.ForDayAsync(Dzis.AddDays(1));
 
-        jutro.Select(w => w.Tytul).Should().Equal("Jutrzejsze");
-        jutro.Single().Podpis.Should().Be("10:00 / Dom");
+        jutro.Select(w => w.Title).Should().Equal("Jutrzejsze");
+        jutro.Single().Caption.Should().Be("10:00 / Dom");
     }
 
     [Fact]
@@ -194,24 +194,24 @@ public sealed class PlanDniaServiceTests : IDisposable
     {
         // Zaległe należą do dziś, bo to dziś trzeba z nimi coś zrobić. Dołożone do
         // czwartku udawałyby, że ktoś je na czwartek zaplanował.
-        Dodaj("Rozliczenie", dzien: Dzis.AddDays(-3), pora: new TimeOnly(7, 0));
+        Dodaj("Rozliczenie", day: Dzis.AddDays(-3), time: new TimeOnly(7, 0));
 
-        (await _plan.DzisAsync()).Select(w => w.Tytul).Should().Equal("Rozliczenie");
-        (await _plan.DlaDniaAsync(Dzis.AddDays(2))).Should().BeEmpty();
+        (await _plan.TodayAsync()).Select(w => w.Title).Should().Equal("Rozliczenie");
+        (await _plan.ForDayAsync(Dzis.AddDays(2))).Should().BeEmpty();
     }
 
     [Fact]
     public async Task Wziete_na_inny_dzien_widac_w_tamtym_dniu()
     {
-        var zadanie = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
-        zadanie.Focus(Dzis.AddDays(1), _hlc.Next());
-        _db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
+        task.Focus(Dzis.AddDays(1), _hlc.Next());
+        _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        (await _plan.DzisAsync()).Should().BeEmpty();
+        (await _plan.TodayAsync()).Should().BeEmpty();
 
-        var jutro = await _plan.DlaDniaAsync(Dzis.AddDays(1));
+        var jutro = await _plan.ForDayAsync(Dzis.AddDays(1));
 
-        jutro.Single().Podpis.Should().Be("wzięte na ten dzień");
+        jutro.Single().Caption.Should().Be("wzięte na ten dzień");
     }
 }

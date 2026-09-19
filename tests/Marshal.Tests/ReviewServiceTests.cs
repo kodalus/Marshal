@@ -58,12 +58,12 @@ public sealed class ReviewServiceTests : IDisposable
         _db.SaveChanges();
     }
 
-    private TaskItem Wrzut(string tytul)
+    private TaskItem Wrzut(string title)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
-        _db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
     [Fact]

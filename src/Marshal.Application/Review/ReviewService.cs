@@ -46,31 +46,31 @@ public sealed class ReviewService(
     /// </remarks>
     public async Task<ReviewSession> StartOrResumeAsync(CancellationToken ct = default)
     {
-        if (await sessions.OpenAsync(ct) is { } trwajacy)
+        if (await sessions.OpenAsync(ct) is { } ongoing)
         {
-            return trwajacy;
+            return ongoing;
         }
 
-        var nowy = new ReviewSession(Guid.CreateVersion7(), clock.Now, hlc.Next());
-        sessions.Add(nowy);
+        var created = new ReviewSession(Guid.CreateVersion7(), clock.Now, hlc.Next());
+        sessions.Add(created);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return nowy;
+        return created;
     }
 
     public async Task<ReviewCounts> CountsAsync(CancellationToken ct = default)
     {
-        var dzis = Today();
+        var today = Today();
 
         return new ReviewCounts(
             Inbox: await tasks.InboxCountAsync(ct),
-            Overdue: (await queries.OverdueAsync(dzis, ct)).Count,
-            Nudges: (await queries.WaitingAsync(dzis, ct)).Count(w => w.NeedsNudge),
+            Overdue: (await queries.OverdueAsync(today, ct)).Count,
+            Nudges: (await queries.WaitingAsync(today, ct)).Count(w => w.NeedsNudge),
             Blocked: (await queries.BlockedProjectsAsync(ct)).Count,
-            StaleProjects: (await queries.StaleProjectsAsync(dzis, StaleProjectDays, ct)).Count,
-            MaturedSomeday: (await queries.MaturedSomedayAsync(dzis, ct)).Count,
-            Upcoming: (await tasks.UpcomingAsync(dzis, dzis.AddDays(UpcomingDays), ct)).Count,
-            QuietAreas: (await queries.BalanceAsync(dzis, ct)).Count(b => b.IsQuiet));
+            StaleProjects: (await queries.StaleProjectsAsync(today, StaleProjectDays, ct)).Count,
+            MaturedSomeday: (await queries.MaturedSomedayAsync(today, ct)).Count,
+            Upcoming: (await tasks.UpcomingAsync(today, today.AddDays(UpcomingDays), ct)).Count,
+            QuietAreas: (await queries.BalanceAsync(today, ct)).Count(b => b.IsQuiet));
     }
 
     /// <summary>
@@ -80,36 +80,36 @@ public sealed class ReviewService(
         ReviewStep step, ReviewSession session, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var dzis = Today();
+        var today = Today();
 
-        var wszystkie = step switch
+        var all = step switch
         {
             ReviewStep.Inbox => (await tasks.InboxAsync(ct))
                 .Select(t => new ReviewItem(t.Id, t.Title, "w skrzynce")),
 
-            ReviewStep.Overdue => (await queries.OverdueAsync(dzis, ct))
+            ReviewStep.Overdue => (await queries.OverdueAsync(today, ct))
                 .Select(t => new ReviewItem(t.Id, t.Title, $"termin {t.Deadline:yyyy-MM-dd}")),
 
-            ReviewStep.Nudges => (await queries.WaitingAsync(dzis, ct))
+            ReviewStep.Nudges => (await queries.WaitingAsync(today, ct))
                 .Where(w => w.NeedsNudge)
                 .Select(w => new ReviewItem(w.Task.Id, w.Task.Title, $"{w.Who}, {w.Days} dni")),
 
             ReviewStep.Blocked => (await queries.BlockedProjectsAsync(ct))
                 .Select(p => new ReviewItem(p.ProjectId, p.Outcome, $"brak następnej akcji · {p.AreaName}"))
-                .Concat((await queries.StuckOnSomeoneAsync(dzis, StuckDays, ct))
+                .Concat((await queries.StuckOnSomeoneAsync(today, StuckDays, ct))
                     .Select(p => new ReviewItem(p.ProjectId, p.Outcome, $"utknięty na: {p.Who}, {p.Days} dni"))),
 
-            ReviewStep.StaleProjects => (await queries.StaleProjectsAsync(dzis, StaleProjectDays, ct))
+            ReviewStep.StaleProjects => (await queries.StaleProjectsAsync(today, StaleProjectDays, ct))
                 .Select(p => new ReviewItem(p.Id, p.Outcome, "nietknięty od dwóch tygodni")),
 
-            ReviewStep.Someday => (await queries.MaturedSomedayAsync(dzis, ct))
+            ReviewStep.Someday => (await queries.MaturedSomedayAsync(today, ct))
                 .Select(t => new ReviewItem(t.Id, t.Title, $"odłożone do {t.DeferUntil:yyyy-MM-dd}")),
 
-            ReviewStep.Upcoming => (await tasks.UpcomingAsync(dzis, dzis.AddDays(UpcomingDays), ct))
+            ReviewStep.Upcoming => (await tasks.UpcomingAsync(today, today.AddDays(UpcomingDays), ct))
                 .Select(t => new ReviewItem(
                     t.Id, t.Title, $"{t.DoDate ?? t.Deadline:yyyy-MM-dd}")),
 
-            ReviewStep.Counters => (await queries.CounterFlagsAsync(dzis, ct))
+            ReviewStep.Counters => (await queries.CounterFlagsAsync(today, ct))
                 .Select(f => new ReviewItem(f.Task.Id, f.Task.Title, f.Question)),
 
             // Krok zerowy i krok równowagi nie mają pozycji do odhaczenia: pierwszy jest
@@ -118,7 +118,7 @@ public sealed class ReviewService(
             _ => [],
         };
 
-        return wszystkie.Where(i => !session.IsProcessed(i.Id)).ToList();
+        return all.Where(i => !session.IsProcessed(i.Id)).ToList();
     }
 
     public async Task MarkProcessedAsync(

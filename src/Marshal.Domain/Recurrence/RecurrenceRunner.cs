@@ -35,11 +35,11 @@ public static class RecurrenceRunner
         // przesuwa kolejnego poniedziałku; „co 3 dni podlewanie" — przesuwa.
         var today = Today(now);
 
-        var baza = rule.Anchor == RecurrenceAnchor.FromCompletion
+        var basis = rule.Anchor == RecurrenceAnchor.FromCompletion
             ? today
             : task.DoDate ?? today;
 
-        return Spawn(task, rule, baza, now, stamp);
+        return Spawn(task, rule, basis, now, stamp);
     }
 
     /// <summary>
@@ -92,9 +92,9 @@ public static class RecurrenceRunner
                 // Wystąpienie przestaje być częścią serii i zostaje zwykłą zaległością;
                 // rytm idzie dalej na następniku. Trzy nieodhaczone treningi to trzy
                 // pozycje do zrobienia plus jedna umówiona na dziś.
-                var nastepne = Spawn(task, rule, doDate, now, stamp);
+                var next = Spawn(task, rule, doDate, now, stamp);
                 task.LeaveAsDebt(stamp());
-                return nastepne;
+                return next;
 
             default:
                 task.CarryTo(today, stamp());
@@ -111,34 +111,34 @@ public static class RecurrenceRunner
     /// na każde uruchomienie.
     /// </remarks>
     private static TaskItem? Spawn(
-        TaskItem task, RecurrenceRule rule, DateOnly baza, DateTimeOffset now, Func<Hlc> stamp)
+        TaskItem task, RecurrenceRule rule, DateOnly basis, DateTimeOffset now, Func<Hlc> stamp)
     {
         task.SetRecurrence(null, stamp());
 
-        if (RecurrenceSchedule.Next(rule, baza) is not { } nastepna)
+        if (RecurrenceSchedule.Next(rule, basis) is not { } next)
         {
             return null;
         }
 
-        return task.SpawnNextOccurrence(nastepna, rule.Advance(), now, stamp());
+        return task.SpawnNextOccurrence(next, rule.Advance(), now, stamp());
     }
 
     private static TaskItem? SpawnFrom(
         TaskItem task,
         RecurrenceRule rule,
-        DateOnly baza,
+        DateOnly basis,
         DateOnly floor,
         DateTimeOffset now,
         Func<Hlc> stamp)
     {
         task.SetRecurrence(null, stamp());
 
-        if (RecurrenceSchedule.NextFrom(rule, baza, floor) is not { } wystapienie)
+        if (RecurrenceSchedule.NextFrom(rule, basis, floor) is not { } occurrence)
         {
             return null;
         }
 
-        return task.SpawnNextOccurrence(wystapienie.Date, wystapienie.Rule, now, stamp());
+        return task.SpawnNextOccurrence(occurrence.Date, occurrence.Rule, now, stamp());
     }
 
     /// <summary>

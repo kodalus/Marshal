@@ -60,9 +60,9 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
     private async Task SzukajAsync()
     {
         Items.Clear();
-        foreach (var notatka in await notes.SearchAsync(Query))
+        foreach (var note in await notes.SearchAsync(Query))
         {
-            Items.Add(notatka);
+            Items.Add(note);
         }
 
         OnPropertyChanged(nameof(HasItems));
@@ -77,11 +77,11 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
             return;
         }
 
-        var notatka = await notes.CreateAsync(NewTitle);
+        var note = await notes.CreateAsync(NewTitle);
         NewTitle = string.Empty;
 
         await SearchAsync();
-        Open(notatka);
+        Open(note);
     }
 
     [RelayCommand]

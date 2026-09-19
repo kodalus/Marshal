@@ -59,8 +59,8 @@ public partial class WyborDaty : UserControl
                 return;
             }
 
-            Wartosc = _miesiac.SelectedDate is { } dzien
-                ? new DateTimeOffset(dzien.Date, TimeSpan.Zero)
+            Wartosc = _miesiac.SelectedDate is { } day
+                ? new DateTimeOffset(day.Date, TimeSpan.Zero)
                 : null;
 
             // Dzień wybrany, więc nie ma na co dłużej patrzeć. Rozwinięcie zostawione
@@ -76,10 +76,10 @@ public partial class WyborDaty : UserControl
             }
 
             var wybrana = await zapytaj(
-                Wartosc is { } teraz ? DateOnly.FromDateTime(teraz.Date) : null);
+                Wartosc is { } now ? DateOnly.FromDateTime(now.Date) : null);
 
-            Wartosc = wybrana is { } dzien
-                ? new DateTimeOffset(dzien.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            Wartosc = wybrana is { } day
+                ? new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
                 : null;
         };
 
@@ -123,10 +123,10 @@ public partial class WyborDaty : UserControl
         {
             _miesiac.SelectedDate = Wartosc?.Date;
 
-            if (Wartosc is { } dzien)
+            if (Wartosc is { } day)
             {
                 // Otwieraj na miesiącu, który jest wybrany, a nie na bieżącym.
-                _miesiac.DisplayDate = dzien.Date;
+                _miesiac.DisplayDate = day.Date;
             }
         }
         finally
@@ -149,10 +149,10 @@ public partial class WyborDaty : UserControl
     /// kończyło się pustym wskazaniem w konstruktorze i wywrotką całej aplikacji przy
     /// starcie, bo kontrolka powstaje w środku składania okna.
     /// </remarks>
-    private static T Znajdz<T>(UserControl gdzie, string nazwa)
+    private static T Znajdz<T>(UserControl where, string name)
         where T : Control =>
-        gdzie.FindControl<T>(nazwa)
-            ?? throw new InvalidOperationException($"Brak elementu „{nazwa}” w układzie.");
+        where.FindControl<T>(name)
+            ?? throw new InvalidOperationException($"Brak elementu „{name}” w układzie.");
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
 }

@@ -45,7 +45,7 @@ public sealed class OdlozoneOdbicieTests
     {
         public List<(string Co, ActivityLevel Poziom)> Wpisy { get; } = [];
 
-        public TaskCompletionSource Zapisano { get; } = new();
+        public TaskCompletionSource Saved { get; } = new();
 
         public int Dropped => 0;
 
@@ -61,7 +61,7 @@ public sealed class OdlozoneOdbicieTests
                 Wpisy.Add((operation, level));
             }
 
-            Zapisano.TrySetResult();
+            Saved.TrySetResult();
             return Task.CompletedTask;
         }
 
@@ -83,9 +83,9 @@ public sealed class OdlozoneOdbicieTests
     /// <summary>Czekanie na warunek zamiast na stoper. Zwleka najwyżej pięć sekund.</summary>
     private static async Task Doczekaj(Func<bool> warunek)
     {
-        var koniec = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        var end = DateTime.UtcNow + TimeSpan.FromSeconds(5);
 
-        while (DateTime.UtcNow < koniec)
+        while (DateTime.UtcNow < end)
         {
             if (warunek())
             {
@@ -98,22 +98,22 @@ public sealed class OdlozoneOdbicieTests
         warunek().Should().BeTrue("warunek miał zajść w ciągu pięciu sekund");
     }
 
-    private static TaskItem Zadanie() =>
+    private static TaskItem TaskId() =>
         TaskItem.Capture("Zebranie", DateTimeOffset.UnixEpoch, new Marshal.Domain.Primitives.Hlc(1, 0, "testy"));
 
     [Fact]
     public async Task Wolajacy_nie_czeka_na_siec()
     {
-        var odbicie = new Odbicie();
-        var odlozone = new OdlozoneOdbicie(odbicie, new Dziennik());
+        var mirror = new Odbicie();
+        var odlozone = new DeferredMirror(mirror, new Dziennik());
 
         // Sedno: odbicie stoi i nie ruszy, dopóki go nie puścimy — a mimo to wołanie
         // wraca. Gdyby czekało, ten await nie skończyłby się nigdy.
-        await odlozone.PushAsync(Zadanie());
+        await odlozone.PushAsync(TaskId());
 
-        await odbicie.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        odbicie.Puszczone.SetResult();
+        mirror.Puszczone.SetResult();
     }
 
     /// <summary>Odbicie zapisujące kolejność i zwlekające z pierwszą pracą.</summary>
@@ -161,28 +161,28 @@ public sealed class OdlozoneOdbicieTests
         // decydowało wtedy to, która praca pierwsza po niego sięgnęła, czyli pula
         // wątków. Wysłanie stoi tu na uwięzi właśnie po to, żeby dać kasowaniu
         // wszelką sposobność wyprzedzenia go.
-        var odbicie = new Kolejnosc();
-        var odlozone = new OdlozoneOdbicie(odbicie, new Dziennik());
+        var mirror = new Kolejnosc();
+        var odlozone = new DeferredMirror(mirror, new Dziennik());
 
-        await odlozone.PushAsync(Zadanie());
-        await odbicie.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await odlozone.PushAsync(TaskId());
+        await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        await odlozone.RemoveAsync(Zadanie());
+        await odlozone.RemoveAsync(TaskId());
 
         // Chwila na to, żeby kasowanie zdążyło się wepchnąć, gdyby miało jak.
         await Task.Delay(50);
 
-        lock (odbicie.Wykonane)
+        lock (mirror.Wykonane)
         {
-            odbicie.Wykonane.Should().BeEmpty("kasowanie ma czekać na swoją poprzedniczkę");
+            mirror.Wykonane.Should().BeEmpty("kasowanie ma czekać na swoją poprzedniczkę");
         }
 
-        odbicie.Puszczone.SetResult();
-        await odbicie.Skonczone.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        mirror.Puszczone.SetResult();
+        await mirror.Skonczone.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        lock (odbicie.Wykonane)
+        lock (mirror.Wykonane)
         {
-            odbicie.Wykonane.Should().Equal("wysłanie", "kasowanie");
+            mirror.Wykonane.Should().Equal("wysłanie", "kasowanie");
         }
     }
 
@@ -192,23 +192,23 @@ public sealed class OdlozoneOdbicieTests
         // Jedno nieudane wysłanie nie może zabrać ze sobą wszystkiego, co za nim stoi:
         // odbicia doczepiają się jedno do drugiego, więc wyjątek puszczony dalej
         // unieruchomiłby kolejkę do końca działania aplikacji.
-        var odbicie = new Odbicie { Wywrotka = new InvalidOperationException("sieć padła") };
-        var dziennik = new Dziennik();
-        var odlozone = new OdlozoneOdbicie(odbicie, dziennik);
+        var mirror = new Odbicie { Wywrotka = new InvalidOperationException("sieć padła") };
+        var journal = new Dziennik();
+        var odlozone = new DeferredMirror(mirror, journal);
 
-        await odlozone.PushAsync(Zadanie());
-        await odbicie.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await odlozone.PushAsync(TaskId());
+        await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        await odlozone.RemoveAsync(Zadanie());
-        odbicie.Puszczone.SetResult();
+        await odlozone.RemoveAsync(TaskId());
+        mirror.Puszczone.SetResult();
 
         // Dwa wpisy: obie prace się wywróciły, ale obie doszły do skutku. Czekanie
         // na warunek, a nie na stoper — wolna maszyna nie ma prawa psuć wyniku.
         await Doczekaj(() =>
         {
-            lock (dziennik.Wpisy)
+            lock (journal.Wpisy)
             {
-                return dziennik.Wpisy.Count == 2;
+                return journal.Wpisy.Count == 2;
             }
         });
     }
@@ -218,20 +218,20 @@ public sealed class OdlozoneOdbicieTests
     {
         // Odbicie robione po fakcie nie ma komu oddać wyjątku: ekran dawno odpowiedział.
         // Bez wpisu nieudane wysłanie byłoby nieodróżnialne od wysłanego.
-        var odbicie = new Odbicie { Wywrotka = new InvalidOperationException("sieć padła") };
-        var dziennik = new Dziennik();
-        var odlozone = new OdlozoneOdbicie(odbicie, dziennik);
+        var mirror = new Odbicie { Wywrotka = new InvalidOperationException("sieć padła") };
+        var journal = new Dziennik();
+        var odlozone = new DeferredMirror(mirror, journal);
 
-        await odlozone.PushAsync(Zadanie());
+        await odlozone.PushAsync(TaskId());
 
-        await odbicie.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        odbicie.Puszczone.SetResult();
+        await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        mirror.Puszczone.SetResult();
 
-        await dziennik.Zapisano.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await journal.Saved.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        lock (dziennik.Wpisy)
+        lock (journal.Wpisy)
         {
-            dziennik.Wpisy.Should().ContainSingle()
+            journal.Wpisy.Should().ContainSingle()
                 .Which.Poziom.Should().Be(ActivityLevel.Problem);
         }
     }

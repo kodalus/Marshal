@@ -75,16 +75,16 @@ public static class Rozruch
     /// <summary>Jedno uderzenie serca. Wołane z minutnika wątku okna.</summary>
     public static void Bicie()
     {
-        var teraz = Teraz();
-        var przerwa = teraz - _ostatnieBicie;
+        var now = Teraz();
+        var przerwa = now - _ostatnieBicie;
 
         if (_ostatnieBicie > 0 && przerwa > NajdluzszaPrzerwa)
         {
             NajdluzszaPrzerwa = przerwa;
-            PrzerwaMinela = teraz;
+            PrzerwaMinela = now;
         }
 
-        _ostatnieBicie = teraz;
+        _ostatnieBicie = now;
     }
 
     public static string Opis =>

@@ -34,10 +34,10 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        var tresc = await http.GetStringAsync(source.ExternalId, ct);
+        var content = await http.GetStringAsync(source.ExternalId, ct);
 
         return new FeedResult(
-            Parse(tresc, DateTime.UtcNow), SyncToken: null, IsFull: true, ParseColor(tresc));
+            Parse(content, DateTime.UtcNow), SyncToken: null, IsFull: true, ParseColor(content));
     }
 
     /// <summary>
@@ -67,9 +67,9 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
                 continue;
             }
 
-            var barwa = oczyszczona[(dwukropek + 1)..].Trim();
+            var color = oczyszczona[(dwukropek + 1)..].Trim();
 
-            return string.IsNullOrEmpty(barwa) ? null : barwa;
+            return string.IsNullOrEmpty(color) ? null : color;
         }
 
         return null;
@@ -81,31 +81,31 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
     /// </summary>
     public static IReadOnlyList<FeedEvent> Parse(string content, DateTime now)
     {
-        var kalendarz = Ical.Net.Calendar.Load(content);
-        var wynik = new List<FeedEvent>();
+        var calendarId = Ical.Net.Calendar.Load(content);
+        var result = new List<FeedEvent>();
 
-        var wystapienia = kalendarz.GetOccurrences(
+        var wystapienia = calendarId.GetOccurrences(
             now.AddMonths(-WindowMonths), now.AddMonths(WindowMonths));
 
         foreach (var wystapienie in wystapienia)
         {
-            if (wystapienie.Source is not IcalEvent wydarzenie)
+            if (wystapienie.Source is not IcalEvent ev)
             {
                 continue;
             }
 
             var start = wystapienie.Period.StartTime.AsDateTimeOffset;
-            var koniec = wystapienie.Period.EndTime?.AsDateTimeOffset ?? start.AddHours(1);
+            var end = wystapienie.Period.EndTime?.AsDateTimeOffset ?? start.AddHours(1);
 
-            wynik.Add(new FeedEvent(
+            result.Add(new FeedEvent(
                 // Identyfikator musi rozróżniać wystąpienia serii: wszystkie mają ten sam
                 // UID, więc bez daty w kluczu cotygodniowe spotkanie zapisałoby się raz.
-                $"{wydarzenie.Uid}|{start:yyyy-MM-ddTHH:mm:ssK}",
-                string.IsNullOrWhiteSpace(wydarzenie.Summary) ? "(bez tytułu)" : wydarzenie.Summary,
+                $"{ev.Uid}|{start:yyyy-MM-ddTHH:mm:ssK}",
+                string.IsNullOrWhiteSpace(ev.Summary) ? "(bez tytułu)" : ev.Summary,
                 start,
-                koniec,
-                wydarzenie.IsAllDay,
-                wydarzenie.Location,
+                end,
+                ev.IsAllDay,
+                ev.Location,
 
                 // Odwołanie w kanale iCal nie przychodzi jako zdarzenie, tylko jako brak
                 // wydarzenia w kolejnym pobraniu. Sprzątaniem zajmuje się usługa, która
@@ -113,6 +113,6 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
                 Cancelled: false));
         }
 
-        return wynik;
+        return result;
     }
 }

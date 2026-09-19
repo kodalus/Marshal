@@ -6,19 +6,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Repositories;
 
-public sealed class NoteRepository(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+public sealed class NoteRepository(MarshalDbContext db, IDbQueue? queue = null)
     : INoteRepository
 {
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     public async Task<Note?> FindAsync(Guid id, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Notes.FirstOrDefaultAsync(n => n.Id == id && !n.Deleted, ct), ct);
+        await _kolejka.RunAsync(() => db.Notes.FirstOrDefaultAsync(n => n.Id == id && !n.Deleted, ct), ct);
 
     public async Task<IReadOnlyList<Note>> AllAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => Zywe().OrderByDescending(n => n.CreatedAt).ToListAsync(ct), ct);
+        await _kolejka.RunAsync(() => Zywe().OrderByDescending(n => n.CreatedAt).ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<Note>> PinnedAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => Zywe()
+        await _kolejka.RunAsync(() => Zywe()
             .Where(n => n.IsPinned)
             .OrderBy(n => n.CreatedAt)
             .ToListAsync(ct), ct);
@@ -37,7 +37,7 @@ public sealed class NoteRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
         // notatkach przeglądanie po kolei jest niezauważalne, a indeks pełnotekstowy
         // w SQLite to osobna tabela, którą trzeba by utrzymywać w zgodzie przy każdej
         // synchronizacji.
-        return await _kolejka.WykonajAsync(() => Zywe()
+        return await _kolejka.RunAsync(() => Zywe()
             .Where(n => EF.Functions.Like(n.Title, $"%{szukane}%")
                      || EF.Functions.Like(n.Content, $"%{szukane}%"))
             .OrderByDescending(n => n.CreatedAt)

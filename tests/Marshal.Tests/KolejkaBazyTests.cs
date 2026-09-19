@@ -47,21 +47,21 @@ public sealed class KolejkaBazyTests : IDisposable
         // puszczała na czas oczekiwania, wpuszczałaby drugą pracę dokładnie w tę
         // szczelinę, którą ma zamykać — a to jest ta szczelina, w którą wchodzi
         // synchronizacja ruszająca sama.
-        var kolejka = new KolejkaBazy();
+        var queue = new KolejkaBazy();
         var wewnatrz = 0;
         var najwiecejNaraz = 0;
 
         async Task Praca()
         {
-            var teraz = Interlocked.Increment(ref wewnatrz);
-            InterlockedMax(ref najwiecejNaraz, teraz);
+            var now = Interlocked.Increment(ref wewnatrz);
+            InterlockedMax(ref najwiecejNaraz, now);
 
             await Task.Delay(20);
 
             Interlocked.Decrement(ref wewnatrz);
         }
 
-        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => kolejka.WykonajAsync(Praca)));
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => queue.RunAsync(Praca)));
 
         najwiecejNaraz.Should().Be(1, "brama przepuszcza jedną pracę naraz");
     }
@@ -70,17 +70,17 @@ public sealed class KolejkaBazyTests : IDisposable
     public async Task Brama_puszcza_po_wywrotce()
     {
         // Bez tego jedna awaria zamykałaby bazę do końca działania aplikacji.
-        var kolejka = new KolejkaBazy();
+        var queue = new KolejkaBazy();
 
         // Jawny typ, bo samo „rzuć" pasuje do obu przeciążeń bramy naraz.
         Func<Task> wywrotka = () => Task.FromException(new InvalidOperationException("celowo"));
 
-        var wybuch = async () => await kolejka.WykonajAsync(wywrotka);
+        var wybuch = async () => await queue.RunAsync(wywrotka);
 
         await wybuch.Should().ThrowAsync<InvalidOperationException>();
 
         var doszlo = false;
-        await kolejka.WykonajAsync(() =>
+        await queue.RunAsync(() =>
         {
             doszlo = true;
             return Task.CompletedTask;
@@ -101,14 +101,14 @@ public sealed class KolejkaBazyTests : IDisposable
         // że znacznik „jestem w środku" **dojeżdża** do niej razem z przepływem
         // wywołania. Ustawiony po odpaleniu pracy nie dojechałby, a objawem byłoby
         // dokładnie to zawiśnięcie.
-        var kolejka = new KolejkaBazy();
+        var queue = new KolejkaBazy();
         var doszlo = false;
 
         // Z ogranicznikiem czasu, bo objawem tej usterki jest zawiśnięcie, a test,
         // który wisi, nie mówi nic — blokuje tylko przebieg aż do jego limitu.
-        await kolejka.WykonajAsync(async () =>
+        await queue.RunAsync(async () =>
         {
-            await kolejka.WykonajAsync(() =>
+            await queue.RunAsync(() =>
             {
                 doszlo = true;
                 return Task.CompletedTask;
@@ -120,7 +120,7 @@ public sealed class KolejkaBazyTests : IDisposable
         // A po wyjściu ma być znowu wolna — inaczej pierwsze zagnieżdżenie
         // zamykałoby ją na dobre.
         var pozniej = false;
-        await kolejka.WykonajAsync(() =>
+        await queue.RunAsync(() =>
         {
             pozniej = true;
             return Task.CompletedTask;
@@ -135,16 +135,16 @@ public sealed class KolejkaBazyTests : IDisposable
         // Brama pilnująca samych zapisów przepuszczała odczyty wprost na kontekst
         // i stąd brał się błąd o drugiej operacji zaczętej przed końcem pierwszej.
         // Sprawdzenie wprost: praca trzyma bramę, odczyt z repozytorium ma stać.
-        var kolejka = new KolejkaBazy();
-        var zadania = new TaskRepository(_db, kolejka);
+        var queue = new KolejkaBazy();
+        var tasks = new TaskRepository(_db, queue);
 
         var puscic = new TaskCompletionSource();
 
-        var trzymana = kolejka.WykonajAsync(() => puscic.Task);
+        var trzymana = queue.RunAsync(() => puscic.Task);
 
         // Odpalony po zajęciu bramy, więc jeśli kiedykolwiek się skończy przed
         // zwolnieniem, znaczy, że bramę ominął.
-        var odczyt = Task.Run(() => zadania.InboxCountAsync());
+        var odczyt = Task.Run(() => tasks.InboxCountAsync());
 
         var ktoPierwszy = await Task.WhenAny(odczyt, Task.Delay(200));
 
@@ -161,13 +161,13 @@ public sealed class KolejkaBazyTests : IDisposable
     {
         var sygnal = new SygnalZapisu();
         var podniesiony = 0;
-        sygnal.Zapisano += () => podniesiony++;
+        sygnal.Saved += () => podniesiony++;
 
-        var praca = new UnitOfWork(_db, new KolejkaBazy(), sygnal);
+        var work = new UnitOfWork(_db, new KolejkaBazy(), sygnal);
 
         var hlc = new HlcSource(new Zegar(), "testy");
         _db.Areas.Add(new Area(Guid.CreateVersion7(), new Zegar().Now, hlc.Next(), "Dom", 0));
-        await praca.SaveChangesAsync();
+        await work.SaveChangesAsync();
 
         podniesiony.Should().Be(1, "to jedyny znak, po którym synchronizacja wie, że jest co wysyłać");
     }
@@ -179,11 +179,11 @@ public sealed class KolejkaBazyTests : IDisposable
         // z nich prosił o przebieg, aplikacja chodziłaby po Dysku bez treści.
         var sygnal = new SygnalZapisu();
         var podniesiony = 0;
-        sygnal.Zapisano += () => podniesiony++;
+        sygnal.Saved += () => podniesiony++;
 
-        var praca = new UnitOfWork(_db, new KolejkaBazy(), sygnal);
+        var work = new UnitOfWork(_db, new KolejkaBazy(), sygnal);
 
-        await praca.SaveChangesAsync();
+        await work.SaveChangesAsync();
 
         podniesiony.Should().Be(0);
     }

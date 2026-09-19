@@ -72,29 +72,29 @@ public static class Agenda
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(days);
 
-        var wszystkie = entries.ToList();
-        var wynik = new List<AgendaDay>(days);
+        var all = entries.ToList();
+        var result = new List<AgendaDay>(days);
 
         for (var i = 0; i < days; i++)
         {
-            var dzien = from.AddDays(i);
+            var day = from.AddDays(i);
 
-            var calodniowe = wszystkie
-                .Where(e => e.IsAllDay && Covers(e, dzien))
+            var allDay = all
+                .Where(e => e.IsAllDay && Covers(e, day))
                 .OrderBy(e => e.Title, StringComparer.Ordinal)
                 .ToList();
 
-            var godzinowe = wszystkie
-                .Where(e => !e.IsAllDay && Covers(e, dzien))
-                .Select(e => ClipTo(e, dzien))
+            var hourly = all
+                .Where(e => !e.IsAllDay && Covers(e, day))
+                .Select(e => ClipTo(e, day))
                 .OrderBy(e => e.Start)
                 .ThenByDescending(e => e.End)
                 .ToList();
 
-            wynik.Add(new AgendaDay(dzien, calodniowe, Layout(godzinowe)));
+            result.Add(new AgendaDay(day, allDay, Layout(hourly)));
         }
 
-        return wynik;
+        return result;
     }
 
     /// <summary>
@@ -103,15 +103,15 @@ public static class Agenda
     /// </summary>
     private static bool Covers(AgendaEntry entry, DateOnly day)
     {
-        var poczatek = DateOnly.FromDateTime(entry.Start.DateTime);
-        var koniec = DateOnly.FromDateTime(entry.End.DateTime);
+        var start = DateOnly.FromDateTime(entry.Start.DateTime);
+        var end = DateOnly.FromDateTime(entry.End.DateTime);
 
-        if (entry.End.TimeOfDay == TimeSpan.Zero && koniec > poczatek)
+        if (entry.End.TimeOfDay == TimeSpan.Zero && end > start)
         {
-            koniec = koniec.AddDays(-1);
+            end = end.AddDays(-1);
         }
 
-        return day >= poczatek && day <= koniec;
+        return day >= start && day <= end;
     }
 
     /// <summary>
@@ -121,13 +121,13 @@ public static class Agenda
     /// </summary>
     private static AgendaEntry ClipTo(AgendaEntry entry, DateOnly day)
     {
-        var poczatekDnia = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), entry.Start.Offset);
-        var koniecDnia = poczatekDnia.AddDays(1);
+        var dayStart = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), entry.Start.Offset);
+        var dayEnd = dayStart.AddDays(1);
 
-        var start = entry.Start < poczatekDnia ? poczatekDnia : entry.Start;
-        var koniec = entry.End > koniecDnia ? koniecDnia : entry.End;
+        var start = entry.Start < dayStart ? dayStart : entry.Start;
+        var end = entry.End > dayEnd ? dayEnd : entry.End;
 
-        return entry with { Start = start, End = koniec };
+        return entry with { Start = start, End = end };
     }
 
     /// <summary>
@@ -140,53 +140,53 @@ public static class Agenda
     /// </remarks>
     private static List<AgendaSlot> Layout(List<AgendaEntry> timed)
     {
-        var sloty = new List<AgendaSlot>(timed.Count);
-        var grono = new List<(AgendaEntry Entry, int Column)>();
-        var konceKolumn = new List<DateTimeOffset>();
-        var najdalszyKoniec = DateTimeOffset.MinValue;
+        var slots = new List<AgendaSlot>(timed.Count);
+        var cluster = new List<(AgendaEntry Entry, int Column)>();
+        var columnEnds = new List<DateTimeOffset>();
+        var furthestEnd = DateTimeOffset.MinValue;
 
-        void ZamknijGrono()
+        void CloseCluster()
         {
-            foreach (var (wpis, kolumna) in grono)
+            foreach (var (entry, column) in cluster)
             {
-                sloty.Add(new AgendaSlot(wpis, kolumna, konceKolumn.Count));
+                slots.Add(new AgendaSlot(entry, column, columnEnds.Count));
             }
 
-            grono.Clear();
-            konceKolumn.Clear();
-            najdalszyKoniec = DateTimeOffset.MinValue;
+            cluster.Clear();
+            columnEnds.Clear();
+            furthestEnd = DateTimeOffset.MinValue;
         }
 
-        foreach (var wpis in timed)
+        foreach (var entry in timed)
         {
-            if (grono.Count > 0 && wpis.Start >= najdalszyKoniec)
+            if (cluster.Count > 0 && entry.Start >= furthestEnd)
             {
-                ZamknijGrono();
+                CloseCluster();
             }
 
             // Pierwsza kolumna, która zdążyła się zwolnić. Bez tego dwa krótkie
             // spotkania jedno po drugim zajmowałyby dwie kolumny, choć nie kolidują.
-            var kolumna = konceKolumn.FindIndex(koniec => koniec <= wpis.Start);
+            var column = columnEnds.FindIndex(end => end <= entry.Start);
 
-            if (kolumna < 0)
+            if (column < 0)
             {
-                kolumna = konceKolumn.Count;
-                konceKolumn.Add(wpis.End);
+                column = columnEnds.Count;
+                columnEnds.Add(entry.End);
             }
             else
             {
-                konceKolumn[kolumna] = wpis.End;
+                columnEnds[column] = entry.End;
             }
 
-            grono.Add((wpis, kolumna));
+            cluster.Add((entry, column));
 
-            if (wpis.End > najdalszyKoniec)
+            if (entry.End > furthestEnd)
             {
-                najdalszyKoniec = wpis.End;
+                furthestEnd = entry.End;
             }
         }
 
-        ZamknijGrono();
-        return sloty;
+        CloseCluster();
+        return slots;
     }
 }

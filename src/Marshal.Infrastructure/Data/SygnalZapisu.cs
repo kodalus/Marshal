@@ -7,9 +7,9 @@ namespace Marshal.Infrastructure.Data;
 /// Cała treść to jedno zdarzenie. Wywołanie jest oddzielone od zgłoszenia lokalną kopią,
 /// bo odbiorca może się odpiąć między jednym a drugim — a wtedy pole byłoby już puste.
 /// </remarks>
-public sealed class SygnalZapisu : ISygnalZapisu
+public sealed class SygnalZapisu : IWriteSignal
 {
-    public event Action? Zapisano;
+    public event Action? Saved;
 
-    public void Zglos() => Zapisano?.Invoke();
+    public void Report() => Saved?.Invoke();
 }

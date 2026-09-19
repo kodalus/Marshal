@@ -140,19 +140,19 @@ public sealed partial class MainViewModel : ObservableObject
         FiltersViewModel filters,
         SettingsViewModel settings,
         JournalViewModel journal,
-        IActivityLog dziennik,
+        IActivityLog journal,
         NoteService noteService,
         StructureEditService szkielet,
-        TaskMirror odbicie,
+        TaskMirror mirror,
         CalendarSyncService kalendarze,
         ReminderService przypomnienia,
         GoogleSyncService dysk,
         DayRolloverService przejscieDnia,
-        ISygnalZapisu sygnal)
+        IWriteSignal sygnal)
     {
         _inbox = inbox;
         _szkielet = szkielet;
-        _odbicie = odbicie;
+        _odbicie = mirror;
         _kalendarze = kalendarze;
         _przypomnienia = przypomnienia;
         _dysk = dysk;
@@ -161,7 +161,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
         // dokładnie dwie rzeczy: odłożyć notatkę i poprosić wątek okna o wysyłkę.
         // Sam przebieg rusza stamtąd, bo kończy się przerysowaniem list.
-        sygnal.Zapisano += () =>
+        sygnal.Saved += () =>
         {
             Interlocked.Exchange(ref _zmiana, 1);
             PoproszOWysylke();
@@ -175,7 +175,7 @@ public sealed partial class MainViewModel : ObservableObject
         _focus = focus;
         _queries = queries;
         _notifier = notifier;
-        _dziennik = dziennik;
+        _dziennik = journal;
         _notes = noteService;
         Clarify = clarify;
         Detail = detail;
@@ -207,14 +207,14 @@ public sealed partial class MainViewModel : ObservableObject
         Settings.Imported += (_, _) => Bezpiecznie("Ekran: odświeżenie po wczytaniu kopii", ReloadAsync);
 
         // Kliknięcie w blok na siatce otwiera tę samą nakładkę, co kliknięcie na liście.
-        Calendar.NewTaskRequested += (dzien, pora) =>
-            Bezpiecznie("Kalendarz: nowe zadanie", () => Detail.NewAsync(dzien, pora));
+        Calendar.NewTaskRequested += (day, time) =>
+            Bezpiecznie("Kalendarz: nowe zadanie", () => Detail.NewAsync(day, time));
 
         Calendar.TaskRequested += id => Bezpiecznie("Kalendarz: otwarcie zadania", async () =>
         {
-            if (await _tasks.FindAsync(id) is { } zadanie)
+            if (await _tasks.FindAsync(id) is { } task)
             {
-                await Detail.LoadAsync(zadanie);
+                await Detail.LoadAsync(task);
             }
         });
     }
@@ -228,13 +228,13 @@ public sealed partial class MainViewModel : ObservableObject
     /// zamknięciu zostawałby ten ekran, nie kalendarz. Z widgetu przychodzi się
     /// **na kalendarz**, nawet gdy zadania już nie ma.
     /// </remarks>
-    public void PokazKalendarz(Guid? zadanie)
+    public void PokazKalendarz(Guid? task)
     {
         Bezpiecznie("Kalendarz: wejście z widgetu", async () =>
         {
             await ShowCalendarAsync();
 
-            if (zadanie is { } identyfikator && await _tasks.FindAsync(identyfikator) is { } rzecz)
+            if (task is { } id && await _tasks.FindAsync(id) is { } rzecz)
             {
                 await Detail.LoadAsync(rzecz);
             }
@@ -553,14 +553,14 @@ public sealed partial class MainViewModel : ObservableObject
     {
         while (_slad.Count > 0)
         {
-            var ostatni = _slad[^1];
+            var last = _slad[^1];
             _slad.RemoveAt(_slad.Count - 1);
 
             // Ten sam ekran w śladzie to nie jest miejsce do cofnięcia — najczęściej
             // bierze się z wejścia w tryb i wyjścia z niego.
-            if (ostatni != Current)
+            if (last != Current)
             {
-                return ostatni;
+                return last;
             }
         }
 
@@ -682,7 +682,7 @@ public sealed partial class MainViewModel : ObservableObject
         // Zaległe kasowania odbić: wydarzenie po zadaniu, którego już nie ma, wisi
         // w cudzym kalendarzu do skutku, a skutek ma tylko wtedy, gdy ktoś spróbuje
         // ponownie. To ta sama odpowiedź na upływ czasu, co reszta tutaj.
-        await Probuj("Kalendarz: zaległe odbicia", () => _odbicie.DokonczKasowaniaAsync());
+        await Probuj("Kalendarz: zaległe odbicia", () => _odbicie.FinishDeletionAsync());
 
         await Probuj("Kalendarz: pobranie w tle", PobierzKalendarzeAsync);
 
@@ -778,10 +778,10 @@ public sealed partial class MainViewModel : ObservableObject
         _odlozonePrzeliczenie?.Cancel();
         _odlozonePrzeliczenie?.Dispose();
 
-        var zrodlo = new CancellationTokenSource();
-        _odlozonePrzeliczenie = zrodlo;
+        var source = new CancellationTokenSource();
+        _odlozonePrzeliczenie = source;
 
-        _ = PrzeliczZaChwileAsync(zrodlo.Token);
+        _ = PrzeliczZaChwileAsync(source.Token);
     });
 
     private async Task PrzeliczZaChwileAsync(CancellationToken ct)
@@ -812,10 +812,10 @@ public sealed partial class MainViewModel : ObservableObject
         _odlozonaWysylka?.Cancel();
         _odlozonaWysylka?.Dispose();
 
-        var zrodlo = new CancellationTokenSource();
-        _odlozonaWysylka = zrodlo;
+        var source = new CancellationTokenSource();
+        _odlozonaWysylka = source;
 
-        _ = WyslijZaChwileAsync(zrodlo.Token);
+        _ = WyslijZaChwileAsync(source.Token);
     });
 
     private async Task WyslijZaChwileAsync(CancellationToken ct)
@@ -864,15 +864,15 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        var zmiana = Interlocked.Exchange(ref _zmiana, 0) == 1;
+        var change = Interlocked.Exchange(ref _zmiana, 0) == 1;
         var przerwa = _clock.Now - _ostatniaSynchronizacja >= Przerwa;
 
-        if (!zmiana && !przerwa)
+        if (!change && !przerwa)
         {
             return;
         }
 
-        await PrzebiegAsync(zmiana ? "Synchronizacja po zmianie" : "Synchronizacja co jakiś czas", cicha: true);
+        await PrzebiegAsync(change ? "Synchronizacja po zmianie" : "Synchronizacja co jakiś czas", cicha: true);
     }
 
     /// <summary>
@@ -898,27 +898,27 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     private async Task PrzejscieDniaAsync()
     {
-        var dzis = _clock.Today;
+        var today = _clock.Today;
 
         // Pierwsze sprawdzenie tylko zapamiętuje dzień. Start nadrabia przejście własną
         // drogą (CatchUpAsync), więc robienie tego drugi raz byłoby pracą bez skutku.
         if (_dzien is null)
         {
-            _dzien = dzis;
+            _dzien = today;
             return;
         }
 
-        if (_dzien == dzis)
+        if (_dzien == today)
         {
             return;
         }
 
-        _dzien = dzis;
+        _dzien = today;
 
         await _przejscieDnia.RunAsync();
         await _focus.ExpireAsync();
 
-        await _dziennik.RecordAsync("Przejście dnia", $"nowy dzień: {dzis:yyyy-MM-dd}");
+        await _dziennik.RecordAsync("Przejście dnia", $"nowy dzień: {today:yyyy-MM-dd}");
         await ReloadAsync();
     }
 
@@ -951,13 +951,13 @@ public sealed partial class MainViewModel : ObservableObject
     /// bez śladu w oknie i bez śladu nigdzie indziej. Wyglądało to dokładnie tak,
     /// jakby zapis się nie udał — a zapis się udawał.
     /// </remarks>
-    private void Bezpiecznie(string co, Func<Task> praca) => _ = Probuj(co, praca);
+    private void Bezpiecznie(string co, Func<Task> work) => _ = Probuj(co, work);
 
-    private async Task Probuj(string co, Func<Task> praca)
+    private async Task Probuj(string co, Func<Task> work)
     {
         try
         {
-            await praca();
+            await work();
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -995,11 +995,11 @@ public sealed partial class MainViewModel : ObservableObject
 
         _trwaSynchronizacja = true;
 
-        SyncOutcome wynik;
+        SyncOutcome result;
 
         try
         {
-            wynik = await _dysk.SyncAsync();
+            result = await _dysk.SyncAsync();
         }
         finally
         {
@@ -1010,19 +1010,19 @@ public sealed partial class MainViewModel : ObservableObject
             _ostatniaSynchronizacja = _clock.Now;
         }
 
-        var niemo = cicha && wynik is { Ok: true, Sent: 0, Applied: 0 };
+        var niemo = cicha && result is { Ok: true, Sent: 0, Applied: 0 };
 
         if (!niemo)
         {
             await _dziennik.RecordAsync(
                 co,
-                wynik.Ok ? $"wysłane {wynik.Sent}, przyjęte {wynik.Applied}" : wynik.Message,
-                wynik.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
+                result.Ok ? $"wysłane {result.Sent}, przyjęte {result.Applied}" : result.Message,
+                result.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
         }
 
         // Przeliczenie tylko wtedy, gdy coś przyszło: przerysowanie ekranu pod ręką,
         // która właśnie coś na nim robi, jest kosztem bez pożytku.
-        if (wynik is { Ok: true, Applied: > 0 })
+        if (result is { Ok: true, Applied: > 0 })
         {
             // Przypomnienia sprawdzane od razu, nie dopiero za minutę. Przyniesione
             // przez synchronizację bywa już zaległe — zadanie zmienione na drugim
@@ -1062,7 +1062,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         await Probuj("Ekran: przeliczenie skrzynki", RefreshInboxAsync);
 
-        var zadanie = Current switch
+        var task = Current switch
         {
             Screen.Today => ShowTodayAsync(),
             Screen.Now => Now.LoadAsync(),
@@ -1078,7 +1078,7 @@ public sealed partial class MainViewModel : ObservableObject
             _ => Task.CompletedTask,
         };
 
-        await Probuj($"Ekran: przeliczenie ({Current})", () => zadanie);
+        await Probuj($"Ekran: przeliczenie ({Current})", () => task);
     }
 
     /// <summary>
@@ -1102,25 +1102,25 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     private async Task RefreshFocusAsync()
     {
-        var dzis = Today();
+        var today = Today();
         var naDzis = await _focus.TodayAsync();
 
         FocusItems.Clear();
         FocusOffGrid.Clear();
 
-        foreach (var zadanie in naDzis)
+        foreach (var task in naDzis)
         {
-            FocusItems.Add(zadanie);
+            FocusItems.Add(task);
 
             // Bez godziny nie ma bloku na siatce, więc pasek nad kalendarzem jest
             // jedynym miejscem, gdzie to zadanie w ogóle widać.
-            if (zadanie.DoTime is null && zadanie.State != TaskState.Done)
+            if (task.DoTime is null && task.State != TaskState.Done)
             {
-                FocusOffGrid.Add(zadanie);
+                FocusOffGrid.Add(task);
             }
         }
 
-        var wybrane = FocusItems.Select(t => t.Id).ToHashSet();
+        var selected = FocusItems.Select(t => t.Id).ToHashSet();
         // Zaplanowane **na dziś** nie są kandydatami do wzięcia na dziś. Stoją już na
         // liście dnia wyżej, a wybór na dziś jest obietnicą daną sobie co do rzeczy,
         // której dzień nie narzuca — branie na dziś czegoś, co i tak jest na dziś,
@@ -1128,9 +1128,9 @@ public sealed partial class MainViewModel : ObservableObject
         //
         // Zaległe zostają: te mają dzień wcześniejszy i wzięcie ich na dziś jest
         // prawdziwą decyzją, a nie powtórzeniem tego, co już wiadomo.
-        var kandydaci = (await _tasks.ByStateAsync(TaskState.Next))
+        var candidates = (await _tasks.ByStateAsync(TaskState.Next))
             .Concat(await _tasks.ByStateAsync(TaskState.Scheduled))
-            .Where(t => t.State == TaskState.Next || t.DoDate < dzis)
+            .Where(t => t.State == TaskState.Next || t.DoDate < today)
             .ToList();
 
         // „Kiedyś-może" tylko na wyraźne życzenie. Wzięcie stamtąd czegoś na dziś
@@ -1139,16 +1139,16 @@ public sealed partial class MainViewModel : ObservableObject
         // odłożyło, wracałoby tu codziennie i odkładanie przestałoby cokolwiek dawać.
         if (AlsoSomeday)
         {
-            kandydaci.AddRange((await _tasks.ByStateAsync(TaskState.Someday))
-                .Where(t => t.DeferUntil is null || t.DeferUntil <= dzis));
+            candidates.AddRange((await _tasks.ByStateAsync(TaskState.Someday))
+                .Where(t => t.DeferUntil is null || t.DeferUntil <= today));
         }
 
-        kandydaci = kandydaci.Where(t => !wybrane.Contains(t.Id)).ToList();
+        candidates = candidates.Where(t => !selected.Contains(t.Id)).ToList();
 
         FocusCandidates.Clear();
-        foreach (var zadanie in kandydaci)
+        foreach (var task in candidates)
         {
-            FocusCandidates.Add(TaskRow.From(zadanie, dzis));
+            FocusCandidates.Add(TaskRow.From(task, today));
         }
 
         OnPropertyChanged(nameof(FocusIsFull));
@@ -1164,9 +1164,9 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        var wynik = await _focus.TryFocusAsync(row.Task.Id);
+        var result = await _focus.TryFocusAsync(row.Task.Id);
 
-        if (!wynik.Accepted)
+        if (!result.Accepted)
         {
             PendingFocus = row.Task;
             await RefreshFocusAsync();
@@ -1363,15 +1363,15 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowTodayAsync()
     {
         Current = Screen.Today;
-        var dzis = Today();
-        await Fill(TodayItems, _tasks.TodayAsync(dzis));
+        var today = Today();
+        await Fill(TodayItems, _tasks.TodayAsync(today));
         OnPropertyChanged(nameof(HasToday));
         await RefreshFocusAsync();
 
         // Ponaglenia (N3) i projekty zablokowane (N1) idą na „Dzisiaj", bo są sprawami
         // na dziś. Cisza obszarów (N10) **nigdy tu nie trafia** — to nie jest sprawa na
         // dziś, a codzienne przypominanie o niej zamieniłoby ją w szum (spec 6).
-        var ponaglenia = (await _queries.WaitingAsync(dzis)).Where(w => w.NeedsNudge).ToList();
+        var ponaglenia = (await _queries.WaitingAsync(today)).Where(w => w.NeedsNudge).ToList();
         var zablokowane = await _queries.BlockedProjectsAsync();
 
         Nudges.Clear();
@@ -1381,9 +1381,9 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         BlockedProjects.Clear();
-        foreach (var projekt in zablokowane)
+        foreach (var project in zablokowane)
         {
-            BlockedProjects.Add(projekt);
+            BlockedProjects.Add(project);
         }
 
         OnPropertyChanged(nameof(HasNudges));
@@ -1412,12 +1412,12 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task Fill(ObservableCollection<TaskRow> target, Task<IReadOnlyList<TaskItem>> source)
     {
         var items = await source;
-        var dzis = Today();
+        var today = Today();
 
         target.Clear();
         foreach (var item in items)
         {
-            target.Add(TaskRow.From(item, dzis));
+            target.Add(TaskRow.From(item, today));
         }
     }
 
@@ -1453,14 +1453,14 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        var wynik = await _focus.TryFocusAsync(task.Id);
+        var result = await _focus.TryFocusAsync(task.Id);
 
-        PendingFocus = wynik.Accepted ? null : task;
+        PendingFocus = result.Accepted ? null : task;
 
         // Odmowa musi być słychać z każdego ekranu. Ramka z pytaniem „co schodzi"
         // stoi tylko na „Dzisiaj", więc wzięcie na dziś z „Kiedyś" przy pełnej piątce
         // nie robiło nic i nie mówiło dlaczego.
-        Notice = wynik.Accepted
+        Notice = result.Accepted
             ? string.Empty
             : $"Pięć zadań na dziś już jest. Zdejmij coś na ekranie „Dzisiaj”, "
                 + $"żeby zmieścić „{task.Title}”.";
@@ -1530,9 +1530,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     public async Task SetDateAsync(TaskItem task, DateOnly? day)
     {
-        if (day is { } dzien)
+        if (day is { } day)
         {
-            await _edit.RescheduleAsync(task.Id, dzien, task.DoTime);
+            await _edit.RescheduleAsync(task.Id, day, task.DoTime);
         }
         else
         {
@@ -1640,14 +1640,14 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     public async Task AddAreaAsync()
     {
-        var nazwa = NewAreaName.Trim();
+        var name = NewAreaName.Trim();
 
-        if (nazwa.Length == 0)
+        if (name.Length == 0)
         {
             return;
         }
 
-        await _szkielet.AddAreaAsync(nazwa);
+        await _szkielet.AddAreaAsync(name);
         NewAreaName = string.Empty;
         Notice = string.Empty;
         await ShowProjectsAsync();
@@ -1745,9 +1745,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Pokazanie zadania na siatce — kalendarz przeskakuje na jego dzień.</summary>
     public async Task ShowInCalendarAsync(TaskItem task)
     {
-        if (task.DoDate is { } dzien)
+        if (task.DoDate is { } day)
         {
-            Calendar.Anchor = dzien;
+            Calendar.Anchor = day;
         }
 
         await ShowCalendarAsync();

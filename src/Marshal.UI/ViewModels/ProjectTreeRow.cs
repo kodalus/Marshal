@@ -48,8 +48,8 @@ public sealed record ProjectTreeRow(ProjectRow Row, AreaBalance? Balance = null)
     /// </remarks>
     public string BalanceText => Balance is not { } b
         ? string.Empty
-        : b.DaysSinceMove is { } dni
-            ? $"{b.ActiveProjects} aktywnych · {dni} dni bez ruchu"
+        : b.DaysSinceMove is { } days
+            ? $"{b.ActiveProjects} aktywnych · {days} dni bez ruchu"
             : $"{b.ActiveProjects} aktywnych · brak ruchu";
 
     public bool HasBalance => Balance is not null;
@@ -63,8 +63,8 @@ public sealed record ProjectTreeRow(ProjectRow Row, AreaBalance? Balance = null)
     /// gdzie leży pod tekstem.
     /// </summary>
     public IBrush Swatch =>
-        Avalonia.Media.Color.TryParse(Row.Color ?? string.Empty, out var barwa)
-            ? new SolidColorBrush(barwa)
+        Avalonia.Media.Color.TryParse(Row.Color ?? string.Empty, out var color)
+            ? new SolidColorBrush(color)
             : new SolidColorBrush(Avalonia.Media.Color.Parse(Brak));
 }
 

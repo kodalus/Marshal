@@ -54,7 +54,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         GoogleSyncService dysk,
         CalendarSyncService kalendarze,
         GoogleCalendarGateway google,
-        IActivityLog dziennik,
+        IActivityLog journal,
         InAppNotifier powiadomienia)
     {
         _powiadomienia = powiadomienia;
@@ -64,7 +64,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _dysk = dysk;
         _kalendarze = kalendarze;
         _google = google;
-        _dziennik = dziennik;
+        _dziennik = journal;
     }
 
     /// <summary>
@@ -277,27 +277,27 @@ public sealed partial class SettingsViewModel : ObservableObject
         var konta = new List<string?> { null };
         konta.AddRange(_settings.CalendarAccounts);
 
-        foreach (var konto in konta)
+        foreach (var account in konta)
         {
             try
             {
-                lista.AddRange(await _google.ListAsync(konto));
+                lista.AddRange(await _google.ListAsync(account));
             }
             catch (Exception e)
             {
-                klopoty.Add($"{konto ?? "konto główne"}: {e.Message}");
+                klopoty.Add($"{account ?? "konto główne"}: {e.Message}");
                 await _dziennik.RecordAsync(
                     "Kalendarze Google: lista",
-                    konto ?? "konto główne",
+                    account ?? "konto główne",
                     ActivityLevel.Problem,
                     e.Message);
             }
         }
 
         AvailableGoogleCalendars.Clear();
-        foreach (var kalendarz in lista)
+        foreach (var calendarId in lista)
         {
-            AvailableGoogleCalendars.Add(kalendarz);
+            AvailableGoogleCalendars.Add(calendarId);
         }
 
         OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
@@ -383,25 +383,25 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void WczytajKonta()
     {
         CalendarAccounts.Clear();
-        foreach (var konto in _settings.CalendarAccounts)
+        foreach (var account in _settings.CalendarAccounts)
         {
-            CalendarAccounts.Add(konto);
+            CalendarAccounts.Add(account);
         }
 
         OnPropertyChanged(nameof(HasCalendarAccounts));
     }
 
     [RelayCommand]
-    private async Task AddGoogleCalendarAsync(GoogleCalendarInfo? kalendarz)
+    private async Task AddGoogleCalendarAsync(GoogleCalendarInfo? calendarId)
     {
-        if (kalendarz is null)
+        if (calendarId is null)
         {
             return;
         }
 
         await DodajAsync(
-            CalendarKind.Google, kalendarz.Id, kalendarz.Name, kalendarz.Color,
-            kalendarz.Account, kalendarz.ReadOnly);
+            CalendarKind.Google, calendarId.Id, calendarId.Name, calendarId.Color,
+            calendarId.Account, calendarId.ReadOnly);
     }
 
     [ObservableProperty]
@@ -421,9 +421,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        var nazwa = string.IsNullOrWhiteSpace(NewIcalName) ? "Kanał iCal" : NewIcalName;
+        var name = string.IsNullOrWhiteSpace(NewIcalName) ? "Kanał iCal" : NewIcalName;
 
-        await DodajAsync(CalendarKind.Ical, NewIcalUrl, nazwa);
+        await DodajAsync(CalendarKind.Ical, NewIcalUrl, name);
         NewIcalUrl = string.Empty;
         NewIcalName = string.Empty;
     }
@@ -494,16 +494,16 @@ public sealed partial class SettingsViewModel : ObservableObject
         string externalId,
         string name,
         string? color = null,
-        string? konto = null,
-        bool tylkoOdczyt = false)
+        string? account = null,
+        bool readOnly = false)
     {
         try
         {
-            await _kalendarze.AddAsync(kind, externalId, name, color, konto, tylkoOdczyt);
+            await _kalendarze.AddAsync(kind, externalId, name, color, account, readOnly);
 
             // Konto w dzienniku, bo ten sam kalendarz podłączony z dwóch kont daje dwa
             // wiersze o tej samej nazwie — i bez adresu nie widać, który jest który.
-            var skad = string.IsNullOrWhiteSpace(konto) ? kind.ToString() : $"{kind}, {konto}";
+            var skad = string.IsNullOrWhiteSpace(account) ? kind.ToString() : $"{kind}, {account}";
             await _dziennik.RecordAsync("Kalendarz: podłączenie", $"{name} ({skad})");
             await ReloadCalendarsAsync();
             await RefreshCalendarsAsync();
@@ -520,9 +520,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     private async Task ReloadCalendarsAsync()
     {
         Calendars.Clear();
-        foreach (var zrodlo in await _kalendarze.SourcesAsync())
+        foreach (var source in await _kalendarze.SourcesAsync())
         {
-            Calendars.Add(zrodlo);
+            Calendars.Add(source);
         }
 
         // Do wyboru tylko te, do których umiemy i wolno nam pisać. Kanał iCal jest
@@ -532,9 +532,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         MainCalendars.Clear();
         MainCalendars.Add(BezKalendarza);
 
-        foreach (var zrodlo in Calendars.Where(_kalendarze.CanWrite))
+        foreach (var source in Calendars.Where(_kalendarze.CanWrite))
         {
-            MainCalendars.Add(new MainCalendarChoice(zrodlo.Id, zrodlo.Name));
+            MainCalendars.Add(new MainCalendarChoice(source.Id, source.Name));
         }
 
         _wczytywanieKalendarza = true;
@@ -564,11 +564,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             return;
         }
 
-        var nazwa = $"marshal-{_clock.Today:yyyy-MM-dd}.json";
+        var name = $"marshal-{_clock.Today:yyyy-MM-dd}.json";
 
         try
         {
-            await using var strumien = await SaveRequested(nazwa);
+            await using var strumien = await SaveRequested(name);
 
             if (strumien is null)
             {
@@ -576,8 +576,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             }
 
             await _backup.ExportAsync(strumien);
-            Status = $"Zapisane do {nazwa}.";
-            await _dziennik.RecordAsync("Kopia: zapis", nazwa);
+            Status = $"Zapisane do {name}.";
+            await _dziennik.RecordAsync("Kopia: zapis", name);
         }
         catch (Exception e)
         {
@@ -695,14 +695,14 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         try
         {
-            var wynik = await _dysk.SyncAsync(_przerwanie.Token);
-            SyncStatus = wynik.Message;
+            var result = await _dysk.SyncAsync(_przerwanie.Token);
+            SyncStatus = result.Message;
 
             await _dziennik.RecordAsync(
                 "Synchronizacja",
-                $"wysłane {wynik.Sent}, nałożone {wynik.Applied}",
-                wynik.Ok ? ActivityLevel.Ok : ActivityLevel.Problem,
-                wynik.Message);
+                $"wysłane {result.Sent}, nałożone {result.Applied}",
+                result.Ok ? ActivityLevel.Ok : ActivityLevel.Problem,
+                result.Message);
         }
         catch (OperationCanceledException)
         {

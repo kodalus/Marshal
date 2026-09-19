@@ -202,9 +202,9 @@ public sealed partial class ReviewViewModel(
         Pinned.Clear();
         if (IsPinnedStep)
         {
-            foreach (var notatka in await notes.PinnedAsync())
+            foreach (var note in await notes.PinnedAsync())
             {
-                Pinned.Add(notatka);
+                Pinned.Add(note);
             }
         }
 

@@ -45,40 +45,40 @@ public sealed class DayRolloverService(
         var now = clock.Now;
         var today = clock.Today;
 
-        var kolejka = new Queue<TaskItem>(await tasks.OverdueByDoDateAsync(today, ct));
-        var przesuniete = 0;
-        var nowe = 0;
+        var queue = new Queue<TaskItem>(await tasks.OverdueByDoDateAsync(today, ct));
+        var moved = 0;
+        var fresh = 0;
 
-        while (kolejka.Count > 0)
+        while (queue.Count > 0)
         {
-            var zadanie = kolejka.Dequeue();
-            var przed = (zadanie.DoDate, zadanie.RollCount, zadanie.CarriedSince);
+            var task = queue.Dequeue();
+            var before = (task.DoDate, task.RollCount, task.CarriedSince);
 
-            if (RecurrenceRunner.Rollover(zadanie, now, hlc.Next) is { } nastepne)
+            if (RecurrenceRunner.Rollover(task, now, hlc.Next) is { } next)
             {
-                tasks.Add(nastepne);
-                nowe++;
+                tasks.Add(next);
+                fresh++;
 
                 // Świeże wystąpienie samo bywa zaległe: przy Accumulate rytm nadrabia
                 // po jednym dniu, więc tydzień nieobecności to tydzień pozycji. Bez
                 // domknięcia tu zaległość schodziłaby po jednym dniu na uruchomienie.
-                if (nastepne.DoDate < today && nowe < MaxSpawnsPerRun)
+                if (next.DoDate < today && fresh < MaxSpawnsPerRun)
                 {
-                    kolejka.Enqueue(nastepne);
+                    queue.Enqueue(next);
                 }
             }
 
-            if (przed != (zadanie.DoDate, zadanie.RollCount, zadanie.CarriedSince))
+            if (before != (task.DoDate, task.RollCount, task.CarriedSince))
             {
-                przesuniete++;
+                moved++;
             }
         }
 
-        if (przesuniete > 0 || nowe > 0)
+        if (moved > 0 || fresh > 0)
         {
             await unitOfWork.SaveChangesAsync(ct);
         }
 
-        return new RolloverReport(przesuniete, nowe);
+        return new RolloverReport(moved, fresh);
     }
 }

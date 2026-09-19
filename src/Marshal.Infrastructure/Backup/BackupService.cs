@@ -33,12 +33,12 @@ public sealed class BackupService(
     IHlcSource hlc,
     IClock clock,
     IDeviceIdentity device,
-    IKolejkaBazy? kolejka = null)
+    IDbQueue? queue = null)
 {
     // Kopia czyta albo podmienia **całą** bazę, więc idzie przez bramę w całości,
     // a nie zapytaniami. Synchronizacja wchodząca w środek odtwarzania zapisałaby
     // na Dysk stan z połowy podmiany.
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -56,7 +56,7 @@ public sealed class BackupService(
         {
             CreatedAt = clock.Now,
             DeviceId = device.Id,
-            Lines = await _kolejka.WykonajAsync(() => BuildLinesAsync(ct), ct),
+            Lines = await _kolejka.RunAsync(() => BuildLinesAsync(ct), ct),
         };
 
         await JsonSerializer.SerializeAsync(destination, plik, Json, ct);
@@ -69,7 +69,7 @@ public sealed class BackupService(
         var plik = await JsonSerializer.DeserializeAsync<BackupFile>(source, Json, ct)
             ?? throw new InvalidDataException("Plik nie wygląda na kopię zapasową Marshala.");
 
-        return await _kolejka.WykonajAsync(() => WgrajAsync(plik, mode, ct), ct);
+        return await _kolejka.RunAsync(() => WgrajAsync(plik, mode, ct), ct);
     }
 
     private async Task<ImportReport> WgrajAsync(
@@ -168,7 +168,7 @@ public sealed class BackupService(
 
             foreach (var encja in await RowsAsync(typ.ClrType, ct))
             {
-                var wpis = db.Entry(encja);
+                var entry = db.Entry(encja);
 
                 // Pole bez znacznika to pole zapisane, zanim znaczniki istniały —
                 // albo ustawione konstruktorem. Znacznik encji jest wtedy jedynym,
@@ -176,11 +176,11 @@ public sealed class BackupService(
                 // później niż jego własne UpdatedAt.
                 var domyslny = encja.UpdatedAt.ToString();
 
-                foreach (var grupa in wlasciwosci
+                foreach (var group in wlasciwosci
                     .Select(p => (
                         Pole: p.Name,
                         Hlc: znaczniki.GetValueOrDefault((encja.Id, p.Name)),
-                        Wartosc: Encode(wpis, p.Name)))
+                        Wartosc: Encode(entry, p.Name)))
 
                     // Pole bez znacznika i bez wartości nigdy nie było ustawione —
                     // dziennik pomija puste przy zakładaniu rekordu. Wypisane w kopii
@@ -196,8 +196,8 @@ public sealed class BackupService(
                     {
                         Entity = tabela,
                         Id = encja.Id.ToString(),
-                        Hlc = grupa.Key,
-                        Fields = grupa.ToDictionary(x => x.Pole, x => x.Wartosc),
+                        Hlc = group.Key,
+                        Fields = group.ToDictionary(x => x.Pole, x => x.Wartosc),
                     });
                 }
             }
@@ -257,9 +257,9 @@ public sealed class BackupService(
         db.ChangeTracker.Clear();
     }
 
-    private static JsonNode? Encode(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry wpis, string pole)
+    private static JsonNode? Encode(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry, string pole)
     {
-        var wlasciwosc = wpis.Property(pole);
+        var wlasciwosc = entry.Property(pole);
         var wartosc = wlasciwosc.CurrentValue;
 
         if (wartosc is null)

@@ -6,10 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Repositories;
 
-public sealed class ReminderLog(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+public sealed class ReminderLog(MarshalDbContext db, IDbQueue? queue = null)
     : IReminderLog
 {
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     /// <summary>
     /// Czy ta konkretna chwila już się odezwała.
@@ -21,7 +21,7 @@ public sealed class ReminderLog(MarshalDbContext db, IKolejkaBazy? kolejka = nul
     /// </remarks>
     public Task<bool> WasShownAsync(
         Guid taskId, DateTimeOffset reminderAt, CancellationToken ct = default) =>
-        _kolejka.WykonajAsync(async () =>
+        _kolejka.RunAsync(async () =>
             db.ChangeTracker.Entries<ReminderShown>()
                 .Select(e => e.Entity)
                 .Any(r => r.TaskId == taskId && r.ReminderAt == reminderAt)
@@ -30,11 +30,11 @@ public sealed class ReminderLog(MarshalDbContext db, IKolejkaBazy? kolejka = nul
 
     public void Record(Guid taskId, DateTimeOffset reminderAt, DateTimeOffset shownAt)
     {
-        var juzJest = db.ChangeTracker.Entries<ReminderShown>()
+        var alreadyThere = db.ChangeTracker.Entries<ReminderShown>()
             .Select(e => e.Entity)
             .Any(r => r.TaskId == taskId && r.ReminderAt == reminderAt);
 
-        if (!juzJest)
+        if (!alreadyThere)
         {
             db.ReminderShown.Add(new ReminderShown(taskId, reminderAt, shownAt));
         }

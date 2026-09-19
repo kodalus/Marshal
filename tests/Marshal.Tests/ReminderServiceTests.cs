@@ -86,22 +86,22 @@ public sealed class ReminderServiceTests : IDisposable
             _zegar);
     }
 
-    private static DateTimeOffset Chwila(string iso) =>
+    private static DateTimeOffset Moment(string iso) =>
         DateTimeOffset.Parse(iso + "+02:00");
 
-    private TaskItem Dodaj(string tytul, string? przypomnienie)
+    private TaskItem Dodaj(string title, string? przypomnienie)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
-        zadanie.MakeNext(_obszar, _hlc.Next());
+        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        task.MakeNext(_obszar, _hlc.Next());
 
         if (przypomnienie is not null)
         {
-            zadanie.SetReminder(Chwila(przypomnienie), _hlc.Next());
+            task.SetReminder(Moment(przypomnienie), _hlc.Next());
         }
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
     [Fact]
@@ -120,10 +120,10 @@ public sealed class ReminderServiceTests : IDisposable
 
         (await _usluga.RunAsync()).Should().Be(1);
 
-        var pokazane = _powiadamiacz.Drain();
-        pokazane.Should().ContainSingle();
-        pokazane[0].TaskId.Should().Be(id);
-        pokazane[0].Title.Should().Be("Zadzwonić do przychodni");
+        var shown = _powiadamiacz.Drain();
+        shown.Should().ContainSingle();
+        shown[0].TaskId.Should().Be(id);
+        shown[0].Title.Should().Be("Zadzwonić do przychodni");
     }
 
     [Fact]
@@ -148,24 +148,24 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Zadanie_z_godzina_odzywa_sie_z_kazdego_wyprzedzenia()
     {
-        var zadanie = TaskItem.Capture("Wizyta", _zegar.Now, _hlc.Next());
-        zadanie.Schedule(_obszar, new DateOnly(2026, 9, 16), _hlc.Next());
-        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
-        zadanie.SetReminderLeads([0, 15, 60], _hlc.Next());
-        _db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture("Wizyta", _zegar.Now, _hlc.Next());
+        task.Schedule(_obszar, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        task.SetReminderLeads([0, 15, 60], _hlc.Next());
+        _db.Tasks.Add(task);
         _db.SaveChanges();
 
         // Kwadrans po dziewiątej: minęło wyprzedzenie godzinne, reszta jeszcze nie.
-        _zegar.Now = Chwila("2026-09-16T09:15:00");
+        _zegar.Now = Moment("2026-09-16T09:15:00");
         (await _usluga.RunAsync()).Should().Be(1);
 
-        _zegar.Now = Chwila("2026-09-16T09:50:00");
+        _zegar.Now = Moment("2026-09-16T09:50:00");
         (await _usluga.RunAsync()).Should().Be(1, "kwadrans przed, godzinne już było");
 
-        _zegar.Now = Chwila("2026-09-16T10:00:00");
+        _zegar.Now = Moment("2026-09-16T10:00:00");
         (await _usluga.RunAsync()).Should().Be(1, "o czasie");
 
-        _zegar.Now = Chwila("2026-09-16T10:30:00");
+        _zegar.Now = Moment("2026-09-16T10:30:00");
         (await _usluga.RunAsync()).Should().Be(0, "wszystkie trzy już się odezwały");
     }
 
@@ -175,21 +175,21 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Przesuniete_zadanie_zabiera_wyprzedzenia_ze_soba()
     {
-        var zadanie = TaskItem.Capture("Wizyta", _zegar.Now, _hlc.Next());
-        zadanie.Schedule(_obszar, new DateOnly(2026, 9, 16), _hlc.Next());
-        zadanie.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
-        zadanie.SetReminderLeads([30], _hlc.Next());
-        _db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture("Wizyta", _zegar.Now, _hlc.Next());
+        task.Schedule(_obszar, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
+        task.SetReminderLeads([30], _hlc.Next());
+        _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        _zegar.Now = Chwila("2026-09-16T09:31:00");
+        _zegar.Now = Moment("2026-09-16T09:31:00");
         (await _usluga.RunAsync()).Should().Be(1);
 
         // Ta sama godzina, następny dzień: to inna chwila, więc odzywa się na nowo.
-        zadanie.MoveDoDate(new DateOnly(2026, 9, 17), _hlc.Next());
+        task.MoveDoDate(new DateOnly(2026, 9, 17), _hlc.Next());
         _db.SaveChanges();
 
-        _zegar.Now = Chwila("2026-09-17T09:31:00");
+        _zegar.Now = Moment("2026-09-17T09:31:00");
         (await _usluga.RunAsync()).Should().Be(1);
     }
 
@@ -233,11 +233,11 @@ public sealed class ReminderServiceTests : IDisposable
     {
         // „Przypomnij mi jednak o godzinę później" musi zadziałać. Gdyby zapis
         // pokazania znaczył tylko „o tym zadaniu już było", nowa chwila by przepadła.
-        var zadanie = Dodaj("Zadzwonić", "2026-09-16T08:00:00");
+        var task = Dodaj("Zadzwonić", "2026-09-16T08:00:00");
         await _usluga.RunAsync();
         _powiadamiacz.Drain();
 
-        zadanie.SetReminder(Chwila("2026-09-16T08:30:00"), _hlc.Next());
+        task.SetReminder(Moment("2026-09-16T08:30:00"), _hlc.Next());
         _db.SaveChanges();
 
         (await _usluga.RunAsync()).Should().Be(1);
@@ -246,8 +246,8 @@ public sealed class ReminderServiceTests : IDisposable
     [Fact]
     public async Task Wykonane_zadanie_nie_przypomina_o_sobie()
     {
-        var zadanie = Dodaj("Zadzwonić", "2026-09-16T08:00:00");
-        zadanie.Complete(_zegar.Now, _hlc.Next());
+        var task = Dodaj("Zadzwonić", "2026-09-16T08:00:00");
+        task.Complete(_zegar.Now, _hlc.Next());
         _db.SaveChanges();
 
         (await _usluga.RunAsync()).Should().Be(0);
@@ -280,11 +280,11 @@ public sealed class ReminderServiceTests : IDisposable
         // Gdyby trafiał, drugie urządzenie dowiedziałoby się, że tu już pokazano —
         // i zamilkło, choć telefon leżał w torbie.
         Dodaj("Zadzwonić", "2026-09-16T08:00:00");
-        var przed = _db.Changes.Count();
+        var before = _db.Changes.Count();
 
         await _usluga.RunAsync();
 
-        _db.Changes.Count().Should().Be(przed);
+        _db.Changes.Count().Should().Be(before);
         _db.ReminderShown.Should().ContainSingle();
     }
 
@@ -293,16 +293,16 @@ public sealed class ReminderServiceTests : IDisposable
     {
         // „W przeddzień o dwudziestej" ma zostać przeddniem o dwudziestej, a nie
         // przenieść się co do daty i odezwać się natychmiast.
-        var zadanie = TaskItem.Capture("Wynieść śmieci", _zegar.Now, _hlc.Next());
-        zadanie.Schedule(_obszar, new DateOnly(2026, 9, 14), _hlc.Next());
-        zadanie.SetReminder(Chwila("2026-09-13T20:00:00"), _hlc.Next());
-        zadanie.SetRecurrence(
+        var task = TaskItem.Capture("Wynieść śmieci", _zegar.Now, _hlc.Next());
+        task.Schedule(_obszar, new DateOnly(2026, 9, 14), _hlc.Next());
+        task.SetReminder(Moment("2026-09-13T20:00:00"), _hlc.Next());
+        task.SetRecurrence(
             new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday), _hlc.Next());
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, _zegar.Now, _hlc.Next)!;
+        var next = RecurrenceRunner.Complete(task, _zegar.Now, _hlc.Next)!;
 
-        nastepne.DoDate.Should().Be(new DateOnly(2026, 9, 21));
-        nastepne.ReminderAt.Should().Be(Chwila("2026-09-20T20:00:00"));
+        next.DoDate.Should().Be(new DateOnly(2026, 9, 21));
+        next.ReminderAt.Should().Be(Moment("2026-09-20T20:00:00"));
     }
 
     public void Dispose()

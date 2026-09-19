@@ -23,35 +23,35 @@ public sealed partial class LeadChoice(int minutes) : ObservableObject
     public string Label => Nazwa(Minutes);
 
     /// <summary>Wyprzedzenie po ludzku: „o czasie", „15 min wcześniej", „dzień wcześniej".</summary>
-    public static string Nazwa(int minuty)
+    public static string Nazwa(int minutes)
     {
-        if (minuty <= 0)
+        if (minutes <= 0)
         {
             return "o czasie";
         }
 
-        var dni = minuty / (60 * 24);
-        var godziny = minuty / 60 % 24;
-        var reszta = minuty % 60;
+        var days = minutes / (60 * 24);
+        var godziny = minutes / 60 % 24;
+        var reszta = minutes % 60;
 
-        var czesci = new List<string>();
+        var parts = new List<string>();
 
-        if (dni > 0)
+        if (days > 0)
         {
-            czesci.Add(dni == 1 ? "dzień" : $"{dni} dni");
+            parts.Add(days == 1 ? "dzień" : $"{days} dni");
         }
 
         if (godziny > 0)
         {
-            czesci.Add($"{godziny} godz.");
+            parts.Add($"{godziny} godz.");
         }
 
         if (reszta > 0)
         {
-            czesci.Add($"{reszta} min");
+            parts.Add($"{reszta} min");
         }
 
-        return $"{string.Join(' ', czesci)} wcześniej";
+        return $"{string.Join(' ', parts)} wcześniej";
     }
 
     public override string ToString() => Label;

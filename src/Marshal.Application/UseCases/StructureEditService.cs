@@ -37,26 +37,26 @@ public sealed class StructureEditService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        var istniejace = await areas.AllAsync(ct);
-        var kolejnosc = istniejace.Count == 0 ? 0 : istniejace.Max(o => o.SortOrder) + 1;
+        var existing = await areas.AllAsync(ct);
+        var order = existing.Count == 0 ? 0 : existing.Max(o => o.SortOrder) + 1;
 
-        var obszar = new Area(Guid.CreateVersion7(), clock.Now, hlc.Next(), name, kolejnosc);
-        areas.Add(obszar);
+        var area = new Area(Guid.CreateVersion7(), clock.Now, hlc.Next(), name, order);
+        areas.Add(area);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return obszar.Id;
+        return area.Id;
     }
 
     public async Task RenameAreaAsync(Guid areaId, string name, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        if (await areas.FindAsync(areaId, ct) is not { } obszar)
+        if (await areas.FindAsync(areaId, ct) is not { } area)
         {
             return;
         }
 
-        obszar.Rename(name, hlc.Next());
+        area.Rename(name, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -79,32 +79,32 @@ public sealed class StructureEditService(
             return "To ostatni obszar — bez żadnego nie da się nadać zadaniu dnia wykonania.";
         }
 
-        if ((await projects.ByAreaAsync(areaId, ct)).Count is var ile and > 0)
+        if ((await projects.ByAreaAsync(areaId, ct)).Count is var count and > 0)
         {
-            return $"Obszar ma projekty ({ile}) — przenieś je albo usuń najpierw.";
+            return $"Obszar ma projekty ({count}) — przenieś je albo usuń najpierw.";
         }
 
-        var zadania = await tasks.ByAreaAsync(areaId, ct);
+        var tasks = await tasks.ByAreaAsync(areaId, ct);
 
-        return zadania.Count > 0
-            ? $"Obszar ma zadania ({zadania.Count}) — przenieś je gdzie indziej."
+        return tasks.Count > 0
+            ? $"Obszar ma zadania ({tasks.Count}) — przenieś je gdzie indziej."
             : null;
     }
 
     /// <summary>Usunięcie obszaru. Nagrobkiem, nie kasowaniem.</summary>
     public async Task<string?> DeleteAreaAsync(Guid areaId, CancellationToken ct = default)
     {
-        if (await WhyCannotDeleteAreaAsync(areaId, ct) is { } przeszkoda)
+        if (await WhyCannotDeleteAreaAsync(areaId, ct) is { } blocker)
         {
-            return przeszkoda;
+            return blocker;
         }
 
-        if (await areas.FindAsync(areaId, ct) is not { } obszar)
+        if (await areas.FindAsync(areaId, ct) is not { } area)
         {
             return null;
         }
 
-        obszar.MarkDeleted(hlc.Next());
+        area.MarkDeleted(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
         return null;
@@ -124,16 +124,16 @@ public sealed class StructureEditService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outcome);
 
-        var wszystkie = await projects.AllAsync(ct);
-        var kolejnosc = wszystkie.Count == 0 ? 0 : wszystkie.Max(p => p.SortOrder) + 1;
+        var all = await projects.AllAsync(ct);
+        var order = all.Count == 0 ? 0 : all.Max(p => p.SortOrder) + 1;
 
         // Rodzicem bywa obszar albo projekt. Jedno wejście na oba, bo z punktu widzenia
         // ręki to ta sama czynność: „tutaj ma powstać nowy".
-        if (wszystkie.FirstOrDefault(p => p.Id == parentId) is { } rodzic)
+        if (all.FirstOrDefault(p => p.Id == parentId) is { } parent)
         {
             var pod = new Project(
                 Guid.CreateVersion7(), clock.Now, hlc.Next(), outcome,
-                rodzic.AreaId, kolejnosc, rodzic.Id);
+                parent.AreaId, order, parent.Id);
 
             projects.Add(pod);
             await unitOfWork.SaveChangesAsync(ct);
@@ -146,13 +146,13 @@ public sealed class StructureEditService(
             return null;
         }
 
-        var projekt = new Project(
-            Guid.CreateVersion7(), clock.Now, hlc.Next(), outcome, parentId, kolejnosc);
+        var project = new Project(
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), outcome, parentId, order);
 
-        projects.Add(projekt);
+        projects.Add(project);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return projekt.Id;
+        return project.Id;
     }
 
     /// <summary>Nowa nazwa projektu. Nazwa projektu jest wynikiem, nie czynnością.</summary>
@@ -160,23 +160,23 @@ public sealed class StructureEditService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(outcome);
 
-        if (await projects.FindAsync(projectId, ct) is not { } projekt)
+        if (await projects.FindAsync(projectId, ct) is not { } project)
         {
             return;
         }
 
-        projekt.Rename(outcome, hlc.Next());
+        project.Rename(outcome, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 
     public async Task SetAreaColorAsync(Guid areaId, string? color, CancellationToken ct = default)
     {
-        if (await areas.FindAsync(areaId, ct) is not { } obszar)
+        if (await areas.FindAsync(areaId, ct) is not { } area)
         {
             return;
         }
 
-        obszar.SetColor(color, hlc.Next());
+        area.SetColor(color, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -194,32 +194,32 @@ public sealed class StructureEditService(
     public async Task SetAreaCalendarAsync(
         Guid areaId, Guid? calendarId, CancellationToken ct = default)
     {
-        if (await areas.FindAsync(areaId, ct) is not { } obszar)
+        if (await areas.FindAsync(areaId, ct) is not { } area)
         {
             return;
         }
 
-        if (calendarId is { } kalendarz)
+        if (calendarId is { } calendarId)
         {
-            foreach (var inny in (await areas.AllAsync(ct))
-                .Where(o => o.Id != areaId && o.CalendarId == kalendarz))
+            foreach (var other in (await areas.AllAsync(ct))
+                .Where(o => o.Id != areaId && o.CalendarId == calendarId))
             {
-                inny.SetCalendar(null, hlc.Next());
+                other.SetCalendar(null, hlc.Next());
             }
         }
 
-        obszar.SetCalendar(calendarId, hlc.Next());
+        area.SetCalendar(calendarId, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 
     public async Task SetProjectColorAsync(Guid projectId, string? color, CancellationToken ct = default)
     {
-        if (await projects.FindAsync(projectId, ct) is not { } projekt)
+        if (await projects.FindAsync(projectId, ct) is not { } project)
         {
             return;
         }
 
-        projekt.SetColor(color, hlc.Next());
+        project.SetColor(color, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -234,34 +234,34 @@ public sealed class StructureEditService(
     /// </remarks>
     public async Task<string?> WhyCannotDeleteAsync(Guid projectId, CancellationToken ct = default)
     {
-        var wszystkie = await projects.AllAsync(ct);
+        var all = await projects.AllAsync(ct);
 
-        if (wszystkie.Any(p => p.ParentProjectId == projectId))
+        if (all.Any(p => p.ParentProjectId == projectId))
         {
             return "Projekt ma podprojekty — najpierw usuń albo odepnij je.";
         }
 
-        var zadania = await tasks.ByProjectAsync(projectId, ct);
+        var tasks = await tasks.ByProjectAsync(projectId, ct);
 
-        return zadania.Count > 0
-            ? $"Projekt ma zadania ({zadania.Count}) — przenieś je albo zamknij projekt."
+        return tasks.Count > 0
+            ? $"Projekt ma zadania ({tasks.Count}) — przenieś je albo zamknij projekt."
             : null;
     }
 
     /// <summary>Usunięcie projektu. Nagrobkiem, nie kasowaniem — inaczej wróciłby przy scaleniu.</summary>
     public async Task<string?> DeleteProjectAsync(Guid projectId, CancellationToken ct = default)
     {
-        if (await WhyCannotDeleteAsync(projectId, ct) is { } przeszkoda)
+        if (await WhyCannotDeleteAsync(projectId, ct) is { } blocker)
         {
-            return przeszkoda;
+            return blocker;
         }
 
-        if (await projects.FindAsync(projectId, ct) is not { } projekt)
+        if (await projects.FindAsync(projectId, ct) is not { } project)
         {
             return null;
         }
 
-        projekt.MarkDeleted(hlc.Next());
+        project.MarkDeleted(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
         return null;

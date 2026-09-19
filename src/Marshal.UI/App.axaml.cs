@@ -61,16 +61,16 @@ public partial class App : Avalonia.Application
     /// Bez tego z widgetu dało się wejść tylko „gdzieś w okolice" i dalej trzeba było
     /// szukać wzrokiem po siatce.
     /// </param>
-    public static void PoprosOKalendarz(Guid? zadanie = null)
+    public static void PoprosOKalendarz(Guid? task = null)
     {
-        if (_pokazKalendarz is { } teraz)
+        if (_pokazKalendarz is { } now)
         {
-            teraz(zadanie);
+            now(task);
             return;
         }
 
         _zadanoKalendarza = true;
-        _zadaneZadanie = zadanie;
+        _zadaneZadanie = task;
     }
 
     /// <summary>Podpięcie okna. Spełnia prośbę, która przyszła, zanim okno powstało.</summary>
@@ -85,10 +85,10 @@ public partial class App : Avalonia.Application
 
         _zadanoKalendarza = false;
 
-        var zadanie = _zadaneZadanie;
+        var task = _zadaneZadanie;
         _zadaneZadanie = null;
 
-        pokaz(zadanie);
+        pokaz(task);
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
@@ -206,8 +206,8 @@ public partial class App : Avalonia.Application
                 var wczytanie = zegarStartu.ElapsedMilliseconds - przygotowanie - zlozenie;
 
                 PodepnijKalendarz(
-                    zadanie => Dispatcher.UIThread.Post(
-                        () => viewModel.PokazKalendarz(zadanie)));
+                    task => Dispatcher.UIThread.Post(
+                        () => viewModel.PokazKalendarz(task)));
 
                 // Strefa w dzienniku przy każdym starcie: przesuwa wszystkie godziny
                 // naraz, a przesunięte wszystko wygląda tak samo jak źle pobrane dane.

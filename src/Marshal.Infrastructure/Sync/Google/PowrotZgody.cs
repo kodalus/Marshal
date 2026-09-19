@@ -27,12 +27,12 @@ namespace Marshal.Infrastructure.Sync.Google;
 public static class PowrotZgody
 {
     private static readonly Lock Zamek = new();
-    private static TaskCompletionSource<string>? _czekajacy;
+    private static TaskCompletionSource<string>? _waiting;
 
     /// <summary>Czy logowanie czeka właśnie na powrót z przeglądarki.</summary>
     public static bool Czeka
     {
-        get { lock (Zamek) { return _czekajacy is not null; } }
+        get { lock (Zamek) { return _waiting is not null; } }
     }
 
     /// <summary>Zgłoszenie oczekiwania. Zwraca zadanie kończące się przepisanym adresem.</summary>
@@ -42,10 +42,10 @@ public static class PowrotZgody
         {
             // Kontynuacje asynchronicznie: bez tego dalszy ciąg logowania pobiegłby
             // na wątku okna, prosto z obsługi kliknięcia.
-            _czekajacy = new TaskCompletionSource<string>(
+            _waiting = new TaskCompletionSource<string>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
 
-            return _czekajacy.Task;
+            return _waiting.Task;
         }
     }
 
@@ -54,7 +54,7 @@ public static class PowrotZgody
     {
         lock (Zamek)
         {
-            _czekajacy = null;
+            _waiting = null;
         }
     }
 
@@ -65,7 +65,7 @@ public static class PowrotZgody
     {
         lock (Zamek)
         {
-            return _czekajacy?.TrySetResult(adres) ?? false;
+            return _waiting?.TrySetResult(adres) ?? false;
         }
     }
 }

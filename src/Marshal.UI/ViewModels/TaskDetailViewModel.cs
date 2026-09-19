@@ -27,7 +27,7 @@ public sealed partial class TaskDetailViewModel(
     private bool _loading;
 
     /// <summary>Ile trwa zadanie z godziną, ale bez podanego końca (spec 11).</summary>
-    private const int DomyslneMinuty = 30;
+    private const int DefaultMinutes = 30;
 
     [ObservableProperty]
     public partial bool IsOpen { get; set; }
@@ -113,35 +113,35 @@ public sealed partial class TaskDetailViewModel(
     {
         get
         {
-            var czesci = new List<string>();
+            var parts = new List<string>();
 
-            if (Deadline is { } termin)
+            if (Deadline is { } deadline)
             {
-                czesci.Add($"termin {termin:dd.MM}");
+                parts.Add($"termin {deadline:dd.MM}");
             }
 
             if (ReminderDay is not null || Leads.Any(w => w.IsChecked))
             {
-                czesci.Add("przypomnienie");
+                parts.Add("przypomnienie");
             }
 
             if (Waga != Priority.None)
             {
-                czesci.Add(SelectedPriority!.Label);
+                parts.Add(SelectedPriority!.Label);
             }
 
             if (Sila != Energy.Unknown)
             {
-                czesci.Add(SelectedEnergyLevel!.Label);
+                parts.Add(SelectedEnergyLevel!.Label);
             }
 
             if (Rytm is not null)
             {
-                czesci.Add("powtarza się");
+                parts.Add("powtarza się");
             }
 
-            return czesci.Count == 0 ? "termin, przypomnienie, waga, energia, rytm"
-                : string.Join(" · ", czesci);
+            return parts.Count == 0 ? "termin, przypomnienie, waga, energia, rytm"
+                : string.Join(" · ", parts);
         }
     }
 
@@ -283,12 +283,12 @@ public sealed partial class TaskDetailViewModel(
     {
         get
         {
-            var regula = BuildRule(out var problem);
+            var rule = BuildRule(out var problem);
 
             // Reguła niepełna nie może pokazywać się jako „nie powtarza się" — wybrałaś
             // „co tydzień", a zdanie mówiłoby, że rytmu nie ma. Zdanie musi mówić prawdę
             // o tym, co jest na ekranie, także wtedy, gdy na ekranie czegoś brakuje.
-            return problem is not null ? problem : RecurrenceText.Describe(regula);
+            return problem is not null ? problem : RecurrenceText.Describe(rule);
         }
     }
 
@@ -438,8 +438,8 @@ public sealed partial class TaskDetailViewModel(
         // do bazy jako oszacowanie, którego nikt nie podał — zadanie na piętnaście
         // minut robiło się trzydziestominutowe samo z siebie. Aplikacja nie ma prawa
         // zmyślać długości: brak oszacowania to brak, a nie „pewnie pół godziny".
-        EndTime = task.DoTime is { } poczatek && task.EstimatedMinutes is { } dlugosc
-            ? poczatek.ToTimeSpan() + TimeSpan.FromMinutes(dlugosc)
+        EndTime = task.DoTime is { } start && task.EstimatedMinutes is { } length
+            ? start.ToTimeSpan() + TimeSpan.FromMinutes(length)
             : null;
         SelectedEnergyLevel = Energies.First(e => e.Value == task.Energy);
         LoadRule(task.Recurrence);
@@ -469,14 +469,14 @@ public sealed partial class TaskDetailViewModel(
         // co widać na ekranie.
         SelectedMissed = Missed.FirstOrDefault(m => m.Value == rule?.OnMissed) ?? Missed[0];
 
-        var dni = rule?.DaysOfWeek ?? Weekdays.None;
-        Monday = dni.Includes(DayOfWeek.Monday);
-        Tuesday = dni.Includes(DayOfWeek.Tuesday);
-        Wednesday = dni.Includes(DayOfWeek.Wednesday);
-        Thursday = dni.Includes(DayOfWeek.Thursday);
-        Friday = dni.Includes(DayOfWeek.Friday);
-        Saturday = dni.Includes(DayOfWeek.Saturday);
-        Sunday = dni.Includes(DayOfWeek.Sunday);
+        var days = rule?.DaysOfWeek ?? Weekdays.None;
+        Monday = days.Includes(DayOfWeek.Monday);
+        Tuesday = days.Includes(DayOfWeek.Tuesday);
+        Wednesday = days.Includes(DayOfWeek.Wednesday);
+        Thursday = days.Includes(DayOfWeek.Thursday);
+        Friday = days.Includes(DayOfWeek.Friday);
+        Saturday = days.Includes(DayOfWeek.Saturday);
+        Sunday = days.Includes(DayOfWeek.Sunday);
     }
 
     public void Close()
@@ -505,11 +505,11 @@ public sealed partial class TaskDetailViewModel(
         await log.RecordAsync("Zadanie: polecenie zapisu", Title);
 
         string? problem;
-        RecurrenceRule? regula;
+        RecurrenceRule? rule;
 
         try
         {
-            regula = BuildRule(out problem);
+            rule = BuildRule(out problem);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -559,12 +559,12 @@ public sealed partial class TaskDetailViewModel(
                 ToDate(DoDate),
                 ToDate(Deadline),
                 ReminderAt(),
-                regula,
+                rule,
                 Waga,
                 Minuty(),
                 Sila,
                 SelectedPlacement?.AreaId,
-                DoTime is { } pora ? TimeOnly.FromTimeSpan(pora) : null,
+                DoTime is { } time ? TimeOnly.FromTimeSpan(time) : null,
                 WybraneWyprzedzenia()));
 
             // Projekt osobnym wywołaniem, a nie kolejnym polem edycji: pole typu
@@ -610,7 +610,7 @@ public sealed partial class TaskDetailViewModel(
     /// przy tym samym dniu i tej samej godzinie — a oszacowanie mogło zostać z innego
     /// planu. Koniec przed początkiem znaczy przejście przez północ.
     /// </remarks>
-    private int? Minuty() => EstimatedMinutes is { } minuty ? (int)minuty : null;
+    private int? Minuty() => EstimatedMinutes is { } minutes ? (int)minutes : null;
 
     /// <summary>
     /// Długość i godzina zakończenia trzymane zgodnie.
@@ -623,29 +623,29 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     partial void OnEndTimeChanged(TimeSpan? value)
     {
-        if (_loading || _zgodne || DoTime is not { } poczatek || value is not { } koniec)
+        if (_loading || _zgodne || DoTime is not { } start || value is not { } end)
         {
             return;
         }
 
-        var dlugosc = koniec > poczatek
-            ? koniec - poczatek
-            : koniec + TimeSpan.FromDays(1) - poczatek;
+        var length = end > start
+            ? end - start
+            : end + TimeSpan.FromDays(1) - start;
 
         _zgodne = true;
-        EstimatedMinutes = Math.Max(1, (int)dlugosc.TotalMinutes);
+        EstimatedMinutes = Math.Max(1, (int)length.TotalMinutes);
         _zgodne = false;
     }
 
     partial void OnEstimatedMinutesChanged(decimal? value)
     {
-        if (_loading || _zgodne || DoTime is not { } poczatek || value is not { } minuty)
+        if (_loading || _zgodne || DoTime is not { } start || value is not { } minutes)
         {
             return;
         }
 
         _zgodne = true;
-        EndTime = poczatek + TimeSpan.FromMinutes((double)Math.Max(1, minuty));
+        EndTime = start + TimeSpan.FromMinutes((double)Math.Max(1, minutes));
         _zgodne = false;
     }
 
@@ -660,7 +660,7 @@ public sealed partial class TaskDetailViewModel(
         // jest najczęstszym sposobem na przegapienie.
         if (!_loading && value is not null && !Leads.Any(w => w.IsChecked))
         {
-            Dopisz(0).IsChecked = true;
+            Append(0).IsChecked = true;
             Refresh();
         }
 
@@ -677,19 +677,19 @@ public sealed partial class TaskDetailViewModel(
             Refresh();
         }
 
-        if (_loading || _zgodne || value is not { } poczatek)
+        if (_loading || _zgodne || value is not { } start)
         {
             return;
         }
 
         // Przy pustej długości koniec zostaje pusty — patrz wyżej.
-        if (EstimatedMinutes is not { } minuty)
+        if (EstimatedMinutes is not { } minutes)
         {
             return;
         }
 
         _zgodne = true;
-        EndTime = poczatek + TimeSpan.FromMinutes((double)minuty);
+        EndTime = start + TimeSpan.FromMinutes((double)minutes);
         _zgodne = false;
     }
 
@@ -775,13 +775,13 @@ public sealed partial class TaskDetailViewModel(
     /// </summary>
     private DateTimeOffset? ReminderAt()
     {
-        if (ReminderDay is not { } dzien)
+        if (ReminderDay is not { } day)
         {
             return null;
         }
 
-        var pora = ReminderTime ?? new TimeSpan(8, 0, 0);
-        return new DateTimeOffset(dzien.Date.Add(pora), clock.Now.Offset);
+        var time = ReminderTime ?? new TimeSpan(8, 0, 0);
+        return new DateTimeOffset(day.Date.Add(time), clock.Now.Offset);
     }
 
     /// <summary>
@@ -793,28 +793,28 @@ public sealed partial class TaskDetailViewModel(
     {
         problem = null;
 
-        if (Rytm is not { } rodzaj)
+        if (Rytm is not { } kind)
         {
             return null;
         }
 
-        var dni = Weekdays.None;
-        if (Monday) { dni |= Weekdays.Monday; }
-        if (Tuesday) { dni |= Weekdays.Tuesday; }
-        if (Wednesday) { dni |= Weekdays.Wednesday; }
-        if (Thursday) { dni |= Weekdays.Thursday; }
-        if (Friday) { dni |= Weekdays.Friday; }
-        if (Saturday) { dni |= Weekdays.Saturday; }
-        if (Sunday) { dni |= Weekdays.Sunday; }
+        var days = Weekdays.None;
+        if (Monday) { days |= Weekdays.Monday; }
+        if (Tuesday) { days |= Weekdays.Tuesday; }
+        if (Wednesday) { days |= Weekdays.Wednesday; }
+        if (Thursday) { days |= Weekdays.Thursday; }
+        if (Friday) { days |= Weekdays.Friday; }
+        if (Saturday) { days |= Weekdays.Saturday; }
+        if (Sunday) { days |= Weekdays.Sunday; }
 
         try
         {
             return new RecurrenceRule(
-                rodzaj,
+                kind,
                 (int)Math.Max(1, Interval),
-                dni,
-                rodzaj == RecurrenceKind.Monthly && DayOfMonth is { } dzien ? (int)dzien : null,
-                SelectedAnchor?.Value ?? RecurrenceRule.DefaultAnchorFor(rodzaj),
+                days,
+                kind == RecurrenceKind.Monthly && DayOfMonth is { } day ? (int)day : null,
+                SelectedAnchor?.Value ?? RecurrenceRule.DefaultAnchorFor(kind),
                 SelectedMissed?.Value ?? OnMissed.Carry);
         }
         catch (ArgumentException)
@@ -837,26 +837,26 @@ public sealed partial class TaskDetailViewModel(
     /// Lista wyprzedzeń od nowa: gotowy zestaw plus to, co zadanie ma zapisane,
     /// w kolejności czasu. Zaznaczone jest wyłącznie to, co zadanie naprawdę ma.
     /// </summary>
-    private void WczytajWyprzedzenia(IReadOnlyList<int> wybrane)
+    private void WczytajWyprzedzenia(IReadOnlyList<int> selected)
     {
         Leads.Clear();
 
-        foreach (var minuty in Gotowe.Concat(wybrane).Distinct().OrderBy(m => m))
+        foreach (var minutes in Gotowe.Concat(selected).Distinct().OrderBy(m => m))
         {
-            Leads.Add(new LeadChoice(minuty) { IsChecked = wybrane.Contains(minuty) });
+            Leads.Add(new LeadChoice(minutes) { IsChecked = selected.Contains(minutes) });
         }
     }
 
     /// <summary>Wyprzedzenie na liście — to, które już tam jest, albo świeżo wstawione.</summary>
-    private LeadChoice Dopisz(int minuty)
+    private LeadChoice Append(int minutes)
     {
-        if (Leads.FirstOrDefault(w => w.Minutes == minuty) is { } juz)
+        if (Leads.FirstOrDefault(w => w.Minutes == minutes) is { } juz)
         {
             return juz;
         }
 
-        var pozycja = new LeadChoice(minuty);
-        Leads.Insert(Leads.Count(w => w.Minutes < minuty), pozycja);
+        var pozycja = new LeadChoice(minutes);
+        Leads.Insert(Leads.Count(w => w.Minutes < minutes), pozycja);
         return pozycja;
     }
 
@@ -867,19 +867,19 @@ public sealed partial class TaskDetailViewModel(
     [RelayCommand]
     private void AddLead()
     {
-        if (CustomLead is not { } ile || SelectedLeadUnit is not { } jednostka)
+        if (CustomLead is not { } count || SelectedLeadUnit is not { } jednostka)
         {
             return;
         }
 
-        var minuty = (int)Math.Round(ile) * jednostka.Minutes;
+        var minutes = (int)Math.Round(count) * jednostka.Minutes;
 
-        if (minuty < 0)
+        if (minutes < 0)
         {
             return;
         }
 
-        Dopisz(minuty).IsChecked = true;
+        Append(minutes).IsChecked = true;
         Refresh();
     }
 
@@ -912,9 +912,9 @@ public sealed partial class TaskDetailViewModel(
         // Domyślne zaczepienie wynika z rodzaju (spec 5.7), więc zmiana rodzaju ma je
         // przestawić. Zostawione ręcznie ustawione dałoby „co poniedziałek, licząc od
         // wykonania" jako stan domyślny — czyli rytm dryfujący na środy.
-        if (value?.Kind is { } rodzaj)
+        if (value?.Kind is { } kind)
         {
-            SelectedAnchor = Anchors.First(a => a.Value == RecurrenceRule.DefaultAnchorFor(rodzaj));
+            SelectedAnchor = Anchors.First(a => a.Value == RecurrenceRule.DefaultAnchorFor(kind));
         }
 
         Refresh();

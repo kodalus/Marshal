@@ -47,52 +47,52 @@ public sealed class NowServiceTests : IDisposable
         _db.Database.Migrate();
         _hlc = new HlcSource(_zegar, "biurko");
 
-        var zadania = new TaskRepository(_db);
-        _teraz = new NowService(zadania, new ProjectRepository(_db), _zegar);
-        _wybor = new FocusService(zadania, new UnitOfWork(_db), _zegar, _hlc);
+        var tasks = new TaskRepository(_db);
+        _teraz = new NowService(tasks, new ProjectRepository(_db), _zegar);
+        _wybor = new FocusService(tasks, new UnitOfWork(_db), _zegar, _hlc);
 
         _obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(_obszar);
         _db.SaveChanges();
     }
 
-    private TaskItem Zadanie(
-        string tytul,
-        int? minuty = 30,
+    private TaskItem TaskId(
+        string title,
+        int? minutes = 30,
         Energy energia = Energy.Unknown,
-        Guid? projekt = null)
+        Guid? project = null)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
-        zadanie.MakeNext(_obszar.Id, _hlc.Next());
+        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        task.MakeNext(_obszar.Id, _hlc.Next());
 
-        if (projekt is { } p)
+        if (project is { } p)
         {
-            zadanie.MoveTo(_obszar.Id, p, _hlc.Next());
+            task.MoveTo(_obszar.Id, p, _hlc.Next());
         }
 
-        if (minuty is not null || energia != Energy.Unknown)
+        if (minutes is not null || energia != Energy.Unknown)
         {
-            zadanie.SetEstimate(minuty, energia, _hlc.Next());
+            task.SetEstimate(minutes, energia, _hlc.Next());
         }
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
-    private Project Projekt(string wynik, ProjectState stan = ProjectState.Active)
+    private Project Projekt(string result, ProjectState stan = ProjectState.Active)
     {
-        var projekt = new Project(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), wynik, _obszar.Id, _kolejnosc++);
+        var project = new Project(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), result, _obszar.Id, _kolejnosc++);
 
         if (stan != ProjectState.Active)
         {
-            projekt.SetState(stan, _hlc.Next());
+            project.SetState(stan, _hlc.Next());
         }
 
-        _db.Projects.Add(projekt);
+        _db.Projects.Add(project);
         _db.SaveChanges();
-        return projekt;
+        return project;
     }
 
     // --- dobór kandydatów (8.1) ----------------------------------------------
@@ -102,7 +102,7 @@ public sealed class NowServiceTests : IDisposable
     {
         // To nie jest surowość, tylko warunek działania: widok dobierający pod dostępne
         // minuty nie ma jak ocenić czegoś bez oszacowania.
-        Zadanie("nieoszacowane", minuty: null);
+        TaskId("nieoszacowane", minutes: null);
 
         (await _teraz.PickAsync(60, Energy.High)).Should().BeEmpty();
     }
@@ -110,8 +110,8 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Zadanie_dluzsze_niz_dostepny_czas_odpada()
     {
-        Zadanie("długie", minuty: 90);
-        Zadanie("krótkie", minuty: 20);
+        TaskId("długie", minutes: 90);
+        TaskId("krótkie", minutes: 20);
 
         (await _teraz.PickAsync(30, Energy.High)).Select(p => p.Task.Title)
             .Should().Equal("krótkie");
@@ -120,8 +120,8 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Zadanie_wymagajace_wiecej_energii_odpada()
     {
-        Zadanie("ciężkie", energia: Energy.High);
-        Zadanie("lekkie", energia: Energy.Low);
+        TaskId("ciężkie", energia: Energy.High);
+        TaskId("lekkie", energia: Energy.Low);
 
         (await _teraz.PickAsync(60, Energy.Low)).Select(p => p.Task.Title)
             .Should().Equal("lekkie");
@@ -131,7 +131,7 @@ public sealed class NowServiceTests : IDisposable
     public async Task Zadanie_o_nieznanej_energii_przechodzi_przy_kazdym_poziomie()
     {
         // Nieznana to nie to samo co niska. Brak decyzji nie może udawać decyzji.
-        Zadanie("nieokreślone", energia: Energy.Unknown);
+        TaskId("nieokreślone", energia: Energy.Unknown);
 
         (await _teraz.PickAsync(60, Energy.Low)).Should().ContainSingle();
     }
@@ -139,9 +139,9 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Zadanie_odlozone_na_przyszlosc_odpada()
     {
-        var zadanie = Zadanie("odłożone");
-        zadanie.Postpone(_obszar.Id, Dzis.AddDays(7), _hlc.Next());
-        zadanie.MakeNext(_obszar.Id, _hlc.Next());
+        var task = TaskId("odłożone");
+        task.Postpone(_obszar.Id, Dzis.AddDays(7), _hlc.Next());
+        task.MakeNext(_obszar.Id, _hlc.Next());
         _db.SaveChanges();
 
         (await _teraz.PickAsync(60, Energy.High)).Should().BeEmpty();
@@ -152,8 +152,8 @@ public sealed class NowServiceTests : IDisposable
     {
         // Leży w bazie poprawnie, ale nie jest tym, co można teraz zrobić.
         var wstrzymany = Projekt("Kiedyś remont", ProjectState.Someday);
-        Zadanie("z zamrożonego", projekt: wstrzymany.Id);
-        Zadanie("samodzielne");
+        TaskId("z zamrożonego", project: wstrzymany.Id);
+        TaskId("samodzielne");
 
         (await _teraz.PickAsync(60, Energy.High)).Select(p => p.Task.Title)
             .Should().Equal("samodzielne");
@@ -164,28 +164,28 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Termin_za_chwile_bije_wszystko()
     {
-        var pilne = Zadanie("z terminem");
+        var pilne = TaskId("z terminem");
         pilne.SetDeadline(Dzis.AddDays(1), _hlc.Next());
 
-        var wybrane = Zadanie("wybrane na dziś");
-        wybrane.Focus(Dzis, _hlc.Next());
+        var selected = TaskId("wybrane na dziś");
+        selected.Focus(Dzis, _hlc.Next());
         _db.SaveChanges();
 
-        var wynik = await _teraz.PickAsync(60, Energy.High);
+        var result = await _teraz.PickAsync(60, Energy.High);
 
-        wynik[0].Task.Title.Should().Be("z terminem");
-        wynik[0].Reason.Should().Be("termin za chwilę");
+        result[0].Task.Title.Should().Be("z terminem");
+        result[0].Reason.Should().Be("termin za chwilę");
     }
 
     [Fact]
     public async Task Wybor_na_dzis_bije_wysoka_wage()
     {
         // Aplikacja słucha decyzji z dzisiaj, a nie etykiety sprzed pół roku.
-        var wazne = Zadanie("wysoka waga");
+        var wazne = TaskId("wysoka waga");
         wazne.SetPriority(Priority.High, _hlc.Next());
 
-        var wybrane = Zadanie("wybrane na dziś");
-        wybrane.Focus(Dzis, _hlc.Next());
+        var selected = TaskId("wybrane na dziś");
+        selected.Focus(Dzis, _hlc.Next());
         _db.SaveChanges();
 
         (await _teraz.PickAsync(60, Energy.High))[0].Task.Title.Should().Be("wybrane na dziś");
@@ -194,12 +194,12 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Jedyna_akcja_w_projekcie_dostaje_punkty_za_odblokowanie()
     {
-        var projekt = Projekt("Opony są na aucie");
-        Zadanie("jedyna akcja", projekt: projekt.Id);
+        var project = Projekt("Opony są na aucie");
+        TaskId("jedyna akcja", project: project.Id);
 
-        var wynik = await _teraz.PickAsync(60, Energy.High);
+        var result = await _teraz.PickAsync(60, Energy.High);
 
-        wynik[0].Reason.Should().Be("odblokowuje projekt");
+        result[0].Reason.Should().Be("odblokowuje projekt");
     }
 
     [Fact]
@@ -208,14 +208,14 @@ public sealed class NowServiceTests : IDisposable
         // Bez przycięcia jedno zadanie sprzed roku zdominowałoby ekran na zawsze.
         // Rok i miesiąc muszą więc dostać tyle samo punktów za wiek.
         _zegar.Now = _zegar.Now.AddYears(-1);
-        Zadanie("prastare");
+        TaskId("prastare");
         _zegar.Now = _zegar.Now.AddYears(1).AddDays(-25);
-        Zadanie("sprzed miesiąca");
+        TaskId("sprzed miesiąca");
         _zegar.Now = _zegar.Now.AddDays(25);
 
-        var wynik = await _teraz.PickAsync(60, Energy.High);
+        var result = await _teraz.PickAsync(60, Energy.High);
 
-        wynik.Select(p => p.Score).Distinct().Should().ContainSingle();
+        result.Select(p => p.Score).Distinct().Should().ContainSingle();
     }
 
     [Fact]
@@ -224,7 +224,7 @@ public sealed class NowServiceTests : IDisposable
         // Przycięcie jest sposobem liczenia punktów, a nie faktem o zadaniu.
         // „Czeka 20 dni" przy zadaniu sprzed stu dni byłoby nieprawdą na ekranie.
         _zegar.Now = _zegar.Now.AddDays(-100);
-        Zadanie("dawne");
+        TaskId("dawne");
         _zegar.Now = _zegar.Now.AddDays(100);
 
         (await _teraz.PickAsync(60, Energy.High))[0].Reason.Should().Be("czeka 100 dni");
@@ -235,10 +235,10 @@ public sealed class NowServiceTests : IDisposable
     {
         // Sedno przycięcia: leżenie długo nie może przebić faktu zewnętrznego.
         _zegar.Now = _zegar.Now.AddYears(-1);
-        Zadanie("prastare");
+        TaskId("prastare");
         _zegar.Now = _zegar.Now.AddYears(1);
 
-        var zTerminem = Zadanie("z terminem");
+        var zTerminem = TaskId("z terminem");
         zTerminem.SetDeadline(Dzis.AddDays(5), _hlc.Next());
         _db.SaveChanges();
 
@@ -250,18 +250,18 @@ public sealed class NowServiceTests : IDisposable
     {
         // Pięć kroków tego samego projektu wygląda jak praca, ale zamyka pole widzenia
         // na resztę życia.
-        var projekt = Projekt("Duży projekt");
+        var project = Projekt("Duży projekt");
         for (var i = 0; i < 5; i++)
         {
-            Zadanie($"krok {i}", projekt: projekt.Id);
+            TaskId($"krok {i}", project: project.Id);
         }
 
-        Zadanie("coś zupełnie innego");
+        TaskId("coś zupełnie innego");
 
-        var wynik = await _teraz.PickAsync(60, Energy.High);
+        var result = await _teraz.PickAsync(60, Energy.High);
 
-        wynik.Should().HaveCount(2);
-        wynik.Count(p => p.Task.ProjectId == projekt.Id).Should().Be(1);
+        result.Should().HaveCount(2);
+        result.Count(p => p.Task.ProjectId == project.Id).Should().Be(1);
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public sealed class NowServiceTests : IDisposable
     {
         for (var i = 0; i < 12; i++)
         {
-            Zadanie($"zadanie {i}");
+            TaskId($"zadanie {i}");
         }
 
         (await _teraz.PickAsync(60, Energy.High)).Should().HaveCount(5);
@@ -278,8 +278,8 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Nieoszacowane_sa_liczone_zeby_dalo_sie_o_nie_poprosic()
     {
-        Zadanie("bez oszacowania", minuty: null);
-        Zadanie("oszacowane");
+        TaskId("bez oszacowania", minutes: null);
+        TaskId("oszacowane");
 
         (await _teraz.UnestimatedCountAsync()).Should().Be(1);
     }
@@ -288,9 +288,9 @@ public sealed class NowServiceTests : IDisposable
     [InlineData(8, Energy.High)]
     [InlineData(14, Energy.Medium)]
     [InlineData(22, Energy.Low)]
-    public void Podpowiedz_energii_idzie_z_pory_dnia(int godzina, Energy oczekiwana)
+    public void Podpowiedz_energii_idzie_z_pory_dnia(int hour, Energy oczekiwana)
     {
-        _zegar.Now = new DateTimeOffset(2026, 9, 16, godzina, 0, 0, TimeSpan.FromHours(2));
+        _zegar.Now = new DateTimeOffset(2026, 9, 16, hour, 0, 0, TimeSpan.FromHours(2));
 
         _teraz.SuggestEnergy().Should().Be(oczekiwana);
     }
@@ -302,7 +302,7 @@ public sealed class NowServiceTests : IDisposable
     {
         for (var i = 0; i < 5; i++)
         {
-            (await _wybor.TryFocusAsync(Zadanie($"zadanie {i}").Id)).Accepted.Should().BeTrue();
+            (await _wybor.TryFocusAsync(TaskId($"zadanie {i}").Id)).Accepted.Should().BeTrue();
         }
 
         (await _wybor.TodayAsync()).Should().HaveCount(5);
@@ -313,30 +313,30 @@ public sealed class NowServiceTests : IDisposable
     {
         for (var i = 0; i < 5; i++)
         {
-            await _wybor.TryFocusAsync(Zadanie($"zadanie {i}").Id);
+            await _wybor.TryFocusAsync(TaskId($"zadanie {i}").Id);
         }
 
-        var szoste = Zadanie("szóste");
-        var wynik = await _wybor.TryFocusAsync(szoste.Id);
+        var szoste = TaskId("szóste");
+        var result = await _wybor.TryFocusAsync(szoste.Id);
 
-        wynik.Accepted.Should().BeFalse();
-        wynik.Current.Should().HaveCount(5);
+        result.Accepted.Should().BeFalse();
+        result.Current.Should().HaveCount(5);
         _db.Tasks.Single(t => t.Id == szoste.Id).FocusDate.Should().BeNull();
     }
 
     [Fact]
     public async Task Zdjecie_z_wyboru_robi_miejsce()
     {
-        var pierwsze = Zadanie("pierwsze");
+        var pierwsze = TaskId("pierwsze");
         await _wybor.TryFocusAsync(pierwsze.Id);
         for (var i = 1; i < 5; i++)
         {
-            await _wybor.TryFocusAsync(Zadanie($"zadanie {i}").Id);
+            await _wybor.TryFocusAsync(TaskId($"zadanie {i}").Id);
         }
 
         await _wybor.UnfocusAsync(pierwsze.Id);
 
-        (await _wybor.TryFocusAsync(Zadanie("szóste").Id)).Accepted.Should().BeTrue();
+        (await _wybor.TryFocusAsync(TaskId("szóste").Id)).Accepted.Should().BeTrue();
     }
 
     [Fact]
@@ -344,11 +344,11 @@ public sealed class NowServiceTests : IDisposable
     {
         // Zadanie zdjęte rano, żeby zrobić miejsce innemu, nie jest zadaniem,
         // którego nie zrobiłaś.
-        var zadanie = Zadanie("pierwsze");
-        await _wybor.TryFocusAsync(zadanie.Id);
-        await _wybor.UnfocusAsync(zadanie.Id);
+        var task = TaskId("pierwsze");
+        await _wybor.TryFocusAsync(task.Id);
+        await _wybor.UnfocusAsync(task.Id);
 
-        _db.Tasks.Single(t => t.Id == zadanie.Id).FocusMissCount.Should().Be(0);
+        _db.Tasks.Single(t => t.Id == task.Id).FocusMissCount.Should().Be(0);
     }
 
     /// <summary>
@@ -363,30 +363,30 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Wziecie_z_kiedys_na_dzis_czyni_zadanie_nastepna_akcja()
     {
-        var zadanie = TaskItem.Capture("Nauczyć się gotować", _zegar.Now, _hlc.Next());
-        zadanie.Postpone(_obszar.Id, Dzis.AddDays(90), _hlc.Next());
-        zadanie.SetEstimate(15, Energy.Low, _hlc.Next());
-        _db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture("Nauczyć się gotować", _zegar.Now, _hlc.Next());
+        task.Postpone(_obszar.Id, Dzis.AddDays(90), _hlc.Next());
+        task.SetEstimate(15, Energy.Low, _hlc.Next());
+        _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        (await _wybor.TryFocusAsync(zadanie.Id)).Accepted.Should().BeTrue();
+        (await _wybor.TryFocusAsync(task.Id)).Accepted.Should().BeTrue();
 
-        var poWzieciu = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        var poWzieciu = _db.Tasks.Single(t => t.Id == task.Id);
         poWzieciu.State.Should().Be(TaskState.Next);
         poWzieciu.DeferUntil.Should().BeNull();
         poWzieciu.FocusDate.Should().Be(Dzis);
 
         (await _teraz.PickAsync(30, Energy.Medium))
-            .Select(w => w.Task.Id).Should().Contain(zadanie.Id);
+            .Select(w => w.Task.Id).Should().Contain(task.Id);
     }
 
     [Fact]
     public async Task Ponowny_wybor_tego_samego_zadania_nie_zajmuje_drugiego_slotu()
     {
-        var zadanie = Zadanie("pierwsze");
+        var task = TaskId("pierwsze");
 
-        await _wybor.TryFocusAsync(zadanie.Id);
-        await _wybor.TryFocusAsync(zadanie.Id);
+        await _wybor.TryFocusAsync(task.Id);
+        await _wybor.TryFocusAsync(task.Id);
 
         (await _wybor.TodayAsync()).Should().ContainSingle();
     }
@@ -394,13 +394,13 @@ public sealed class NowServiceTests : IDisposable
     [Fact]
     public async Task Niewykonany_wybor_wygasa_z_licznikiem()
     {
-        var zadanie = Zadanie("niezrobione");
-        await _wybor.TryFocusAsync(zadanie.Id);
+        var task = TaskId("niezrobione");
+        await _wybor.TryFocusAsync(task.Id);
 
         _zegar.Now = _zegar.Now.AddDays(1);
         (await _wybor.ExpireAsync()).Should().Be(1);
 
-        var po = _db.Tasks.Single(t => t.Id == zadanie.Id);
+        var po = _db.Tasks.Single(t => t.Id == task.Id);
         po.FocusDate.Should().BeNull();
         po.FocusMissCount.Should().Be(1);
         po.State.Should().Be(TaskState.Next);
@@ -410,38 +410,38 @@ public sealed class NowServiceTests : IDisposable
     public async Task Wykonane_zadanie_nie_liczy_sie_jako_pominiete()
     {
         // Bez tego N13 liczyłby zrobione zadania jako nierobione.
-        var zadanie = Zadanie("zrobione");
-        await _wybor.TryFocusAsync(zadanie.Id);
+        var task = TaskId("zrobione");
+        await _wybor.TryFocusAsync(task.Id);
 
-        _db.Tasks.Single(t => t.Id == zadanie.Id).Complete(_zegar.Now, _hlc.Next());
+        _db.Tasks.Single(t => t.Id == task.Id).Complete(_zegar.Now, _hlc.Next());
         _db.SaveChanges();
 
         _zegar.Now = _zegar.Now.AddDays(1);
         (await _wybor.ExpireAsync()).Should().Be(0);
-        _db.Tasks.Single(t => t.Id == zadanie.Id).FocusMissCount.Should().Be(0);
+        _db.Tasks.Single(t => t.Id == task.Id).FocusMissCount.Should().Be(0);
     }
 
     [Fact]
     public async Task Wygaszanie_puszczone_dwa_razy_liczy_raz()
     {
-        var zadanie = Zadanie("niezrobione");
-        await _wybor.TryFocusAsync(zadanie.Id);
+        var task = TaskId("niezrobione");
+        await _wybor.TryFocusAsync(task.Id);
         _zegar.Now = _zegar.Now.AddDays(1);
 
         await _wybor.ExpireAsync();
         await _wybor.ExpireAsync();
 
-        _db.Tasks.Single(t => t.Id == zadanie.Id).FocusMissCount.Should().Be(1);
+        _db.Tasks.Single(t => t.Id == task.Id).FocusMissCount.Should().Be(1);
     }
 
     [Fact]
     public async Task Dzisiejszy_wybor_nie_wygasa()
     {
-        var zadanie = Zadanie("na dziś");
-        await _wybor.TryFocusAsync(zadanie.Id);
+        var task = TaskId("na dziś");
+        await _wybor.TryFocusAsync(task.Id);
 
         (await _wybor.ExpireAsync()).Should().Be(0);
-        _db.Tasks.Single(t => t.Id == zadanie.Id).FocusDate.Should().Be(Dzis);
+        _db.Tasks.Single(t => t.Id == task.Id).FocusDate.Should().Be(Dzis);
     }
 
     public void Dispose()

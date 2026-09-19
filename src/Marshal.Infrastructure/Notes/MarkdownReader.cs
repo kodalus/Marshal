@@ -53,10 +53,10 @@ public static class MarkdownReader
                 case QuoteBlock cytat:
                     // Cytat rozkładany na akapity oznaczone jako cytat: cytat w cytacie
                     // istnieje w formacie, ale nie w notatce osobistej.
-                    var przed = output.Count;
+                    var before = output.Count;
                     Flatten(cytat, output, listLevel);
 
-                    for (var i = przed; i < output.Count; i++)
+                    for (var i = before; i < output.Count; i++)
                     {
                         output[i] = output[i] with { Kind = MarkdownBlockKind.Quote };
                     }
@@ -66,14 +66,14 @@ public static class MarkdownReader
                 case ListBlock lista:
                     foreach (var pozycja in lista.OfType<ListItemBlock>())
                     {
-                        var poczatek = output.Count;
+                        var start = output.Count;
                         Flatten(pozycja, output, listLevel + 1);
 
                         // Pierwszy akapit pozycji staje się punktem listy; dalsze zostają
                         // akapitami z tym samym wcięciem, bo tym właśnie są.
-                        if (output.Count > poczatek)
+                        if (output.Count > start)
                         {
-                            output[poczatek] = output[poczatek] with
+                            output[start] = output[start] with
                             {
                                 Kind = lista.IsOrdered
                                     ? MarkdownBlockKind.Numbered
@@ -86,12 +86,12 @@ public static class MarkdownReader
                     break;
 
                 case CodeBlock kod:
-                    var tresc = Lines(kod);
+                    var content = Lines(kod);
                     output.Add(new MarkdownBlock(
                         MarkdownBlockKind.Code,
                         listLevel,
-                        [new MarkdownSpan(tresc, false, false, true, null)],
-                        tresc));
+                        [new MarkdownSpan(content, false, false, true, null)],
+                        content));
                     break;
 
                 case ContainerBlock zagniezdzony:
@@ -168,13 +168,13 @@ public static class MarkdownReader
         }
 
         if (output.Count > 0
-            && output[^1] is var ostatni
-            && ostatni.Bold == bold
-            && ostatni.Italic == italic
-            && ostatni.Code == code
-            && ostatni.Link == link)
+            && output[^1] is var last
+            && last.Bold == bold
+            && last.Italic == italic
+            && last.Code == code
+            && last.Link == link)
         {
-            output[^1] = ostatni with { Text = ostatni.Text + text };
+            output[^1] = last with { Text = last.Text + text };
             return;
         }
 

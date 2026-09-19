@@ -9,18 +9,18 @@ public class AreaTests
 {
     private static readonly DateTimeOffset Kiedys = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
 
-    private static Area Obszar(string nazwa = "Zdrowie") =>
-        new(Guid.CreateVersion7(), Kiedys, new Hlc(1000, 0, "a"), nazwa, sortOrder: 1.0);
+    private static Area Obszar(string name = "Zdrowie") =>
+        new(Guid.CreateVersion7(), Kiedys, new Hlc(1000, 0, "a"), name, sortOrder: 1.0);
 
     [Fact]
     public void Nowy_obszar_jest_aktywny_i_ma_progi_domyslne()
     {
-        var obszar = Obszar();
+        var area = Obszar();
 
-        obszar.IsActive.Should().BeTrue();
-        obszar.Deleted.Should().BeFalse();
-        obszar.QuietDays.Should().Be(Area.DefaultQuietDays);
-        obszar.DefaultNudgeDays.Should().Be(Area.DefaultNudgeDaysValue);
+        area.IsActive.Should().BeTrue();
+        area.Deleted.Should().BeFalse();
+        area.QuietDays.Should().Be(Area.DefaultQuietDays);
+        area.DefaultNudgeDays.Should().Be(Area.DefaultNudgeDaysValue);
     }
 
     [Fact]
@@ -32,9 +32,9 @@ public class AreaTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public void Pusta_nazwa_jest_odrzucana(string nazwa)
+    public void Pusta_nazwa_jest_odrzucana(string name)
     {
-        var utworz = () => Obszar(nazwa);
+        var utworz = () => Obszar(name);
 
         utworz.Should().Throw<ArgumentException>();
     }
@@ -42,9 +42,9 @@ public class AreaTests
     [Fact]
     public void Progi_musza_byc_dodatnie()
     {
-        var obszar = Obszar();
+        var area = Obszar();
 
-        var zeroweCiche = () => obszar.SetThresholds(0, 7, new Hlc(2000, 0, "a"));
+        var zeroweCiche = () => area.SetThresholds(0, 7, new Hlc(2000, 0, "a"));
 
         zeroweCiche.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -52,20 +52,20 @@ public class AreaTests
     [Fact]
     public void Zmiana_pola_podnosi_znacznik_zmiany()
     {
-        var obszar = Obszar();
-        var przed = obszar.UpdatedAt;
+        var area = Obszar();
+        var before = area.UpdatedAt;
 
-        obszar.Rename("Zdrowie moje", new Hlc(2000, 0, "a"));
+        area.Rename("Zdrowie moje", new Hlc(2000, 0, "a"));
 
-        obszar.UpdatedAt.Should().BeGreaterThan(przed);
+        area.UpdatedAt.Should().BeGreaterThan(before);
     }
 
     [Fact]
     public void Znacznik_nie_moze_sie_cofnac()
     {
-        var obszar = Obszar();
+        var area = Obszar();
 
-        var cofnij = () => obszar.Rename("Cokolwiek", new Hlc(500, 0, "a"));
+        var cofnij = () => area.Rename("Cokolwiek", new Hlc(500, 0, "a"));
 
         cofnij.Should().Throw<ArgumentException>();
     }
@@ -73,12 +73,12 @@ public class AreaTests
     [Fact]
     public void Usuniecie_jest_logiczne_i_odwracalne()
     {
-        var obszar = Obszar();
+        var area = Obszar();
 
-        obszar.MarkDeleted(new Hlc(2000, 0, "a"));
-        obszar.Deleted.Should().BeTrue();
+        area.MarkDeleted(new Hlc(2000, 0, "a"));
+        area.Deleted.Should().BeTrue();
 
-        obszar.Restore(new Hlc(3000, 0, "a"));
-        obszar.Deleted.Should().BeFalse();
+        area.Restore(new Hlc(3000, 0, "a"));
+        area.Deleted.Should().BeFalse();
     }
 }

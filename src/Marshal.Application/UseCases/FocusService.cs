@@ -49,7 +49,7 @@ public sealed class FocusService(
     /// Ślad po nieudanej wysyłce zostaje w dzienniku — zapisuje go samo odbicie.
     /// </para>
     /// </remarks>
-    private async Task OdbijAsync(TaskItem zadanie, CancellationToken ct)
+    private async Task MirrorAsync(TaskItem task, CancellationToken ct)
     {
         if (mirror is null)
         {
@@ -58,7 +58,7 @@ public sealed class FocusService(
 
         try
         {
-            await mirror.PushAsync(zadanie, ct);
+            await mirror.PushAsync(task, ct);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -78,46 +78,46 @@ public sealed class FocusService(
     /// </summary>
     public async Task<FocusResult> TryFocusAsync(Guid taskId, CancellationToken ct = default)
     {
-        var dzis = Today();
-        var wybrane = await tasks.ByFocusDateAsync(dzis, ct);
+        var today = Today();
+        var selected = await tasks.ByFocusDateAsync(today, ct);
 
-        if (wybrane.Any(t => t.Id == taskId))
+        if (selected.Any(t => t.Id == taskId))
         {
-            return new FocusResult(true, wybrane);
+            return new FocusResult(true, selected);
         }
 
-        if (wybrane.Count >= Slots)
+        if (selected.Count >= Slots)
         {
-            return new FocusResult(false, wybrane);
+            return new FocusResult(false, selected);
         }
 
-        if (await tasks.FindAsync(taskId, ct) is not { } zadanie)
+        if (await tasks.FindAsync(taskId, ct) is not { } task)
         {
-            return new FocusResult(false, wybrane);
+            return new FocusResult(false, selected);
         }
 
         // Wzięcie z „kiedyś-może” aktywuje zadanie. Sama data wyboru zostawiała je
         // w stanie, którego „Teraz” nie pokazuje — wybrane na dziś i niewidoczne tam,
         // gdzie pyta się „co teraz”.
-        zadanie.Activate(hlc.Next());
-        zadanie.Focus(dzis, hlc.Next());
+        task.Activate(hlc.Next());
+        task.Focus(today, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
-        await OdbijAsync(zadanie, ct);
+        await MirrorAsync(task, ct);
 
-        return new FocusResult(true, await tasks.ByFocusDateAsync(dzis, ct));
+        return new FocusResult(true, await tasks.ByFocusDateAsync(today, ct));
     }
 
     /// <summary>Zdjęcie z wyboru. Bez żadnej innej zmiany i bez podbijania licznika.</summary>
     public async Task UnfocusAsync(Guid taskId, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(taskId, ct) is not { } zadanie)
+        if (await tasks.FindAsync(taskId, ct) is not { } task)
         {
             return;
         }
 
-        zadanie.Unfocus(hlc.Next());
+        task.Unfocus(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
-        await OdbijAsync(zadanie, ct);
+        await MirrorAsync(task, ct);
     }
 
     /// <summary>
@@ -129,24 +129,24 @@ public sealed class FocusService(
     /// </remarks>
     public async Task<int> ExpireAsync(CancellationToken ct = default)
     {
-        var wygasle = await tasks.ExpiredFocusAsync(Today(), ct);
+        var expired = await tasks.ExpiredFocusAsync(Today(), ct);
 
-        foreach (var zadanie in wygasle)
+        foreach (var task in expired)
         {
-            zadanie.MissFocus(hlc.Next());
+            task.MissFocus(hlc.Next());
         }
 
-        if (wygasle.Count > 0)
+        if (expired.Count > 0)
         {
             await unitOfWork.SaveChangesAsync(ct);
 
-            foreach (var zadanie in wygasle)
+            foreach (var task in expired)
             {
-                await OdbijAsync(zadanie, ct);
+                await MirrorAsync(task, ct);
             }
         }
 
-        return wygasle.Count;
+        return expired.Count;
     }
 
     private DateOnly Today() => clock.Today;

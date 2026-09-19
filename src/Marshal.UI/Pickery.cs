@@ -27,8 +27,8 @@ public static class Pickery
     public static Func<DateOnly?, Task<DateOnly?>>? Data { get; set; }
 
     /// <summary>Oddaje wybraną godzinę albo tę podaną, gdy okno zamknięto bez wyboru.</summary>
-    public static Func<TimeOnly?, Task<TimeOnly?>>? Godzina { get; set; }
+    public static Func<TimeOnly?, Task<TimeOnly?>>? Hour { get; set; }
 
     /// <summary>Czy platforma ma własne okienka. Rozstrzyga, który wybierak jest widoczny.</summary>
-    public static bool Systemowe => Data is not null && Godzina is not null;
+    public static bool Systemowe => Data is not null && Hour is not null;
 }

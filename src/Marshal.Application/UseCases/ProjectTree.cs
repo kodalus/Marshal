@@ -45,11 +45,11 @@ public static class ProjectTree
             .GroupBy(p => p.ParentProjectId)
             .ToDictionary(g => g.Key ?? Guid.Empty, g => g.OrderBy(p => p.SortOrder).ThenBy(p => p.Outcome).ToList());
 
-        var znane = projects.Select(p => p.Id).ToHashSet();
+        var known = projects.Select(p => p.Id).ToHashSet();
 
         // Jeden zbiór na całe drzewo, nie na gałąź: po scaleniu dwóch urządzeń projekt
         // może trafić pod rodzica z innego obszaru i bez tego pojawiłby się dwa razy.
-        var odwiedzone = new HashSet<Guid>();
+        var visited = new HashSet<Guid>();
 
         foreach (var area in areas.OrderBy(a => a.SortOrder))
         {
@@ -63,33 +63,33 @@ public static class ProjectTree
             // zapisu, nie zależności, więc podprojekt potrafi wyprzedzić swój cel.
             // Ukrycie go do czasu przyjścia rodzica oznaczałoby, że zadanie istnieje,
             // ale nie widać go nigdzie.
-            var korzenie = projects
+            var roots = projects
                 .Where(p => p.AreaId == area.Id
-                         && (p.ParentProjectId is null || !znane.Contains(p.ParentProjectId.Value)))
+                         && (p.ParentProjectId is null || !known.Contains(p.ParentProjectId.Value)))
                 .OrderBy(p => p.SortOrder)
                 .ThenBy(p => p.Outcome);
 
-            foreach (var projekt in korzenie)
+            foreach (var project in roots)
             {
-                Dopisz(projekt, depth: 1, rows, byParent, odwiedzone, blocked, area.Color);
+                Append(project, depth: 1, rows, byParent, visited, blocked, area.Color);
             }
         }
 
         return rows;
     }
 
-    private static void Dopisz(
-        Project projekt,
+    private static void Append(
+        Project project,
         int depth,
         List<ProjectRow> rows,
         Dictionary<Guid, List<Project>> byParent,
-        HashSet<Guid> odwiedzone,
+        HashSet<Guid> visited,
         IReadOnlySet<Guid>? blocked,
-        string? barwaObszaru)
+        string? areaColor)
     {
         // Zabezpieczenie przed cyklem: przy scalaniu dwóch urządzeń da się otrzymać
         // projekt będący własnym przodkiem, mimo że żadne z osobna na to nie pozwala.
-        if (!odwiedzone.Add(projekt.Id))
+        if (!visited.Add(project.Id))
         {
             return;
         }
@@ -97,24 +97,24 @@ public static class ProjectTree
         // Barwa własna albo odziedziczona — ta sama reguła, którą stosuje kalendarz.
         // Wiersz pokazuje więc kolor, jaki zadania naprawdę dostaną, a nie puste pole
         // przy projekcie, który kolor ma, tyle że po rodzicu.
-        var barwa = string.IsNullOrWhiteSpace(projekt.Color) ? barwaObszaru : projekt.Color;
+        var color = string.IsNullOrWhiteSpace(project.Color) ? areaColor : project.Color;
 
         rows.Add(new ProjectRow(
-            projekt.Id,
-            projekt.Outcome,
+            project.Id,
+            project.Outcome,
             depth,
             IsArea: false,
-            IsBlocked: blocked?.Contains(projekt.Id) ?? false,
-            Color: barwa)
+            IsBlocked: blocked?.Contains(project.Id) ?? false,
+            Color: color)
         {
-            AreaId = projekt.AreaId,
+            AreaId = project.AreaId,
         });
 
-        if (byParent.TryGetValue(projekt.Id, out var dzieci))
+        if (byParent.TryGetValue(project.Id, out var children))
         {
-            foreach (var dziecko in dzieci)
+            foreach (var child in children)
             {
-                Dopisz(dziecko, depth + 1, rows, byParent, odwiedzone, blocked, barwa);
+                Append(child, depth + 1, rows, byParent, visited, blocked, color);
             }
         }
     }

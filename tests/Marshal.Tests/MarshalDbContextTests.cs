@@ -55,16 +55,16 @@ public sealed class MarshalDbContextTests : IDisposable
         }
 
         using var odczyt = Kontekst();
-        var obszar = odczyt.Areas.Single();
+        var area = odczyt.Areas.Single();
 
-        obszar.Id.Should().Be(id);
-        obszar.Name.Should().Be("Sprawy urzędowe");
-        obszar.Color.Should().Be("#8899AA");
-        obszar.SortOrder.Should().Be(9.0);
-        obszar.QuietDays.Should().Be(60);
-        obszar.DefaultNudgeDays.Should().Be(21);
-        obszar.UpdatedAt.Should().Be(znacznik);
-        obszar.CreatedAt.Should().Be(utworzony);
+        area.Id.Should().Be(id);
+        area.Name.Should().Be("Sprawy urzędowe");
+        area.Color.Should().Be("#8899AA");
+        area.SortOrder.Should().Be(9.0);
+        area.QuietDays.Should().Be(60);
+        area.DefaultNudgeDays.Should().Be(21);
+        area.UpdatedAt.Should().Be(znacznik);
+        area.CreatedAt.Should().Be(utworzony);
     }
 
     [Fact]
@@ -102,11 +102,11 @@ public sealed class MarshalDbContextTests : IDisposable
         var id = Guid.CreateVersion7();
 
         using var kontekst = Kontekst();
-        var obszar = new Area(id, DateTimeOffset.UnixEpoch, new Hlc(1, 0, "a"), "Relacje", 10.0);
-        kontekst.Areas.Add(obszar);
+        var area = new Area(id, DateTimeOffset.UnixEpoch, new Hlc(1, 0, "a"), "Relacje", 10.0);
+        kontekst.Areas.Add(area);
         kontekst.SaveChanges();
 
-        obszar.MarkDeleted(new Hlc(2, 0, "a"));
+        area.MarkDeleted(new Hlc(2, 0, "a"));
         kontekst.SaveChanges();
 
         kontekst.Areas.Single().Deleted.Should().BeTrue();

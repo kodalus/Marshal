@@ -39,64 +39,64 @@ public static class RecurrenceText
             return "nie powtarza się";
         }
 
-        var zdanie = new StringBuilder(Rhythm(rule));
+        var sentence = new StringBuilder(Rhythm(rule));
 
         if (rule.Anchor == RecurrenceAnchor.FromCompletion && rule.Kind is not
             (RecurrenceKind.Daily or RecurrenceKind.EveryNDays))
         {
-            zdanie.Append(", licząc od wykonania");
+            sentence.Append(", licząc od wykonania");
         }
         else if (rule.Anchor == RecurrenceAnchor.FromScheduled && rule.Kind is
             (RecurrenceKind.Daily or RecurrenceKind.EveryNDays))
         {
             // Dopisywane tylko wtedy, gdy zaczepienie odbiega od domyślnego dla rodzaju
             // (spec 5.7). Powtarzanie oczywistości w każdym zdaniu zamienia je w szum.
-            zdanie.Append(", licząc od planu");
+            sentence.Append(", licząc od planu");
         }
 
-        if (rule.Until is { } koniec)
+        if (rule.Until is { } end)
         {
-            zdanie.Append(", do ").Append(koniec.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            sentence.Append(", do ").Append(end.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         }
-        else if (rule.Count is { } ile)
+        else if (rule.Count is { } count)
         {
-            zdanie.Append(", jeszcze ").Append(ile).Append(' ').Append(Times(ile));
+            sentence.Append(", jeszcze ").Append(count).Append(' ').Append(Times(count));
         }
 
-        return zdanie.ToString();
+        return sentence.ToString();
     }
 
     /// <summary>Stan zadania po polsku: zaległość, przesunięcia, termin.</summary>
     public static IReadOnlyList<string> Badges(TaskItem task, DateOnly today)
     {
         ArgumentNullException.ThrowIfNull(task);
-        var etykiety = new List<string>();
+        var labels = new List<string>();
 
         if (task.CarriedSince is { } od)
         {
-            etykiety.Add($"zaległe od {od:yyyy-MM-dd}");
+            labels.Add($"zaległe od {od:yyyy-MM-dd}");
         }
 
         // Liczba przesunięć pokazywana dopiero od drugiego: pierwsze zdarza się każdemu
         // i nie niesie informacji. Bez czerwieni i bez wykrzyknika — to licznik, nie kara.
         if (task.RollCount > 1)
         {
-            etykiety.Add($"przesunięte {task.RollCount} {Times(task.RollCount)}");
+            labels.Add($"przesunięte {task.RollCount} {Times(task.RollCount)}");
         }
 
-        if (task.Deadline is { } termin)
+        if (task.Deadline is { } deadline)
         {
-            etykiety.Add(termin < today
-                ? $"po terminie ({termin:yyyy-MM-dd})"
-                : $"termin {termin:yyyy-MM-dd}");
+            labels.Add(deadline < today
+                ? $"po terminie ({deadline:yyyy-MM-dd})"
+                : $"termin {deadline:yyyy-MM-dd}");
         }
 
-        if (task.Recurrence is { } regula)
+        if (task.Recurrence is { } rule)
         {
-            etykiety.Add(Describe(regula));
+            labels.Add(Describe(rule));
         }
 
-        return etykiety;
+        return labels;
     }
 
     private static string Rhythm(RecurrenceRule rule) => rule.Kind switch
@@ -110,20 +110,20 @@ public static class RecurrenceText
 
     private static string Weekly(RecurrenceRule rule)
     {
-        var dni = Days(rule.DaysOfWeek);
+        var days = Days(rule.DaysOfWeek);
 
         return rule.Interval == 1
-            ? $"co tydzień, w {dni}"
-            : $"co {rule.Interval} {Weeks(rule.Interval)}, w {dni}";
+            ? $"co tydzień, w {days}"
+            : $"co {rule.Interval} {Weeks(rule.Interval)}, w {days}";
     }
 
     private static string Monthly(RecurrenceRule rule)
     {
-        var dzien = Day(rule.DayOfMonth);
+        var day = Day(rule.DayOfMonth);
 
         return rule.Interval == 1
-            ? $"co miesiąc, {dzien}"
-            : $"co {rule.Interval} {Months(rule.Interval)}, {dzien}";
+            ? $"co miesiąc, {day}"
+            : $"co {rule.Interval} {Months(rule.Interval)}, {day}";
     }
 
     private static string Yearly(RecurrenceRule rule) =>
@@ -138,20 +138,20 @@ public static class RecurrenceText
 
     private static string Days(Weekdays set)
     {
-        var nazwy = DayFlags
-            .Select((flaga, i) => (flaga, nazwa: DayNames[i]))
-            .Where(x => (set & x.flaga) != 0)
-            .Select(x => x.nazwa)
+        var names = DayFlags
+            .Select((flag, i) => (flag, name: DayNames[i]))
+            .Where(x => (set & x.flag) != 0)
+            .Select(x => x.name)
             .ToList();
 
-        if (nazwy.Count == 0)
+        if (names.Count == 0)
         {
             return "wybrane dni";
         }
 
-        return nazwy.Count == 1
-            ? nazwy[0]
-            : string.Join(", ", nazwy.Take(nazwy.Count - 1)) + " i " + nazwy[^1];
+        return names.Count == 1
+            ? names[0]
+            : string.Join(", ", names.Take(names.Count - 1)) + " i " + names[^1];
     }
 
     /// <summary>
@@ -163,8 +163,8 @@ public static class RecurrenceText
     /// </remarks>
     private static bool IsFew(int n)
     {
-        var dziesiatki = n % 100;
-        return n % 10 is >= 2 and <= 4 && dziesiatki is < 12 or > 14;
+        var tens = n % 100;
+        return n % 10 is >= 2 and <= 4 && tens is < 12 or > 14;
     }
 
     private static string Weeks(int n) => IsFew(n) ? "tygodnie" : "tygodni";

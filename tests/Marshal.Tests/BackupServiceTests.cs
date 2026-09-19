@@ -79,31 +79,31 @@ public sealed class BackupServiceTests : IDisposable
         return strumien.ToArray();
     }
 
-    private TaskItem Zadanie(Baza baza, string tytul, Guid obszar)
+    private TaskItem TaskId(Baza baza, string title, Guid area)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, baza.Hlc.Next());
-        zadanie.MakeNext(obszar, baza.Hlc.Next());
-        baza.Db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture(title, _zegar.Now, baza.Hlc.Next());
+        task.MakeNext(area, baza.Hlc.Next());
+        baza.Db.Tasks.Add(task);
         baza.Db.SaveChanges();
 
-        return zadanie;
+        return task;
     }
 
-    private Guid Obszar(Baza baza, string nazwa)
+    private Guid Obszar(Baza baza, string name)
     {
-        var obszar = new Area(Guid.CreateVersion7(), _zegar.Now, baza.Hlc.Next(), nazwa, sortOrder: 0);
-        baza.Db.Areas.Add(obszar);
+        var area = new Area(Guid.CreateVersion7(), _zegar.Now, baza.Hlc.Next(), name, sortOrder: 0);
+        baza.Db.Areas.Add(area);
         baza.Db.SaveChanges();
 
-        return obszar.Id;
+        return area.Id;
     }
 
     [Fact]
     public async Task Kopia_odtwarza_zadania_na_pustej_bazie()
     {
-        var obszar = Obszar(_biurko, "Dom");
-        Zadanie(_biurko, "kupić mleko", obszar);
-        Zadanie(_biurko, "zadzwonić do przychodni", obszar);
+        var area = Obszar(_biurko, "Dom");
+        TaskId(_biurko, "kupić mleko", area);
+        TaskId(_biurko, "zadzwonić do przychodni", area);
 
         var plik = await EksportAsync(_biurko.Kopia);
 
@@ -121,7 +121,7 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Kopia, której nie da się obejrzeć notatnikiem, jest obietnicą,
         // a nie zabezpieczeniem.
-        Zadanie(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
 
         var tekst = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia));
 
@@ -138,32 +138,32 @@ public sealed class BackupServiceTests : IDisposable
         // reguły — że po modelu nie przeszło **za dużo**. Kursory, pokazane
         // przypomnienia i pobrane wydarzenia należą do urządzenia, nie do danych,
         // a dziennik zmian w kopii oznaczałby wysłanie wszystkiego na nowo.
-        Zadanie(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
 
         var tekst = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia));
 
-        foreach (var lokalna in new[]
+        foreach (var local in new[]
                  {
                      "Changes", "FieldStamps", "SyncCursors", "LocalSettings",
                      "ReminderShown", "CalendarEvents", "CalendarCursors",
                  })
         {
-            tekst.Should().NotContain($"\"{lokalna}\"", $"tabela {lokalna} jest lokalna");
+            tekst.Should().NotContain($"\"{local}\"", $"tabela {local} jest lokalna");
         }
     }
 
     [Fact]
     public async Task Nowsza_zmiana_lokalna_wygrywa_ze_starszym_wpisem_z_pliku()
     {
-        var obszar = Obszar(_biurko, "Dom");
-        var zadanie = Zadanie(_biurko, "stary tytuł", obszar);
+        var area = Obszar(_biurko, "Dom");
+        var task = TaskId(_biurko, "stary tytuł", area);
 
         var plik = await EksportAsync(_biurko.Kopia);
 
         // Zmiana po zrobieniu kopii. Wgranie kopii nie może jej cofnąć — inaczej
         // odtworzenie byłoby cichą utratą wszystkiego, co powstało po eksporcie.
         _zegar.Now = _zegar.Now.AddHours(1);
-        zadanie.Rename("nowy tytuł", _biurko.Hlc.Next());
+        task.Rename("nowy tytuł", _biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
         await _biurko.Kopia.ImportAsync(Plik(plik), ImportMode.Merge);
@@ -174,19 +174,19 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Scalanie_idzie_pole_po_polu_a_nie_calym_rekordem()
     {
-        var obszar = Obszar(_biurko, "Dom");
-        var zadanie = Zadanie(_biurko, "kupić mleko", obszar);
+        var area = Obszar(_biurko, "Dom");
+        var task = TaskId(_biurko, "kupić mleko", area);
 
         // Waga ustawiona przed kopią, tytuł zmieniony po niej. Gdyby cały rekord
         // jechał pod jednym znacznikiem, wgranie kopii albo cofnęłoby tytuł,
         // albo odrzuciło wagę.
-        zadanie.SetPriority(Priority.High, _biurko.Hlc.Next());
+        task.SetPriority(Priority.High, _biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
         var plik = await EksportAsync(_biurko.Kopia);
 
         _zegar.Now = _zegar.Now.AddHours(1);
-        zadanie.Rename("kupić mleko i chleb", _biurko.Hlc.Next());
+        task.Rename("kupić mleko i chleb", _biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
         await _biurko.Kopia.ImportAsync(Plik(plik), ImportMode.Merge);
@@ -199,13 +199,13 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Podmiana_calosci_czysci_to_co_bylo()
     {
-        var obszar = Obszar(_biurko, "Dom");
-        Zadanie(_biurko, "było przed kopią", obszar);
+        var area = Obszar(_biurko, "Dom");
+        TaskId(_biurko, "było przed kopią", area);
 
         var plik = await EksportAsync(_biurko.Kopia);
 
         _zegar.Now = _zegar.Now.AddHours(1);
-        Zadanie(_biurko, "powstało po kopii", obszar);
+        TaskId(_biurko, "powstało po kopii", area);
 
         await _biurko.Kopia.ImportAsync(Plik(plik), ImportMode.Replace);
 
@@ -219,7 +219,7 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Inaczej każdy odtworzony rekord poleciałby na Dysk jako świeża zmiana
         // i wskrzesił na drugim urządzeniu rzeczy skasowane po zrobieniu kopii.
-        Zadanie(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
         var plik = await EksportAsync(_biurko.Kopia);
 
         using var telefon = new Baza("telefon", _zegar).Otworz();
@@ -234,7 +234,7 @@ public sealed class BackupServiceTests : IDisposable
         // Bez tego kolejna zmiana na tym urządzeniu byłaby wcześniejsza niż to,
         // co przed chwilą przyszło z pliku, i przegrałaby przy scalaniu (spec 9.6).
         _zegar.Now = _zegar.Now.AddDays(3);
-        Zadanie(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
         var plik = await EksportAsync(_biurko.Kopia);
 
         var wczesniej = new Zegar { Now = _zegar.Now.AddDays(-3) };
@@ -248,11 +248,11 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Nagrobek_z_kopii_kasuje_rekord_wskrzeszony_gdzie_indziej()
     {
-        var obszar = Obszar(_biurko, "Dom");
-        var zadanie = Zadanie(_biurko, "do skasowania", obszar);
+        var area = Obszar(_biurko, "Dom");
+        var task = TaskId(_biurko, "do skasowania", area);
 
         _zegar.Now = _zegar.Now.AddHours(1);
-        zadanie.MarkDeleted(_biurko.Hlc.Next());
+        task.MarkDeleted(_biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
         var plik = await EksportAsync(_biurko.Kopia);
@@ -280,8 +280,8 @@ public sealed class BackupServiceTests : IDisposable
         // Dziennik pomija puste pola przy zakładaniu rekordu, więc nie mają znacznika.
         // Gdyby kopia wypisywała je mimo to, byłyby jawnym „wyczyść to" ze znacznikiem
         // całej encji — i skasowałyby wartość nadaną w międzyczasie gdzie indziej.
-        var obszar = Obszar(_biurko, "Dom");
-        var zadanie = Zadanie(_biurko, "kupić mleko", obszar);
+        var area = Obszar(_biurko, "Dom");
+        var task = TaskId(_biurko, "kupić mleko", area);
 
         var plik = await EksportAsync(_biurko.Kopia);
 
@@ -290,22 +290,22 @@ public sealed class BackupServiceTests : IDisposable
         await telefon.Kopia.ImportAsync(Plik(plik), ImportMode.Merge);
 
         _zegar.Now = _zegar.Now.AddHours(1);
-        var uNich = telefon.Db.Tasks.Single(z => z.Id == zadanie.Id);
+        var uNich = telefon.Db.Tasks.Single(z => z.Id == task.Id);
         uNich.SetDeadline(new DateOnly(2026, 10, 1), telefon.Hlc.Next());
         await telefon.Db.SaveChangesAsync();
 
         // Ta sama, stara kopia wgrana jeszcze raz nie ma prawa go zdjąć.
         await telefon.Kopia.ImportAsync(Plik(plik), ImportMode.Merge);
 
-        telefon.Db.Tasks.Single(z => z.Id == zadanie.Id)
+        telefon.Db.Tasks.Single(z => z.Id == task.Id)
             .Deadline.Should().Be(new DateOnly(2026, 10, 1));
     }
 
     [Fact]
     public async Task Uszkodzona_wartosc_pomija_pole_a_nie_wywraca_wgrywania()
     {
-        var obszar = Obszar(_biurko, "Dom");
-        Zadanie(_biurko, "kupić mleko", obszar);
+        var area = Obszar(_biurko, "Dom");
+        TaskId(_biurko, "kupić mleko", area);
 
         var tekst = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia));
 
@@ -328,7 +328,7 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Podmiana czyści tabele przed wgraniem. Bez transakcji błąd w połowie
         // zostawiłby bazę pustą i nieodtworzoną.
-        Zadanie(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
 
         var plik = await EksportAsync(_biurko.Kopia);
 
@@ -348,7 +348,7 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Podmiana_z_pliku_bez_wpisow_jest_odrzucana()
     {
-        Zadanie(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
 
         var pusty = Encoding.UTF8.GetBytes(
             """{"wersja":1,"utworzono":"2026-09-17T09:00:00+02:00","urzadzenie":"skads","wiersze":[]}""");
@@ -364,7 +364,7 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Pominięcie nieznanej tabeli jest przy scalaniu słuszne, ale przy podmianie
         // znaczyłoby bazę wyczyszczoną i nieodtworzoną — po cichu.
-        Zadanie(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
 
         var tekst = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia))
             .Replace("\"e\": \"", "\"e\": \"Obce");

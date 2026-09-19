@@ -55,7 +55,7 @@ public sealed class TodayWidgetService : RemoteViewsService
     private sealed class Fabryka(Context kontekst, int widgetId)
         : Java.Lang.Object, IRemoteViewsFactory
     {
-        private IReadOnlyList<PozycjaPlanu> _wiersze = [];
+        private IReadOnlyList<PlanRow> _wiersze = [];
 
         public int Count => _wiersze.Count;
 
@@ -181,7 +181,7 @@ public sealed class TodayWidgetService : RemoteViewsService
 
         private static string Klucz(int widgetId) => $"wiersze-{widgetId}";
 
-        private static IReadOnlyList<PozycjaPlanu> Zapamietane(Context kontekst, int widgetId)
+        private static IReadOnlyList<PlanRow> Zapamietane(Context kontekst, int widgetId)
         {
             try
             {
@@ -198,8 +198,8 @@ public sealed class TodayWidgetService : RemoteViewsService
                     .Split(Wiersz, StringSplitOptions.RemoveEmptyEntries)
                     .Select(w => w.Split(Miedzy))
                     .Where(p => p.Length == 4)
-                    .Select(p => new PozycjaPlanu(
-                        Guid.TryParse(p[0], out var zadanie) ? zadanie : null,
+                    .Select(p => new PlanRow(
+                        Guid.TryParse(p[0], out var task) ? task : null,
                         p[1],
                         p[2],
                         p[3].Length == 0 ? null : p[3]))
@@ -216,7 +216,7 @@ public sealed class TodayWidgetService : RemoteViewsService
         }
 
         private static void Zapamietaj(
-            Context kontekst, int widgetId, IReadOnlyList<PozycjaPlanu> wiersze)
+            Context kontekst, int widgetId, IReadOnlyList<PlanRow> wiersze)
         {
             try
             {
@@ -224,10 +224,10 @@ public sealed class TodayWidgetService : RemoteViewsService
                     Wiersz,
                     wiersze.Select(w => string.Join(
                         Miedzy,
-                        w.Zadanie?.ToString() ?? string.Empty,
-                        Czysto(w.Tytul),
-                        Czysto(w.Podpis),
-                        Czysto(w.Barwa ?? string.Empty))));
+                        w.TaskId?.ToString() ?? string.Empty,
+                        Czysto(w.Title),
+                        Czysto(w.Caption),
+                        Czysto(w.Color ?? string.Empty))));
 
                 kontekst.GetSharedPreferences(TodayWidget.Pamiec, FileCreationMode.Private)
                     ?.Edit()?.PutString(Klucz(widgetId), zapis)?.Apply();
@@ -274,9 +274,9 @@ public sealed class TodayWidgetService : RemoteViewsService
             var pozycja = _wiersze[position];
             var widok = new RemoteViews(kontekst.PackageName, Resource.Layout.widget_wiersz);
 
-            widok.SetTextViewText(Resource.Id.tytul, pozycja.Tytul);
-            widok.SetTextViewText(Resource.Id.podpis, pozycja.Podpis);
-            widok.SetInt(Resource.Id.pasek, "setBackgroundColor", Barwa(pozycja.Barwa));
+            widok.SetTextViewText(Resource.Id.title, pozycja.Title);
+            widok.SetTextViewText(Resource.Id.podpis, pozycja.Caption);
+            widok.SetInt(Resource.Id.pasek, "setBackgroundColor", Color(pozycja.Color));
 
             // Uzupełnienie wzorca, nie własny zamiar: wierszowi listy nie da się dać
             // osobnego zamiaru oczekującego — system trzyma jeden wzorzec na całą listę
@@ -287,12 +287,12 @@ public sealed class TodayWidgetService : RemoteViewsService
             // że czeka. Kwadracik zostaje wtedy schowany — niewidoczny, a nie wyłączony,
             // bo wyłączony wyglądałby na zepsuty. Miejsce po nim zostaje, żeby wiersze
             // miały wspólną krawędź tekstu.
-            if (pozycja.Zadanie is { } zadanie)
+            if (pozycja.TaskId is { } task)
             {
                 widok.SetViewVisibility(Resource.Id.zrobione, ViewStates.Visible);
 
                 var odhaczenie = new Intent();
-                odhaczenie.PutExtra(TodayWidget.TaskIdExtra, zadanie.ToString());
+                odhaczenie.PutExtra(TodayWidget.TaskIdExtra, task.ToString());
 
                 widok.SetOnClickFillInIntent(Resource.Id.zrobione, odhaczenie);
             }
@@ -312,12 +312,12 @@ public sealed class TodayWidgetService : RemoteViewsService
             var otwarcie = new Intent();
             otwarcie.PutExtra(TodayWidget.CoOtworzExtra, TodayWidget.CoOtworz);
 
-            if (pozycja.Zadanie is { } otwierane)
+            if (pozycja.TaskId is { } otwierane)
             {
                 otwarcie.PutExtra(TodayWidget.TaskIdExtra, otwierane.ToString());
             }
 
-            widok.SetOnClickFillInIntent(Resource.Id.tresc, otwarcie);
+            widok.SetOnClickFillInIntent(Resource.Id.content, otwarcie);
 
             return widok;
         }
@@ -335,16 +335,16 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// zawsze dzisiaj. Wyglądało to na nieodświeżoną listę, a było listą, która
         /// nigdy nie wiedziała, o który dzień pytać.
         /// </remarks>
-        private static async Task<IReadOnlyList<PozycjaPlanu>> WczytajAsync(
+        private static async Task<IReadOnlyList<PlanRow>> WczytajAsync(
             Context kontekst, int widgetId)
         {
             await AppServices.ReadyAsync();
 
             var uslugi = AppServices.Provider;
-            var dzien = uslugi.GetRequiredService<IClock>().Today
+            var day = uslugi.GetRequiredService<IClock>().Today
                 .AddDays(TodayWidget.Przesuniecie(kontekst, widgetId));
 
-            return await uslugi.GetRequiredService<PlanDniaService>().DlaDniaAsync(dzien);
+            return await uslugi.GetRequiredService<DayPlanService>().ForDayAsync(day);
         }
 
         /// <summary>
@@ -355,7 +355,7 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// Wywrotka przy rysowaniu wiersza nie daje żadnego objawu poza zepsutą listą
         /// na ekranie domowym, więc zły zapis schodzi na barwę domyślną.
         /// </remarks>
-        private static int Barwa(string? zapis)
+        private static int Color(string? zapis)
         {
             if (string.IsNullOrWhiteSpace(zapis))
             {

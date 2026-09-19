@@ -6,13 +6,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Repositories;
 
-public sealed class ContactRepository(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+public sealed class ContactRepository(MarshalDbContext db, IDbQueue? queue = null)
     : IContactRepository
 {
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     public async Task<Contact?> FindAsync(Guid id, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(
+        await _kolejka.RunAsync(
             () => db.Contacts.FirstOrDefaultAsync(k => k.Id == id && !k.Deleted, ct), ct);
 
     /// <summary>
@@ -25,17 +25,17 @@ public sealed class ContactRepository(MarshalDbContext db, IKolejkaBazy? kolejka
     /// </remarks>
     public async Task<Contact?> FindByEmailAsync(string email, CancellationToken ct = default)
     {
-        var szukany = (email ?? string.Empty).Trim();
+        var wanted = (email ?? string.Empty).Trim();
 
-        var wszystkie = await _kolejka.WykonajAsync(
+        var all = await _kolejka.RunAsync(
             () => db.Contacts.Where(k => !k.Deleted).ToListAsync(ct), ct);
 
-        return wszystkie.FirstOrDefault(
-            k => string.Equals(k.Email, szukany, StringComparison.OrdinalIgnoreCase));
+        return all.FirstOrDefault(
+            k => string.Equals(k.Email, wanted, StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task<IReadOnlyList<Contact>> AllAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Contacts
+        await _kolejka.RunAsync(() => db.Contacts
             .Where(k => !k.Deleted)
             .OrderBy(k => k.Name)
             .ToListAsync(ct), ct);

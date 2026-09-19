@@ -76,12 +76,12 @@ public sealed class RecurrenceTextTests
     [InlineData(12, "co 12 tygodni")]
     [InlineData(13, "co 13 tygodni")]
     [InlineData(22, "co 22 tygodnie")]
-    public void Odmiana_tygodni_idzie_za_regula_z_wyjatkiem_nastek(int ile, string oczekiwany)
+    public void Odmiana_tygodni_idzie_za_regula_z_wyjatkiem_nastek(int count, string oczekiwany)
     {
         // Dwa do czterech mają swoją formę, reszta inną — ale dwanaście, trzynaście
         // i czternaście idą z resztą, mimo że kończą się na dwa, trzy i cztery.
         RecurrenceText.Describe(
-                new RecurrenceRule(RecurrenceKind.Weekly, interval: ile, daysOfWeek: Weekdays.Monday))
+                new RecurrenceRule(RecurrenceKind.Weekly, interval: count, daysOfWeek: Weekdays.Monday))
             .Should().StartWith(oczekiwany);
     }
 
@@ -89,9 +89,9 @@ public sealed class RecurrenceTextTests
     [InlineData(2, "co 2 miesiące")]
     [InlineData(5, "co 5 miesięcy")]
     [InlineData(13, "co 13 miesięcy")]
-    public void Odmiana_miesiecy(int ile, string oczekiwany)
+    public void Odmiana_miesiecy(int count, string oczekiwany)
     {
-        RecurrenceText.Describe(new RecurrenceRule(RecurrenceKind.Monthly, interval: ile))
+        RecurrenceText.Describe(new RecurrenceRule(RecurrenceKind.Monthly, interval: count))
             .Should().StartWith(oczekiwany);
     }
 
@@ -99,9 +99,9 @@ public sealed class RecurrenceTextTests
     [InlineData(2, "co 2 lata")]
     [InlineData(5, "co 5 lat")]
     [InlineData(14, "co 14 lat")]
-    public void Odmiana_lat(int ile, string oczekiwany)
+    public void Odmiana_lat(int count, string oczekiwany)
     {
-        RecurrenceText.Describe(new RecurrenceRule(RecurrenceKind.Yearly, interval: ile))
+        RecurrenceText.Describe(new RecurrenceRule(RecurrenceKind.Yearly, interval: count))
             .Should().Be(oczekiwany);
     }
 
@@ -164,36 +164,36 @@ public sealed class RecurrenceTextTests
     [InlineData(1, "codziennie, jeszcze 1 raz")]
     [InlineData(3, "codziennie, jeszcze 3 razy")]
     [InlineData(7, "codziennie, jeszcze 7 razy")]
-    public void Liczba_pozostalych_wystapien_jest_w_zdaniu(int ile, string oczekiwane)
+    public void Liczba_pozostalych_wystapien_jest_w_zdaniu(int count, string oczekiwane)
     {
-        RecurrenceText.Describe(new RecurrenceRule(RecurrenceKind.Daily, count: ile))
+        RecurrenceText.Describe(new RecurrenceRule(RecurrenceKind.Daily, count: count))
             .Should().Be(oczekiwane);
     }
 
     // --- etykiety stanu ------------------------------------------------------
 
-    private TaskItem Zadanie()
+    private TaskItem TaskId()
     {
         var hlc = Hlc.Zero("test");
-        var zadanie = TaskItem.Capture("Wynieść śmieci", DateTimeOffset.UnixEpoch, hlc);
-        zadanie.MakeNext(Guid.CreateVersion7(), Hlc.Next(hlc, 1));
-        return zadanie;
+        var task = TaskItem.Capture("Wynieść śmieci", DateTimeOffset.UnixEpoch, hlc);
+        task.MakeNext(Guid.CreateVersion7(), Hlc.Next(hlc, 1));
+        return task;
     }
 
     [Fact]
     public void Zadanie_bez_niczego_nie_ma_etykiet()
     {
-        RecurrenceText.Badges(Zadanie(), D("2026-09-16")).Should().BeEmpty();
+        RecurrenceText.Badges(TaskId(), D("2026-09-16")).Should().BeEmpty();
     }
 
     [Fact]
     public void Termin_w_przyszlosci_i_w_przeszlosci_brzmia_inaczej()
     {
-        var zadanie = Zadanie();
-        zadanie.SetDeadline(D("2026-09-20"), Hlc.Next(Hlc.Zero("test"), 99));
+        var task = TaskId();
+        task.SetDeadline(D("2026-09-20"), Hlc.Next(Hlc.Zero("test"), 99));
 
-        RecurrenceText.Badges(zadanie, D("2026-09-16")).Should().Contain("termin 2026-09-20");
-        RecurrenceText.Badges(zadanie, D("2026-09-25")).Should().Contain("po terminie (2026-09-20)");
+        RecurrenceText.Badges(task, D("2026-09-16")).Should().Contain("termin 2026-09-20");
+        RecurrenceText.Badges(task, D("2026-09-25")).Should().Contain("po terminie (2026-09-20)");
     }
 
     [Fact]
@@ -202,11 +202,11 @@ public sealed class RecurrenceTextTests
         // Pierwsze przesunięcie zdarza się każdemu i nie niesie informacji. Pokazane
         // byłoby wyrzutem bez treści.
         var hlc = Hlc.Zero("test");
-        var zadanie = TaskItem.Capture("Zadzwonić", DateTimeOffset.UnixEpoch, hlc);
-        zadanie.Schedule(Guid.CreateVersion7(), D("2026-09-10"), Hlc.Next(hlc, 1));
-        zadanie.RollTo(D("2026-09-16"), Hlc.Next(hlc, 2));
+        var task = TaskItem.Capture("Zadzwonić", DateTimeOffset.UnixEpoch, hlc);
+        task.Schedule(Guid.CreateVersion7(), D("2026-09-10"), Hlc.Next(hlc, 1));
+        task.RollTo(D("2026-09-16"), Hlc.Next(hlc, 2));
 
-        RecurrenceText.Badges(zadanie, D("2026-09-16"))
+        RecurrenceText.Badges(task, D("2026-09-16"))
             .Should().NotContain(e => e.StartsWith("przesunięte", StringComparison.Ordinal));
     }
 
@@ -214,25 +214,25 @@ public sealed class RecurrenceTextTests
     public void Wielokrotne_przesuniecie_jest_liczone_bez_oceny()
     {
         var hlc = Hlc.Zero("test");
-        var zadanie = TaskItem.Capture("Zadzwonić", DateTimeOffset.UnixEpoch, hlc);
-        zadanie.Schedule(Guid.CreateVersion7(), D("2026-09-10"), Hlc.Next(hlc, 1));
+        var task = TaskItem.Capture("Zadzwonić", DateTimeOffset.UnixEpoch, hlc);
+        task.Schedule(Guid.CreateVersion7(), D("2026-09-10"), Hlc.Next(hlc, 1));
 
         for (var i = 2; i <= 5; i++)
         {
-            zadanie.RollTo(D("2026-09-16"), Hlc.Next(hlc, i));
+            task.RollTo(D("2026-09-16"), Hlc.Next(hlc, i));
         }
 
-        RecurrenceText.Badges(zadanie, D("2026-09-16")).Should().Contain("przesunięte 4 razy");
+        RecurrenceText.Badges(task, D("2026-09-16")).Should().Contain("przesunięte 4 razy");
     }
 
     [Fact]
     public void Zaleglosc_nazywa_pierwszy_przegapiony_dzien()
     {
         var hlc = Hlc.Zero("test");
-        var zadanie = TaskItem.Capture("Zapłacić", DateTimeOffset.UnixEpoch, hlc);
-        zadanie.Schedule(Guid.CreateVersion7(), D("2026-09-09"), Hlc.Next(hlc, 1));
-        zadanie.CarryTo(D("2026-09-16"), Hlc.Next(hlc, 2));
+        var task = TaskItem.Capture("Zapłacić", DateTimeOffset.UnixEpoch, hlc);
+        task.Schedule(Guid.CreateVersion7(), D("2026-09-09"), Hlc.Next(hlc, 1));
+        task.CarryTo(D("2026-09-16"), Hlc.Next(hlc, 2));
 
-        RecurrenceText.Badges(zadanie, D("2026-09-16")).Should().Contain("zaległe od 2026-09-09");
+        RecurrenceText.Badges(task, D("2026-09-16")).Should().Contain("zaległe od 2026-09-09");
     }
 }

@@ -84,9 +84,9 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
 
             var odpowiedz = await zapytanie.ExecuteAsync(ct);
 
-            foreach (var wydarzenie in odpowiedz.Items ?? [])
+            foreach (var ev in odpowiedz.Items ?? [])
             {
-                if (Convert(wydarzenie) is { } przetworzone)
+                if (Convert(ev) is { } przetworzone)
                 {
                     wydarzenia.Add(przetworzone);
                 }
@@ -97,9 +97,9 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
         }
         while (!string.IsNullOrEmpty(strona));
 
-        var wpis = await WpisAsync(source, ct);
+        var entry = await WpisAsync(source, ct);
 
-        return new FeedResult(wydarzenia, nowyZeton, pelny, wpis.Barwa, wpis.TylkoOdczyt);
+        return new FeedResult(wydarzenia, nowyZeton, pelny, entry.Color, entry.TylkoOdczyt);
     }
 
     /// <summary>
@@ -125,14 +125,14 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     /// dalej i lądują w raporcie.
     /// </para>
     /// </remarks>
-    private async Task<(string? Barwa, bool? TylkoOdczyt)> WpisAsync(
+    private async Task<(string? Color, bool? TylkoOdczyt)> WpisAsync(
         CalendarSource source, CancellationToken ct)
     {
         try
         {
-            var wpis = await service.CalendarList.Get(source.ExternalId).ExecuteAsync(ct);
+            var entry = await service.CalendarList.Get(source.ExternalId).ExecuteAsync(ct);
 
-            return (wpis.BackgroundColor, TylkoOdczyt(wpis.AccessRole));
+            return (entry.BackgroundColor, TylkoOdczyt(entry.AccessRole));
         }
         catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.NotFound)
         {
@@ -157,37 +157,37 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
             && !string.Equals(poziom, "writer", StringComparison.OrdinalIgnoreCase)
         : null;
 
-    private static FeedEvent? Convert(Google.Apis.Calendar.v3.Data.Event wydarzenie)
+    private static FeedEvent? Convert(Google.Apis.Calendar.v3.Data.Event ev)
     {
-        if (string.IsNullOrEmpty(wydarzenie.Id))
+        if (string.IsNullOrEmpty(ev.Id))
         {
             return null;
         }
 
-        var odwolane = string.Equals(wydarzenie.Status, "cancelled", StringComparison.Ordinal);
+        var odwolane = string.Equals(ev.Status, "cancelled", StringComparison.Ordinal);
 
-        var start = Moment(wydarzenie.Start);
-        var koniec = Moment(wydarzenie.End) ?? start?.AddHours(1);
+        var start = Moment(ev.Start);
+        var end = Moment(ev.End) ?? start?.AddHours(1);
 
         // Odwołane wydarzenie przy odczycie przyrostowym przychodzi często jako sam
         // identyfikator, bez dat. Zostaje nagrobkiem z datami zastępczymi — i tak liczy
         // się dla niego wyłącznie to, że jest odwołane.
-        if (start is null || koniec is null)
+        if (start is null || end is null)
         {
             return odwolane
                 ? new FeedEvent(
-                    wydarzenie.Id, "(odwołane)", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch,
+                    ev.Id, "(odwołane)", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch,
                     false, null, Cancelled: true)
                 : null;
         }
 
         return new FeedEvent(
-            wydarzenie.Id,
-            string.IsNullOrWhiteSpace(wydarzenie.Summary) ? "(bez tytułu)" : wydarzenie.Summary,
+            ev.Id,
+            string.IsNullOrWhiteSpace(ev.Summary) ? "(bez tytułu)" : ev.Summary,
             start.Value,
-            koniec.Value,
-            IsAllDay: wydarzenie.Start?.DateTimeDateTimeOffset is null,
-            wydarzenie.Location,
+            end.Value,
+            IsAllDay: ev.Start?.DateTimeDateTimeOffset is null,
+            ev.Location,
             odwolane);
     }
 
@@ -205,9 +205,9 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     /// </remarks>
     private static DateTimeOffset? ParseDate(object? date) => date switch
     {
-        string tekst when DateOnly.TryParse(tekst, CultureInfo.InvariantCulture, out var dzien) =>
-            new DateTimeOffset(dzien.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
-        DateTime chwila => new DateTimeOffset(chwila.Date, TimeSpan.Zero),
+        string tekst when DateOnly.TryParse(tekst, CultureInfo.InvariantCulture, out var day) =>
+            new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero),
+        DateTime moment => new DateTimeOffset(moment.Date, TimeSpan.Zero),
         _ => null,
     };
 }

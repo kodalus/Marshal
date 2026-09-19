@@ -123,8 +123,8 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Nieczytelny identyfikator traktowany jak jego brak: wejście na kalendarz jest
         // wtedy nadal sensowną odpowiedzią, a odmowa całego wejścia — nie.
         App.PoprosOKalendarz(
-            Guid.TryParse(zamiar.GetStringExtra(ZadanieExtra), out var zadanie)
-                ? zadanie
+            Guid.TryParse(zamiar.GetStringExtra(ZadanieExtra), out var task)
+                ? task
                 : null);
     }
 

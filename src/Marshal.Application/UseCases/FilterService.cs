@@ -40,22 +40,22 @@ public sealed class FilterService(
             return [];
         }
 
-        var wszystkie = await tasks.AllAsync(ct);
+        var all = await tasks.AllAsync(ct);
 
         // Powiązania z tagami wczytane raz i pogrupowane, zamiast pytania o tagi przy
         // każdym zadaniu. Przy tysiącu zadań to różnica między jednym odczytem
         // a tysiącem — i to niezależnie od tego, czy filtr w ogóle pyta o tagi.
-        var poZadaniu = (await tags.AllLinksAsync(ct))
+        var byTask = (await tags.AllLinksAsync(ct))
             .GroupBy(l => l.TaskId)
             .ToDictionary(g => g.Key, g => (IReadOnlyCollection<Guid>)g.Select(l => l.TagId).ToArray());
 
-        var dzis = clock.Today;
+        var today = clock.Today;
 
         return query
             .Apply(
-                wszystkie.Select(z => new FilterSubject(
-                    z, poZadaniu.TryGetValue(z.Id, out var t) ? t : [])),
-                dzis)
+                all.Select(z => new FilterSubject(
+                    z, byTask.TryGetValue(z.Id, out var t) ? t : [])),
+                today)
             .ToArray();
     }
 
@@ -69,49 +69,49 @@ public sealed class FilterService(
     public async Task<SavedFilter> SaveAsync(
         string name, FilterQuery query, CancellationToken ct = default)
     {
-        var filtr = SavedFilter.Create(name, query, clock.Now, hlc.Next());
+        var filter = SavedFilter.Create(name, query, clock.Now, hlc.Next());
 
-        var ostatni = (await filters.AllAsync(ct)).LastOrDefault();
-        filtr.SetSortOrder((ostatni?.SortOrder ?? 0) + 1, hlc.Next());
+        var last = (await filters.AllAsync(ct)).LastOrDefault();
+        filter.SetSortOrder((last?.SortOrder ?? 0) + 1, hlc.Next());
 
-        filters.Add(filtr);
+        filters.Add(filter);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return filtr;
+        return filter;
     }
 
     public async Task<SavedFilter?> UpdateAsync(
         Guid id, string name, FilterQuery query, CancellationToken ct = default)
     {
-        if (await filters.FindAsync(id, ct) is not { } filtr)
+        if (await filters.FindAsync(id, ct) is not { } filter)
         {
             return null;
         }
 
         // Każde pole ruszane tylko wtedy, gdy się zmieniło — zob. TaskEditService.
-        if (!string.IsNullOrWhiteSpace(name) && name.Trim() != filtr.Name)
+        if (!string.IsNullOrWhiteSpace(name) && name.Trim() != filter.Name)
         {
-            filtr.Rename(name, hlc.Next());
+            filter.Rename(name, hlc.Next());
         }
 
-        if (!query.IsEmpty && query.ToJson() != filtr.DefinitionJson)
+        if (!query.IsEmpty && query.ToJson() != filter.DefinitionJson)
         {
-            filtr.SetQuery(query, hlc.Next());
+            filter.SetQuery(query, hlc.Next());
         }
 
         await unitOfWork.SaveChangesAsync(ct);
-        return filtr;
+        return filter;
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        if (await filters.FindAsync(id, ct) is not { } filtr)
+        if (await filters.FindAsync(id, ct) is not { } filter)
         {
             return;
         }
 
         // Nagrobek, nie usunięcie fizyczne (spec 5.1).
-        filtr.MarkDeleted(hlc.Next());
+        filter.MarkDeleted(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 }

@@ -161,18 +161,18 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         {
             var adres = email.Trim();
 
-            var teraz = (Read(CalendarAccountsKey) ?? string.Empty)
+            var now = (Read(CalendarAccountsKey) ?? string.Empty)
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList();
 
             // Powtórzenie nie jest błędem: ponowne dodanie konta to najczęstsza reakcja
             // na „chyba nie zadziałało" i ma po prostu odświeżyć żeton.
-            if (!teraz.Contains(adres, StringComparer.OrdinalIgnoreCase))
+            if (!now.Contains(adres, StringComparer.OrdinalIgnoreCase))
             {
-                teraz.Add(adres);
+                now.Add(adres);
             }
 
-            Zapisz(teraz);
+            Zapisz(now);
         }
     }
 
@@ -180,12 +180,12 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     {
         lock (_gate)
         {
-            var teraz = (Read(CalendarAccountsKey) ?? string.Empty)
+            var now = (Read(CalendarAccountsKey) ?? string.Empty)
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Where(k => !string.Equals(k, email?.Trim(), StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            Zapisz(teraz);
+            Zapisz(now);
         }
     }
 
@@ -229,12 +229,12 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         // ostrzeżenie o starej byłoby już nieprawdą.
         _klopotZeStrefa = null;
 
-        var strefa = Resolve(id);
+        var zone = Resolve(id);
 
         lock (_gate)
         {
-            Write(ZoneKey, strefa.Id);
-            _zone = strefa;
+            Write(ZoneKey, zone.Id);
+            _zone = zone;
         }
     }
 
@@ -298,9 +298,9 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     private void Write(string key, string value)
     {
-        if (db.LocalSettings.FirstOrDefault(s => s.Key == key) is { } istniejace)
+        if (db.LocalSettings.FirstOrDefault(s => s.Key == key) is { } existing)
         {
-            istniejace.Set(value);
+            existing.Set(value);
         }
         else
         {

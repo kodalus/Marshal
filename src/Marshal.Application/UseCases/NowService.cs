@@ -45,46 +45,46 @@ public sealed class NowService(
         int availableMinutes, Energy energy, bool includeSomeday = false,
         CancellationToken ct = default)
     {
-        var dzis = clock.Today;
+        var today = clock.Today;
         // Następne akcje **i** to, co zaplanowane na dziś albo wcześniej (spec 8.6).
         // Do dziś brane były wyłącznie „Następne", więc zadanie zaplanowane na dziś —
         // czyli to, na które się właśnie napisałaś — nie mogło się tu pojawić w ogóle.
         // Ekran „co teraz" bez rzeczy umówionych na dziś odpowiada na inne pytanie.
-        var wszystkie = (await tasks.ByStateAsync(TaskState.Next, ct))
+        var all = (await tasks.ByStateAsync(TaskState.Next, ct))
             .Concat((await tasks.ByStateAsync(TaskState.Scheduled, ct))
-                .Where(t => t.DoDate is { } dzien && dzien <= dzis))
+                .Where(t => t.DoDate is { } day && day <= today))
             .ToList();
 
         if (includeSomeday)
         {
-            wszystkie.AddRange(await tasks.ByStateAsync(TaskState.Someday, ct));
+            all.AddRange(await tasks.ByStateAsync(TaskState.Someday, ct));
         }
 
         // Projekt wstrzymany („kiedyś") albo zamknięty wyklucza swoje zadania: leżą
         // w bazie poprawnie, ale nie są tym, co można teraz zrobić.
-        var zywe = (await projects.AllAsync(ct))
+        var live = (await projects.AllAsync(ct))
             .Where(p => p.State == ProjectState.Active && !p.Deleted)
             .Select(p => p.Id)
             .ToHashSet();
 
-        var kandydaci = wszystkie
-            .Where(t => t.DeferUntil is null || t.DeferUntil <= dzis)
-            .Where(t => t.EstimatedMinutes is { } minuty && minuty <= availableMinutes)
+        var candidates = all
+            .Where(t => t.DeferUntil is null || t.DeferUntil <= today)
+            .Where(t => t.EstimatedMinutes is { } minutes && minutes <= availableMinutes)
             .Where(t => t.Energy == Energy.Unknown || t.Energy <= energy)
-            .Where(t => t.ProjectId is null || zywe.Contains(t.ProjectId.Value))
+            .Where(t => t.ProjectId is null || live.Contains(t.ProjectId.Value))
             .ToList();
 
         // Zadanie, które jest jedyną akcją do przodu w swoim projekcie, odblokowuje go
         // — to jest odwrotna strona N1 i dlatego ma własne punkty.
-        var odblokowujace = wszystkie
+        var unblocking = all
             .Where(t => t.ProjectId is not null)
             .GroupBy(t => t.ProjectId!.Value)
             .Where(g => g.Count() == 1)
             .Select(g => g.First().Id)
             .ToHashSet();
 
-        return kandydaci
-            .Select(t => Score(t, dzis, odblokowujace.Contains(t.Id)))
+        return candidates
+            .Select(t => Score(t, today, unblocking.Contains(t.Id)))
             .OrderByDescending(p => p.Score)
             .ThenBy(p => p.Task.CreatedAt)
 
@@ -98,11 +98,11 @@ public sealed class NowService(
     /// <summary>Ilu w ogóle jest kandydatów — bez tego nie da się zaproponować oszacowania.</summary>
     public async Task<int> UnestimatedCountAsync(CancellationToken ct = default)
     {
-        var dzis = clock.Today;
+        var today = clock.Today;
 
         return (await tasks.ByStateAsync(TaskState.Next, ct))
             .Concat((await tasks.ByStateAsync(TaskState.Scheduled, ct))
-                .Where(t => t.DoDate is { } dzien && dzien <= dzis))
+                .Where(t => t.DoDate is { } day && day <= today))
             .Count(t => t.EstimatedMinutes is null);
     }
 
@@ -133,53 +133,53 @@ public sealed class NowService(
     /// </remarks>
     private static NowPick Score(TaskItem task, DateOnly today, bool unblocks)
     {
-        var punkty = 0;
-        string? powod = null;
+        var score = 0;
+        string? reason = null;
 
-        if (task.Deadline is { } termin && termin <= today.AddDays(2))
+        if (task.Deadline is { } deadline && deadline <= today.AddDays(2))
         {
-            punkty += 100;
-            powod = termin < today ? "po terminie" : "termin za chwilę";
+            score += 100;
+            reason = deadline < today ? "po terminie" : "termin za chwilę";
         }
 
         if (task.FocusDate == today)
         {
-            punkty += 60;
-            powod ??= "wybrane na dziś";
+            score += 60;
+            reason ??= "wybrane na dziś";
         }
 
-        if (task.Deadline is { } blizszy && blizszy <= today.AddDays(7))
+        if (task.Deadline is { } closer && closer <= today.AddDays(7))
         {
-            punkty += 40;
-            powod ??= "termin w tym tygodniu";
+            score += 40;
+            reason ??= "termin w tym tygodniu";
         }
 
         if (unblocks)
         {
-            punkty += 25;
-            powod ??= "odblokowuje projekt";
+            score += 25;
+            reason ??= "odblokowuje projekt";
         }
 
         // Wiek w dniach, **przycięty do dwudziestu punktów**. Przycięcie jest istotne:
         // bez niego jedno zadanie sprzed roku zdominowałoby ekran na zawsze.
-        var wiek = Math.Max(0, today.DayNumber - DateOnly.FromDateTime(task.CreatedAt.UtcDateTime).DayNumber);
-        punkty += Math.Min(wiek, 20);
+        var age = Math.Max(0, today.DayNumber - DateOnly.FromDateTime(task.CreatedAt.UtcDateTime).DayNumber);
+        score += Math.Min(age, 20);
 
         if (task.Priority == Priority.High)
         {
-            punkty += 15;
-            powod ??= "wysoka waga";
+            score += 15;
+            reason ??= "wysoka waga";
         }
 
         if (task.EstimatedMinutes is <= 15)
         {
-            punkty += 10;
-            powod ??= "krótkie — łatwo zacząć";
+            score += 10;
+            reason ??= "krótkie — łatwo zacząć";
         }
 
         // Powód podaje wiek **prawdziwy**, nie przycięty: przycięcie jest sposobem
         // liczenia punktów, a nie faktem o zadaniu. „Czeka 20 dni" przy zadaniu sprzed
         // roku byłoby zwyczajną nieprawdą na ekranie.
-        return new NowPick(task, punkty, powod ?? $"czeka {wiek} dni");
+        return new NowPick(task, score, reason ?? $"czeka {age} dni");
     }
 }

@@ -34,60 +34,60 @@ namespace Marshal.Application;
 /// </remarks>
 public sealed class LatestOnly
 {
-    private readonly Lock _zamek = new();
+    private readonly Lock _lock = new();
 
-    private bool _biegnie;
+    private bool _running;
 
     /// <summary>Zgłoszenie, które przyszło w trakcie przebiegu. Jedno na wszystkich.</summary>
     /// <remarks>
     /// Jedno, bo wszyscy czekają na to samo: na przebieg, który zobaczy już ich zmianę.
     /// Siedem znaków w polu szukania to siedem oczekiwań i dwa odczyty.
     /// </remarks>
-    private TaskCompletionSource? _czekajacy;
+    private TaskCompletionSource? _waiting;
 
-    public async Task RunAsync(Func<Task> praca)
+    public async Task RunAsync(Func<Task> work)
     {
-        ArgumentNullException.ThrowIfNull(praca);
+        ArgumentNullException.ThrowIfNull(work);
 
-        TaskCompletionSource? czekam = null;
+        TaskCompletionSource? waiting = null;
 
-        lock (_zamek)
+        lock (_lock)
         {
-            if (_biegnie)
+            if (_running)
             {
                 // Bez kontynuacji w miejscu zakończenia: całe wznowienie czekających
                 // poszłoby wtedy wewnątrz przebiegu, który właśnie kończy pracę.
-                _czekajacy ??= new TaskCompletionSource(
+                _waiting ??= new TaskCompletionSource(
                     TaskCreationOptions.RunContinuationsAsynchronously);
 
-                czekam = _czekajacy;
+                waiting = _waiting;
             }
             else
             {
-                _biegnie = true;
+                _running = true;
             }
         }
 
-        if (czekam is not null)
+        if (waiting is not null)
         {
-            await czekam.Task;
+            await waiting.Task;
             return;
         }
 
         try
         {
-            await praca();
+            await work();
 
-            while (Nastepny() is { } kolejny)
+            while (Next() is { } next)
             {
                 try
                 {
-                    await praca();
-                    kolejny.SetResult();
+                    await work();
+                    next.SetResult();
                 }
                 catch (Exception e) when (e is not OperationCanceledException)
                 {
-                    kolejny.SetException(e);
+                    next.SetException(e);
                     throw;
                 }
             }
@@ -99,28 +99,28 @@ public sealed class LatestOnly
             // na nie czekają. Kończymy je powodzeniem, nie błędem: ich odświeżenie
             // się nie wydarzyło, ale wyjątek na drodze, której nikt nie oczekuje,
             // byłby wyjątkiem nieobserwowanym.
-            TaskCompletionSource? zostal;
+            TaskCompletionSource? leftover;
 
-            lock (_zamek)
+            lock (_lock)
             {
-                zostal = _czekajacy;
-                _czekajacy = null;
-                _biegnie = false;
+                leftover = _waiting;
+                _waiting = null;
+                _running = false;
             }
 
-            zostal?.TrySetResult();
+            leftover?.TrySetResult();
         }
     }
 
     /// <summary>Zgłoszenie do obsłużenia w tym przebiegu. Puste, gdy nie ma na co czekać.</summary>
-    private TaskCompletionSource? Nastepny()
+    private TaskCompletionSource? Next()
     {
-        lock (_zamek)
+        lock (_lock)
         {
-            var kolejny = _czekajacy;
-            _czekajacy = null;
+            var next = _waiting;
+            _waiting = null;
 
-            return kolejny;
+            return next;
         }
     }
 }

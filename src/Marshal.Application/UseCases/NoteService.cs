@@ -22,11 +22,11 @@ public sealed class NoteService(
 
     public async Task<Note> CreateAsync(string title, CancellationToken ct = default)
     {
-        var notatka = Note.Create(title, clock.Now, hlc.Next());
-        notes.Add(notatka);
+        var note = Note.Create(title, clock.Now, hlc.Next());
+        notes.Add(note);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return notatka;
+        return note;
     }
 
     /// <summary>
@@ -39,58 +39,58 @@ public sealed class NoteService(
     /// </remarks>
     public async Task<Note?> ConvertToNoteAsync(Guid taskId, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(taskId, ct) is not { } zadanie)
+        if (await tasks.FindAsync(taskId, ct) is not { } task)
         {
             return null;
         }
 
-        var notatka = Note.FromTask(
-            zadanie.Id, zadanie.Title, zadanie.Note, clock.Now, hlc.Next());
+        var note = Note.FromTask(
+            task.Id, task.Title, task.Note, clock.Now, hlc.Next());
 
-        notes.Add(notatka);
-        zadanie.Trash(hlc.Next());
+        notes.Add(note);
+        task.Trash(hlc.Next());
 
         await unitOfWork.SaveChangesAsync(ct);
-        return notatka;
+        return note;
     }
 
     public async Task<Note?> SaveAsync(
         Guid id, string title, string? content, bool pinned, CancellationToken ct = default)
     {
-        if (await notes.FindAsync(id, ct) is not { } notatka)
+        if (await notes.FindAsync(id, ct) is not { } note)
         {
             return null;
         }
 
         // Każde pole ruszane tylko wtedy, gdy się zmieniło — zob. TaskEditService.
-        if (!string.IsNullOrWhiteSpace(title) && title.Trim() != notatka.Title)
+        if (!string.IsNullOrWhiteSpace(title) && title.Trim() != note.Title)
         {
-            notatka.Rename(title, hlc.Next());
+            note.Rename(title, hlc.Next());
         }
 
-        if ((content ?? string.Empty) != notatka.Content)
+        if ((content ?? string.Empty) != note.Content)
         {
-            notatka.SetContent(content, hlc.Next());
+            note.SetContent(content, hlc.Next());
         }
 
-        if (pinned != notatka.IsPinned)
+        if (pinned != note.IsPinned)
         {
-            notatka.SetPinned(pinned, hlc.Next());
+            note.SetPinned(pinned, hlc.Next());
         }
 
         await unitOfWork.SaveChangesAsync(ct);
-        return notatka;
+        return note;
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        if (await notes.FindAsync(id, ct) is not { } notatka)
+        if (await notes.FindAsync(id, ct) is not { } note)
         {
             return;
         }
 
         // Nagrobek, nie usunięcie fizyczne (spec 5.1).
-        notatka.MarkDeleted(hlc.Next());
+        note.MarkDeleted(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 }

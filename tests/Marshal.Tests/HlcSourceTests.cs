@@ -16,9 +16,9 @@ public class HlcSourceTests
     [Fact]
     public void Kolejne_znaczniki_sa_scisle_rosnace_przy_stojacym_zegarze()
     {
-        var zrodlo = new HlcSource(new ZegarStojacy(), "biurko");
+        var source = new HlcSource(new ZegarStojacy(), "biurko");
 
-        var znaczniki = Enumerable.Range(0, 100).Select(_ => zrodlo.Next()).ToArray();
+        var znaczniki = Enumerable.Range(0, 100).Select(_ => source.Next()).ToArray();
 
         znaczniki.Should().BeInAscendingOrder();
         znaczniki.Should().OnlyHaveUniqueItems();
@@ -27,24 +27,24 @@ public class HlcSourceTests
     [Fact]
     public void Znaczniki_sa_unikalne_przy_zapisach_wspolbieznych()
     {
-        var zrodlo = new HlcSource(new ZegarStojacy(), "biurko");
-        var wynik = new System.Collections.Concurrent.ConcurrentBag<Hlc>();
+        var source = new HlcSource(new ZegarStojacy(), "biurko");
+        var result = new System.Collections.Concurrent.ConcurrentBag<Hlc>();
 
-        Parallel.For(0, 1000, _ => wynik.Add(zrodlo.Next()));
+        Parallel.For(0, 1000, _ => result.Add(source.Next()));
 
-        wynik.Should().HaveCount(1000);
-        wynik.Should().OnlyHaveUniqueItems();
+        result.Should().HaveCount(1000);
+        result.Should().OnlyHaveUniqueItems();
     }
 
     [Fact]
     public void Observe_podnosi_zegar_ponad_znacznik_zdalny()
     {
-        var zrodlo = new HlcSource(new ZegarStojacy(), "biurko");
+        var source = new HlcSource(new ZegarStojacy(), "biurko");
         var zdalny = new Hlc(9_000_000, 3, "telefon");
 
-        zrodlo.Observe(zdalny);
+        source.Observe(zdalny);
 
-        zrodlo.Next().Should().BeGreaterThan(zdalny);
+        source.Next().Should().BeGreaterThan(zdalny);
     }
 
     [Fact]
@@ -53,9 +53,9 @@ public class HlcSourceTests
         // Sprawdzenie przeniesione z konstruktora do pierwszego użycia: zegar powstaje
         // przy składaniu zależności, a tożsamość i wznowienie leżą w bazie, której
         // wtedy jeszcze nie ma. Odrzucenie nadal obowiązuje, tylko później.
-        var zrodlo = new HlcSource(new ZegarStojacy(), "biurko", new Hlc(1, 0, "telefon"));
+        var source = new HlcSource(new ZegarStojacy(), "biurko", new Hlc(1, 0, "telefon"));
 
-        var uzycie = () => zrodlo.Next();
+        var uzycie = () => source.Next();
         uzycie.Should().Throw<InvalidOperationException>();
     }
 

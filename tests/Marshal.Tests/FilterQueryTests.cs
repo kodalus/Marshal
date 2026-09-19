@@ -19,57 +19,57 @@ public sealed class FilterQueryTests
 
     private static Hlc Znacznik() => new(Teraz.ToUnixTimeMilliseconds(), _licznik++, "biurko");
 
-    private static TaskItem Zadanie(string tytul = "cokolwiek")
+    private static TaskItem TaskId(string title = "cokolwiek")
     {
-        var z = TaskItem.Capture(tytul, Teraz, Znacznik());
+        var z = TaskItem.Capture(title, Teraz, Znacznik());
         z.MakeNext(Obszar, Znacznik());
         return z;
     }
 
-    private static FilterSubject Podmiot(TaskItem zadanie, params Guid[] tagi) =>
-        new(zadanie, tagi);
+    private static FilterSubject Podmiot(TaskItem task, params Guid[] tagi) =>
+        new(task, tagi);
 
     [Fact]
     public void Filtr_bez_warunkow_nie_pasuje_do_niczego()
     {
         // Logika mówi co innego, interfejs mówi to. Zob. FilterQuery.IsEmpty.
-        FilterQuery.Empty.Matches(Podmiot(Zadanie()), Dzis).Should().BeFalse();
+        FilterQuery.Empty.Matches(Podmiot(TaskId()), Dzis).Should().BeFalse();
         FilterQuery.Empty.IsEmpty.Should().BeTrue();
     }
 
     [Fact]
     public void Warunki_lacza_sie_spojnikiem_i()
     {
-        var pasuje = Zadanie();
+        var pasuje = TaskId();
         pasuje.SetPriority(Priority.High, Znacznik());
 
-        var niepasuje = Zadanie();
+        var niepasuje = TaskId();
 
-        var filtr = new FilterQuery([
+        var filter = new FilterQuery([
             FilterCondition.States(TaskState.Next),
             FilterCondition.Priorities(Priority.High),
         ]);
 
-        filtr.Matches(Podmiot(pasuje), Dzis).Should().BeTrue();
-        filtr.Matches(Podmiot(niepasuje), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(pasuje), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(niepasuje), Dzis).Should().BeFalse();
     }
 
     [Fact]
     public void Wartosci_wewnatrz_warunku_lacza_sie_spojnikiem_albo()
     {
-        var nastepne = Zadanie();
+        var next = TaskId();
 
-        var zaplanowane = Zadanie();
+        var zaplanowane = TaskId();
         zaplanowane.Schedule(Obszar, Dzis, Znacznik());
 
-        var kiedys = Zadanie();
+        var kiedys = TaskId();
         kiedys.Postpone(Obszar, null, Znacznik());
 
-        var filtr = new FilterQuery([FilterCondition.States(TaskState.Next, TaskState.Scheduled)]);
+        var filter = new FilterQuery([FilterCondition.States(TaskState.Next, TaskState.Scheduled)]);
 
-        filtr.Matches(Podmiot(nastepne), Dzis).Should().BeTrue();
-        filtr.Matches(Podmiot(zaplanowane), Dzis).Should().BeTrue();
-        filtr.Matches(Podmiot(kiedys), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(next), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(zaplanowane), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(kiedys), Dzis).Should().BeFalse();
     }
 
     [Fact]
@@ -77,13 +77,13 @@ public sealed class FilterQueryTests
     {
         // Dwa warunki na jedno pole połączone „i" dawałyby zbiór pusty. Konstruktor,
         // w którym da się kliknąć warunek gwarantujący zero wyników, uczy nieufności.
-        var filtr = new FilterQuery([
+        var filter = new FilterQuery([
             FilterCondition.States(TaskState.Waiting),
             FilterCondition.States(TaskState.Next),
         ]);
 
-        filtr.Conditions.Should().HaveCount(1);
-        filtr.Matches(Podmiot(Zadanie()), Dzis).Should().BeTrue();
+        filter.Conditions.Should().HaveCount(1);
+        filter.Matches(Podmiot(TaskId()), Dzis).Should().BeTrue();
     }
 
     [Theory]
@@ -101,23 +101,23 @@ public sealed class FilterQueryTests
     [InlineData(3, DateWindow.None, false)]
     public void Okna_czasowe_liczone_wzgledem_dzisiaj(int przesuniecie, DateWindow okno, bool oczekiwane)
     {
-        var zadanie = Zadanie();
-        zadanie.SetDeadline(Dzis.AddDays(przesuniecie), Znacznik());
+        var task = TaskId();
+        task.SetDeadline(Dzis.AddDays(przesuniecie), Znacznik());
 
         new FilterQuery([FilterCondition.Deadline(okno)])
-            .Matches(Podmiot(zadanie), Dzis).Should().Be(oczekiwane);
+            .Matches(Podmiot(task), Dzis).Should().Be(oczekiwane);
     }
 
     [Fact]
     public void Puste_pole_daty_pasuje_tylko_do_okna_bez_daty()
     {
-        var zadanie = Zadanie();
+        var task = TaskId();
 
         new FilterQuery([FilterCondition.DoDate(DateWindow.None)])
-            .Matches(Podmiot(zadanie), Dzis).Should().BeTrue();
+            .Matches(Podmiot(task), Dzis).Should().BeTrue();
 
         new FilterQuery([FilterCondition.DoDate(DateWindow.Any)])
-            .Matches(Podmiot(zadanie), Dzis).Should().BeFalse();
+            .Matches(Podmiot(task), Dzis).Should().BeFalse();
     }
 
     [Fact]
@@ -127,11 +127,11 @@ public sealed class FilterQueryTests
         // tydzień" byłby najbardziej pusty wtedy, kiedy planuje się weekend.
         var sobota = new DateOnly(2026, 9, 19);
 
-        var zadanie = Zadanie();
-        zadanie.SetDeadline(sobota.AddDays(4), Znacznik());
+        var task = TaskId();
+        task.SetDeadline(sobota.AddDays(4), Znacznik());
 
         new FilterQuery([FilterCondition.Deadline(DateWindow.ThisWeek)])
-            .Matches(Podmiot(zadanie), sobota).Should().BeTrue();
+            .Matches(Podmiot(task), sobota).Should().BeTrue();
     }
 
     [Fact]
@@ -139,15 +139,15 @@ public sealed class FilterQueryTests
     {
         // Ta sama zasada co w widoku „Teraz" (8.1): bez oszacowania nie ma jak ocenić,
         // czy się zmieści, a domyślne „pewnie tak" byłoby zgadywaniem podanym jako fakt.
-        var bez = Zadanie();
+        var bez = TaskId();
 
-        var z = Zadanie();
+        var z = TaskId();
         z.SetEstimate(10, Energy.Low, Znacznik());
 
-        var filtr = new FilterQuery([FilterCondition.Estimate(15)]);
+        var filter = new FilterQuery([FilterCondition.Estimate(15)]);
 
-        filtr.Matches(Podmiot(bez), Dzis).Should().BeFalse();
-        filtr.Matches(Podmiot(z), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(bez), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(z), Dzis).Should().BeTrue();
     }
 
     [Fact]
@@ -157,10 +157,10 @@ public sealed class FilterQueryTests
         var telefon = Guid.CreateVersion7();
         var zakupy = Guid.CreateVersion7();
 
-        var filtr = new FilterQuery([FilterCondition.Tags(dom, telefon)]);
+        var filter = new FilterQuery([FilterCondition.Tags(dom, telefon)]);
 
-        filtr.Matches(Podmiot(Zadanie(), zakupy, telefon), Dzis).Should().BeTrue();
-        filtr.Matches(Podmiot(Zadanie(), zakupy), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(TaskId(), zakupy, telefon), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(TaskId(), zakupy), Dzis).Should().BeFalse();
     }
 
     [Fact]
@@ -168,43 +168,43 @@ public sealed class FilterQueryTests
     {
         // Zadania bez projektu są dopuszczalne na stałe (spec 5.3, rozstrzygnięcie 5),
         // więc „pokaż luzem leżące" musi być wykonalne.
-        var luzem = Zadanie();
+        var luzem = TaskId();
 
-        var wProjekcie = Zadanie();
+        var wProjekcie = TaskId();
         wProjekcie.MoveTo(Obszar, Guid.CreateVersion7(), Znacznik());
 
-        var filtr = new FilterQuery([FilterCondition.Projects(Guid.Empty)]);
+        var filter = new FilterQuery([FilterCondition.Projects(Guid.Empty)]);
 
-        filtr.Matches(Podmiot(luzem), Dzis).Should().BeTrue();
-        filtr.Matches(Podmiot(wProjekcie), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(luzem), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(wProjekcie), Dzis).Should().BeFalse();
     }
 
     [Fact]
     public void Szukanie_tekstu_nie_rozroznia_wielkosci_liter()
     {
-        var zadanie = Zadanie("Zadzwonić do Żłobka");
+        var task = TaskId("Zadzwonić do Żłobka");
 
         new FilterQuery([FilterCondition.Contains("żłobka")])
-            .Matches(Podmiot(zadanie), Dzis).Should().BeTrue();
+            .Matches(Podmiot(task), Dzis).Should().BeTrue();
     }
 
     [Fact]
     public void Szukanie_tekstu_siega_takze_do_notatki()
     {
-        var zadanie = Zadanie("Zadzwonić");
-        zadanie.SetNote("numer w kalendarzu na lodówce", Znacznik());
+        var task = TaskId("Zadzwonić");
+        task.SetNote("numer w kalendarzu na lodówce", Znacznik());
 
         new FilterQuery([FilterCondition.Contains("lodówce")])
-            .Matches(Podmiot(zadanie), Dzis).Should().BeTrue();
+            .Matches(Podmiot(task), Dzis).Should().BeTrue();
     }
 
     [Fact]
     public void Wykonane_i_wyrzucone_nie_wchodza_dopoki_filtr_o_nie_nie_poprosi()
     {
-        var zrobione = Zadanie();
+        var zrobione = TaskId();
         zrobione.Complete(Teraz, Znacznik());
 
-        var wykosz = Zadanie();
+        var wykosz = TaskId();
         wykosz.Trash(Znacznik());
 
         var poObszarze = new FilterQuery([FilterCondition.Areas(Obszar)]);
@@ -223,7 +223,7 @@ public sealed class FilterQueryTests
     [Fact]
     public void Nagrobek_nie_wchodzi_nawet_gdy_filtr_pyta_o_jego_stan()
     {
-        var skasowane = Zadanie();
+        var skasowane = TaskId();
         skasowane.MarkDeleted(Znacznik());
 
         new FilterQuery([FilterCondition.States(TaskState.Next)])
@@ -242,7 +242,7 @@ public sealed class FilterQueryTests
     {
         var tag = Guid.CreateVersion7();
 
-        var filtr = new FilterQuery([
+        var filter = new FilterQuery([
             FilterCondition.States(TaskState.Next, TaskState.Scheduled),
             FilterCondition.Tags(tag),
             FilterCondition.Deadline(DateWindow.ThisWeek),
@@ -250,10 +250,10 @@ public sealed class FilterQueryTests
             FilterCondition.Contains("telefon"),
         ]);
 
-        var odczytany = FilterQuery.FromJson(filtr.ToJson());
+        var odczytany = FilterQuery.FromJson(filter.ToJson());
 
         odczytany.Should().NotBeNull();
-        odczytany!.ToJson().Should().Be(filtr.ToJson());
+        odczytany!.ToJson().Should().Be(filter.ToJson());
         odczytany.Conditions.Should().HaveCount(5);
     }
 
@@ -294,11 +294,11 @@ public sealed class FilterQueryTests
             [{"Field":"State","Values":["Next"]},{"Field":"Estimate","MaxMinutes":0}]
             """;
 
-        var filtr = FilterQuery.FromJson(json);
+        var filter = FilterQuery.FromJson(json);
 
-        filtr.Should().NotBeNull();
-        filtr!.Conditions.Should().HaveCount(1);
-        filtr.Conditions[0].Field.Should().Be(FilterField.State);
+        filter.Should().NotBeNull();
+        filter!.Conditions.Should().HaveCount(1);
+        filter.Conditions[0].Field.Should().Be(FilterField.State);
     }
 
     [Fact]

@@ -14,7 +14,7 @@ public sealed class LatestOnlyTests
     {
         // To jest cały powód istnienia tej klasy: dwa odczyty naraz na jednym
         // kontekście bazy kończą się wyjątkiem, którego nie ma kto złapać.
-        var kolejka = new LatestOnly();
+        var queue = new LatestOnly();
         var jednoczesnie = 0;
         var szczyt = 0;
 
@@ -27,8 +27,8 @@ public sealed class LatestOnlyTests
             jednoczesnie--;
         }
 
-        var pierwsze = kolejka.RunAsync(Praca);
-        var drugie = kolejka.RunAsync(Praca);
+        var pierwsze = queue.RunAsync(Praca);
+        var drugie = queue.RunAsync(Praca);
 
         wpuszczenie.SetResult();
         await Task.WhenAll(pierwsze, drugie);
@@ -41,7 +41,7 @@ public sealed class LatestOnlyTests
     {
         // Siedem znaków wpisanych w pole szukania ma dać drugi odczyt, nie siedem —
         // wyników pośrednich i tak nikt nie widzi.
-        var kolejka = new LatestOnly();
+        var queue = new LatestOnly();
         var przebiegi = 0;
         var wpuszczenie = new TaskCompletionSource();
 
@@ -51,11 +51,11 @@ public sealed class LatestOnlyTests
             await wpuszczenie.Task;
         }
 
-        var pierwsze = kolejka.RunAsync(Praca);
+        var pierwsze = queue.RunAsync(Praca);
 
         for (var i = 0; i < 6; i++)
         {
-            _ = kolejka.RunAsync(Praca);
+            _ = queue.RunAsync(Praca);
         }
 
         wpuszczenie.SetResult();
@@ -71,7 +71,7 @@ public sealed class LatestOnlyTests
         // zanim cokolwiek się odświeżyło, bo zgłoszenie w trakcie wracało natychmiast.
         // Dopóki odczyt z bazy kończył się bez oddania sterowania, przebieg i tak zdążył
         // przed następną linijką i nie dawało się tego zauważyć.
-        var kolejka = new LatestOnly();
+        var queue = new LatestOnly();
         var wpuszczenie = new TaskCompletionSource();
         var przebiegi = 0;
 
@@ -81,8 +81,8 @@ public sealed class LatestOnlyTests
             przebiegi++;
         }
 
-        var pierwsze = kolejka.RunAsync(Praca);
-        var drugie = kolejka.RunAsync(Praca);
+        var pierwsze = queue.RunAsync(Praca);
+        var drugie = queue.RunAsync(Praca);
 
         drugie.IsCompleted.Should().BeFalse("nic się jeszcze nie odświeżyło");
 
@@ -98,13 +98,13 @@ public sealed class LatestOnlyTests
     [Fact]
     public async Task Bledny_przebieg_nie_zatrzaskuje_kolejki()
     {
-        var kolejka = new LatestOnly();
+        var queue = new LatestOnly();
 
-        var wybuch = async () => await kolejka.RunAsync(() => throw new InvalidOperationException());
+        var wybuch = async () => await queue.RunAsync(() => throw new InvalidOperationException());
         await wybuch.Should().ThrowAsync<InvalidOperationException>();
 
         var poszlo = false;
-        await kolejka.RunAsync(() =>
+        await queue.RunAsync(() =>
         {
             poszlo = true;
             return Task.CompletedTask;

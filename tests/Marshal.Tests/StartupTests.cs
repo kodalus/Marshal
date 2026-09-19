@@ -59,20 +59,20 @@ public sealed class StartupTests : IDisposable
 
         // Po naszych typach, nie po wszystkich: rejestracje wewnętrzne EF Core bywają
         // zakresowe i nie są tym, co ten test pilnuje.
-        var nasze = kolekcja
+        var ours = kolekcja
             .Select(r => r.ServiceType)
             .Where(t => t.Assembly.GetName().Name?.StartsWith("Marshal.", StringComparison.Ordinal) == true)
             .Where(t => !t.IsGenericTypeDefinition)
             .Distinct()
             .ToList();
 
-        nasze.Should().HaveCountGreaterThan(20, "test miał objąć cały graf, nie jego resztkę");
+        ours.Should().HaveCountGreaterThan(20, "test miał objąć cały graf, nie jego resztkę");
 
         // Wszystkie naraz, nie do pierwszego napotkanego: jedna awaria na przebieg
         // znaczyłaby jeden błąd na przebieg budowania.
         var pekniete = new List<string>();
 
-        foreach (var typ in nasze)
+        foreach (var typ in ours)
         {
             try
             {
@@ -176,20 +176,20 @@ public sealed class StartupTests : IDisposable
         await DependencyInjection.PrepareAsync(uslugi);
 
         var ustawienia = uslugi.GetRequiredService<ISettings>();
-        var zadania = uslugi.GetRequiredService<Marshal.Application.Repositories.ITaskRepository>();
+        var tasks = uslugi.GetRequiredService<Marshal.Application.Repositories.ITaskRepository>();
 
-        using var koniec = new CancellationTokenSource();
+        using var end = new CancellationTokenSource();
 
         // W tle to, co przechodzi przez bramę: prawdziwe odczyty na wspólnym kontekście.
         var wTle = Task.Run(
             async () =>
             {
-                while (!koniec.IsCancellationRequested)
+                while (!end.IsCancellationRequested)
                 {
-                    await zadania.AllAsync(koniec.Token);
+                    await tasks.AllAsync(end.Token);
                 }
             },
-            koniec.Token);
+            end.Token);
 
         // A tutaj to, co bramę omija — tak jak robi to okno przy starcie. Z zapisem,
         // bo odczytane ustawienie zostaje w pamięci: bez zapisu druga i każda następna
@@ -208,7 +208,7 @@ public sealed class StartupTests : IDisposable
         proba.Should().NotThrow(
             "ustawienia mają własny kontekst, więc cudza praca nie ma w co uderzyć");
 
-        await koniec.CancelAsync();
+        await end.CancelAsync();
 
         try
         {

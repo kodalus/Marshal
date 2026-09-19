@@ -58,7 +58,7 @@ public sealed class SyncEngineTests : IDisposable
 
         public SyncEngine Engine { get; }
 
-        public TaskItem? Zadanie(Guid id) => Db.Tasks.AsNoTracking().FirstOrDefault(t => t.Id == id);
+        public TaskItem? TaskId(Guid id) => Db.Tasks.AsNoTracking().FirstOrDefault(t => t.Id == id);
 
         public void Dispose()
         {
@@ -80,12 +80,12 @@ public sealed class SyncEngineTests : IDisposable
         _telefon = new Urzadzenie("telefon", _katalog);
     }
 
-    private static Guid Dodaj(Urzadzenie u, string tytul)
+    private static Guid Dodaj(Urzadzenie u, string title)
     {
-        var zadanie = TaskItem.Capture(tytul, u.Zegar.Now, u.Hlc.Next());
-        u.Db.Tasks.Add(zadanie);
+        var task = TaskItem.Capture(title, u.Zegar.Now, u.Hlc.Next());
+        u.Db.Tasks.Add(task);
         u.Db.SaveChanges();
-        return zadanie.Id;
+        return task.Id;
     }
 
     [Fact]
@@ -96,8 +96,8 @@ public sealed class SyncEngineTests : IDisposable
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
-        _telefon.Zadanie(id)!.Title.Should().Be("Zadzwonić do przychodni");
-        _telefon.Zadanie(id)!.State.Should().Be(TaskState.Inbox);
+        _telefon.TaskId(id)!.Title.Should().Be("Zadzwonić do przychodni");
+        _telefon.TaskId(id)!.State.Should().Be(TaskState.Inbox);
     }
 
     [Fact]
@@ -123,9 +123,9 @@ public sealed class SyncEngineTests : IDisposable
 
         foreach (var urzadzenie in new[] { _biurko, _telefon })
         {
-            var zadanie = urzadzenie.Zadanie(id)!;
-            zadanie.Title.Should().Be("Złożyć wniosek o wymianę");
-            zadanie.Priority.Should().Be(Priority.High);
+            var task = urzadzenie.TaskId(id)!;
+            task.Title.Should().Be("Złożyć wniosek o wymianę");
+            task.Priority.Should().Be(Priority.High);
         }
     }
 
@@ -148,8 +148,8 @@ public sealed class SyncEngineTests : IDisposable
         await _telefon.Engine.SyncAsync();
         await _biurko.Engine.SyncAsync();
 
-        _biurko.Zadanie(id)!.Title.Should().Be("z telefonu");
-        _telefon.Zadanie(id)!.Title.Should().Be("z telefonu");
+        _biurko.TaskId(id)!.Title.Should().Be("z telefonu");
+        _telefon.TaskId(id)!.Title.Should().Be("z telefonu");
     }
 
     [Fact]
@@ -187,16 +187,16 @@ public sealed class SyncEngineTests : IDisposable
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
-        foreach (var kursor in _telefon.Db.SyncCursors)
+        foreach (var cursor in _telefon.Db.SyncCursors)
         {
-            kursor.MoveTo(string.Empty);
+            cursor.MoveTo(string.Empty);
         }
 
         _telefon.Db.SaveChanges();
         await _telefon.Engine.SyncAsync();
 
         _telefon.Db.Tasks.Count(t => t.Id == id).Should().Be(1);
-        _telefon.Zadanie(id)!.Title.Should().Be("Zadzwonić");
+        _telefon.TaskId(id)!.Title.Should().Be("Zadzwonić");
     }
 
     [Fact]
@@ -212,7 +212,7 @@ public sealed class SyncEngineTests : IDisposable
         await _biurko.Engine.SyncAsync();
         await _telefon.Engine.SyncAsync();
 
-        _telefon.Zadanie(id)!.State.Should().Be(TaskState.Trashed);
+        _telefon.TaskId(id)!.State.Should().Be(TaskState.Trashed);
     }
 
     [Fact]
@@ -280,14 +280,14 @@ public sealed class SyncEngineTests : IDisposable
         await biurko.Engine.SyncAsync();
         await telefon.Engine.SyncAsync();
 
-        telefon.Zadanie(id)!.Title.Should().Be("Zadzwonić do przychodni");
+        telefon.TaskId(id)!.Title.Should().Be("Zadzwonić do przychodni");
 
         telefon.Db.Tasks.Single(t => t.Id == id).Rename("Umówić wizytę", telefon.Hlc.Next());
         telefon.Db.SaveChanges();
         await telefon.Engine.SyncAsync();
         await biurko.Engine.SyncAsync();
 
-        biurko.Zadanie(id)!.Title.Should().Be("Umówić wizytę");
+        biurko.TaskId(id)!.Title.Should().Be("Umówić wizytę");
     }
 
     [Fact]
@@ -297,11 +297,11 @@ public sealed class SyncEngineTests : IDisposable
         Dodaj(_biurko, "z przyszłości");
         await _biurko.Engine.SyncAsync();
 
-        var przed = _telefon.Hlc.Last;
+        var before = _telefon.Hlc.Last;
         await _telefon.Engine.SyncAsync();
 
-        _telefon.Hlc.Next().Should().BeGreaterThan(przed);
-        _telefon.Hlc.Last.WallMs.Should().BeGreaterThan(przed.WallMs);
+        _telefon.Hlc.Next().Should().BeGreaterThan(before);
+        _telefon.Hlc.Last.WallMs.Should().BeGreaterThan(before.WallMs);
     }
 
     [Fact]
@@ -309,10 +309,10 @@ public sealed class SyncEngineTests : IDisposable
     {
         Dodaj(_biurko, "cokolwiek");
 
-        var wynik = await _biurko.Engine.SyncAsync();
+        var result = await _biurko.Engine.SyncAsync();
 
-        wynik.Sent.Should().BeGreaterThan(0);
-        wynik.Applied.Should().Be(0);
+        result.Sent.Should().BeGreaterThan(0);
+        result.Applied.Should().Be(0);
     }
 
     public void Dispose()

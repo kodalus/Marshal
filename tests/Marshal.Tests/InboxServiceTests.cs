@@ -44,8 +44,8 @@ public sealed class InboxServiceTests : IDisposable
             new NoTaskMirror());
     }
 
-    private async Task<Guid> Wrzut(string tytul = "Zadzwonić do przychodni") =>
-        await _skrzynka.CaptureAsync(tytul);
+    private async Task<Guid> Wrzut(string title = "Zadzwonić do przychodni") =>
+        await _skrzynka.CaptureAsync(title);
 
     private TaskItem Wczytaj(Guid id) => _db.Tasks.Single(t => t.Id == id);
 
@@ -65,9 +65,9 @@ public sealed class InboxServiceTests : IDisposable
         _zegar.Now = _zegar.Now.AddMinutes(5);
         await Wrzut("druga");
 
-        var pozycje = await _skrzynka.ListAsync();
+        var rows = await _skrzynka.ListAsync();
 
-        pozycje.Select(p => p.Title).Should().Equal("pierwsza", "druga");
+        rows.Select(p => p.Title).Should().Equal("pierwsza", "druga");
     }
 
     [Fact]
@@ -89,10 +89,10 @@ public sealed class InboxServiceTests : IDisposable
 
         await _skrzynka.DoNowAsync(id, _obszar);
 
-        var zadanie = Wczytaj(id);
-        zadanie.State.Should().Be(TaskState.Done);
-        zadanie.CompletedAt.Should().Be(_zegar.Now);
-        zadanie.AreaId.Should().Be(_obszar);
+        var task = Wczytaj(id);
+        task.State.Should().Be(TaskState.Done);
+        task.CompletedAt.Should().Be(_zegar.Now);
+        task.AreaId.Should().Be(_obszar);
     }
 
     [Fact]
@@ -102,23 +102,23 @@ public sealed class InboxServiceTests : IDisposable
 
         await _skrzynka.DelegateAsync(id, _obszar, "urząd miasta", nudgeDays: 21);
 
-        var zadanie = Wczytaj(id);
-        zadanie.State.Should().Be(TaskState.Waiting);
-        zadanie.WaitingForWho.Should().Be("urząd miasta");
-        zadanie.WaitingSince.Should().Be(DateOnly.FromDateTime(_zegar.Now.Date));
-        zadanie.WaitingNudgeDays.Should().Be(21);
+        var task = Wczytaj(id);
+        task.State.Should().Be(TaskState.Waiting);
+        task.WaitingForWho.Should().Be("urząd miasta");
+        task.WaitingSince.Should().Be(DateOnly.FromDateTime(_zegar.Now.Date));
+        task.WaitingNudgeDays.Should().Be(21);
     }
 
     [Fact]
     public async Task Zaplanowanie_zapisuje_dzien_i_opuszcza_skrzynke()
     {
         var id = await Wrzut();
-        var dzien = new DateOnly(2026, 9, 21);
+        var day = new DateOnly(2026, 9, 21);
 
-        await _skrzynka.ScheduleAsync(id, _obszar, dzien);
+        await _skrzynka.ScheduleAsync(id, _obszar, day);
 
         Wczytaj(id).State.Should().Be(TaskState.Scheduled);
-        Wczytaj(id).DoDate.Should().Be(dzien);
+        Wczytaj(id).DoDate.Should().Be(day);
         (await _skrzynka.CountAsync()).Should().Be(0);
     }
 
@@ -126,13 +126,13 @@ public sealed class InboxServiceTests : IDisposable
     public async Task Nastepna_akcja_moze_od_razu_trafic_do_projektu()
     {
         var pierwsza = await Wrzut("Zebrać dokumenty");
-        var projekt = await _skrzynka.PromoteToProjectAsync(
+        var project = await _skrzynka.PromoteToProjectAsync(
             pierwsza, _obszar, "Wniosek jest złożony", "Zebrać dokumenty");
 
         var kolejna = await Wrzut("Umówić termin w urzędzie");
-        await _skrzynka.MakeNextAsync(kolejna, _obszar, projekt);
+        await _skrzynka.MakeNextAsync(kolejna, _obszar, project);
 
-        Wczytaj(kolejna).ProjectId.Should().Be(projekt);
+        Wczytaj(kolejna).ProjectId.Should().Be(project);
     }
 
     [Fact]
@@ -140,17 +140,17 @@ public sealed class InboxServiceTests : IDisposable
     {
         var id = await Wrzut("Zrobić coś z wnioskiem");
 
-        var projekt = await _skrzynka.PromoteToProjectAsync(
+        var project = await _skrzynka.PromoteToProjectAsync(
             id, _obszar, "Wniosek jest złożony", "Zebrać listę wymaganych dokumentów");
 
-        var utworzony = _db.Projects.Single(p => p.Id == projekt);
+        var utworzony = _db.Projects.Single(p => p.Id == project);
         utworzony.Outcome.Should().Be("Wniosek jest złożony");
         utworzony.AreaId.Should().Be(_obszar);
 
         var akcja = Wczytaj(id);
         akcja.Title.Should().Be("Zebrać listę wymaganych dokumentów");
         akcja.State.Should().Be(TaskState.Next);
-        akcja.ProjectId.Should().Be(projekt);
+        akcja.ProjectId.Should().Be(project);
     }
 
     [Fact]

@@ -47,37 +47,37 @@ public sealed class ReviewQueriesTests : IDisposable
         _zapytania = new ReviewQueries(_db);
     }
 
-    private Area Obszar(string nazwa, int quietDays = 30, int nudgeDays = 7)
+    private Area Obszar(string name, int quietDays = 30, int nudgeDays = 7)
     {
-        var obszar = new Area(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), nazwa, _kolejnosc++, quietDays, nudgeDays);
-        _db.Areas.Add(obszar);
+        var area = new Area(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), name, _kolejnosc++, quietDays, nudgeDays);
+        _db.Areas.Add(area);
         _db.SaveChanges();
-        return obszar;
+        return area;
     }
 
-    private Project Projekt(string wynik, Area obszar, Guid? rodzic = null)
+    private Project Projekt(string result, Area area, Guid? parent = null)
     {
-        var projekt = new Project(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), wynik, obszar.Id, _kolejnosc++, rodzic);
-        _db.Projects.Add(projekt);
+        var project = new Project(
+            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), result, area.Id, _kolejnosc++, parent);
+        _db.Projects.Add(project);
         _db.SaveChanges();
-        return projekt;
+        return project;
     }
 
-    private TaskItem Zadanie(string tytul, Area obszar, Guid? projekt = null)
+    private TaskItem TaskId(string title, Area area, Guid? project = null)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
-        zadanie.MakeNext(obszar.Id, _hlc.Next());
+        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        task.MakeNext(area.Id, _hlc.Next());
 
-        if (projekt is { } p)
+        if (project is { } p)
         {
-            zadanie.MoveTo(obszar.Id, p, _hlc.Next());
+            task.MoveTo(area.Id, p, _hlc.Next());
         }
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
-        return zadanie;
+        return task;
     }
 
     // --- N1: projekty zablokowane (8.2) --------------------------------------
@@ -85,22 +85,22 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Projekt_bez_zadnej_akcji_jest_zablokowany()
     {
-        var obszar = Obszar("Dom");
-        Projekt("Zimowe opony są na aucie", obszar);
+        var area = Obszar("Dom");
+        Projekt("Zimowe opony są na aucie", area);
 
-        var wynik = await _zapytania.BlockedProjectsAsync();
+        var result = await _zapytania.BlockedProjectsAsync();
 
-        wynik.Should().ContainSingle();
-        wynik[0].Outcome.Should().Be("Zimowe opony są na aucie");
-        wynik[0].AreaName.Should().Be("Dom");
+        result.Should().ContainSingle();
+        result[0].Outcome.Should().Be("Zimowe opony są na aucie");
+        result[0].AreaName.Should().Be("Dom");
     }
 
     [Fact]
     public async Task Projekt_z_nastepna_akcja_nie_jest_zablokowany()
     {
-        var obszar = Obszar("Dom");
-        var projekt = Projekt("Zimowe opony są na aucie", obszar);
-        Zadanie("Zadzwonić do wulkanizacji", obszar, projekt.Id);
+        var area = Obszar("Dom");
+        var project = Projekt("Zimowe opony są na aucie", area);
+        TaskId("Zadzwonić do wulkanizacji", area, project.Id);
 
         (await _zapytania.BlockedProjectsAsync()).Should().BeEmpty();
     }
@@ -109,10 +109,10 @@ public sealed class ReviewQueriesTests : IDisposable
     public async Task Projekt_ktorego_jedyna_akcja_to_oczekiwanie_nie_jest_zablokowany()
     {
         // Czekanie na kogoś jest prawidłowym stanem, a nie brakiem następnej akcji.
-        var obszar = Obszar("Sprawy urzędowe");
-        var projekt = Projekt("Wniosek jest rozpatrzony", obszar);
-        var zadanie = Zadanie("Odpowiedź z urzędu", obszar, projekt.Id);
-        zadanie.Delegate(obszar.Id, "urząd", Dzis.AddDays(-3), null, _hlc.Next());
+        var area = Obszar("Sprawy urzędowe");
+        var project = Projekt("Wniosek jest rozpatrzony", area);
+        var task = TaskId("Odpowiedź z urzędu", area, project.Id);
+        task.Delegate(area.Id, "urząd", Dzis.AddDays(-3), null, _hlc.Next());
         _db.SaveChanges();
 
         (await _zapytania.BlockedProjectsAsync()).Should().BeEmpty();
@@ -121,10 +121,10 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Projekt_z_wykonana_akcja_i_niczym_wiecej_jest_zablokowany()
     {
-        var obszar = Obszar("Dom");
-        var projekt = Projekt("Zimowe opony są na aucie", obszar);
-        var zadanie = Zadanie("Zadzwonić do wulkanizacji", obszar, projekt.Id);
-        zadanie.Complete(_zegar.Now, _hlc.Next());
+        var area = Obszar("Dom");
+        var project = Projekt("Zimowe opony są na aucie", area);
+        var task = TaskId("Zadzwonić do wulkanizacji", area, project.Id);
+        task.Complete(_zegar.Now, _hlc.Next());
         _db.SaveChanges();
 
         (await _zapytania.BlockedProjectsAsync()).Should().ContainSingle();
@@ -137,10 +137,10 @@ public sealed class ReviewQueriesTests : IDisposable
         // zadań — ma podprojekty, które je mają. Bez warunku o podprojektach każdy cel
         // zgłaszałby się jako zablokowany, N1 sypałby fałszywymi alarmami i przestałabyś
         // na niego patrzeć. Niezmiennik, który krzyczy bez powodu, uczy ignorowania.
-        var obszar = Obszar("Rozwój własny");
-        var cel = Projekt("Mam prawo jazdy", obszar);
-        var podprojekt = Projekt("Kurs jest zaliczony", obszar, cel.Id);
-        Zadanie("Zapisać się na kurs", obszar, podprojekt.Id);
+        var area = Obszar("Rozwój własny");
+        var cel = Projekt("Mam prawo jazdy", area);
+        var podprojekt = Projekt("Kurs jest zaliczony", area, cel.Id);
+        TaskId("Zapisać się na kurs", area, podprojekt.Id);
 
         (await _zapytania.BlockedProjectsAsync()).Should().BeEmpty();
     }
@@ -149,22 +149,22 @@ public sealed class ReviewQueriesTests : IDisposable
     public async Task Pusty_podprojekt_zglasza_sie_sam_a_nie_jego_rodzic()
     {
         // Wskazanie ma trafiać tam, gdzie brakuje akcji, a nie w korzeń drzewa.
-        var obszar = Obszar("Rozwój własny");
-        var cel = Projekt("Mam prawo jazdy", obszar);
-        Projekt("Kurs jest zaliczony", obszar, cel.Id);
+        var area = Obszar("Rozwój własny");
+        var cel = Projekt("Mam prawo jazdy", area);
+        Projekt("Kurs jest zaliczony", area, cel.Id);
 
-        var wynik = await _zapytania.BlockedProjectsAsync();
+        var result = await _zapytania.BlockedProjectsAsync();
 
-        wynik.Should().ContainSingle();
-        wynik[0].Outcome.Should().Be("Kurs jest zaliczony");
+        result.Should().ContainSingle();
+        result[0].Outcome.Should().Be("Kurs jest zaliczony");
     }
 
     [Fact]
     public async Task Projekt_zakonczony_nie_jest_zablokowany()
     {
-        var obszar = Obszar("Dom");
-        var projekt = Projekt("Zimowe opony są na aucie", obszar);
-        projekt.SetState(ProjectState.Done, _hlc.Next());
+        var area = Obszar("Dom");
+        var project = Projekt("Zimowe opony są na aucie", area);
+        project.SetState(ProjectState.Done, _hlc.Next());
         _db.SaveChanges();
 
         (await _zapytania.BlockedProjectsAsync()).Should().BeEmpty();
@@ -175,28 +175,28 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Projekt_w_ktorym_wszystko_czeka_dlugo_jest_zglaszany_osobno()
     {
-        var obszar = Obszar("Sprawy urzędowe");
-        var projekt = Projekt("Wniosek jest rozpatrzony", obszar);
-        var zadanie = Zadanie("Odpowiedź z urzędu", obszar, projekt.Id);
-        zadanie.Delegate(obszar.Id, "urząd skarbowy", Dzis.AddDays(-45), null, _hlc.Next());
+        var area = Obszar("Sprawy urzędowe");
+        var project = Projekt("Wniosek jest rozpatrzony", area);
+        var task = TaskId("Odpowiedź z urzędu", area, project.Id);
+        task.Delegate(area.Id, "urząd skarbowy", Dzis.AddDays(-45), null, _hlc.Next());
         _db.SaveChanges();
 
-        var wynik = await _zapytania.StuckOnSomeoneAsync(Dzis, days: 30);
+        var result = await _zapytania.StuckOnSomeoneAsync(Dzis, days: 30);
 
-        wynik.Should().ContainSingle();
-        wynik[0].Days.Should().Be(45);
-        wynik[0].Who.Should().Be("urząd skarbowy");
+        result.Should().ContainSingle();
+        result[0].Days.Should().Be(45);
+        result[0].Who.Should().Be("urząd skarbowy");
     }
 
     [Fact]
     public async Task Projekt_z_jedna_wlasna_akcja_nie_utknal_na_nikim()
     {
         // Ma co robić, więc nie utknął — niezależnie od tego, jak długo wisi reszta.
-        var obszar = Obszar("Sprawy urzędowe");
-        var projekt = Projekt("Wniosek jest rozpatrzony", obszar);
-        var czekajace = Zadanie("Odpowiedź z urzędu", obszar, projekt.Id);
-        czekajace.Delegate(obszar.Id, "urząd", Dzis.AddDays(-90), null, _hlc.Next());
-        Zadanie("Przygotować załączniki", obszar, projekt.Id);
+        var area = Obszar("Sprawy urzędowe");
+        var project = Projekt("Wniosek jest rozpatrzony", area);
+        var czekajace = TaskId("Odpowiedź z urzędu", area, project.Id);
+        czekajace.Delegate(area.Id, "urząd", Dzis.AddDays(-90), null, _hlc.Next());
+        TaskId("Przygotować załączniki", area, project.Id);
         _db.SaveChanges();
 
         (await _zapytania.StuckOnSomeoneAsync(Dzis, days: 30)).Should().BeEmpty();
@@ -207,11 +207,11 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Oczekiwane_wracaja_najdluzej_czekajace_pierwsze()
     {
-        var obszar = Obszar("Dom");
-        foreach (var (tytul, dni) in new[] { ("świeże", 1), ("stare", 30), ("średnie", 10) })
+        var area = Obszar("Dom");
+        foreach (var (title, days) in new[] { ("świeże", 1), ("stare", 30), ("średnie", 10) })
         {
-            var zadanie = Zadanie(tytul, obszar);
-            zadanie.Delegate(obszar.Id, "ktoś", Dzis.AddDays(-dni), null, _hlc.Next());
+            var task = TaskId(title, area);
+            task.Delegate(area.Id, "ktoś", Dzis.AddDays(-days), null, _hlc.Next());
         }
 
         _db.SaveChanges();
@@ -226,28 +226,28 @@ public sealed class ReviewQueriesTests : IDisposable
         // Siedem dni dla urzędu jest absurdalnie agresywne — urząd nie odpowiada
         // w tydzień. Dlatego próg jest per obszar, nie globalny (5.2).
         var urzad = Obszar("Sprawy urzędowe", nudgeDays: 21);
-        var zadanie = Zadanie("Odpowiedź z urzędu", urzad);
-        zadanie.Delegate(urzad.Id, "urząd", Dzis.AddDays(-10), null, _hlc.Next());
+        var task = TaskId("Odpowiedź z urzędu", urzad);
+        task.Delegate(urzad.Id, "urząd", Dzis.AddDays(-10), null, _hlc.Next());
         _db.SaveChanges();
 
-        var wynik = (await _zapytania.WaitingAsync(Dzis)).Single();
+        var result = (await _zapytania.WaitingAsync(Dzis)).Single();
 
-        wynik.NudgeDays.Should().Be(21);
-        wynik.NeedsNudge.Should().BeFalse();
+        result.NudgeDays.Should().Be(21);
+        result.NeedsNudge.Should().BeFalse();
     }
 
     [Fact]
     public async Task Prog_zadania_nadpisuje_prog_obszaru()
     {
         var urzad = Obszar("Sprawy urzędowe", nudgeDays: 21);
-        var zadanie = Zadanie("Pilna odpowiedź", urzad);
-        zadanie.Delegate(urzad.Id, "urząd", Dzis.AddDays(-10), nudgeDays: 5, _hlc.Next());
+        var task = TaskId("Pilna odpowiedź", urzad);
+        task.Delegate(urzad.Id, "urząd", Dzis.AddDays(-10), nudgeDays: 5, _hlc.Next());
         _db.SaveChanges();
 
-        var wynik = (await _zapytania.WaitingAsync(Dzis)).Single();
+        var result = (await _zapytania.WaitingAsync(Dzis)).Single();
 
-        wynik.NudgeDays.Should().Be(5);
-        wynik.NeedsNudge.Should().BeTrue();
+        result.NudgeDays.Should().Be(5);
+        result.NeedsNudge.Should().BeTrue();
     }
 
     // --- 8.5: równowaga obszarów ---------------------------------------------
@@ -259,23 +259,23 @@ public sealed class ReviewQueriesTests : IDisposable
         // się działo — a nie działo się nic.
         Obszar("Relacje");
 
-        var wynik = (await _zapytania.BalanceAsync(Dzis)).Single();
+        var result = (await _zapytania.BalanceAsync(Dzis)).Single();
 
-        wynik.DaysSinceMove.Should().BeNull();
-        wynik.ActiveProjects.Should().Be(0);
-        wynik.IsQuiet.Should().BeTrue();
+        result.DaysSinceMove.Should().BeNull();
+        result.ActiveProjects.Should().Be(0);
+        result.IsQuiet.Should().BeTrue();
     }
 
     [Fact]
     public async Task Obszar_z_dzisiejszym_ruchem_nie_milczy()
     {
-        var obszar = Obszar("Dom");
-        Zadanie("Wymienić żarówkę", obszar);
+        var area = Obszar("Dom");
+        TaskId("Wymienić żarówkę", area);
 
-        var wynik = (await _zapytania.BalanceAsync(Dzis)).Single();
+        var result = (await _zapytania.BalanceAsync(Dzis)).Single();
 
-        wynik.DaysSinceMove.Should().Be(0);
-        wynik.IsQuiet.Should().BeFalse();
+        result.DaysSinceMove.Should().Be(0);
+        result.IsQuiet.Should().BeFalse();
     }
 
     [Fact]
@@ -286,14 +286,14 @@ public sealed class ReviewQueriesTests : IDisposable
         // dostałby i tak czas bieżący. Scenariusz musi biec tak, jak biegnie naprawdę:
         // najpierw dawno, potem dziś.
         _zegar.Now = _zegar.Now.AddDays(-100);
-        var obszar = Obszar("Twórczość", quietDays: 45);
-        Zadanie("Nagrać pierwszą historię", obszar);
+        var area = Obszar("Twórczość", quietDays: 45);
+        TaskId("Nagrać pierwszą historię", area);
         _zegar.Now = _zegar.Now.AddDays(100);
 
-        var wynik = (await _zapytania.BalanceAsync(Dzis)).Single();
+        var result = (await _zapytania.BalanceAsync(Dzis)).Single();
 
-        wynik.DaysSinceMove.Should().Be(100);
-        wynik.IsQuiet.Should().BeTrue();
+        result.DaysSinceMove.Should().Be(100);
+        result.IsQuiet.Should().BeTrue();
     }
 
     [Fact]
@@ -302,25 +302,25 @@ public sealed class ReviewQueriesTests : IDisposable
         // Praca i Dzieci mają progi, które praktycznie nigdy nie zadziałają, i tak ma
         // być: wartość mechanizmu leży cała w dolnej połowie tabeli (5.2).
         _zegar.Now = _zegar.Now.AddDays(-20);
-        var praca = Obszar("Praca", quietDays: 14);
+        var work = Obszar("Praca", quietDays: 14);
         var tworczosc = Obszar("Twórczość", quietDays: 45);
-        Zadanie("Przegląd kodu", praca);
-        Zadanie("Szkic historii", tworczosc);
+        TaskId("Przegląd kodu", work);
+        TaskId("Szkic historii", tworczosc);
         _zegar.Now = _zegar.Now.AddDays(20);
 
-        var wynik = await _zapytania.BalanceAsync(Dzis);
+        var result = await _zapytania.BalanceAsync(Dzis);
 
-        wynik.Single(b => b.Name == "Praca").IsQuiet.Should().BeTrue();
-        wynik.Single(b => b.Name == "Twórczość").IsQuiet.Should().BeFalse();
+        result.Single(b => b.Name == "Praca").IsQuiet.Should().BeTrue();
+        result.Single(b => b.Name == "Twórczość").IsQuiet.Should().BeFalse();
     }
 
     [Fact]
     public async Task Tabela_idzie_od_najdluzej_milczacych()
     {
         _zegar.Now = _zegar.Now.AddDays(-5);
-        var praca = Obszar("Praca");
+        var work = Obszar("Praca");
         Obszar("Relacje");
-        Zadanie("Przegląd kodu", praca);
+        TaskId("Przegląd kodu", work);
         _zegar.Now = _zegar.Now.AddDays(5);
 
         (await _zapytania.BalanceAsync(Dzis)).Select(b => b.Name)
@@ -330,8 +330,8 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Obszar_nieaktywny_znika_z_tabeli()
     {
-        var obszar = Obszar("Dawny");
-        obszar.SetActive(false, _hlc.Next());
+        var area = Obszar("Dawny");
+        area.SetActive(false, _hlc.Next());
         _db.SaveChanges();
 
         (await _zapytania.BalanceAsync(Dzis)).Should().BeEmpty();
@@ -342,15 +342,15 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Po_terminie_lapie_tylko_niewykonane()
     {
-        var obszar = Obszar("Finanse");
-        var przeterminowane = Zadanie("Zapłacić ratę", obszar);
+        var area = Obszar("Finanse");
+        var przeterminowane = TaskId("Zapłacić ratę", area);
         przeterminowane.SetDeadline(Dzis.AddDays(-3), _hlc.Next());
 
-        var zrobione = Zadanie("Rozliczyć PIT", obszar);
+        var zrobione = TaskId("Rozliczyć PIT", area);
         zrobione.SetDeadline(Dzis.AddDays(-5), _hlc.Next());
         zrobione.Complete(_zegar.Now, _hlc.Next());
 
-        var dzisiejsze = Zadanie("Przelew", obszar);
+        var dzisiejsze = TaskId("Przelew", area);
         dzisiejsze.SetDeadline(Dzis, _hlc.Next());
         _db.SaveChanges();
 
@@ -361,15 +361,15 @@ public sealed class ReviewQueriesTests : IDisposable
     [Fact]
     public async Task Kiedys_moze_dojrzewa_gdy_minie_data_odlozenia()
     {
-        var obszar = Obszar("Rozwój własny");
-        var dojrzale = Zadanie("Nauczyć się hiszpańskiego", obszar);
-        dojrzale.Postpone(obszar.Id, Dzis.AddDays(-1), _hlc.Next());
+        var area = Obszar("Rozwój własny");
+        var dojrzale = TaskId("Nauczyć się hiszpańskiego", area);
+        dojrzale.Postpone(area.Id, Dzis.AddDays(-1), _hlc.Next());
 
-        var niedojrzale = Zadanie("Kupić fortepian", obszar);
-        niedojrzale.Postpone(obszar.Id, Dzis.AddDays(30), _hlc.Next());
+        var niedojrzale = TaskId("Kupić fortepian", area);
+        niedojrzale.Postpone(area.Id, Dzis.AddDays(30), _hlc.Next());
 
-        var bezDaty = Zadanie("Kiedyś Islandia", obszar);
-        bezDaty.Postpone(obszar.Id, null, _hlc.Next());
+        var bezDaty = TaskId("Kiedyś Islandia", area);
+        bezDaty.Postpone(area.Id, null, _hlc.Next());
         _db.SaveChanges();
 
         (await _zapytania.MaturedSomedayAsync(Dzis)).Select(t => t.Title)
@@ -380,10 +380,10 @@ public sealed class ReviewQueriesTests : IDisposable
     public async Task Projekty_nietkniete_od_dawna_trafiaja_do_kroku_piatego()
     {
         _zegar.Now = _zegar.Now.AddDays(-30);
-        var obszar = Obszar("Dom");
-        Projekt("Piwnica jest uporządkowana", obszar);
+        var area = Obszar("Dom");
+        Projekt("Piwnica jest uporządkowana", area);
         _zegar.Now = _zegar.Now.AddDays(30);
-        Projekt("Zimowe opony są na aucie", obszar);
+        Projekt("Zimowe opony są na aucie", area);
 
         (await _zapytania.StaleProjectsAsync(Dzis, days: 14)).Select(p => p.Outcome)
             .Should().Equal("Piwnica jest uporządkowana");

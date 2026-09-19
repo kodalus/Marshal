@@ -31,19 +31,19 @@ public sealed class TaskMappingTests : IDisposable
     [Fact]
     public void Zadanie_przechodzi_zapis_i_odczyt_bez_utraty_pol()
     {
-        var obszar = Guid.CreateVersion7();
-        var dzien = new DateOnly(2026, 9, 21);
-        var termin = new DateOnly(2026, 9, 30);
+        var area = Guid.CreateVersion7();
+        var day = new DateOnly(2026, 9, 21);
+        var deadline = new DateOnly(2026, 9, 30);
         Guid id;
 
         using (var zapis = Kontekst())
         {
-            var zadanie = TaskItem.Capture("Złożyć wniosek", Teraz, new Hlc(1000, 0, "a"));
-            zadanie.Schedule(obszar, dzien, new Hlc(2000, 0, "a"));
-            zadanie.SetDeadline(termin, new Hlc(3000, 0, "a"));
-            zadanie.SetNote("Załączniki: **skan dowodu**", new Hlc(4000, 0, "a"));
-            id = zadanie.Id;
-            zapis.Tasks.Add(zadanie);
+            var task = TaskItem.Capture("Złożyć wniosek", Teraz, new Hlc(1000, 0, "a"));
+            task.Schedule(area, day, new Hlc(2000, 0, "a"));
+            task.SetDeadline(deadline, new Hlc(3000, 0, "a"));
+            task.SetNote("Załączniki: **skan dowodu**", new Hlc(4000, 0, "a"));
+            id = task.Id;
+            zapis.Tasks.Add(task);
             zapis.SaveChanges();
         }
 
@@ -53,9 +53,9 @@ public sealed class TaskMappingTests : IDisposable
         wczytane.Id.Should().Be(id);
         wczytane.Title.Should().Be("Złożyć wniosek");
         wczytane.State.Should().Be(TaskState.Scheduled);
-        wczytane.AreaId.Should().Be(obszar);
-        wczytane.DoDate.Should().Be(dzien);
-        wczytane.Deadline.Should().Be(termin);
+        wczytane.AreaId.Should().Be(area);
+        wczytane.DoDate.Should().Be(day);
+        wczytane.Deadline.Should().Be(deadline);
         wczytane.Note.Should().Be("Załączniki: **skan dowodu**");
     }
 
@@ -75,9 +75,9 @@ public sealed class TaskMappingTests : IDisposable
     public void Stan_jest_skladowany_jako_liczba()
     {
         using var kontekst = Kontekst();
-        var zadanie = TaskItem.Capture("cokolwiek", Teraz, new Hlc(1000, 0, "a"));
-        zadanie.Postpone(Guid.CreateVersion7(), null, new Hlc(2000, 0, "a"));
-        kontekst.Tasks.Add(zadanie);
+        var task = TaskItem.Capture("cokolwiek", Teraz, new Hlc(1000, 0, "a"));
+        task.Postpone(Guid.CreateVersion7(), null, new Hlc(2000, 0, "a"));
+        kontekst.Tasks.Add(task);
         kontekst.SaveChanges();
 
         using var polecenie = _connection.CreateCommand();
@@ -89,20 +89,20 @@ public sealed class TaskMappingTests : IDisposable
     [Fact]
     public void Projekt_i_jego_zadania_wiaze_goly_identyfikator()
     {
-        var obszar = Guid.CreateVersion7();
-        var projekt = new Project(
-            Guid.CreateVersion7(), Teraz, new Hlc(1000, 0, "a"), "Wniosek jest złożony", obszar, 1.0);
+        var area = Guid.CreateVersion7();
+        var project = new Project(
+            Guid.CreateVersion7(), Teraz, new Hlc(1000, 0, "a"), "Wniosek jest złożony", area, 1.0);
 
         using var kontekst = Kontekst();
-        kontekst.Projects.Add(projekt);
+        kontekst.Projects.Add(project);
 
-        var zadanie = TaskItem.Capture("Zebrać dokumenty", Teraz, new Hlc(1000, 0, "a"));
-        zadanie.MakeNext(obszar, new Hlc(2000, 0, "a"));
-        zadanie.MoveTo(obszar, projekt.Id, new Hlc(3000, 0, "a"));
-        kontekst.Tasks.Add(zadanie);
+        var task = TaskItem.Capture("Zebrać dokumenty", Teraz, new Hlc(1000, 0, "a"));
+        task.MakeNext(area, new Hlc(2000, 0, "a"));
+        task.MoveTo(area, project.Id, new Hlc(3000, 0, "a"));
+        kontekst.Tasks.Add(task);
         kontekst.SaveChanges();
 
-        kontekst.Tasks.Single(t => t.ProjectId == projekt.Id).Title.Should().Be("Zebrać dokumenty");
+        kontekst.Tasks.Single(t => t.ProjectId == project.Id).Title.Should().Be("Zebrać dokumenty");
     }
 
     [Fact]
@@ -111,10 +111,10 @@ public sealed class TaskMappingTests : IDisposable
         // Brak kluczy obcych jest celowy: przy synchronizacji zmiany przychodzą
         // w kolejności zapisu, nie zależności, więc zadanie potrafi wyprzedzić projekt.
         using var kontekst = Kontekst();
-        var zadanie = TaskItem.Capture("Krok projektu, który dopiero nadejdzie", Teraz, new Hlc(1000, 0, "a"));
-        zadanie.MakeNext(Guid.CreateVersion7(), new Hlc(2000, 0, "a"));
-        zadanie.MoveTo(zadanie.AreaId!.Value, Guid.CreateVersion7(), new Hlc(3000, 0, "a"));
-        kontekst.Tasks.Add(zadanie);
+        var task = TaskItem.Capture("Krok projektu, który dopiero nadejdzie", Teraz, new Hlc(1000, 0, "a"));
+        task.MakeNext(Guid.CreateVersion7(), new Hlc(2000, 0, "a"));
+        task.MoveTo(task.AreaId!.Value, Guid.CreateVersion7(), new Hlc(3000, 0, "a"));
+        kontekst.Tasks.Add(task);
 
         var zapisz = () => kontekst.SaveChanges();
 

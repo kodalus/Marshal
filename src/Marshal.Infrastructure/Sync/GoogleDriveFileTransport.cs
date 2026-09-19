@@ -52,8 +52,8 @@ public sealed class GoogleDriveFileTransport(IDriveClient drive, string folderNa
             return null;
         }
 
-        var tresc = await drive.DownloadAsync(plik.Id, ct);
-        return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(tresc));
+        var content = await drive.DownloadAsync(plik.Id, ct);
+        return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));
     }
 
     private async Task<DriveFile?> FindAsync(string sha256, CancellationToken ct) =>

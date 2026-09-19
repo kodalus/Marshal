@@ -6,33 +6,33 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Marshal.Infrastructure.Repositories;
 
-public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = null)
+public sealed class TaskRepository(MarshalDbContext db, IDbQueue? queue = null)
     : ITaskRepository
 {
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     public async Task<TaskItem?> FindAsync(Guid id, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks.FirstOrDefaultAsync(t => t.Id == id && !t.Deleted, ct), ct);
+        await _kolejka.RunAsync(() => db.Tasks.FirstOrDefaultAsync(t => t.Id == id && !t.Deleted, ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> InboxAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.State == TaskState.Inbox && !t.Deleted)
             .OrderBy(t => t.CreatedAt)
             .ToListAsync(ct), ct);
 
     public Task<int> InboxCountAsync(CancellationToken ct = default) =>
-        _kolejka.WykonajAsync(
+        _kolejka.RunAsync(
             () => db.Tasks.CountAsync(t => t.State == TaskState.Inbox && !t.Deleted, ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> ByStateAsync(TaskState state, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.State == state && !t.Deleted)
             .OrderBy(t => t.SortOrder)
             .ThenBy(t => t.CreatedAt)
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> ByProjectAsync(Guid projectId, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.ProjectId == projectId && !t.Deleted && t.State != TaskState.Trashed)
             .OrderBy(t => t.SortOrder)
             .ThenBy(t => t.CreatedAt)
@@ -48,7 +48,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
     /// jutro liczy się już tylko to, co jutrzejsze.
     /// </remarks>
     public async Task<IReadOnlyList<TaskItem>> TodayAsync(DateOnly today, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => !t.Deleted
                      && t.State != TaskState.Trashed
                      && t.State != TaskState.Inbox
@@ -71,7 +71,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
     /// </remarks>
     public async Task<IReadOnlyList<TaskItem>> UpcomingAsync(
         DateOnly after, DateOnly until, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => !t.Deleted
                      && t.State != TaskState.Trashed
                      && t.State != TaskState.Inbox)
@@ -81,14 +81,14 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> ArchiveAsync(int limit, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => !t.Deleted && (t.State == TaskState.Done || t.State == TaskState.Trashed))
             .OrderByDescending(t => t.CompletedAt ?? t.CreatedAt)
             .Take(limit)
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> ByAreaAsync(Guid areaId, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => Otwarte()
+        await _kolejka.RunAsync(() => Otwarte()
             .Where(t => t.AreaId == areaId)
             .OrderBy(t => t.SortOrder)
             .ThenBy(t => t.CreatedAt)
@@ -104,7 +104,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
     /// czyli w jednym miejscu, razem z powodem.
     /// </remarks>
     public async Task<IReadOnlyList<TaskItem>> AllAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => !t.Deleted)
             .OrderBy(t => t.SortOrder)
             .ThenBy(t => t.CreatedAt)
@@ -112,7 +112,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
 
     public async Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(
         DateOnly today, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => Otwarte()
+        await _kolejka.RunAsync(() => Otwarte()
             .Where(t => t.DoDate != null && t.DoDate < today)
             // Najstarsze pierwsze: przy Accumulate kolejność ma znaczenie, bo każde
             // wystąpienie rodzi następne i rytm musi wyjść z najdawniejszego.
@@ -120,13 +120,13 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> WithRemindersAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => Otwarte()
+        await _kolejka.RunAsync(() => Otwarte()
             .Where(t => t.ReminderAt != null || t.ReminderLeadsCsv != null)
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<TaskItem>> DueRemindersAsync(
         DateTimeOffset now, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => Otwarte()
+        await _kolejka.RunAsync(() => Otwarte()
             .Where(t => t.ReminderAt != null && t.ReminderAt <= now)
             // Najdawniejsze pierwsze: gdy uzbierało się kilka, kolejność ma być taka,
             // w jakiej miały się odezwać.
@@ -135,7 +135,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
 
     public async Task<IReadOnlyList<TaskItem>> ByFocusDateAsync(
         DateOnly date, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.FocusDate == date && !t.Deleted && t.State != TaskState.Trashed)
             .OrderBy(t => t.SortOrder)
             .ThenBy(t => t.CreatedAt)
@@ -143,7 +143,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
 
     public async Task<IReadOnlyList<TaskItem>> FocusedBetweenAsync(
         DateOnly from, DateOnly to, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.FocusDate != null && t.FocusDate >= from && t.FocusDate < to
                      && !t.Deleted && t.State != TaskState.Trashed)
             .OrderBy(t => t.SortOrder)
@@ -152,7 +152,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
 
     public async Task<IReadOnlyList<TaskItem>> ExpiredFocusAsync(
         DateOnly today, CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.FocusDate != null && t.FocusDate < today && !t.Deleted
                      && t.State != TaskState.Done && t.State != TaskState.Trashed)
             .ToListAsync(ct), ct);
@@ -166,7 +166,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
 
     public async Task<IReadOnlyList<TaskItem>> PendingMirrorRemovalsAsync(
         CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             // Także nagrobki: zadanie skasowane na drugim urządzeniu przyjeżdża tu jako
             // nagrobek ze wskazaniem, a jego odbicie nie ma kto zdjąć poza nami.
             .Where(t => t.SharedEventId != null
@@ -175,7 +175,7 @@ public sealed class TaskRepository(MarshalDbContext db, IKolejkaBazy? kolejka = 
             .ToListAsync(ct), ct);
 
     public async Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default) =>
-        await _kolejka.WykonajAsync(() => db.Tasks
+        await _kolejka.RunAsync(() => db.Tasks
             .Where(t => t.SharedEventId != null)
             .Select(t => t.SharedEventId!)
             .Distinct()

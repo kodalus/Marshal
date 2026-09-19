@@ -75,21 +75,21 @@ public sealed class CalendarSyncService(
     {
         ArgumentNullException.ThrowIfNull(draft);
 
-        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+        var (source, writer) = await ForWriteAsync(sourceId, ct);
 
-        var identyfikator = string.IsNullOrWhiteSpace(externalId)
-            ? await pisarz.CreateAsync(zrodlo, draft, ct)
+        var id = string.IsNullOrWhiteSpace(externalId)
+            ? await writer.CreateAsync(source, draft, ct)
             : externalId;
 
         if (!string.IsNullOrWhiteSpace(externalId))
         {
             try
             {
-                await pisarz.UpdateAsync(zrodlo, externalId, draft, ct);
+                await writer.UpdateAsync(source, externalId, draft, ct);
             }
-            catch (WydarzenieZniknelo)
+            catch (EventGone)
             {
-                await ZdejmijDuchaAsync(zrodlo.Id, externalId, ct);
+                await DropGhostAsync(source.Id, externalId, ct);
                 throw;
             }
         }
@@ -107,15 +107,15 @@ public sealed class CalendarSyncService(
         // odświeżeniu wracała z Google prawidłowa, a przy każdym zapisie psuła się
         // z powrotem.
         await store.UpsertAsync(
-            zrodlo.Id,
+            source.Id,
             [new FeedEvent(
-                identyfikator, draft.Title, draft.Start, draft.End,
+                id, draft.Title, draft.Start, draft.End,
                 draft.AllDay, draft.Location, Cancelled: false)],
             ct);
 
         await store.SaveChangesAsync(ct);
 
-        return identyfikator;
+        return id;
     }
 
     /// <summary>Skasowanie wydarzenia u źródła i u nas. Tylko to wskazane wprost.</summary>
@@ -124,13 +124,13 @@ public sealed class CalendarSyncService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
 
-        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+        var (source, writer) = await ForWriteAsync(sourceId, ct);
 
         try
         {
-            await pisarz.DeleteAsync(zrodlo, externalId, ct);
+            await writer.DeleteAsync(source, externalId, ct);
         }
-        catch (WydarzenieZniknelo)
+        catch (EventGone)
         {
             // Skasowanie czegoś, czego już nie ma, jest **wykonaniem** prośby, a nie
             // awarią: po drugiej stronie stan jest dokładnie ten, o który chodziło.
@@ -147,24 +147,24 @@ public sealed class CalendarSyncService(
         // na siatce jako cudze wydarzenie po zadaniu, którego już nie ma. Identyfikator
         // wydarzenia jest u Google jednoznaczny, więc szersze dopasowanie nie może
         // zdjąć niczego innego.
-        var nasze = await store.EventsAsync(
+        var ours = await store.EventsAsync(
             DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
 
-        var zdjete = false;
+        var removed = false;
 
-        foreach (var wydarzenie in nasze.Where(e => e.ExternalId == externalId))
+        foreach (var ev in ours.Where(e => e.ExternalId == externalId))
         {
             await store.UpsertAsync(
-                wydarzenie.SourceId,
+                ev.SourceId,
                 [new FeedEvent(
-                    externalId, wydarzenie.Title, wydarzenie.StartsAt, wydarzenie.EndsAt,
-                    wydarzenie.IsAllDay, wydarzenie.Location, Cancelled: true)],
+                    externalId, ev.Title, ev.StartsAt, ev.EndsAt,
+                    ev.IsAllDay, ev.Location, Cancelled: true)],
                 ct);
 
-            zdjete = true;
+            removed = true;
         }
 
-        if (zdjete)
+        if (removed)
         {
             await store.SaveChangesAsync(ct);
         }
@@ -193,9 +193,9 @@ public sealed class CalendarSyncService(
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
         ArgumentException.ThrowIfNullOrWhiteSpace(email);
 
-        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+        var (source, writer) = await ForWriteAsync(sourceId, ct);
 
-        return await pisarz.InviteAsync(zrodlo, externalId, email, ct);
+        return await writer.InviteAsync(source, externalId, email, ct);
     }
 
     /// <summary>Obszary, które mają przypisany kalendarz — razem z tym kalendarzem.</summary>
@@ -204,13 +204,13 @@ public sealed class CalendarSyncService(
         // Tylko te, do których wolno pisać: przeniesienie wydarzenia do obszaru znaczy
         // założenie go w kalendarzu tego obszaru. Obszar wskazujący kalendarz świąteczny
         // stałby na liście jako możliwy wybór i kończył się odmową po kliknięciu.
-        var zywe = (await store.SourcesAsync(ct))
+        var live = (await store.SourcesAsync(ct))
             .Where(CanWrite)
             .Select(z => z.Id)
             .ToHashSet();
 
         return (await areas.AllAsync(ct))
-            .Where(o => !o.Deleted && o.IsActive && o.CalendarId is { } k && zywe.Contains(k))
+            .Where(o => !o.Deleted && o.IsActive && o.CalendarId is { } k && live.Contains(k))
             .OrderBy(o => o.SortOrder)
             .ToList();
     }
@@ -248,21 +248,21 @@ public sealed class CalendarSyncService(
             return externalId;
         }
 
-        var nasze = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
+        var ours = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
 
-        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
-            is not { } wydarzenie)
+        if (ours.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
+            is not { } ev)
         {
-            throw new WydarzenieZniknelo(
+            throw new EventGone(
                 "Tego wydarzenia nie ma już w naszej kopii — odśwież kalendarz i spróbuj jeszcze raz.");
         }
 
-        var nowy = await SaveEventAsync(
+        var created = await SaveEventAsync(
             targetId,
             externalId: null,
             new CalendarDraft(
-                wydarzenie.Title, wydarzenie.StartsAt, wydarzenie.EndsAt,
-                wydarzenie.Location, wydarzenie.IsAllDay),
+                ev.Title, ev.StartsAt, ev.EndsAt,
+                ev.Location, ev.IsAllDay),
             ct);
 
         try
@@ -284,23 +284,23 @@ public sealed class CalendarSyncService(
             // jedyna rzecz, jakiej nikt nie chciał, to właśnie ta kopia.
             try
             {
-                await DeleteEventAsync(targetId, nowy, ct);
+                await DeleteEventAsync(targetId, created, ct);
             }
-            catch (Exception przyCofaniu) when (przyCofaniu is not OperationCanceledException)
+            catch (Exception whenUndoing) when (whenUndoing is not OperationCanceledException)
             {
                 // Nieudane cofnięcie **dopisuje się** do pierwotnego powodu, zamiast go
                 // przykrywać. Powód mówi, czemu przeniesienie nie wyszło; dopisek mówi,
                 // że została po nim kopia — a to dwie różne rzeczy do zrobienia.
                 throw new InvalidOperationException(
                     $"{e.Message} Do tego kopia założona w nowym kalendarzu została na miejscu "
-                    + $"i nie udało się jej zdjąć ({przyCofaniu.Message}) — usuń ją ręcznie.",
+                    + $"i nie udało się jej zdjąć ({whenUndoing.Message}) — usuń ją ręcznie.",
                     e);
             }
 
             throw;
         }
 
-        return nowy;
+        return created;
     }
 
     /// <summary>
@@ -325,39 +325,39 @@ public sealed class CalendarSyncService(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
 
-        var (zrodlo, pisarz) = await DoZapisuAsync(sourceId, ct);
+        var (source, writer) = await ForWriteAsync(sourceId, ct);
 
-        var nasze = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
+        var ours = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
 
-        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
-            is not { } wydarzenie)
+        if (ours.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
+            is not { } ev)
         {
             throw new InvalidOperationException(
                 "Tego wydarzenia nie ma już w pobranej kopii kalendarza. Odśwież i spróbuj raz jeszcze.");
         }
 
-        var nazwa = EventMark.Set(wydarzenie.Title, done);
+        var name = EventMark.Set(ev.Title, done);
 
-        if (nazwa == wydarzenie.Title)
+        if (name == ev.Title)
         {
             return;
         }
 
         try
         {
-            await pisarz.RenameAsync(zrodlo, externalId, nazwa, ct);
+            await writer.RenameAsync(source, externalId, name, ct);
         }
-        catch (WydarzenieZniknelo)
+        catch (EventGone)
         {
-            await ZdejmijDuchaAsync(sourceId, externalId, ct);
+            await DropGhostAsync(sourceId, externalId, ct);
             throw;
         }
 
         await store.UpsertAsync(
             sourceId,
             [new FeedEvent(
-                externalId, nazwa, wydarzenie.StartsAt, wydarzenie.EndsAt,
-                wydarzenie.IsAllDay, wydarzenie.Location, Cancelled: false)],
+                externalId, name, ev.StartsAt, ev.EndsAt,
+                ev.IsAllDay, ev.Location, Cancelled: false)],
             ct);
 
         await store.SaveChangesAsync(ct);
@@ -382,12 +382,12 @@ public sealed class CalendarSyncService(
     /// Nagrobek, nie usunięcie: tak samo jak wszędzie indziej w tym modelu.
     /// </para>
     /// </remarks>
-    private async Task ZdejmijDuchaAsync(Guid sourceId, string externalId, CancellationToken ct)
+    private async Task DropGhostAsync(Guid sourceId, string externalId, CancellationToken ct)
     {
-        var nasze = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
+        var ours = await store.EventsAsync(DateTimeOffset.MinValue, DateTimeOffset.MaxValue, ct);
 
-        if (nasze.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
-            is not { } duch)
+        if (ours.FirstOrDefault(e => e.SourceId == sourceId && e.ExternalId == externalId)
+            is not { } ghost)
         {
             return;
         }
@@ -395,8 +395,8 @@ public sealed class CalendarSyncService(
         await store.UpsertAsync(
             sourceId,
             [new FeedEvent(
-                externalId, duch.Title, duch.StartsAt, duch.EndsAt,
-                duch.IsAllDay, duch.Location, Cancelled: true)],
+                externalId, ghost.Title, ghost.StartsAt, ghost.EndsAt,
+                ghost.IsAllDay, ghost.Location, Cancelled: true)],
             ct);
 
         await store.SaveChangesAsync(ct);
@@ -419,16 +419,16 @@ public sealed class CalendarSyncService(
     /// usterce nigdy się nie dowie.
     /// </para>
     /// </remarks>
-    private async Task NaprawGlownyAsync(CancellationToken ct)
+    private async Task FixPrimaryAsync(CancellationToken ct)
     {
-        if (settings.MainCalendarId is not { } glowny)
+        if (settings.MainCalendarId is not { } primary)
         {
             return;
         }
 
-        var zywy = await ZywyKalendarzAsync(glowny, ct);
+        var live = await LiveCalendarAsync(primary, ct);
 
-        if (zywy is { } id && id != glowny)
+        if (live is { } id && id != primary)
         {
             settings.SetMainCalendar(id);
         }
@@ -456,56 +456,56 @@ public sealed class CalendarSyncService(
     /// nie zajęło jego miejsca. To jedyny przypadek, w którym zapis ma odmówić.
     /// </para>
     /// </remarks>
-    public async Task<Guid?> ZywyKalendarzAsync(Guid sourceId, CancellationToken ct = default)
+    public async Task<Guid?> LiveCalendarAsync(Guid sourceId, CancellationToken ct = default)
     {
-        var zywe = await store.SourcesAsync(ct);
+        var live = await store.SourcesAsync(ct);
 
-        if (zywe.Any(z => z.Id == sourceId))
+        if (live.Any(z => z.Id == sourceId))
         {
             return sourceId;
         }
 
         if ((await store.AllSourcesAsync(ct)).FirstOrDefault(z => z.Id == sourceId)
-            is not { } nagrobek)
+            is not { } tombstone)
         {
             return null;
         }
 
-        return zywe.FirstOrDefault(
-                z => z.Kind == nagrobek.Kind
-                  && z.ExternalId == nagrobek.ExternalId
-                  && z.Account == nagrobek.Account)?.Id;
+        return live.FirstOrDefault(
+                z => z.Kind == tombstone.Kind
+                  && z.ExternalId == tombstone.ExternalId
+                  && z.Account == tombstone.Account)?.Id;
     }
 
-    private async Task<(CalendarSource Source, ICalendarWriter Writer)> DoZapisuAsync(
+    private async Task<(CalendarSource Source, ICalendarWriter Writer)> ForWriteAsync(
         Guid sourceId, CancellationToken ct)
     {
         // Rozstrzygnięcie przed odmową: wskazanie na odrzucony duplikat jest starym
         // imieniem żyjącego podłączenia, a nie brakiem kalendarza.
-        var rozstrzygniete = await ZywyKalendarzAsync(sourceId, ct);
+        var resolved = await LiveCalendarAsync(sourceId, ct);
 
-        var zrodlo = rozstrzygniete is { } id
+        var source = resolved is { } id
             ? (await store.SourcesAsync(ct)).First(z => z.Id == id)
             : throw new InvalidOperationException(
                 "Tego kalendarza już nie ma na liście podłączonych. "
                 + "Wybierz kalendarz główny w Ustawieniach → Kalendarze.");
 
-        var pisarz = writers.FirstOrDefault(w => w.Kind == zrodlo.Kind)
+        var writer = writers.FirstOrDefault(w => w.Kind == source.Kind)
             ?? throw new InvalidOperationException(
-                $"Kalendarze rodzaju {zrodlo.Kind} są tylko do odczytu.");
+                $"Kalendarze rodzaju {source.Kind} są tylko do odczytu.");
 
         // Odmowa **przed** czynnością, nie po niej. Google odpowiada na to samo swoim
         // 403, ale dopiero po wykonaniu wszystkiego, co przed — a przy przenoszeniu
         // wydarzenia „wszystko, co przed" znaczy kopię założoną w nowym kalendarzu.
-        if (zrodlo.ReadOnly)
+        if (source.ReadOnly)
         {
             throw new InvalidOperationException(
-                $"Kalendarz „{zrodlo.Name}” jest udostępniony tylko do odczytu — "
+                $"Kalendarz „{source.Name}” jest udostępniony tylko do odczytu — "
                 + "nie wolno w nim nic zmieniać ani kasować. Tak są ustawione kalendarze "
                 + "świąteczne, fazy księżyca i cudze udostępnione bez prawa zmian.");
         }
 
-        return (zrodlo, pisarz);
+        return (source, writer);
     }
 
     /// <summary>
@@ -516,13 +516,13 @@ public sealed class CalendarSyncService(
     /// czego nikt do żadnego obszaru nie przypisał — świąt, wywiadówek, kanałów, które
     /// się tylko czyta.
     /// </remarks>
-    private static string? BarwaWydarzenia(
+    private static string? EventColor(
         Guid sourceId,
-        IReadOnlyDictionary<Guid, Area> obszary,
-        IReadOnlyDictionary<Guid, string?> barwyZrodel) =>
-        obszary.TryGetValue(sourceId, out var obszar) && obszar.Color is { } barwa
-            ? barwa
-            : barwyZrodel.GetValueOrDefault(sourceId);
+        IReadOnlyDictionary<Guid, Area> areas,
+        IReadOnlyDictionary<Guid, string?> sourceColors) =>
+        areas.TryGetValue(sourceId, out var area) && area.Color is { } color
+            ? color
+            : sourceColors.GetValueOrDefault(sourceId);
 
     /// <summary>Strefa, w której rysowana jest siatka. Na ekran, nie do liczenia.</summary>
     /// <remarks>
@@ -561,40 +561,40 @@ public sealed class CalendarSyncService(
         // Z kontem w porównaniu: ten sam identyfikator kalendarza potrafi wystąpić
         // na dwóch kontach — udostępniony widnieje u obu stron pod tym samym adresem
         // — a to są wtedy dwa różne podłączenia, o różnych uprawnieniach.
-        var szukany = externalId?.Trim() ?? string.Empty;
-        var konto = string.IsNullOrWhiteSpace(account) ? null : account.Trim();
+        var wanted = externalId?.Trim() ?? string.Empty;
+        var account = string.IsNullOrWhiteSpace(account) ? null : account.Trim();
 
         if ((await store.SourcesAsync(ct)).FirstOrDefault(
-                z => z.Kind == kind && z.ExternalId == szukany && z.Account == konto)
-            is { } juzJest)
+                z => z.Kind == kind && z.ExternalId == wanted && z.Account == account)
+            is { } alreadyThere)
         {
-            return juzJest;
+            return alreadyThere;
         }
 
-        var zrodlo = new CalendarSource(
-            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, szukany, name, color, konto);
+        var source = new CalendarSource(
+            Guid.CreateVersion7(), clock.Now, hlc.Next(), kind, wanted, name, color, account);
 
         // Poziom dostępu znany już przy podłączaniu — lista kalendarzy z konta podaje
         // go razem z nazwą i barwą. Bez tego kalendarz świąteczny wyglądałby na
         // zapisywalny aż do pierwszego odświeżenia, czyli akurat przez te kilka chwil,
         // w których człowiek go ogląda po dodaniu.
-        zrodlo.SetReadOnly(readOnly);
+        source.SetReadOnly(readOnly);
 
-        store.AddSource(zrodlo);
+        store.AddSource(source);
         await store.SaveChangesAsync(ct);
 
-        return zrodlo;
+        return source;
     }
 
     /// <summary>Odłączenie. Nagrobek, nie usunięcie — wybór kalendarzy się synchronizuje.</summary>
     public async Task RemoveAsync(Guid id, CancellationToken ct = default)
     {
-        if ((await store.SourcesAsync(ct)).FirstOrDefault(z => z.Id == id) is not { } zrodlo)
+        if ((await store.SourcesAsync(ct)).FirstOrDefault(z => z.Id == id) is not { } source)
         {
             return;
         }
 
-        zrodlo.MarkDeleted(hlc.Next());
+        source.MarkDeleted(hlc.Next());
         await store.SaveChangesAsync(ct);
     }
 
@@ -626,44 +626,44 @@ public sealed class CalendarSyncService(
     public async Task<CalendarRefreshReport> RefreshAsync(
         bool force = false, CancellationToken ct = default)
     {
-        var teraz = clock.Now;
-        var odswiezone = 0;
-        var wydarzen = 0;
-        var nieudane = 0;
-        var powody = new List<string>();
+        var now = clock.Now;
+        var refreshed = 0;
+        var events = 0;
+        var failed = 0;
+        var reasons = new List<string>();
 
-        var zlozone = await ZlozDuplikatyAsync(ct);
+        var merged = await MergeDuplicatesAsync(ct);
 
-        await NaprawGlownyAsync(ct);
+        await FixPrimaryAsync(ct);
 
-        foreach (var zrodlo in await store.SourcesAsync(ct))
+        foreach (var source in await store.SourcesAsync(ct))
         {
-            var kursor = await store.CursorAsync(zrodlo.Id, ct);
+            var cursor = await store.CursorAsync(source.Id, ct);
 
-            if (!force && kursor is not null && teraz - kursor.FetchedAt < RefreshInterval)
+            if (!force && cursor is not null && now - cursor.FetchedAt < RefreshInterval)
             {
                 continue;
             }
 
-            if (feeds.FirstOrDefault(f => f.Kind == zrodlo.Kind) is not { } kanal)
+            if (feeds.FirstOrDefault(f => f.Kind == source.Kind) is not { } feed)
             {
                 // Rodzaj bez podłączonego kanału. Do dziś było to ciche pominięcie
                 // i właśnie ono sprawiało, że kalendarz Google wyglądał na pusty.
-                nieudane++;
-                powody.Add($"{zrodlo.Name}: brak obsługi kalendarzy rodzaju {zrodlo.Kind}.");
+                failed++;
+                reasons.Add($"{source.Name}: brak obsługi kalendarzy rodzaju {source.Kind}.");
                 continue;
             }
 
             try
             {
-                var wynik = await kanal.FetchAsync(zrodlo, kursor?.SyncToken, ct);
+                var result = await feed.FetchAsync(source, cursor?.SyncToken, ct);
 
-                await store.UpsertAsync(zrodlo.Id, wynik.Events, ct);
+                await store.UpsertAsync(source.Id, result.Events, ct);
 
-                if (wynik.IsFull)
+                if (result.IsFull)
                 {
                     await store.MarkMissingCancelledAsync(
-                        zrodlo.Id, wynik.Events.Select(e => e.ExternalId).ToList(), ct);
+                        source.Id, result.Events.Select(e => e.ExternalId).ToList(), ct);
                 }
 
                 // Barwa dociągana przy każdym pobraniu, nie tylko przy podłączaniu.
@@ -673,34 +673,34 @@ public sealed class CalendarSyncService(
                 // Puste znaczy „źródło nie mówi", więc nie kasuje barwy już zapisanej.
                 // Porównanie przed zapisem, bo inaczej każde odświeżenie na każdym
                 // urządzeniu dopisywałoby tę samą zmianę do dziennika synchronizacji.
-                if (!string.IsNullOrWhiteSpace(wynik.Color) && wynik.Color != zrodlo.Color)
+                if (!string.IsNullOrWhiteSpace(result.Color) && result.Color != source.Color)
                 {
-                    zrodlo.SetColor(wynik.Color, hlc.Next());
+                    source.SetColor(result.Color, hlc.Next());
                 }
 
                 // Poziom dostępu przy każdym pobraniu, bo się zmienia: ktoś dopuszcza
                 // do swojego kalendarza albo dostęp odbiera. Puste znaczy „źródło nie
                 // mówi" — kanał iCal nie zna tego pojęcia i nie ma prawa nadpisywać
                 // odpowiedzi, którą podał kto inny.
-                if (wynik.ReadOnly is { } tylkoOdczyt && tylkoOdczyt != zrodlo.ReadOnly)
+                if (result.ReadOnly is { } readOnly && readOnly != source.ReadOnly)
                 {
-                    zrodlo.SetReadOnly(tylkoOdczyt);
+                    source.SetReadOnly(readOnly);
                 }
 
-                store.SaveCursor(zrodlo.Id, wynik.SyncToken, teraz);
+                store.SaveCursor(source.Id, result.SyncToken, now);
                 await store.SaveChangesAsync(ct);
 
-                odswiezone++;
-                wydarzen += wynik.Events.Count;
+                refreshed++;
+                events += result.Events.Count;
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
-                nieudane++;
-                powody.Add($"{zrodlo.Name}: {e.Message}");
+                failed++;
+                reasons.Add($"{source.Name}: {e.Message}");
             }
         }
 
-        return new CalendarRefreshReport(odswiezone, wydarzen, nieudane, powody, zlozone);
+        return new CalendarRefreshReport(refreshed, events, failed, reasons, merged);
     }
 
     /// <summary>
@@ -729,43 +729,43 @@ public sealed class CalendarSyncService(
     /// Odrzucenie jest nagrobkiem, czyli dojdzie i do drugiej strony.
     /// </para>
     /// </remarks>
-    private async Task<int> ZlozDuplikatyAsync(CancellationToken ct)
+    private async Task<int> MergeDuplicatesAsync(CancellationToken ct)
     {
-        var powtorzone = (await store.SourcesAsync(ct))
+        var repeated = (await store.SourcesAsync(ct))
             .GroupBy(z => (z.Kind, z.ExternalId, z.Account))
             .Where(g => g.Count() > 1)
             .ToList();
 
-        if (powtorzone.Count == 0)
+        if (repeated.Count == 0)
         {
             return 0;
         }
 
-        var zlozone = 0;
-        var wszystkie = await tasks.AllAsync(ct);
-        var obszary = await areas.AllAsync(ct);
+        var merged = 0;
+        var all = await tasks.AllAsync(ct);
+        var areas = await areas.AllAsync(ct);
 
-        foreach (var grupa in powtorzone)
+        foreach (var group in repeated)
         {
-            var zostaje = grupa.OrderBy(z => z.CreatedAt).ThenBy(z => z.Id).First();
+            var stays = group.OrderBy(z => z.CreatedAt).ThenBy(z => z.Id).First();
 
-            foreach (var nadmiarowe in grupa.Where(z => z.Id != zostaje.Id))
+            foreach (var extra in group.Where(z => z.Id != stays.Id))
             {
-                nadmiarowe.MarkDeleted(hlc.Next());
+                extra.MarkDeleted(hlc.Next());
 
                 // Kopia wydarzeń odrzuconego źródła do skasowania: jest lokalna i nikomu
                 // już niepotrzebna, a policzona w „ile w bazie" myliłaby przy szukaniu
                 // dokładnie tej usterki.
-                await store.ForgetEventsAsync(nadmiarowe.Id, ct);
+                await store.ForgetEventsAsync(extra.Id, ct);
 
-                Przepnij(nadmiarowe.Id, zostaje.Id, wszystkie, obszary);
-                zlozone++;
+                Reattach(extra.Id, stays.Id, all, areas);
+                merged++;
             }
         }
 
         await store.SaveChangesAsync(ct);
 
-        return zlozone;
+        return merged;
     }
 
     /// <summary>
@@ -784,32 +784,32 @@ public sealed class CalendarSyncService(
     /// zostaje ten sam i dalej jest ważny.
     /// </para>
     /// </remarks>
-    private void Przepnij(
-        Guid odrzucone,
-        Guid zostaje,
-        IReadOnlyList<TaskItem> zadania,
-        IReadOnlyList<Area> obszary)
+    private void Reattach(
+        Guid rejected,
+        Guid stays,
+        IReadOnlyList<TaskItem> tasks,
+        IReadOnlyList<Area> areas)
     {
-        if (settings.MainCalendarId == odrzucone)
+        if (settings.MainCalendarId == rejected)
         {
-            settings.SetMainCalendar(zostaje);
+            settings.SetMainCalendar(stays);
         }
 
         // Obszary też, bo od nich zależy, czyje jest wydarzenie. Wskazanie na odrzucony
         // wiersz znaczyłoby obszar bez kalendarza i kalendarz bez obszaru — czyli
         // wydarzenia, które z dnia na dzień przestają do czegokolwiek należeć.
-        foreach (var obszar in obszary.Where(o => o.CalendarId == odrzucone))
+        foreach (var area in areas.Where(o => o.CalendarId == rejected))
         {
-            obszar.SetCalendar(zostaje, hlc.Next());
+            area.SetCalendar(stays, hlc.Next());
         }
 
         // Z identyfikatorem wydarzenia, bo bez niego nie ma czego przepinać: udostępnienie
         // ustawia obie rzeczy naraz i jedna bez drugiej znaczy zadanie, którego w Google
         // nie ma.
-        foreach (var zadanie in zadania.Where(
-            z => z.SharedCalendarId == odrzucone && z.SharedEventId is not null))
+        foreach (var task in tasks.Where(
+            z => z.SharedCalendarId == rejected && z.SharedEventId is not null))
         {
-            zadanie.Share(zostaje, zadanie.SharedEventId!, hlc.Next());
+            task.Share(stays, task.SharedEventId!, hlc.Next());
         }
     }
 
@@ -831,27 +831,27 @@ public sealed class CalendarSyncService(
         // niedzieli października Polska ma +1, a nie +2: wszystko oglądane spoza
         // bieżącej zmiany czasu rysowało się i podpisywało godzinę obok. Przesunięcie
         // jest cechą chwili, nie kalendarza, więc liczy się je dla każdej chwili osobno.
-        var strefa = settings.Zone;
-        var poczatek = WStrefie(from.ToDateTime(TimeOnly.MinValue), strefa);
-        var koniec = WStrefie(from.AddDays(days).ToDateTime(TimeOnly.MinValue), strefa);
+        var zone = settings.Zone;
+        var start = InZone(from.ToDateTime(TimeOnly.MinValue), zone);
+        var end = InZone(from.AddDays(days).ToDateTime(TimeOnly.MinValue), zone);
 
-        var wpisy = new List<AgendaEntry>();
+        var entries = new List<AgendaEntry>();
 
         // Barwa jest cechą kalendarza, nie wydarzenia: przy jedenastu podłączonych
         // kalendarzach to jedyna rzecz, po której widać, do którego z nich coś należy.
-        var zrodla = await store.SourcesAsync(ct);
-        var barwy = zrodla.ToDictionary(z => z.Id, z => z.Color);
+        var sources = await store.SourcesAsync(ct);
+        var colors = sources.ToDictionary(z => z.Id, z => z.Color);
 
         // Obszary wczytane raz, na dwie rzeczy naraz: barwę zadań i przynależność
         // wydarzeń. Kalendarz przypisany do obszaru **jest** tym obszarem, więc
         // wydarzenie stamtąd ma wyglądać jak wszystko inne z tego obszaru — inaczej
         // odbiór dziecka wpisany w Google i odbiór dziecka wpisany w Marshalu stałyby
         // obok siebie w dwóch kolorach, choć są tą samą rzeczą z tej samej półki.
-        var wszystkieObszary = await areas.AllAsync(ct);
+        var allAreas = await areas.AllAsync(ct);
 
         // Nagrobki odsiane, a przy sklejce zostaje pierwszy: przypisanie jest jeden
         // do jednego, ale dwa nagrobki po przenoszeniu mogą wskazywać ten sam kalendarz.
-        var obszaryKalendarzy = wszystkieObszary
+        var calendarAreas = allAreas
             .Where(o => !o.Deleted && o.CalendarId is not null)
             .GroupBy(o => o.CalendarId!.Value)
             .ToDictionary(g => g.Key, g => g.First());
@@ -861,7 +861,7 @@ public sealed class CalendarSyncService(
         // żadnego skutku. Bez drugiego pokazuje je przy wydarzeniu z kalendarza
         // świątecznego albo faz księżyca — czyli przycisk, który kończy się odmową
         // Google, a przy przenoszeniu kopią założoną, zanim odmowa przyszła.
-        var zapisywalne = zrodla
+        var writable = sources
             .Where(z => !z.ReadOnly && writers.Any(w => w.Kind == z.Kind))
             .Select(z => z.Id)
             .ToHashSet();
@@ -871,7 +871,7 @@ public sealed class CalendarSyncService(
         // nas przy odświeżaniu — narysowane obok zadania dałoby dwa bloki na tę samą
         // rzecz, w tym samym miejscu, z których jeden nie dawałby się odhaczyć.
         // Prawdą jest zadanie; wydarzenie jest jego cieniem.
-        var umowione = await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct);
+        var upcoming = await tasks.UpcomingAsync(from.AddDays(-1), from.AddDays(days), ct);
 
         // Wybory na dzień dołożone do umówionych. Zadanie wzięte „na dziś" w widoku
         // „Teraz" nie dostaje dnia wykonania — dostaje obietnicę daną sobie — więc
@@ -879,10 +879,10 @@ public sealed class CalendarSyncService(
         // w którym widać cały dzień naraz, i obietnica należy do niego tak samo jak
         // spotkanie. Ląduje na pasku całodniowym, bo godziny nie ma i zgadywanie jej
         // zrobiłoby z listy zadań kalendarz, w którym wszystko jest umówione.
-        var wybrane = await tasks.FocusedBetweenAsync(from, from.AddDays(days), ct);
+        var selected = await tasks.FocusedBetweenAsync(from, from.AddDays(days), ct);
 
-        var zadania = umowione
-            .Concat(wybrane.Where(w => umowione.All(u => u.Id != w.Id)))
+        var tasks = upcoming
+            .Concat(selected.Where(w => upcoming.All(u => u.Id != w.Id)))
             .ToList();
 
         // Wskazania **wszystkich** zadań, nie tylko tych widocznych w tym zakresie.
@@ -898,11 +898,11 @@ public sealed class CalendarSyncService(
         // przez cały ten czas cień pozostaje cieniem. Gdyby zdjęcie nie doszło nigdy,
         // dokańczanie zaległych kasowań próbuje co minutę i zapisuje powód w dzienniku
         // — wpis nie znika więc po cichu, tylko czeka na skutek.
-        var odbicia = (await tasks.MirroredEventIdsAsync(ct)).ToHashSet(StringComparer.Ordinal);
+        var mirrors = (await tasks.MirroredEventIdsAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
-        foreach (var wydarzenie in await store.EventsAsync(poczatek, koniec, ct))
+        foreach (var ev in await store.EventsAsync(start, end, ct))
         {
-            if (odbicia.Contains(wydarzenie.ExternalId))
+            if (mirrors.Contains(ev.ExternalId))
             {
                 continue;
             }
@@ -915,39 +915,39 @@ public sealed class CalendarSyncService(
             // Ptaszek zdejmowany z nazwy przy rysowaniu: jest stanem, nie częścią nazwy.
             // Zostawiony w tytule stałby obok kwadracika jako drugi ptaszek, a przy
             // zmianie nazwy w oknie szczegółu wróciłby do Google zapisany dwa razy.
-            wpisy.Add(new AgendaEntry(
-                EventMark.Strip(wydarzenie.Title),
-                wydarzenie.IsAllDay
-                    ? wydarzenie.StartsAt
-                    : TimeZoneInfo.ConvertTime(wydarzenie.StartsAt, strefa),
-                wydarzenie.IsAllDay
-                    ? wydarzenie.EndsAt
-                    : TimeZoneInfo.ConvertTime(wydarzenie.EndsAt, strefa),
-                wydarzenie.IsAllDay,
+            entries.Add(new AgendaEntry(
+                EventMark.Strip(ev.Title),
+                ev.IsAllDay
+                    ? ev.StartsAt
+                    : TimeZoneInfo.ConvertTime(ev.StartsAt, zone),
+                ev.IsAllDay
+                    ? ev.EndsAt
+                    : TimeZoneInfo.ConvertTime(ev.EndsAt, zone),
+                ev.IsAllDay,
                 AgendaKind.Event,
-                BarwaWydarzenia(wydarzenie.SourceId, obszaryKalendarzy, barwy),
+                EventColor(ev.SourceId, calendarAreas, colors),
                 TaskId: null,
-                wydarzenie.SourceId,
-                wydarzenie.ExternalId,
-                IsDone: EventMark.IsDone(wydarzenie.Title),
-                CanWrite: zapisywalne.Contains(wydarzenie.SourceId)));
+                ev.SourceId,
+                ev.ExternalId,
+                IsDone: EventMark.IsDone(ev.Title),
+                CanWrite: writable.Contains(ev.SourceId)));
         }
 
         // Barwy dziedziczone w dół: zadanie bierze swoją, a gdy jej nie ma — projektu,
         // a gdy i tego nie ma — obszaru. Ustawienie koloru raz na obszarze koloruje
         // więc wszystko, co do niego należy, bez dotykania pojedynczych zadań.
-        var barwyObszarow = wszystkieObszary.ToDictionary(o => o.Id, o => o.Color);
-        var barwyProjektow = BarwyProjektow(await projects.AllAsync(ct), barwyObszarow);
+        var areaColors = allAreas.ToDictionary(o => o.Id, o => o.Color);
+        var projectColors = ProjectColors(await projects.AllAsync(ct), areaColors);
 
-        foreach (var zadanie in zadania)
+        foreach (var task in tasks)
         {
-            if (Entry(zadanie, strefa, Barwa(zadanie, barwyProjektow, barwyObszarow)) is { } wpis)
+            if (Entry(task, zone, Color(task, projectColors, areaColors)) is { } entry)
             {
-                wpisy.Add(wpis);
+                entries.Add(entry);
             }
         }
 
-        return Agenda.Build(wpisy, from, days);
+        return Agenda.Build(entries, from, days);
     }
 
     /// <summary>
@@ -956,8 +956,8 @@ public sealed class CalendarSyncService(
     /// dokładnie ten rodzaj planowania, który się nie utrzymuje.
     /// </summary>
     /// <summary>Chwila lokalna w strefie, z przesunięciem obowiązującym **tego dnia**.</summary>
-    private static DateTimeOffset WStrefie(DateTime lokalna, TimeZoneInfo strefa) =>
-        new(lokalna, strefa.GetUtcOffset(lokalna));
+    private static DateTimeOffset InZone(DateTime local, TimeZoneInfo zone) =>
+        new(local, zone.GetUtcOffset(local));
 
     /// <summary>
     /// Barwa każdego projektu po rozwinięciu dziedziczenia: własna, rodzica, obszaru.
@@ -967,89 +967,89 @@ public sealed class CalendarSyncService(
     /// przodków, a zadań w tygodniu są setki. Przejście zabezpieczone licznikiem:
     /// po scaleniu dwóch urządzeń projekt umie stać się własnym przodkiem.
     /// </remarks>
-    private static Dictionary<Guid, string?> BarwyProjektow(
-        IReadOnlyList<Project> projekty,
-        IReadOnlyDictionary<Guid, string?> obszary)
+    private static Dictionary<Guid, string?> ProjectColors(
+        IReadOnlyList<Project> projects,
+        IReadOnlyDictionary<Guid, string?> areas)
     {
-        var wedlugId = projekty.ToDictionary(p => p.Id);
-        var wynik = new Dictionary<Guid, string?>(projekty.Count);
+        var byId = projects.ToDictionary(p => p.Id);
+        var result = new Dictionary<Guid, string?>(projects.Count);
 
-        foreach (var projekt in projekty)
+        foreach (var project in projects)
         {
-            string? znaleziona = null;
-            Project? biezacy = projekt;
+            string? found = null;
+            Project? current = project;
 
-            for (var krok = 0; krok < projekty.Count && biezacy is not null; krok++)
+            for (var step = 0; step < projects.Count && current is not null; step++)
             {
-                if (!string.IsNullOrWhiteSpace(biezacy.Color))
+                if (!string.IsNullOrWhiteSpace(current.Color))
                 {
-                    znaleziona = biezacy.Color;
+                    found = current.Color;
                     break;
                 }
 
-                biezacy = biezacy.ParentProjectId is { } rodzic
-                    && wedlugId.TryGetValue(rodzic, out var wyzej)
-                        ? wyzej
+                current = current.ParentProjectId is { } parent
+                    && byId.TryGetValue(parent, out var above)
+                        ? above
                         : null;
             }
 
-            wynik[projekt.Id] = znaleziona
-                ?? (obszary.TryGetValue(projekt.AreaId, out var zObszaru) ? zObszaru : null);
+            result[project.Id] = found
+                ?? (areas.TryGetValue(project.AreaId, out var fromArea) ? fromArea : null);
         }
 
-        return wynik;
+        return result;
     }
 
     /// <summary>Barwa zadania: własna, projektu albo obszaru — w tej kolejności.</summary>
-    private static string? Barwa(
+    private static string? Color(
         TaskItem task,
-        IReadOnlyDictionary<Guid, string?> projekty,
-        IReadOnlyDictionary<Guid, string?> obszary)
+        IReadOnlyDictionary<Guid, string?> projects,
+        IReadOnlyDictionary<Guid, string?> areas)
     {
         if (!string.IsNullOrWhiteSpace(task.Color))
         {
             return task.Color;
         }
 
-        if (task.ProjectId is { } projekt
-            && projekty.TryGetValue(projekt, out var zProjektu)
-            && !string.IsNullOrWhiteSpace(zProjektu))
+        if (task.ProjectId is { } project
+            && projects.TryGetValue(project, out var fromProject)
+            && !string.IsNullOrWhiteSpace(fromProject))
         {
-            return zProjektu;
+            return fromProject;
         }
 
-        return task.AreaId is { } obszar && obszary.TryGetValue(obszar, out var zObszaru)
-            ? zObszaru
+        return task.AreaId is { } area && areas.TryGetValue(area, out var fromArea)
+            ? fromArea
             : null;
     }
 
-    private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone, string? barwa)
+    private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone, string? color)
     {
         // Dzień wykonania, a gdy go nie ma — dzień, na który zadanie zostało wybrane.
         // Kolejność nie jest dowolna: zadanie umówione na czwartek i wzięte na dziś
         // ma stać w czwartek, bo tam jest umówione. Wybór mówi „zajmę się tym", a nie
         // „to się wtedy odbywa".
-        if ((task.DoDate ?? task.FocusDate) is not { } dzien)
+        if ((task.DoDate ?? task.FocusDate) is not { } day)
         {
             return null;
         }
 
-        if (task.DoDate is null || task.DoTime is not { } godzina)
+        if (task.DoDate is null || task.DoTime is not { } hour)
         {
-            var poczatekDnia = WStrefie(dzien.ToDateTime(TimeOnly.MinValue), zone);
+            var dayStart = InZone(day.ToDateTime(TimeOnly.MinValue), zone);
             return new AgendaEntry(
-                task.Title, poczatekDnia, poczatekDnia.AddDays(1),
-                IsAllDay: true, AgendaKind.Task, barwa, task.Id,
+                task.Title, dayStart, dayStart.AddDays(1),
+                IsAllDay: true, AgendaKind.Task, color, task.Id,
                 SourceId: null, ExternalId: null, IsDone: task.State == TaskState.Done,
                 CanWrite: true);
         }
 
-        var start = WStrefie(dzien.ToDateTime(godzina), zone);
-        var dlugosc = TimeSpan.FromMinutes(task.EstimatedMinutes ?? 30);
+        var start = InZone(day.ToDateTime(hour), zone);
+        var length = TimeSpan.FromMinutes(task.EstimatedMinutes ?? 30);
 
         return new AgendaEntry(
-            task.Title, start, start + dlugosc, IsAllDay: false, AgendaKind.Task,
-            barwa, task.Id, SourceId: null, ExternalId: null,
+            task.Title, start, start + length, IsAllDay: false, AgendaKind.Task,
+            color, task.Id, SourceId: null, ExternalId: null,
             IsDone: task.State == TaskState.Done, CanWrite: true);
     }
 }

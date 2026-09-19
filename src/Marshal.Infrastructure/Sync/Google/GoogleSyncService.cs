@@ -32,11 +32,11 @@ public sealed class GoogleSyncService(
     IHlcSource hlc,
     IDeviceIdentity device,
     string databasePath,
-    IKolejkaBazy? kolejka = null)
+    IDbQueue? queue = null)
 {
     // Brama na bazę. Domyślnie wprost, żeby testy i wywołania ręczne nie musiały
     // jej podawać — ale w złożonej aplikacji jest zawsze ta jedna, wspólna z oknem.
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     /// <summary>Czy w ogóle jest czym się logować.</summary>
     public bool HasCredentials =>

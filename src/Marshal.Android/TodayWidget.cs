@@ -114,15 +114,15 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
-        var nowe = Przesuniecie(kontekst, widgetId) + delta;
+        var fresh = Przesuniecie(kontekst, widgetId) + delta;
 
         // Granica po obu stronach: kilkadziesiąt dotknięć strzałki w jedną stronę nie ma
         // wyprowadzać widgetu w miejsce, z którego nie widać, jak wrócić. Rok w każdą
         // stronę, bo strzałka przesuwa teraz o tydzień, a nie o dzień — przy dawnych
         // dwóch tygodniach druga strzałka już nic by nie robiła.
-        nowe = Math.Clamp(nowe, -366, 366);
+        fresh = Math.Clamp(fresh, -366, 366);
 
-        zapis.Edit()?.PutInt($"dzien-{widgetId}", nowe)?.Apply();
+        zapis.Edit()?.PutInt($"dzien-{widgetId}", fresh)?.Apply();
     }
 
     /// <summary>Zapomnienie ustawienia widgetu, który zdjęto z ekranu.</summary>
@@ -247,20 +247,20 @@ public sealed class TodayWidget : AppWidgetProvider
                 var services = await ServicesAsync(okno.ApplicationContext ?? okno);
                 var gotowe = zegar.ElapsedMilliseconds;
 
-                var dzis = services.GetRequiredService<IClock>().Today;
-                var plan = services.GetRequiredService<PlanDniaService>();
+                var today = services.GetRequiredService<IClock>().Today;
+                var plan = services.GetRequiredService<DayPlanService>();
 
                 foreach (var id in identyfikatory)
                 {
                     // Kropki liczone na kafelek, nie raz na wszystkie: dwa kafelki obok
                     // siebie mają prawo oglądać dwa różne tygodnie — po to się je stawia
                     // dwa — a wspólny tydzień oznaczyłby kropki jednego z nich na drugim.
-                    var ogladany = dzis.AddDays(Przesuniecie(okno, id));
+                    var ogladany = today.AddDays(Przesuniecie(okno, id));
                     var poniedzialek = ogladany.AddDays(-(((int)ogladany.DayOfWeek + 6) % 7));
 
-                    var zajete = await plan.ZajeteAsync(poniedzialek, DniTygodnia);
+                    var busy = await plan.BusyAsync(poniedzialek, DniTygodnia);
 
-                    menedzer.UpdateAppWidget(id, Rama(okno, id, dzis, zajete));
+                    menedzer.UpdateAppWidget(id, Rama(okno, id, today, busy));
                 }
 
                 // Przerysowanie kafelka idzie w odbiorniku rozgłoszenia, czyli z budżetem
@@ -302,13 +302,13 @@ public sealed class TodayWidget : AppWidgetProvider
     /// zamiary do tej samej usługi różniły się czymś, co system porównuje.
     /// </remarks>
     private static RemoteViews Rama(
-        Context context, int widgetId, DateOnly dzis, IReadOnlySet<DateOnly> zajete)
+        Context context, int widgetId, DateOnly today, IReadOnlySet<DateOnly> busy)
     {
         var widok = new RemoteViews(context.PackageName, Resource.Layout.widget_marshal);
         var przesuniecie = Przesuniecie(context, widgetId);
-        var ogladany = dzis.AddDays(przesuniecie);
+        var ogladany = today.AddDays(przesuniecie);
 
-        widok.SetTextViewText(Resource.Id.naglowek, Miesiac(ogladany, dzis));
+        widok.SetTextViewText(Resource.Id.naglowek, Miesiac(ogladany, today));
 
         // Strzałki po tygodniu, bo pasek pokazuje tydzień. Przesuwanie o dzień przy
         // widocznym tygodniu znaczyłoby, że pierwsze dotknięcie prawie nic nie zmienia
@@ -318,7 +318,7 @@ public sealed class TodayWidget : AppWidgetProvider
         widok.SetOnClickPendingIntent(
             Resource.Id.naprzod, DzienIntent(context, widgetId, +DniTygodnia, 8));
 
-        PasekTygodnia(context, widok, widgetId, ogladany, dzis, zajete);
+        PasekTygodnia(context, widok, widgetId, ogladany, today, busy);
 
         // Dotknięcie samego kafelka otwiera kalendarz: widget odpowiada na pytanie
         // „co dziś", a kalendarz jest tym samym pytaniem zadanym szerzej. Na pustym
@@ -368,15 +368,15 @@ public sealed class TodayWidget : AppWidgetProvider
     /// Rok tylko nie-bieżący, bo dopisany zawsze byłby stałą, którą się przestaje czytać
     /// — a wtedy przestaje się ją czytać także wtedy, gdy naprawdę coś mówi.
     /// </remarks>
-    private static string Miesiac(DateOnly ogladany, DateOnly dzis)
+    private static string Miesiac(DateOnly ogladany, DateOnly today)
     {
-        var nazwa = ogladany.ToString("MMMM", CultureInfo.CurrentCulture);
+        var name = ogladany.ToString("MMMM", CultureInfo.CurrentCulture);
 
-        var zWielkiej = nazwa.Length > 0
-            ? char.ToUpper(nazwa[0], CultureInfo.CurrentCulture) + nazwa[1..]
-            : nazwa;
+        var zWielkiej = name.Length > 0
+            ? char.ToUpper(name[0], CultureInfo.CurrentCulture) + name[1..]
+            : name;
 
-        return ogladany.Year == dzis.Year ? zWielkiej : $"{zWielkiej} {ogladany.Year}";
+        return ogladany.Year == today.Year ? zWielkiej : $"{zWielkiej} {ogladany.Year}";
     }
 
     /// <summary>
@@ -400,18 +400,18 @@ public sealed class TodayWidget : AppWidgetProvider
         RemoteViews widok,
         int widgetId,
         DateOnly ogladany,
-        DateOnly dzis,
-        IReadOnlySet<DateOnly> zajete)
+        DateOnly today,
+        IReadOnlySet<DateOnly> busy)
     {
         var poniedzialek = ogladany.AddDays(-(((int)ogladany.DayOfWeek + 6) % 7));
 
         for (var i = 0; i < DniTygodnia; i++)
         {
-            var dzien = poniedzialek.AddDays(i);
-            var wybrany = dzien == ogladany;
+            var day = poniedzialek.AddDays(i);
+            var selected = day == ogladany;
 
-            widok.SetTextViewText(Nazwy[i], dzien.ToString("ddd", CultureInfo.CurrentCulture));
-            widok.SetTextViewText(Numery[i], dzien.Day.ToString(CultureInfo.CurrentCulture));
+            widok.SetTextViewText(Nazwy[i], day.ToString("ddd", CultureInfo.CurrentCulture));
+            widok.SetTextViewText(Numery[i], day.Day.ToString(CultureInfo.CurrentCulture));
 
             // Dzisiejszy dzień w barwie wyróżnienia nawet wtedy, gdy ogląda się inny:
             // kafelek stoi na ekranie domowym i pierwsze pytanie do niego brzmi
@@ -422,23 +422,23 @@ public sealed class TodayWidget : AppWidgetProvider
             widok.SetInt(
                 Numery[i],
                 "setTextColor",
-                context.GetColor(dzien == dzis ? Resource.Color.akcent : Resource.Color.tekst));
+                context.GetColor(day == today ? Resource.Color.akcent : Resource.Color.tekst));
 
             widok.SetInt(
                 Kropki[i],
                 "setBackgroundResource",
-                zajete.Contains(dzien) ? Resource.Drawable.kropka_widgetu : Resource.Drawable.przezroczyste);
+                busy.Contains(day) ? Resource.Drawable.kropka_widgetu : Resource.Drawable.przezroczyste);
 
             widok.SetInt(
                 Kreski[i],
                 "setBackgroundResource",
-                wybrany ? Resource.Drawable.kreska_widgetu : Resource.Drawable.przezroczyste);
+                selected ? Resource.Drawable.kreska_widgetu : Resource.Drawable.przezroczyste);
 
             // Dotknięcie kolumny przestawia widget na ten dzień. Przez różnicę, bo
             // przesunięcie liczone jest od dzisiejszego dnia i tak je zapisujemy.
             widok.SetOnClickPendingIntent(
                 Kolumny[i],
-                DzienIntent(context, widgetId, dzien.DayNumber - ogladany.DayNumber, i));
+                DzienIntent(context, widgetId, day.DayNumber - ogladany.DayNumber, i));
         }
     }
 
@@ -570,9 +570,9 @@ public sealed class TodayWidget : AppWidgetProvider
             // Zadanie, jeśli dotknięto pozycji, a nie samego kafelka. Wejście „gdzieś
             // w okolice" znaczyło szukanie wzrokiem po siatce tego, co przed chwilą
             // stało pod palcem.
-            if (intent.GetStringExtra(TaskIdExtra) is { Length: > 0 } zadanie)
+            if (intent.GetStringExtra(TaskIdExtra) is { Length: > 0 } task)
             {
-                doOkna.PutExtra(MainActivity.ZadanieExtra, zadanie);
+                doOkna.PutExtra(MainActivity.ZadanieExtra, task);
             }
 
             okno.StartActivity(doOkna);
@@ -609,10 +609,10 @@ public sealed class TodayWidget : AppWidgetProvider
         {
             try
             {
-                if (Guid.TryParse(id, out var zadanie))
+                if (Guid.TryParse(id, out var task))
                 {
                     var services = await ServicesAsync(okno);
-                    await services.GetRequiredService<TaskEditService>().CompleteAsync(zadanie);
+                    await services.GetRequiredService<TaskEditService>().CompleteAsync(task);
                 }
 
                 Refresh(okno);

@@ -43,13 +43,13 @@ public sealed class Note : Entity
     public static Note FromTask(
         Guid taskId, string title, string? content, DateTimeOffset now, Hlc stamp)
     {
-        var notatka = new Note(Guid.CreateVersion7(), now, stamp, title)
+        var note = new Note(Guid.CreateVersion7(), now, stamp, title)
         {
             FromTaskId = taskId,
             Content = content ?? string.Empty,
         };
 
-        return notatka;
+        return note;
     }
 
     public string Title { get; private set; }

@@ -45,12 +45,12 @@ public sealed class ActivityLogTests : IDisposable
     {
         await _dziennik.RecordAsync("Kalendarz: pobranie", "11 kalendarzy, 52 wydarzenia");
 
-        var wpis = (await _dziennik.RecentAsync()).Single();
+        var entry = (await _dziennik.RecentAsync()).Single();
 
-        wpis.Operation.Should().Be("Kalendarz: pobranie");
-        wpis.Outcome.Should().Be("11 kalendarzy, 52 wydarzenia");
-        wpis.Level.Should().Be(ActivityLevel.Ok);
-        wpis.At.Should().Be(_zegar.Now);
+        entry.Operation.Should().Be("Kalendarz: pobranie");
+        entry.Outcome.Should().Be("11 kalendarzy, 52 wydarzenia");
+        entry.Level.Should().Be(ActivityLevel.Ok);
+        entry.At.Should().Be(_zegar.Now);
     }
 
     [Fact]

@@ -39,19 +39,19 @@ public sealed class AttachmentService(
     {
         ArgumentNullException.ThrowIfNull(content);
 
-        var (skrot, bufor) = await HashAsync(content, ct);
+        var (hash, buffer) = await HashAsync(content, ct);
 
-        bufor.Position = 0;
-        await files.PutAsync(skrot, bufor, ct);
+        buffer.Position = 0;
+        await files.PutAsync(hash, buffer, ct);
 
-        var zalacznik = new Attachment(
+        var attachment = new Attachment(
             Guid.CreateVersion7(), clock.Now, hlc.Next(),
-            skrot, Path.GetFileName(fileName), bufor.Length, taskId, noteId);
+            hash, Path.GetFileName(fileName), buffer.Length, taskId, noteId);
 
-        attachments.Add(zalacznik);
+        attachments.Add(attachment);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return zalacznik;
+        return attachment;
     }
 
     public Task<IReadOnlyList<Attachment>> ForTaskAsync(Guid taskId, CancellationToken ct = default) =>
@@ -69,7 +69,7 @@ public sealed class AttachmentService(
 
     public async Task RemoveAsync(Guid id, CancellationToken ct = default)
     {
-        if (await attachments.FindAsync(id, ct) is not { } zalacznik)
+        if (await attachments.FindAsync(id, ct) is not { } attachment)
         {
             return;
         }
@@ -77,7 +77,7 @@ public sealed class AttachmentService(
         // Nagrobek na wpisie; treść w składnicy zostaje. Dwa wpisy mogą wskazywać ten
         // sam plik, a liczenie, który był ostatni, wymagałoby przejścia po całej bazie
         // przy każdym usunięciu — za to samo płaci się kilkoma kilobajtami.
-        zalacznik.MarkDeleted(hlc.Next());
+        attachment.MarkDeleted(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -92,12 +92,12 @@ public sealed class AttachmentService(
     private static async Task<(string Hash, MemoryStream Content)> HashAsync(
         Stream content, CancellationToken ct)
     {
-        var bufor = new MemoryStream();
-        await content.CopyToAsync(bufor, ct);
-        bufor.Position = 0;
+        var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, ct);
+        buffer.Position = 0;
 
-        var skrot = await SHA256.HashDataAsync(bufor, ct);
+        var hash = await SHA256.HashDataAsync(buffer, ct);
 
-        return (Convert.ToHexString(skrot).ToLowerInvariant(), bufor);
+        return (Convert.ToHexString(hash).ToLowerInvariant(), buffer);
     }
 }

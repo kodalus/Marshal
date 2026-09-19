@@ -25,11 +25,11 @@ public sealed class SyncEngine(
     ISyncTransport transport,
     IHlcSource hlc,
     string deviceId,
-    IKolejkaBazy? kolejka = null)
+    IDbQueue? queue = null)
 {
     private readonly ChangeApplier _applier = new(db, hlc);
 
-    private readonly IKolejkaBazy _kolejka = kolejka ?? new KolejkaWprost();
+    private readonly IDbQueue _kolejka = queue ?? new KolejkaWprost();
 
     public async Task<SyncReport> SyncAsync(CancellationToken ct = default)
     {
@@ -41,7 +41,7 @@ public sealed class SyncEngine(
     /// <summary>Dopisuje niewysłane zmiany na koniec własnego pliku.</summary>
     public async Task<int> PushAsync(CancellationToken ct = default)
     {
-        var pending = await _kolejka.WykonajAsync(
+        var pending = await _kolejka.RunAsync(
             () => db.Changes.Where(c => !c.Sent).ToListAsync(ct), ct);
 
         if (pending.Count == 0)
@@ -70,7 +70,7 @@ public sealed class SyncEngine(
 
         await transport.WriteSegmentAsync(deviceId, await NextSegmentAsync(ct), tekst.ToString(), ct);
 
-        await _kolejka.WykonajAsync(
+        await _kolejka.RunAsync(
             () =>
             {
                 foreach (var change in pending)
@@ -92,7 +92,7 @@ public sealed class SyncEngine(
 
         // Kursory z bazy, przez bramę: dopiero one mówią, których porcji jeszcze nie
         // widzieliśmy, a bez tego trzeba by ściągać wszystko od początku świata.
-        var kursory = await _kolejka.WykonajAsync(
+        var kursory = await _kolejka.RunAsync(
             () => db.SyncCursors.ToDictionaryAsync(c => c.RemoteDeviceId, ct), ct);
 
         // Ściąganie **w całości przed** nakładaniem. Nakładanie przeplatane pobieraniem
@@ -100,20 +100,20 @@ public sealed class SyncEngine(
         // trwa sieć.
         var porcje = new List<(string Urzadzenie, string Nazwa, string Tresc)>();
 
-        foreach (var grupa in segments.Where(s => s.DeviceId != deviceId).GroupBy(s => s.DeviceId))
+        foreach (var group in segments.Where(s => s.DeviceId != deviceId).GroupBy(s => s.DeviceId))
         {
-            var odkad = kursory.TryGetValue(grupa.Key, out var kursor)
-                ? kursor.LastSegment
+            var odkad = kursory.TryGetValue(group.Key, out var cursor)
+                ? cursor.LastSegment
                 : string.Empty;
 
-            foreach (var segment in grupa.OrderBy(s => s.Name, StringComparer.Ordinal))
+            foreach (var segment in group.OrderBy(s => s.Name, StringComparer.Ordinal))
             {
                 if (string.CompareOrdinal(segment.Name, odkad) <= 0)
                 {
                     continue;
                 }
 
-                porcje.Add((grupa.Key, segment.Name, await transport.ReadSegmentAsync(segment, ct)));
+                porcje.Add((group.Key, segment.Name, await transport.ReadSegmentAsync(segment, ct)));
             }
         }
 
@@ -122,7 +122,7 @@ public sealed class SyncEngine(
             return 0;
         }
 
-        return await _kolejka.WykonajAsync(() => NalozAsync(porcje, ct), ct);
+        return await _kolejka.RunAsync(() => NalozAsync(porcje, ct), ct);
     }
 
     /// <summary>Nałożenie ściągniętych porcji — jednym blokiem, za bramą.</summary>
@@ -142,16 +142,16 @@ public sealed class SyncEngine(
 
         using (SyncScope.Begin())
         {
-            foreach (var (urzadzenie, nazwa, tresc) in porcje)
+            foreach (var (urzadzenie, name, content) in porcje)
             {
-                if (!kursory.TryGetValue(urzadzenie, out var kursor))
+                if (!kursory.TryGetValue(urzadzenie, out var cursor))
                 {
-                    kursor = new SyncCursor(urzadzenie, string.Empty);
-                    db.SyncCursors.Add(kursor);
-                    kursory[urzadzenie] = kursor;
+                    cursor = new SyncCursor(urzadzenie, string.Empty);
+                    db.SyncCursors.Add(cursor);
+                    kursory[urzadzenie] = cursor;
                 }
 
-                foreach (var linia in tresc.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                foreach (var linia in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
                 {
                     if (ChangeLine.TryParse(linia) is { } wiersz && _applier.Apply(wiersz))
                     {
@@ -159,7 +159,7 @@ public sealed class SyncEngine(
                     }
                 }
 
-                kursor.MoveTo(nazwa);
+                cursor.MoveTo(name);
             }
 
             // Scalanie podnosi zegar lokalny ponad znaczniki zdalne. Gdyby to

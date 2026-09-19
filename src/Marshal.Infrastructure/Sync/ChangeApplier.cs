@@ -61,7 +61,7 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
             db.Entry(encja).Property("Id").CurrentValue = id;
         }
 
-        var wpis = db.Entry(encja);
+        var entry = db.Entry(encja);
         var cokolwiek = false;
 
         foreach (var (pole, wartosc) in wiersz.Fields)
@@ -80,7 +80,7 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
 
             try
             {
-                wpis.Property(pole).CurrentValue = Decode(wartosc, wlasciwosc);
+                entry.Property(pole).CurrentValue = Decode(wartosc, wlasciwosc);
             }
             catch (Exception e) when (e is JsonException or NotSupportedException
                                       or InvalidCastException or FormatException
@@ -112,8 +112,8 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
     /// </remarks>
     private bool Nowszy(string tabela, Guid id, string pole, Hlc zdalny)
     {
-        var lokalny = Znacznik(tabela, id, pole);
-        return lokalny is null || zdalny > Hlc.Parse(lokalny.Hlc);
+        var local = Znacznik(tabela, id, pole);
+        return local is null || zdalny > Hlc.Parse(local.Hlc);
     }
 
     private void Stamp(string tabela, Guid id, string pole, string znacznik)

@@ -33,9 +33,9 @@ namespace Marshal.Application.Abstractions;
 /// i identyfikator wczytują się raz i zostają w pamięci.
 /// </para>
 /// </remarks>
-public interface IKolejkaBazy
+public interface IDbQueue
 {
-    Task WykonajAsync(Func<Task> praca, CancellationToken ct = default);
+    Task RunAsync(Func<Task> work, CancellationToken ct = default);
 
-    Task<T> WykonajAsync<T>(Func<Task<T>> praca, CancellationToken ct = default);
+    Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken ct = default);
 }

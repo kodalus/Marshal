@@ -61,11 +61,11 @@ public sealed class TaskEditService(
     /// wysyłka szła pierwsza, nieudany zapis lokalny zostawiałby w cudzym kalendarzu
     /// wydarzenie opisujące zadanie, które u nas wygląda inaczej.
     /// </remarks>
-    private async Task OdbijAsync(TaskItem? zadanie, CancellationToken ct)
+    private async Task MirrorAsync(TaskItem? task, CancellationToken ct)
     {
-        if (zadanie is not null)
+        if (task is not null)
         {
-            await mirror.PushAsync(zadanie, ct);
+            await mirror.PushAsync(task, ct);
         }
     }
 
@@ -73,7 +73,7 @@ public sealed class TaskEditService(
     {
         ArgumentNullException.ThrowIfNull(edit);
 
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
@@ -81,72 +81,72 @@ public sealed class TaskEditService(
         // Każde pole ruszane tylko wtedy, gdy naprawdę się zmieniło. Zapis „na wszelki
         // wypadek" trafiłby do dziennika jako świeża decyzja i wygrał scalanie
         // ze zmianą, której użytkownik naprawdę dokonał gdzie indziej.
-        if (!string.IsNullOrWhiteSpace(edit.Title) && edit.Title.Trim() != zadanie.Title)
+        if (!string.IsNullOrWhiteSpace(edit.Title) && edit.Title.Trim() != task.Title)
         {
-            zadanie.Rename(edit.Title, hlc.Next());
+            task.Rename(edit.Title, hlc.Next());
         }
 
-        if ((edit.Note ?? string.Empty) != (zadanie.Note ?? string.Empty))
+        if ((edit.Note ?? string.Empty) != (task.Note ?? string.Empty))
         {
-            zadanie.SetNote(edit.Note, hlc.Next());
+            task.SetNote(edit.Note, hlc.Next());
         }
 
-        if (edit.Deadline != zadanie.Deadline)
+        if (edit.Deadline != task.Deadline)
         {
-            zadanie.SetDeadline(edit.Deadline, hlc.Next());
+            task.SetDeadline(edit.Deadline, hlc.Next());
         }
 
-        if (edit.ReminderAt != zadanie.ReminderAt)
+        if (edit.ReminderAt != task.ReminderAt)
         {
-            zadanie.SetReminder(edit.ReminderAt, hlc.Next());
+            task.SetReminder(edit.ReminderAt, hlc.Next());
         }
 
         // Porównanie po uporządkowaniu, bo zadanie trzyma je bez powtórzeń i rosnąco.
         // Inaczej ta sama lista w innej kolejności wyglądałaby na zmianę i wygrywała
         // scalanie z prawdziwą zmianą z drugiego urządzenia.
-        if (edit.ReminderLeads is { } wyprzedzenia
-            && !wyprzedzenia.Where(m => m >= 0).Distinct().Order().SequenceEqual(zadanie.ReminderLeads))
+        if (edit.ReminderLeads is { } leads
+            && !leads.Where(m => m >= 0).Distinct().Order().SequenceEqual(task.ReminderLeads))
         {
-            zadanie.SetReminderLeads(wyprzedzenia, hlc.Next());
+            task.SetReminderLeads(leads, hlc.Next());
         }
 
-        if (edit.Priority != zadanie.Priority)
+        if (edit.Priority != task.Priority)
         {
-            zadanie.SetPriority(edit.Priority, hlc.Next());
+            task.SetPriority(edit.Priority, hlc.Next());
         }
 
-        if (edit.EstimatedMinutes != zadanie.EstimatedMinutes || edit.Energy != zadanie.Energy)
+        if (edit.EstimatedMinutes != task.EstimatedMinutes || edit.Energy != task.Energy)
         {
-            zadanie.SetEstimate(edit.EstimatedMinutes, edit.Energy, hlc.Next());
+            task.SetEstimate(edit.EstimatedMinutes, edit.Energy, hlc.Next());
         }
 
-        if (edit.Recurrence != zadanie.Recurrence)
+        if (edit.Recurrence != task.Recurrence)
         {
-            zadanie.SetRecurrence(edit.Recurrence, hlc.Next());
+            task.SetRecurrence(edit.Recurrence, hlc.Next());
         }
 
         // Zmiana obszaru rusza stan tylko wtedy, gdy zadanie już wyszło ze skrzynki:
         // przetwarzanie jest osobnym krokiem i zapisanie szczegółu nie ma go zastępować.
-        var obszarSieZmienil = edit.AreaId is { } nowy
-            && nowy != zadanie.AreaId
-            && zadanie.State != TaskState.Inbox;
+        var areaChanged = edit.AreaId is { } created
+            && created != task.AreaId
+            && task.State != TaskState.Inbox;
 
-        if (edit.DoDate != zadanie.DoDate || obszarSieZmienil)
+        if (edit.DoDate != task.DoDate || areaChanged)
         {
-            await ApplyDoDateAsync(zadanie, edit.DoDate, edit.AreaId, ct);
+            await ApplyDoDateAsync(task, edit.DoDate, edit.AreaId, ct);
         }
 
         // Godzina po dniu, bo bez dnia nie ma czego trzymać — i po przejściu stanu,
         // bo MakeNext ją czyści.
-        if (edit.DoTime != zadanie.DoTime)
+        if (edit.DoTime != task.DoTime)
         {
-            zadanie.SetDoTime(edit.DoTime, hlc.Next());
+            task.SetDoTime(edit.DoTime, hlc.Next());
         }
 
         await unitOfWork.SaveChangesAsync(ct);
-        await OdbijAsync(zadanie, ct);
+        await MirrorAsync(task, ct);
 
-        return zadanie;
+        return task;
     }
 
     /// <summary>
@@ -160,18 +160,18 @@ public sealed class TaskEditService(
     public async Task<TaskItem?> SetEstimateAsync(
         Guid id, int? minutes, Energy energy, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
 
-        if (zadanie.EstimatedMinutes != minutes || zadanie.Energy != energy)
+        if (task.EstimatedMinutes != minutes || task.Energy != energy)
         {
-            zadanie.SetEstimate(minutes, energy, hlc.Next());
+            task.SetEstimate(minutes, energy, hlc.Next());
             await unitOfWork.SaveChangesAsync(ct);
         }
 
-        return zadanie;
+        return task;
     }
 
     /// <summary>
@@ -185,70 +185,70 @@ public sealed class TaskEditService(
     public async Task<TaskItem?> SetMinutesAsync(
         Guid id, int minutes, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
 
-        if (zadanie.EstimatedMinutes != minutes)
+        if (task.EstimatedMinutes != minutes)
         {
-            zadanie.SetEstimate(minutes, zadanie.Energy, hlc.Next());
+            task.SetEstimate(minutes, task.Energy, hlc.Next());
             await unitOfWork.SaveChangesAsync(ct);
-            await OdbijAsync(zadanie, ct);
+            await MirrorAsync(task, ct);
         }
 
-        return zadanie;
+        return task;
     }
 
     /// <summary>Waga — jedno pole, jedna zmiana (menu podręczne).</summary>
     public Task<TaskItem?> SetPriorityAsync(
         Guid id, Priority priority, CancellationToken ct = default) =>
-        ZmienAsync(id, z => z.SetPriority(priority, hlc.Next()), ct);
+        ChangeAsync(id, z => z.SetPriority(priority, hlc.Next()), ct);
 
     /// <summary>Rytm z menu: same rodzaje, bez zaczepienia i pominięć — te mają swój ekran.</summary>
     public Task<TaskItem?> SetRecurrenceAsync(
         Guid id, RecurrenceKind? kind, CancellationToken ct = default) =>
-        ZmienAsync(
+        ChangeAsync(
             id,
             z => z.SetRecurrence(
-                kind is { } rodzaj ? new RecurrenceRule(rodzaj) : null, hlc.Next()),
+                kind is { } kind ? new RecurrenceRule(kind) : null, hlc.Next()),
             ct);
 
     /// <summary>Przeniesienie do projektu albo wyjęcie z niego.</summary>
     public async Task<TaskItem?> SetProjectAsync(
         Guid id, Guid? projectId, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
 
-        var obszar = zadanie.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
+        var area = task.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
 
-        if (obszar is not { } identyfikator)
+        if (area is not { } id)
         {
             throw new InvalidOperationException(
                 "Nie ma żadnego czynnego obszaru, a zadanie w projekcie musi do któregoś należeć.");
         }
 
-        zadanie.MoveTo(identyfikator, projectId, hlc.Next());
+        task.MoveTo(id, projectId, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
-        return zadanie;
+        return task;
     }
 
-    private async Task<TaskItem?> ZmienAsync(
-        Guid id, Action<TaskItem> zmiana, CancellationToken ct)
+    private async Task<TaskItem?> ChangeAsync(
+        Guid id, Action<TaskItem> change, CancellationToken ct)
     {
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
 
-        zmiana(zadanie);
+        change(task);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return zadanie;
+        return task;
     }
 
     /// <summary>
@@ -263,18 +263,18 @@ public sealed class TaskEditService(
     public async Task<TaskItem?> RescheduleAsync(
         Guid id, DateOnly day, TimeOnly? time, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
 
-        await ApplyDoDateAsync(zadanie, day, zadanie.AreaId, ct);
-        zadanie.SetDoTime(time, hlc.Next());
+        await ApplyDoDateAsync(task, day, task.AreaId, ct);
+        task.SetDoTime(time, hlc.Next());
 
         await unitOfWork.SaveChangesAsync(ct);
-        await OdbijAsync(zadanie, ct);
+        await MirrorAsync(task, ct);
 
-        return zadanie;
+        return task;
     }
 
     /// <summary>
@@ -282,7 +282,7 @@ public sealed class TaskEditService(
     /// </summary>
     public async Task<TaskItem?> CompleteAsync(Guid id, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
@@ -292,22 +292,22 @@ public sealed class TaskEditService(
         // z kalendarza bez śladu, więc wieczorem nie było z czego odczytać, na co
         // poszedł dzień. Godziny wpisanej wcześniej nie ruszamy — to była decyzja,
         // a nie zapis tego, co się stało.
-        if (zadanie.DoTime is null && zadanie.State != TaskState.Done)
+        if (task.DoTime is null && task.State != TaskState.Done)
         {
-            await ZapiszPoreWykonaniaAsync(zadanie, ct);
+            await SaveDoTimeAsync(task, ct);
         }
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, clock.Now, hlc.Next);
+        var next = RecurrenceRunner.Complete(task, clock.Now, hlc.Next);
 
-        if (nastepne is not null)
+        if (next is not null)
         {
-            tasks.Add(nastepne);
+            tasks.Add(next);
         }
 
         await unitOfWork.SaveChangesAsync(ct);
-        await OdbijAsync(zadanie, ct);
+        await MirrorAsync(task, ct);
 
-        return nastepne;
+        return next;
     }
 
     /// <summary>
@@ -321,44 +321,44 @@ public sealed class TaskEditService(
     /// </remarks>
     public async Task<TaskItem?> ReopenAsync(Guid id, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(id, ct) is not { } zadanie)
+        if (await tasks.FindAsync(id, ct) is not { } task)
         {
             return null;
         }
 
-        if (zadanie.State != TaskState.Done)
+        if (task.State != TaskState.Done)
         {
-            return zadanie;
+            return task;
         }
 
-        zadanie.Reopen(hlc.Next());
+        task.Reopen(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
-        await OdbijAsync(zadanie, ct);
+        await MirrorAsync(task, ct);
 
-        return zadanie;
+        return task;
     }
 
     /// <summary>Blok kończący się teraz, o długości równej oszacowaniu.</summary>
-    private async Task ZapiszPoreWykonaniaAsync(TaskItem zadanie, CancellationToken ct)
+    private async Task SaveDoTimeAsync(TaskItem task, CancellationToken ct)
     {
-        var teraz = clock.Now;
+        var now = clock.Now;
 
         // Do pięciu minut w dół: „skończone o 14:37" jest dokładniejsze, niż bywa prawda.
-        var koniec = new TimeOnly(teraz.Hour, teraz.Minute / 5 * 5);
-        var dlugosc = TimeSpan.FromMinutes(zadanie.EstimatedMinutes ?? DomyslneMinuty);
+        var end = new TimeOnly(now.Hour, now.Minute / 5 * 5);
+        var length = TimeSpan.FromMinutes(task.EstimatedMinutes ?? DefaultMinutes);
 
         // Początek przycięty do północy: blok ma opisać dzisiaj, a nie sięgnąć wstecz
         // na wczoraj przez zadanie oszacowane na trzy godziny i odhaczone o pierwszej.
-        var start = koniec.ToTimeSpan() > dlugosc
-            ? TimeOnly.FromTimeSpan(koniec.ToTimeSpan() - dlugosc)
+        var start = end.ToTimeSpan() > length
+            ? TimeOnly.FromTimeSpan(end.ToTimeSpan() - length)
             : TimeOnly.MinValue;
 
-        await ApplyDoDateAsync(zadanie, clock.Today, zadanie.AreaId, ct);
-        zadanie.SetDoTime(start, hlc.Next());
+        await ApplyDoDateAsync(task, clock.Today, task.AreaId, ct);
+        task.SetDoTime(start, hlc.Next());
     }
 
     /// <summary>Ile trwa zadanie bez oszacowania (spec 11).</summary>
-    private const int DomyslneMinuty = 30;
+    private const int DefaultMinutes = 30;
 
     /// <summary>
     /// Nadanie i zdjęcie dnia wykonania.
@@ -378,35 +378,35 @@ public sealed class TaskEditService(
     /// </para>
     /// </remarks>
     private async Task ApplyDoDateAsync(
-        TaskItem zadanie, DateOnly? doDate, Guid? wybrany, CancellationToken ct)
+        TaskItem task, DateOnly? doDate, Guid? selected, CancellationToken ct)
     {
         // Zadanie odhaczone dostaje sam dzień, bez przejścia stanu. Przejście ustawia
         // „zaplanowane" i tym samym zdejmuje „wykonane" — więc przeciągnięcie
         // wykonanego bloku po siatce wskrzeszało go, a zapis szczegółu odhaczonego
         // zadania cofał odhaczenie. Ruch po siatce poprawia zapis o przeszłości;
         // od cofnięcia decyzji jest zdjęcie ptaszka, osobną czynnością.
-        if (zadanie.State == TaskState.Done)
+        if (task.State == TaskState.Done)
         {
-            zadanie.MoveDoDate(doDate, hlc.Next());
+            task.MoveDoDate(doDate, hlc.Next());
             return;
         }
 
-        var obszar = wybrany ?? zadanie.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
+        var area = selected ?? task.AreaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id;
 
-        if (obszar is not { } id)
+        if (area is not { } id)
         {
             throw new InvalidOperationException(
                 "Nie ma żadnego czynnego obszaru, a zadanie z dniem wykonania musi do "
                 + "któregoś należeć. Załóż albo włącz obszar na ekranie „Obszary i projekty”.");
         }
 
-        if (doDate is { } dzien)
+        if (doDate is { } day)
         {
-            zadanie.Schedule(id, dzien, hlc.Next());
+            task.Schedule(id, day, hlc.Next());
         }
         else
         {
-            zadanie.MakeNext(id, hlc.Next());
+            task.MakeNext(id, hlc.Next());
         }
     }
 }

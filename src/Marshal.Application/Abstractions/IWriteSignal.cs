@@ -21,11 +21,11 @@ namespace Marshal.Application.Abstractions;
 /// notatkę na później. Wchodzenie stąd na listy widoczne w oknie jest błędem.
 /// </para>
 /// </remarks>
-public interface ISygnalZapisu
+public interface IWriteSignal
 {
     /// <summary>Podniesiony po zapisie z okna. Może przyjść spoza wątku okna.</summary>
-    event Action? Zapisano;
+    event Action? Saved;
 
     /// <summary>Podnosi znak.</summary>
-    void Zglos();
+    void Report();
 }

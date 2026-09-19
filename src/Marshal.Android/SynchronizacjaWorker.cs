@@ -141,29 +141,29 @@ public sealed class SynchronizacjaWorker : Worker
             return Result.InvokeSuccess()!;
         }
 
-        var wynik = await dysk.SyncAsync();
+        var result = await dysk.SyncAsync();
 
-        if (!wynik.Ok)
+        if (!result.Ok)
         {
             await Budzik.Zapisz(
-                "Synchronizacja w tle", wynik.Message, poziom: ActivityLevel.Problem);
+                "Synchronizacja w tle", result.Message, poziom: ActivityLevel.Problem);
 
             return Result.InvokeRetry()!;
         }
 
-        if (wynik.Applied > 0)
+        if (result.Applied > 0)
         {
             // Przypomnienia od razu, nie przy następnym budziku: to, co właśnie przyszło,
             // bywa już zaległe. Zadanie zmienione rano na komputerze dociera tu po
             // południu i ma się odezwać teraz.
-            var ile = await AppServices.Provider
+            var count = await AppServices.Provider
                 .GetRequiredService<ReminderService>()
                 .RunAsync();
 
             await Budzik.Zapisz(
                 "Synchronizacja w tle",
-                $"przyjęte {wynik.Applied}"
-                    + (ile > 0 ? $", przypomnienia pokazane: {ile}" : string.Empty));
+                $"przyjęte {result.Applied}"
+                    + (count > 0 ? $", przypomnienia pokazane: {count}" : string.Empty));
 
             TodayWidget.Refresh(ApplicationContext!);
         }

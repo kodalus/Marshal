@@ -18,20 +18,20 @@ public sealed class RecurrenceRunnerTests
 
     private static DateOnly D(string iso) => DateOnly.Parse(iso);
 
-    private static DateTimeOffset Chwila(string iso, int godzina = 9) =>
-        new(DateOnly.Parse(iso).ToDateTime(new TimeOnly(godzina, 0)), TimeSpan.FromHours(2));
+    private static DateTimeOffset Moment(string iso, int hour = 9) =>
+        new(DateOnly.Parse(iso).ToDateTime(new TimeOnly(hour, 0)), TimeSpan.FromHours(2));
 
-    private TaskItem Zaplanowane(string doDate, RecurrenceRule? regula = null)
+    private TaskItem Zaplanowane(string doDate, RecurrenceRule? rule = null)
     {
-        var zadanie = TaskItem.Capture("Wynieść śmieci", Chwila(doDate), Stempel());
-        zadanie.Schedule(_obszar, D(doDate), Stempel());
+        var task = TaskItem.Capture("Wynieść śmieci", Moment(doDate), Stempel());
+        task.Schedule(_obszar, D(doDate), Stempel());
 
-        if (regula is not null)
+        if (rule is not null)
         {
-            zadanie.SetRecurrence(regula, Stempel());
+            task.SetRecurrence(rule, Stempel());
         }
 
-        return zadanie;
+        return task;
     }
 
     // --- odhaczenie (8.4) ----------------------------------------------------
@@ -39,10 +39,10 @@ public sealed class RecurrenceRunnerTests
     [Fact]
     public void Odhaczenie_zwyklego_zadania_nie_rodzi_nastepnika()
     {
-        var zadanie = Zaplanowane("2026-09-16");
+        var task = Zaplanowane("2026-09-16");
 
-        RecurrenceRunner.Complete(zadanie, Chwila("2026-09-16"), Stempel).Should().BeNull();
-        zadanie.State.Should().Be(TaskState.Done);
+        RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel).Should().BeNull();
+        task.State.Should().Be(TaskState.Done);
     }
 
     [Fact]
@@ -50,12 +50,12 @@ public sealed class RecurrenceRunnerTests
     {
         // „Co poniedziałek śmieci" odhaczone we wtorek: kolejny poniedziałek zostaje
         // poniedziałkiem. To jest cała różnica między rytmem świata a rytmem moich rąk.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-14", new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday));
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, Chwila("2026-09-15"), Stempel);
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-15"), Stempel);
 
-        nastepne!.DoDate.Should().Be(D("2026-09-21"));
+        next!.DoDate.Should().Be(D("2026-09-21"));
     }
 
     [Fact]
@@ -63,12 +63,12 @@ public sealed class RecurrenceRunnerTests
     {
         // „Co 3 dni podlewanie" odhaczone z dwudniowym opóźnieniem: kolejne trzy dni
         // liczą się od podlania, a nie od tego, co było obiecane.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-14", new RecurrenceRule(RecurrenceKind.EveryNDays, interval: 3));
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, Chwila("2026-09-16"), Stempel);
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel);
 
-        nastepne!.DoDate.Should().Be(D("2026-09-19"));
+        next!.DoDate.Should().Be(D("2026-09-19"));
     }
 
     [Fact]
@@ -76,33 +76,33 @@ public sealed class RecurrenceRunnerTests
     {
         // Historia „robiłam to w każdy poniedziałek prócz jednego" jest całą wartością
         // powtarzalności; zadanie przestawiane w przyszłość jej nie niesie.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-14", new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday));
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, Chwila("2026-09-14"), Stempel);
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-14"), Stempel);
 
-        zadanie.State.Should().Be(TaskState.Done);
-        zadanie.DoDate.Should().Be(D("2026-09-14"));
-        nastepne!.Id.Should().NotBe(zadanie.Id);
-        nastepne.State.Should().Be(TaskState.Scheduled);
+        task.State.Should().Be(TaskState.Done);
+        task.DoDate.Should().Be(D("2026-09-14"));
+        next!.Id.Should().NotBe(task.Id);
+        next.State.Should().Be(TaskState.Scheduled);
     }
 
     [Fact]
     public void Nastepne_wystapienie_dziedziczy_obszar_projekt_i_wage()
     {
-        var zadanie = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
-        var projekt = Guid.CreateVersion7();
-        zadanie.MoveTo(_obszar, projekt, Stempel());
-        zadanie.SetPriority(Priority.High, Stempel());
-        zadanie.SetNote("z kluczem do piwnicy", Stempel());
+        var task = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
+        var project = Guid.CreateVersion7();
+        task.MoveTo(_obszar, project, Stempel());
+        task.SetPriority(Priority.High, Stempel());
+        task.SetNote("z kluczem do piwnicy", Stempel());
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, Chwila("2026-09-14"), Stempel)!;
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-14"), Stempel)!;
 
-        nastepne.AreaId.Should().Be(_obszar);
-        nastepne.ProjectId.Should().Be(projekt);
-        nastepne.Priority.Should().Be(Priority.High);
-        nastepne.Note.Should().Be("z kluczem do piwnicy");
-        nastepne.Title.Should().Be("Wynieść śmieci");
+        next.AreaId.Should().Be(_obszar);
+        next.ProjectId.Should().Be(project);
+        next.Priority.Should().Be(Priority.High);
+        next.Note.Should().Be("z kluczem do piwnicy");
+        next.Title.Should().Be("Wynieść śmieci");
     }
 
     [Fact]
@@ -110,54 +110,54 @@ public sealed class RecurrenceRunnerTests
     {
         // „Zapłacić do 10-go" przy racie robionej 5-go to pięć dni zapasu, co miesiąc
         // tyle samo. Skopiowany wprost byłby od razu przeterminowany i N5 zacząłby kłamać.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-05", new RecurrenceRule(RecurrenceKind.Monthly, dayOfMonth: 5));
-        zadanie.SetDeadline(D("2026-09-10"), Stempel());
+        task.SetDeadline(D("2026-09-10"), Stempel());
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, Chwila("2026-09-05"), Stempel)!;
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-05"), Stempel)!;
 
-        nastepne.DoDate.Should().Be(D("2026-10-05"));
-        nastepne.Deadline.Should().Be(D("2026-10-10"));
+        next.DoDate.Should().Be(D("2026-10-05"));
+        next.Deadline.Should().Be(D("2026-10-10"));
     }
 
     [Fact]
     public void Regule_nosi_zawsze_najnowsze_wystapienie()
     {
-        var zadanie = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
+        var task = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, Chwila("2026-09-14"), Stempel)!;
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-14"), Stempel)!;
 
-        zadanie.Recurrence.Should().BeNull();
-        nastepne.Recurrence.Should().NotBeNull();
+        task.Recurrence.Should().BeNull();
+        next.Recurrence.Should().NotBeNull();
     }
 
     [Fact]
     public void Odhaczenie_dwa_razy_tego_samego_dnia_nie_robi_dwoch_nastepnikow()
     {
-        var zadanie = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
+        var task = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
 
-        RecurrenceRunner.Complete(zadanie, Chwila("2026-09-14"), Stempel).Should().NotBeNull();
-        RecurrenceRunner.Complete(zadanie, Chwila("2026-09-14"), Stempel).Should().BeNull();
+        RecurrenceRunner.Complete(task, Moment("2026-09-14"), Stempel).Should().NotBeNull();
+        RecurrenceRunner.Complete(task, Moment("2026-09-14"), Stempel).Should().BeNull();
     }
 
     [Fact]
     public void Odhaczenie_zadania_z_przyszlosci_liczy_od_jego_daty()
     {
         // Zrobione z wyprzedzeniem. Przy zaczepieniu na planie rytm zostaje nietknięty.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-21", new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday));
 
-        var nastepne = RecurrenceRunner.Complete(zadanie, Chwila("2026-09-16"), Stempel)!;
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel)!;
 
-        nastepne.DoDate.Should().Be(D("2026-09-28"));
+        next.DoDate.Should().Be(D("2026-09-28"));
     }
 
     [Fact]
     public void Wyczerpana_seria_nie_rodzi_nastepnika()
     {
-        var zadanie = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily, count: 1));
+        var task = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily, count: 1));
 
-        RecurrenceRunner.Complete(zadanie, Chwila("2026-09-14"), Stempel).Should().BeNull();
+        RecurrenceRunner.Complete(task, Moment("2026-09-14"), Stempel).Should().BeNull();
     }
 
     // --- przejście dnia (8.4 tabela, 8.7) ------------------------------------
@@ -165,13 +165,13 @@ public sealed class RecurrenceRunnerTests
     [Fact]
     public void Zwykle_zaplanowane_przesuwa_sie_na_dzis_z_licznikiem()
     {
-        var zadanie = Zaplanowane("2026-09-10");
+        var task = Zaplanowane("2026-09-10");
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel).Should().BeNull();
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().BeNull();
 
-        zadanie.DoDate.Should().Be(D("2026-09-16"));
-        zadanie.RollCount.Should().Be(1);
-        zadanie.State.Should().Be(TaskState.Scheduled);
+        task.DoDate.Should().Be(D("2026-09-16"));
+        task.RollCount.Should().Be(1);
+        task.State.Should().Be(TaskState.Scheduled);
     }
 
     [Fact]
@@ -179,44 +179,44 @@ public sealed class RecurrenceRunnerTests
     {
         // Termin to fakt zewnętrzny — świat się nie przesunął, więc minięcie zostaje
         // przeterminowaniem (N5). Data wykonania to obietnica dana sobie, i to ona idzie.
-        var zadanie = Zaplanowane("2026-09-10");
-        zadanie.SetDeadline(D("2026-09-12"), Stempel());
+        var task = Zaplanowane("2026-09-10");
+        task.SetDeadline(D("2026-09-12"), Stempel());
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
 
-        zadanie.Deadline.Should().Be(D("2026-09-12"));
+        task.Deadline.Should().Be(D("2026-09-12"));
     }
 
     [Fact]
     public void Przejscie_dnia_puszczone_dwa_razy_liczy_raz()
     {
-        var zadanie = Zaplanowane("2026-09-10");
+        var task = Zaplanowane("2026-09-10");
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
 
-        zadanie.RollCount.Should().Be(1);
+        task.RollCount.Should().Be(1);
     }
 
     [Fact]
     public void Zadanie_na_dzis_nie_jest_ruszane()
     {
-        var zadanie = Zaplanowane("2026-09-16");
+        var task = Zaplanowane("2026-09-16");
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel).Should().BeNull();
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().BeNull();
 
-        zadanie.RollCount.Should().Be(0);
+        task.RollCount.Should().Be(0);
     }
 
     [Fact]
     public void Wykonane_zadanie_z_przeszlosci_nie_jest_ruszane()
     {
-        var zadanie = Zaplanowane("2026-09-10");
-        zadanie.Complete(Chwila("2026-09-10"), Stempel());
+        var task = Zaplanowane("2026-09-10");
+        task.Complete(Moment("2026-09-10"), Stempel());
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel).Should().BeNull();
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().BeNull();
 
-        zadanie.DoDate.Should().Be(D("2026-09-10"));
+        task.DoDate.Should().Be(D("2026-09-10"));
     }
 
     [Fact]
@@ -225,27 +225,27 @@ public sealed class RecurrenceRunnerTests
         // Nie na 15-go: wystąpienia między datą pominiętą a dniem dzisiejszym też
         // przepadają, bo na tym polega Skip. Tworzenie ich po to, żeby zaraz wyrzucić,
         // dałoby tylko nagrobki do rozesłania.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-14",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
 
-        var nastepne = RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+        var next = RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
 
-        zadanie.State.Should().Be(TaskState.Trashed);
-        nastepne!.DoDate.Should().Be(D("2026-09-16"));
+        task.State.Should().Be(TaskState.Trashed);
+        next!.DoDate.Should().Be(D("2026-09-16"));
     }
 
     [Fact]
     public void Pominiete_z_Carry_przenosi_sie_na_dzis_i_nie_rodzi_nastepnego()
     {
-        var zadanie = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
+        var task = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
 
-        var nastepne = RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+        var next = RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
 
-        nastepne.Should().BeNull();
-        zadanie.DoDate.Should().Be(D("2026-09-16"));
-        zadanie.CarriedSince.Should().Be(D("2026-09-14"));
-        zadanie.Recurrence.Should().NotBeNull();
+        next.Should().BeNull();
+        task.DoDate.Should().Be(D("2026-09-16"));
+        task.CarriedSince.Should().Be(D("2026-09-14"));
+        task.Recurrence.Should().NotBeNull();
     }
 
     [Fact]
@@ -253,15 +253,15 @@ public sealed class RecurrenceRunnerTests
     {
         // „Zaległe od 14 września", nie „od wczoraj". Bez tego N12 nigdy nie doliczyłby
         // trzydziestu dni i strażnik rytmu nie odezwałby się nigdy.
-        var zadanie = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
+        var task = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
 
-        foreach (var dzien in new[] { "2026-09-15", "2026-09-22", "2026-10-05" })
+        foreach (var day in new[] { "2026-09-15", "2026-09-22", "2026-10-05" })
         {
-            RecurrenceRunner.Rollover(zadanie, Chwila(dzien), Stempel);
+            RecurrenceRunner.Rollover(task, Moment(day), Stempel);
         }
 
-        zadanie.CarriedSince.Should().Be(D("2026-09-14"));
-        zadanie.DoDate.Should().Be(D("2026-10-05"));
+        task.CarriedSince.Should().Be(D("2026-09-14"));
+        task.DoDate.Should().Be(D("2026-10-05"));
     }
 
     [Fact]
@@ -271,31 +271,31 @@ public sealed class RecurrenceRunnerTests
         // zaplanowane na swoją dawną datę, nazajutrz przesunęłoby się na dziś, potem
         // znowu, i po czterech dniach odpaliłoby N15. Zostaje więc następną akcją
         // bez dnia, a dzień, na który było umówione, siedzi w „zaległe od".
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-14",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
 
-        var nastepne = RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+        var next = RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
 
-        zadanie.State.Should().Be(TaskState.Next);
-        zadanie.DoDate.Should().BeNull();
-        zadanie.CarriedSince.Should().Be(D("2026-09-14"));
-        zadanie.Recurrence.Should().BeNull();
-        nastepne!.DoDate.Should().Be(D("2026-09-15"));
+        task.State.Should().Be(TaskState.Next);
+        task.DoDate.Should().BeNull();
+        task.CarriedSince.Should().Be(D("2026-09-14"));
+        task.Recurrence.Should().BeNull();
+        next!.DoDate.Should().Be(D("2026-09-15"));
     }
 
     [Fact]
     public void Zalegle_wystapienie_z_Accumulate_nie_jest_juz_przesuwane()
     {
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-14",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-20"), Stempel);
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
+        RecurrenceRunner.Rollover(task, Moment("2026-09-20"), Stempel);
 
-        zadanie.RollCount.Should().Be(0);
-        zadanie.CarriedSince.Should().Be(D("2026-09-14"));
+        task.RollCount.Should().Be(0);
+        task.CarriedSince.Should().Be(D("2026-09-14"));
     }
 
     [Fact]
@@ -303,14 +303,14 @@ public sealed class RecurrenceRunnerTests
     {
         // Nagrobek każdego przeskoczonego dnia nie jest niczyją informacją, a rozjechałby
         // się po wszystkich urządzeniach.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
 
-        var nastepne = RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel);
+        var next = RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
 
-        nastepne!.DoDate.Should().Be(D("2026-09-16"));
-        RecurrenceRunner.Rollover(nastepne, Chwila("2026-09-16"), Stempel).Should().BeNull();
+        next!.DoDate.Should().Be(D("2026-09-16"));
+        RecurrenceRunner.Rollover(next, Moment("2026-09-16"), Stempel).Should().BeNull();
     }
 
     [Fact]
@@ -318,11 +318,11 @@ public sealed class RecurrenceRunnerTests
     {
         // Seria „pięć razy" przespana przez pięć dni jest serią skończoną, a nie serią,
         // która czeka na kolejne pięć okazji.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip, count: 3));
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel).Should().BeNull();
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().BeNull();
     }
 
     [Fact]
@@ -331,11 +331,11 @@ public sealed class RecurrenceRunnerTests
         // Najważniejszy test przejścia dnia: bez zabrania reguły poprzednikowi każde
         // uruchomienie dokładałoby po jednej pozycji, a aplikacja startuje wiele razy
         // dziennie i na dwóch urządzeniach.
-        var zadanie = Zaplanowane(
+        var task = Zaplanowane(
             "2026-09-14",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
 
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel).Should().NotBeNull();
-        RecurrenceRunner.Rollover(zadanie, Chwila("2026-09-16"), Stempel).Should().BeNull();
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().NotBeNull();
+        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().BeNull();
     }
 }

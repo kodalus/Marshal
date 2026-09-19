@@ -55,65 +55,65 @@ public sealed class StaleCacheTests : IDisposable
     [Fact]
     public void Regula_powtarzania_odswieza_sie_po_wpisaniu_z_boku()
     {
-        var zadanie = TaskItem.Capture("podlać kwiaty", _zegar.Now, _hlc.Next());
-        zadanie.MakeNext(_obszar, _hlc.Next());
-        zadanie.SetRecurrence(
+        var task = TaskItem.Capture("podlać kwiaty", _zegar.Now, _hlc.Next());
+        task.MakeNext(_obszar, _hlc.Next());
+        task.SetRecurrence(
             new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday), _hlc.Next());
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
 
         // Odczyt, który zapełnia pamięć podręczną.
-        zadanie.Recurrence!.Kind.Should().Be(RecurrenceKind.Weekly);
+        task.Recurrence!.Kind.Should().Be(RecurrenceKind.Weekly);
 
         // Drugie urządzenie zmieniło rytm na codzienny.
         WpiszZBoku(
-            zadanie,
+            task,
             nameof(TaskItem.RecurrenceJson),
             new RecurrenceRule(RecurrenceKind.Daily).ToJson());
 
         // Bez wiązania pamięci podręcznej z tekstem przejście dnia rodziłoby
         // wystąpienia w rytmie, który już nie obowiązuje.
-        zadanie.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
+        task.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
     }
 
     [Fact]
     public void Zapisany_widok_odswieza_sie_po_wpisaniu_z_boku()
     {
-        var filtr = SavedFilter.Create(
+        var filter = SavedFilter.Create(
             "Kwadrans",
             new FilterQuery([FilterCondition.Estimate(15)]),
             _zegar.Now,
             _hlc.Next());
 
-        _db.SavedFilters.Add(filtr);
+        _db.SavedFilters.Add(filter);
         _db.SaveChanges();
 
-        filtr.Query!.Conditions[0].MaxMinutes.Should().Be(15);
+        filter.Query!.Conditions[0].MaxMinutes.Should().Be(15);
 
         WpiszZBoku(
-            filtr,
+            filter,
             nameof(SavedFilter.DefinitionJson),
             new FilterQuery([FilterCondition.Estimate(60)]).ToJson());
 
-        filtr.Query!.Conditions[0].MaxMinutes.Should().Be(60);
+        filter.Query!.Conditions[0].MaxMinutes.Should().Be(60);
     }
 
     [Fact]
     public void Wyczyszczenie_reguly_z_boku_tez_widac()
     {
-        var zadanie = TaskItem.Capture("podlać kwiaty", _zegar.Now, _hlc.Next());
-        zadanie.MakeNext(_obszar, _hlc.Next());
-        zadanie.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), _hlc.Next());
+        var task = TaskItem.Capture("podlać kwiaty", _zegar.Now, _hlc.Next());
+        task.MakeNext(_obszar, _hlc.Next());
+        task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), _hlc.Next());
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        zadanie.Recurrence.Should().NotBeNull();
+        task.Recurrence.Should().NotBeNull();
 
-        WpiszZBoku(zadanie, nameof(TaskItem.RecurrenceJson), null);
+        WpiszZBoku(task, nameof(TaskItem.RecurrenceJson), null);
 
-        zadanie.Recurrence.Should().BeNull();
+        task.Recurrence.Should().BeNull();
     }
 
     public void Dispose()

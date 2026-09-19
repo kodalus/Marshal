@@ -14,18 +14,18 @@ public class ProjectTreeTests
 
     private static Hlc Stamp() => new(_znacznik += 10, 0, "t");
 
-    private static Area Obszar(string nazwa, double kolejnosc) =>
-        new(Guid.CreateVersion7(), Teraz, Stamp(), nazwa, kolejnosc);
+    private static Area Obszar(string name, double order) =>
+        new(Guid.CreateVersion7(), Teraz, Stamp(), name, order);
 
-    private static Project Projekt(string wynik, Guid obszar, double kolejnosc = 0, Guid? rodzic = null) =>
-        new(Guid.CreateVersion7(), Teraz, Stamp(), wynik, obszar, kolejnosc, rodzic);
+    private static Project Projekt(string result, Guid area, double order = 0, Guid? parent = null) =>
+        new(Guid.CreateVersion7(), Teraz, Stamp(), result, area, order, parent);
 
     [Fact]
     public void Puste_obszary_i_tak_sa_widoczne()
     {
-        var obszary = new[] { Obszar("Praca", 1), Obszar("Dom", 2) };
+        var areas = new[] { Obszar("Praca", 1), Obszar("Dom", 2) };
 
-        var wiersze = ProjectTree.Build(obszary, []);
+        var wiersze = ProjectTree.Build(areas, []);
 
         wiersze.Select(w => w.Label).Should().Equal("Praca", "Dom");
         wiersze.Should().OnlyContain(w => w.IsArea);
@@ -34,11 +34,11 @@ public class ProjectTreeTests
     [Fact]
     public void Projekty_ida_pod_swoim_obszarem()
     {
-        var praca = Obszar("Praca", 1);
+        var work = Obszar("Praca", 1);
         var dom = Obszar("Dom", 2);
-        var projekty = new[] { Projekt("Raport oddany", praca.Id), Projekt("Opony wymienione", dom.Id) };
+        var projects = new[] { Projekt("Raport oddany", work.Id), Projekt("Opony wymienione", dom.Id) };
 
-        var wiersze = ProjectTree.Build([praca, dom], projekty);
+        var wiersze = ProjectTree.Build([work, dom], projects);
 
         wiersze.Select(w => w.Label).Should().Equal("Praca", "Raport oddany", "Dom", "Opony wymienione");
         wiersze[1].Depth.Should().Be(1);
@@ -47,11 +47,11 @@ public class ProjectTreeTests
     [Fact]
     public void Podprojekt_ma_wieksza_glebokosc()
     {
-        var obszar = Obszar("Urzędy", 1);
-        var cel = Projekt("Prawo jazdy jest w portfelu", obszar.Id);
-        var krok = Projekt("Egzamin zdany", obszar.Id, rodzic: cel.Id);
+        var area = Obszar("Urzędy", 1);
+        var cel = Projekt("Prawo jazdy jest w portfelu", area.Id);
+        var step = Projekt("Egzamin zdany", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([obszar], [cel, krok]);
+        var wiersze = ProjectTree.Build([area], [cel, step]);
 
         wiersze.Select(w => w.Depth).Should().Equal(0, 1, 2);
         wiersze.Last().Label.Should().Be("Egzamin zdany");
@@ -63,10 +63,10 @@ public class ProjectTreeTests
         // Przy synchronizacji zmiany przychodzą w kolejności zapisu, nie zależności,
         // więc podprojekt potrafi dotrzeć przed swoim celem. Ukrycie go znaczyłoby,
         // że zadanie istnieje, a nie widać go nigdzie.
-        var obszar = Obszar("Urzędy", 1);
-        var sierota = Projekt("Egzamin zdany", obszar.Id, rodzic: Guid.CreateVersion7());
+        var area = Obszar("Urzędy", 1);
+        var sierota = Projekt("Egzamin zdany", area.Id, parent: Guid.CreateVersion7());
 
-        var wiersze = ProjectTree.Build([obszar], [sierota]);
+        var wiersze = ProjectTree.Build([area], [sierota]);
 
         wiersze.Should().HaveCount(2);
         wiersze.Last().Label.Should().Be("Egzamin zdany");
@@ -76,12 +76,12 @@ public class ProjectTreeTests
     [Fact]
     public void Cykl_nie_zapetla_budowania()
     {
-        var obszar = Obszar("Dom", 1);
-        var a = Projekt("A", obszar.Id);
-        var b = Projekt("B", obszar.Id, rodzic: a.Id);
+        var area = Obszar("Dom", 1);
+        var a = Projekt("A", area.Id);
+        var b = Projekt("B", area.Id, parent: a.Id);
         a.AttachTo(b, Stamp());
 
-        var buduj = () => ProjectTree.Build([obszar], [a, b]);
+        var buduj = () => ProjectTree.Build([area], [a, b]);
 
         buduj.Should().NotThrow();
     }
@@ -89,11 +89,11 @@ public class ProjectTreeTests
     [Fact]
     public void Projekt_pojawia_sie_tylko_raz()
     {
-        var obszar = Obszar("Dom", 1);
-        var cel = Projekt("Cel", obszar.Id);
-        var krok = Projekt("Krok", obszar.Id, rodzic: cel.Id);
+        var area = Obszar("Dom", 1);
+        var cel = Projekt("Cel", area.Id);
+        var step = Projekt("Krok", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([obszar], [cel, krok]);
+        var wiersze = ProjectTree.Build([area], [cel, step]);
 
         wiersze.Select(w => w.Id).Should().OnlyHaveUniqueItems();
     }
@@ -117,13 +117,13 @@ public class ProjectTreeTests
     [Fact]
     public void Barwa_schodzi_z_obszaru_na_projekty()
     {
-        var obszar = Obszar("Praca", 1);
-        obszar.SetColor("#4E7FD8", Stamp());
+        var area = Obszar("Praca", 1);
+        area.SetColor("#4E7FD8", Stamp());
 
-        var cel = Projekt("Cel", obszar.Id);
-        var krok = Projekt("Krok", obszar.Id, rodzic: cel.Id);
+        var cel = Projekt("Cel", area.Id);
+        var step = Projekt("Krok", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([obszar], [cel, krok]);
+        var wiersze = ProjectTree.Build([area], [cel, step]);
 
         wiersze.Select(w => w.Color).Should().AllBeEquivalentTo("#4E7FD8");
     }
@@ -131,14 +131,14 @@ public class ProjectTreeTests
     [Fact]
     public void Wlasna_barwa_projektu_wygrywa_i_schodzi_nizej()
     {
-        var obszar = Obszar("Praca", 1);
-        obszar.SetColor("#4E7FD8", Stamp());
+        var area = Obszar("Praca", 1);
+        area.SetColor("#4E7FD8", Stamp());
 
-        var cel = Projekt("Cel", obszar.Id);
+        var cel = Projekt("Cel", area.Id);
         cel.SetColor("#CF5757", Stamp());
-        var krok = Projekt("Krok", obszar.Id, rodzic: cel.Id);
+        var step = Projekt("Krok", area.Id, parent: cel.Id);
 
-        var wiersze = ProjectTree.Build([obszar], [cel, krok]);
+        var wiersze = ProjectTree.Build([area], [cel, step]);
 
         wiersze.Single(w => w.Label == "Praca").Color.Should().Be("#4E7FD8");
         wiersze.Single(w => w.Label == "Cel").Color.Should().Be("#CF5757");

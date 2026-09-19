@@ -95,7 +95,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
                 // Gniazdo zostaje porzucone i zaraz zgaśnie razem z nasłuchem.
                 // Jego wyjątek trzeba obejrzeć, inaczej wraca później jako nieobsłużony.
                 _ = gniazdo.ContinueWith(
-                    zadanie => _ = zadanie.Exception, TaskScheduler.Default);
+                    task => _ = task.Exception, TaskScheduler.Default);
 
                 return new AuthorizationCodeResponseUrl(Pola(await reczny));
             }
@@ -130,7 +130,7 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
             using var polaczenie = await nasluch.AcceptTcpClientAsync(ct);
             var strumien = polaczenie.GetStream();
 
-            if (await Zadanie(strumien, ct) is not { } adres)
+            if (await TaskId(strumien, ct) is not { } adres)
             {
                 continue;
             }
@@ -158,9 +158,9 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
     /// Dymek systemowy. Przez główną pętlę, bo czekanie na zgodę siedzi na wątku
     /// roboczym, a dymek wywołany spoza głównego wątku kończy się wyjątkiem.
     /// </summary>
-    private void Powiedz(string tresc) =>
+    private void Powiedz(string content) =>
         new Handler(Looper.MainLooper!).Post(
-            () => Toast.MakeText(kontekst, tresc, ToastLength.Long)?.Show());
+            () => Toast.MakeText(kontekst, content, ToastLength.Long)?.Show());
 
     /// <summary>Port wybrany przez system. Zajęty na stałe byłby zajęty akurat wtedy, gdy trzeba.</summary>
     private static int WolnyPort()
@@ -189,17 +189,17 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
     }
 
     /// <summary>Adres z pierwszego wiersza żądania. Reszta rozmowy nas nie obchodzi.</summary>
-    private static async Task<string?> Zadanie(NetworkStream strumien, CancellationToken ct)
+    private static async Task<string?> TaskId(NetworkStream strumien, CancellationToken ct)
     {
-        var bufor = new byte[4096];
-        var ile = await strumien.ReadAsync(bufor, ct);
+        var buffer = new byte[4096];
+        var count = await strumien.ReadAsync(buffer, ct);
 
-        if (ile <= 0)
+        if (count <= 0)
         {
             return null;
         }
 
-        var wiersz = Encoding.UTF8.GetString(bufor, 0, ile).Split('\n')[0].Split(' ');
+        var wiersz = Encoding.UTF8.GetString(buffer, 0, count).Split('\n')[0].Split(' ');
 
         // „GET /authorize/?code=… HTTP/1.1"
         return wiersz.Length >= 2 ? wiersz[1] : null;
@@ -222,12 +222,12 @@ internal sealed class OdbiorcaKoduAndroid(Context kontekst) : ICodeReceiver
                 para => para.Length > 1 ? Uri.UnescapeDataString(para[1].Replace('+', ' ')) : string.Empty);
     }
 
-    private static async Task Odpisz(NetworkStream strumien, string tresc, CancellationToken ct)
+    private static async Task Odpisz(NetworkStream strumien, string content, CancellationToken ct)
     {
         var strona = $"<!doctype html><html lang=\"pl\"><meta charset=\"utf-8\">"
             + "<title>Marshal</title>"
             + "<body style=\"background:#121729;color:#fff;font-family:sans-serif;"
-            + $"display:flex;align-items:center;justify-content:center;height:100vh\">{tresc}</body></html>";
+            + $"display:flex;align-items:center;justify-content:center;height:100vh\">{content}</body></html>";
 
         var bajty = Encoding.UTF8.GetBytes(strona);
 

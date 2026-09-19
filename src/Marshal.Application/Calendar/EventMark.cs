@@ -19,12 +19,12 @@ namespace Marshal.Application.Calendar;
 public static class EventMark
 {
     /// <summary>Znak stawiany przed nazwą.</summary>
-    public const char Znak = '✓';
+    public const char Mark = '✓';
 
-    private const string Przedrostek = "✓ ";
+    private const string Prefix = "✓ ";
 
     public static bool IsDone(string? title) =>
-        !string.IsNullOrWhiteSpace(title) && title.TrimStart().StartsWith(Znak);
+        !string.IsNullOrWhiteSpace(title) && title.TrimStart().StartsWith(Mark);
 
     /// <summary>
     /// Nazwa bez ptaszka.
@@ -36,18 +36,18 @@ public static class EventMark
     /// </remarks>
     public static string Strip(string? title)
     {
-        var nazwa = (title ?? string.Empty).TrimStart();
+        var name = (title ?? string.Empty).TrimStart();
 
-        while (nazwa.StartsWith(Znak))
+        while (name.StartsWith(Mark))
         {
-            nazwa = nazwa[1..].TrimStart();
+            name = name[1..].TrimStart();
         }
 
-        return nazwa;
+        return name;
     }
 
     /// <summary>Nazwa z ptaszkiem — dokładnie jednym, niezależnie od tego, co było.</summary>
-    public static string Apply(string? title) => Przedrostek + Strip(title);
+    public static string Apply(string? title) => Prefix + Strip(title);
 
     /// <summary>Nazwa po ustawieniu stanu.</summary>
     public static string Set(string? title, bool done) =>

@@ -176,16 +176,16 @@ internal static class Barwy
     /// </remarks>
     public const byte WKomorce = 0x38;
 
-    public static IBrush Tlo(string? barwa, bool zadanie, byte krycie)
+    public static IBrush Tlo(string? color, bool task, byte krycie)
     {
-        var domyslna = zadanie ? DomyslneZadanie : DomyslneWydarzenie;
+        var domyslna = task ? DomyslneZadanie : DomyslneWydarzenie;
 
-        var zrodlo = string.IsNullOrWhiteSpace(barwa) ? domyslna : barwa;
+        var source = string.IsNullOrWhiteSpace(color) ? domyslna : color;
 
         // Barwa nie do odczytania wraca do domyślnej **z tym samym kryciem**. Wcześniej
         // wracała krycie pełne i jeden nieudany odczyt dawał jedyny nieprzezroczysty
         // prostokąt na siatce — czyli wpis wyróżniony za to, że coś z nim nie tak.
-        var kolor = Color.TryParse(zrodlo, out var odczytana)
+        var kolor = Color.TryParse(source, out var odczytana)
             ? odczytana
             : Color.Parse(domyslna);
 
@@ -319,7 +319,7 @@ public sealed partial class CalendarViewModel(
     IActivityLog log,
     TaskEditService edit,
     IContactRepository? osoby = null,
-    IUnitOfWork? praca = null,
+    IUnitOfWork? work = null,
     IHlcSource? zegarLogiczny = null)
     : ObservableObject
 {
@@ -711,23 +711,23 @@ public sealed partial class CalendarViewModel(
     public event Action<Guid>? TaskRequested;
 
     /// <summary>Otwarcie wpisu z paska całodniowego — zadania albo wydarzenia.</summary>
-    public void OpenAllDay(AllDayBox? wpis)
+    public void OpenAllDay(AllDayBox? entry)
     {
-        if (wpis is null)
+        if (entry is null)
         {
             return;
         }
 
-        if (wpis.TaskId is { } identyfikator)
+        if (entry.TaskId is { } id)
         {
-            TaskRequested?.Invoke(identyfikator);
+            TaskRequested?.Invoke(id);
             return;
         }
 
         OpenTaskCommand.Execute(new SlotBox(
-            wpis.Title, 0, 0, 0, 0, IsTask: false, Color: null,
+            entry.Title, 0, 0, 0, 0, IsTask: false, Color: null,
             StartText: "—", EndText: "—", TaskId: null,
-            DayText: Anchor.ToString("dd.MM.yyyy"), wpis.SourceId, wpis.ExternalId,
+            DayText: Anchor.ToString("dd.MM.yyyy"), entry.SourceId, entry.ExternalId,
             IsDone: false));
     }
 
@@ -738,15 +738,15 @@ public sealed partial class CalendarViewModel(
     /// Zmienia dokładnie dwie rzeczy — dzień i godzinę — i idzie osobną drogą niż zapis
     /// z okna szczegółu. Długość zostaje: przeciągnięcie przesuwa, a nie skraca.
     /// </remarks>
-    public async Task MoveAsync(Guid taskId, DateOnly day, double punkty)
+    public async Task MoveAsync(Guid taskId, DateOnly day, double score)
     {
-        var pora = Pora(punkty);
+        var time = Time(score);
 
         try
         {
-            await edit.RescheduleAsync(taskId, day, pora);
+            await edit.RescheduleAsync(taskId, day, time);
             await log.RecordAsync(
-                "Kalendarz: przełożenie", $"{day:yyyy-MM-dd} {pora:HH}:{pora:mm}");
+                "Kalendarz: przełożenie", $"{day:yyyy-MM-dd} {time:HH}:{time:mm}");
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -777,27 +777,27 @@ public sealed partial class CalendarViewModel(
     /// odpowiedzią na omsknięcie ręki.
     /// </para>
     /// </remarks>
-    public async Task MoveEventAsync(SlotBox blok, DateOnly day, double punkty)
+    public async Task MoveEventAsync(SlotBox blok, DateOnly day, double score)
     {
         ArgumentNullException.ThrowIfNull(blok);
 
-        if (blok is not { SourceId: { } zrodlo, ExternalId: { } identyfikator })
+        if (blok is not { SourceId: { } source, ExternalId: { } id })
         {
             return;
         }
 
-        var strefa = clock.Now.Offset;
-        var start = new DateTimeOffset(day.ToDateTime(Pora(punkty)), strefa);
-        var dlugosc = TimeSpan.FromHours(Math.Max(0.25, blok.Height / HourHeight));
+        var zone = clock.Now.Offset;
+        var start = new DateTimeOffset(day.ToDateTime(Time(score)), zone);
+        var length = TimeSpan.FromHours(Math.Max(0.25, blok.Height / HourHeight));
 
         try
         {
-            var skad = Bylo(blok, strefa);
+            var skad = Bylo(blok, zone);
 
             await calendar.SaveEventAsync(
-                zrodlo, identyfikator, new CalendarDraft(blok.Title, start, start + dlugosc));
+                source, id, new CalendarDraft(blok.Title, start, start + length));
 
-            Undo = new MovedEvent(zrodlo, identyfikator, blok.Title, skad, skad + dlugosc);
+            Undo = new MovedEvent(source, id, blok.Title, skad, skad + length);
             OnPropertyChanged(nameof(CanUndo));
             OnPropertyChanged(nameof(UndoText));
 
@@ -819,14 +819,14 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Skąd wydarzenie przyszło — z dnia i godziny widocznych na bloku.</summary>
-    private static DateTimeOffset Bylo(SlotBox blok, TimeSpan strefa)
+    private static DateTimeOffset Bylo(SlotBox blok, TimeSpan zone)
     {
-        var dzien = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
-        var pora = TimeOnly.TryParse(blok.StartText, CultureInfo.InvariantCulture, out var g)
+        var day = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+        var time = TimeOnly.TryParse(blok.StartText, CultureInfo.InvariantCulture, out var g)
             ? g
             : TimeOnly.MinValue;
 
-        return new DateTimeOffset(dzien.ToDateTime(pora), strefa);
+        return new DateTimeOffset(day.ToDateTime(time), zone);
     }
 
     /// <summary>Ostatnie przeniesienie wydarzenia — do cofnięcia.</summary>
@@ -885,10 +885,10 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     private const int Krok = 5;
 
-    public static TimeOnly Pora(double punkty)
+    public static TimeOnly Time(double score)
     {
-        var minuty = Math.Clamp(punkty / HourHeight * 60, 0, (24 * 60) - Krok);
-        var kroki = (int)(minuty / Krok) * Krok;
+        var minutes = Math.Clamp(score / HourHeight * 60, 0, (24 * 60) - Krok);
+        var kroki = (int)(minutes / Krok) * Krok;
 
         return new TimeOnly(kroki / 60, kroki % 60);
     }
@@ -903,9 +903,9 @@ public sealed partial class CalendarViewModel(
     /// Godzina zaokrąglana w dół do kwadransa. Minuta wzięta co do punktu byłaby
     /// udawaną precyzją: trafienie w 14:07 nie znaczy, że ktoś planuje na 14:07.
     /// </remarks>
-    public void NewAt(DateOnly day, double punkty)
+    public void NewAt(DateOnly day, double score)
     {
-        NewTaskRequested?.Invoke(day, Pora(punkty));
+        NewTaskRequested?.Invoke(day, Time(score));
     }
 
     public async Task LoadAsync()
@@ -939,9 +939,9 @@ public sealed partial class CalendarViewModel(
         // Miesiąc liczy własny zakres: siatka zaczyna się w poniedziałek przed pierwszym
         // i kończy w niedzielę po ostatnim, bo tydzień na przełomie jest tygodniem.
         var od = IsMonth ? PoczatekSiatki() : Anchor;
-        var ile = IsMonth ? DniSiatki() : VisibleDays;
+        var count = IsMonth ? DniSiatki() : VisibleDays;
 
-        _dni = await calendar.AgendaAsync(od, ile);
+        _dni = await calendar.AgendaAsync(od, count);
 
         if (IsMonth)
         {
@@ -1146,16 +1146,16 @@ public sealed partial class CalendarViewModel(
             return;
         }
 
-        var dzis = clock.Today;
+        var today = clock.Today;
 
-        if (dzis < Anchor || dzis >= Anchor.AddDays(VisibleDays))
+        if (today < Anchor || today >= Anchor.AddDays(VisibleDays))
         {
             return;
         }
 
-        var godzina = Math.Max(0, clock.Now.TimeOfDay.TotalHours - 1);
+        var hour = Math.Max(0, clock.Now.TimeOfDay.TotalHours - 1);
 
-        ScrollRequested?.Invoke(godzina * HourHeight);
+        ScrollRequested?.Invoke(hour * HourHeight);
     }
 
     private void GoToToday()
@@ -1175,11 +1175,11 @@ public sealed partial class CalendarViewModel(
     /// samym dotknięciem znaczyłoby dwie różne rzeczy pod jednym gestem. Od tego jest
     /// dzień, o jedno dotknięcie stąd.
     /// </remarks>
-    public void OpenMonthEntry(MonthEntry? wpis)
+    public void OpenMonthEntry(MonthEntry? entry)
     {
-        if (wpis?.TaskId is { } identyfikator)
+        if (entry?.TaskId is { } id)
         {
-            TaskRequested?.Invoke(identyfikator);
+            TaskRequested?.Invoke(id);
         }
     }
 
@@ -1236,12 +1236,12 @@ public sealed partial class CalendarViewModel(
     private static int DniSiatki(DateOnly kotwica)
     {
         var od = PoczatekSiatki(kotwica);
-        var koniec = new DateOnly(kotwica.Year, kotwica.Month, 1).AddMonths(1);
+        var end = new DateOnly(kotwica.Year, kotwica.Month, 1).AddMonths(1);
 
         // Do niedzieli włącznie po ostatnim dniu miesiąca.
-        var dni = koniec.DayNumber - od.DayNumber;
+        var days = end.DayNumber - od.DayNumber;
 
-        return dni % 7 == 0 ? dni : dni + (7 - (dni % 7));
+        return days % 7 == 0 ? days : days + (7 - (days % 7));
     }
 
     /// <summary>Złożenie siatki miesiąca z wczytanych dni.</summary>
@@ -1260,26 +1260,26 @@ public sealed partial class CalendarViewModel(
     /// Wyjęte ze składania bieżącego widoku, żeby dało się złożyć także sąsiedni miesiąc
     /// — ten, który przejechanie palcem odsłania w trakcie ruchu.
     /// </remarks>
-    private List<MonthWeek> ZlozTygodnie(IReadOnlyList<AgendaDay> dni, DateOnly kotwica)
+    private List<MonthWeek> ZlozTygodnie(IReadOnlyList<AgendaDay> days, DateOnly kotwica)
     {
         var tygodnie = new List<MonthWeek>();
 
-        var dzis = clock.Today;
+        var today = clock.Today;
         var miesiac = kotwica.Month;
-        var komorki = new List<MonthCell>(dni.Count);
+        var komorki = new List<MonthCell>(days.Count);
 
         // Pojemność liczona raz na siatkę, nie raz na komórkę: wszystkie mają tę samą
         // wysokość, bo siatka o jednej kolumnie dzieli swoją równo między tygodnie.
-        var miejsca = MiescieSieWKomorce(dni.Count / 7);
+        var miejsca = MiescieSieWKomorce(days.Count / 7);
 
-        foreach (var dzien in dni)
+        foreach (var day in days)
         {
             // Całodniowe przed godzinowymi, godzinowe po godzinie. Ten sam porządek,
             // co na siatce tygodnia — inaczej ta sama doba miałaby dwie kolejności
             // zależnie od tego, którym przyciskiem się na nią patrzy.
-            var wpisy = dzien.AllDay
+            var entries = day.AllDay
                 .Select(e => new MonthEntry(string.Empty, e.Title, e.TaskId, e.IsDone, e.Color))
-                .Concat(dzien.Timed
+                .Concat(day.Timed
                     .OrderBy(s => s.Entry.Start)
                     .Select(s => new MonthEntry(
                         // Godzina tylko tam, gdzie jest na nią miejsce. W komórce szerokiej
@@ -1293,15 +1293,15 @@ public sealed partial class CalendarViewModel(
                         s.Entry.Color)))
                 .ToList();
 
-            var widoczne = wpisy.Count > miejsca ? wpisy.Take(miejsca).ToList() : wpisy;
+            var widoczne = entries.Count > miejsca ? entries.Take(miejsca).ToList() : entries;
 
             komorki.Add(new MonthCell(
-                dzien.Date,
-                $"{dzien.Date.Day}",
-                dzien.Date == dzis,
-                dzien.Date.Month != miesiac,
+                day.Date,
+                $"{day.Date.Day}",
+                day.Date == today,
+                day.Date.Month != miesiac,
                 widoczne,
-                wpisy.Count - widoczne.Count));
+                entries.Count - widoczne.Count));
         }
 
         for (var i = 0; i + 7 <= komorki.Count; i += 7)
@@ -1397,16 +1397,16 @@ public sealed partial class CalendarViewModel(
 
         cel.Clear();
 
-        foreach (var kolumna in kolumny)
+        foreach (var column in kolumny)
         {
-            cel.Add(kolumna);
+            cel.Add(column);
         }
     }
 
     private async Task ZlozSasiadaMiesiaca(DateOnly kotwica, ObservableCollection<MonthWeek> cel)
     {
-        var dni = await calendar.AgendaAsync(PoczatekSiatki(kotwica), DniSiatki(kotwica));
-        var tygodnie = ZlozTygodnie(dni, kotwica);
+        var days = await calendar.AgendaAsync(PoczatekSiatki(kotwica), DniSiatki(kotwica));
+        var tygodnie = ZlozTygodnie(days, kotwica);
 
         cel.Clear();
 
@@ -1421,9 +1421,9 @@ public sealed partial class CalendarViewModel(
     {
         Columns.Clear();
 
-        foreach (var kolumna in ZlozKolumny(_dni))
+        foreach (var column in ZlozKolumny(_dni))
         {
-            Columns.Add(kolumna);
+            Columns.Add(column);
         }
 
         // Po złożeniu kolumn, bo obie liczą się z tego, co w nich jest.
@@ -1432,19 +1432,19 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Kolumny z podanych dni. Wyjęte, żeby dało się złożyć także sąsiedni zakres.</summary>
-    private List<CalendarColumn> ZlozKolumny(IReadOnlyList<AgendaDay> dni)
+    private List<CalendarColumn> ZlozKolumny(IReadOnlyList<AgendaDay> days)
     {
-        var dzis = clock.Today;
-        var teraz = clock.Now.TimeOfDay.TotalHours * HourHeight;
+        var today = clock.Today;
+        var now = clock.Now.TimeOfDay.TotalHours * HourHeight;
 
-        return dni.Select(dzien => new CalendarColumn(
-            dzien.Date,
-            $"{DayNames[((int)dzien.Date.DayOfWeek + 6) % 7]} {dzien.Date.Day}",
-            dzien.AllDay.Select(e => new AllDayBox(
+        return days.Select(day => new CalendarColumn(
+            day.Date,
+            $"{DayNames[((int)day.Date.DayOfWeek + 6) % 7]} {day.Date.Day}",
+            day.AllDay.Select(e => new AllDayBox(
                 e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone)).ToList(),
-            dzien.Timed.Select(Box).ToList(),
-            dzien.Date == dzis,
-            teraz)).ToList();
+            day.Timed.Select(Box).ToList(),
+            day.Date == today,
+            now)).ToList();
     }
 
     /// <summary>
@@ -1458,12 +1458,12 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task CompleteAsync(Guid? id)
     {
-        if (id is not { } identyfikator)
+        if (id is not { } id)
         {
             return;
         }
 
-        await edit.CompleteAsync(identyfikator);
+        await edit.CompleteAsync(id);
         await RefreshAsync();
     }
 
@@ -1490,7 +1490,7 @@ public sealed partial class CalendarViewModel(
             return;
         }
 
-        if (blok is not { SourceId: { } zrodlo, ExternalId: { } zewnetrzny })
+        if (blok is not { SourceId: { } source, ExternalId: { } zewnetrzny })
         {
             return;
         }
@@ -1499,10 +1499,10 @@ public sealed partial class CalendarViewModel(
 
         try
         {
-            await calendar.SetEventDoneAsync(zrodlo, zewnetrzny, !blok.IsDone);
+            await calendar.SetEventDoneAsync(source, zewnetrzny, !blok.IsDone);
             await log.RecordAsync(co, blok.Title);
         }
-        catch (WydarzenieZniknelo e)
+        catch (EventGone e)
         {
             // Duch zdjęty z siatki przy odmowie, więc siatka musi się przeliczyć —
             // inaczej zostaje na ekranie aż do najbliższego pełnego odczytu.
@@ -1568,23 +1568,23 @@ public sealed partial class CalendarViewModel(
     /// ujemną albo blokiem, który zniknął pod palcem.
     /// </para>
     /// </remarks>
-    public async Task ResizeAsync(SlotBox blok, double punkty)
+    public async Task ResizeAsync(SlotBox blok, double score)
     {
         ArgumentNullException.ThrowIfNull(blok);
 
-        if (blok.TaskId is not { } zadanie)
+        if (blok.TaskId is not { } task)
         {
             return;
         }
 
-        var poczatek = Pora(blok.Top);
-        var koniec = Pora(punkty);
-        var minuty = (int)(koniec.ToTimeSpan() - poczatek.ToTimeSpan()).TotalMinutes;
+        var start = Time(blok.Top);
+        var end = Time(score);
+        var minutes = (int)(end.ToTimeSpan() - start.ToTimeSpan()).TotalMinutes;
 
         try
         {
-            await edit.SetMinutesAsync(zadanie, Math.Max(Krok, minuty));
-            await log.RecordAsync("Kalendarz: rozciągnięcie", $"{Math.Max(Krok, minuty)} min");
+            await edit.SetMinutesAsync(task, Math.Max(Krok, minutes));
+            await log.RecordAsync("Kalendarz: rozciągnięcie", $"{Math.Max(Krok, minutes)} min");
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -1607,12 +1607,12 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task ReopenAsync(Guid? id)
     {
-        if (id is not { } identyfikator)
+        if (id is not { } id)
         {
             return;
         }
 
-        await edit.ReopenAsync(identyfikator);
+        await edit.ReopenAsync(id);
         await RefreshAsync();
     }
 
@@ -1630,17 +1630,17 @@ public sealed partial class CalendarViewModel(
             return;
         }
 
-        if (blok.TaskId is { } identyfikator)
+        if (blok.TaskId is { } id)
         {
-            TaskRequested?.Invoke(identyfikator);
+            TaskRequested?.Invoke(id);
             return;
         }
 
         Opened = blok;
 
         OpenedTitle = blok.Title;
-        OpenedStart = Pora(blok.StartText);
-        OpenedEnd = Pora(blok.EndText);
+        OpenedStart = Time(blok.StartText);
+        OpenedEnd = Time(blok.EndText);
         OpenedProblem = null;
 
         // Przycisków zapisu nie pokazujemy tam, gdzie zapis i tak nie ma dokąd pójść.
@@ -1685,8 +1685,8 @@ public sealed partial class CalendarViewModel(
         try
         {
             var dostepne = await calendar.AreasWithCalendarAsync();
-            var teraz = blok.SourceId is { } zrodlo
-                ? await calendar.AreaOfCalendarAsync(zrodlo)
+            var now = blok.SourceId is { } source
+                ? await calendar.AreaOfCalendarAsync(source)
                 : null;
 
             _wlasneObszary = true;
@@ -1695,14 +1695,14 @@ public sealed partial class CalendarViewModel(
             {
                 ObszaryWydarzenia.Clear();
 
-                foreach (var obszar in dostepne)
+                foreach (var area in dostepne)
                 {
-                    ObszaryWydarzenia.Add(obszar);
+                    ObszaryWydarzenia.Add(area);
                 }
 
                 // Po identyfikatorze, nie po samym obiekcie: lista pochodzi z osobnego
                 // odczytu, więc to nie są te same wystąpienia.
-                ObszarWydarzenia = dostepne.FirstOrDefault(o => o.Id == teraz?.Id);
+                ObszarWydarzenia = dostepne.FirstOrDefault(o => o.Id == now?.Id);
             }
             finally
             {
@@ -1736,14 +1736,14 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task PokazOsobieAsync(Contact? osoba)
     {
-        if (osoba is null || Opened is not { SourceId: { } zrodlo, ExternalId: { } wpis } blok)
+        if (osoba is null || Opened is not { SourceId: { } source, ExternalId: { } entry } blok)
         {
             return;
         }
 
         try
         {
-            var dopisana = await calendar.InviteAsync(zrodlo, wpis, osoba.Email);
+            var dopisana = await calendar.InviteAsync(source, entry, osoba.Email);
 
             await log.RecordAsync(
                 "Kalendarz: pokazanie osobie",
@@ -1781,7 +1781,7 @@ public sealed partial class CalendarViewModel(
     {
         var adres = NowaOsoba.Trim();
 
-        if (adres.Length == 0 || osoby is null || praca is null || zegarLogiczny is null)
+        if (adres.Length == 0 || osoby is null || work is null || zegarLogiczny is null)
         {
             return;
         }
@@ -1797,7 +1797,7 @@ public sealed partial class CalendarViewModel(
                     adres.Split('@')[0], adres);
 
                 osoby.Add(osoba);
-                await praca.SaveChangesAsync();
+                await work.SaveChangesAsync();
             }
 
             NowaOsoba = string.Empty;
@@ -1850,25 +1850,25 @@ public sealed partial class CalendarViewModel(
 
     partial void OnObszarWydarzeniaChanged(Area? value)
     {
-        if (_wlasneObszary || value?.CalendarId is not { } kalendarz)
+        if (_wlasneObszary || value?.CalendarId is not { } calendarId)
         {
             return;
         }
 
-        _ = PrzelozWydarzenieAsync(kalendarz);
+        _ = PrzelozWydarzenieAsync(calendarId);
     }
 
-    private async Task PrzelozWydarzenieAsync(Guid kalendarz)
+    private async Task PrzelozWydarzenieAsync(Guid calendarId)
     {
-        if (Opened is not { SourceId: { } zrodlo, ExternalId: { } identyfikator } blok
-            || zrodlo == kalendarz)
+        if (Opened is not { SourceId: { } source, ExternalId: { } id } blok
+            || source == calendarId)
         {
             return;
         }
 
         try
         {
-            await calendar.MoveEventAsync(zrodlo, identyfikator, kalendarz);
+            await calendar.MoveEventAsync(source, id, calendarId);
             await log.RecordAsync("Kalendarz: przełożenie wydarzenia", blok.Title);
 
             Opened = null;
@@ -1884,8 +1884,8 @@ public sealed partial class CalendarViewModel(
         }
     }
 
-    private static TimeSpan? Pora(string tekst) =>
-        TimeSpan.TryParse(tekst, CultureInfo.InvariantCulture, out var pora) ? pora : null;
+    private static TimeSpan? Time(string tekst) =>
+        TimeSpan.TryParse(tekst, CultureInfo.InvariantCulture, out var time) ? time : null;
 
     [ObservableProperty]
     public partial string OpenedTitle { get; set; } = string.Empty;
@@ -1915,7 +1915,7 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task SaveOpenedAsync()
     {
-        if (Opened is not { SourceId: { } zrodlo, ExternalId: { } identyfikator } blok)
+        if (Opened is not { SourceId: { } source, ExternalId: { } id } blok)
         {
             return;
         }
@@ -1929,23 +1929,23 @@ public sealed partial class CalendarViewModel(
 
         try
         {
-            var dzien = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
-            var strefa = clock.Now.Offset;
+            var day = DateOnly.ParseExact(blok.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+            var zone = clock.Now.Offset;
 
-            var start = new DateTimeOffset(dzien.ToDateTime(TimeOnly.FromTimeSpan(od)), strefa);
-            var koniec = doGodziny > od
-                ? new DateTimeOffset(dzien.ToDateTime(TimeOnly.FromTimeSpan(doGodziny)), strefa)
+            var start = new DateTimeOffset(day.ToDateTime(TimeOnly.FromTimeSpan(od)), zone);
+            var end = doGodziny > od
+                ? new DateTimeOffset(day.ToDateTime(TimeOnly.FromTimeSpan(doGodziny)), zone)
                 : start.AddMinutes(30);
 
             await calendar.SaveEventAsync(
-                zrodlo, identyfikator, new CalendarDraft(OpenedTitle, start, koniec));
+                source, id, new CalendarDraft(OpenedTitle, start, end));
 
             await log.RecordAsync("Kalendarz: zapis wydarzenia", OpenedTitle);
 
             Opened = null;
             await RefreshAsync();
         }
-        catch (WydarzenieZniknelo e)
+        catch (EventGone e)
         {
             // Karta nie ma już czego opisywać: wydarzenia nie ma po drugiej stronie,
             // a duch został właśnie zdjęty z siatki. Zostawienie jej otwartej znaczyłoby
@@ -1984,14 +1984,14 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task DeleteOpenedAsync()
     {
-        if (Opened is not { SourceId: { } zrodlo, ExternalId: { } identyfikator })
+        if (Opened is not { SourceId: { } source, ExternalId: { } id })
         {
             return;
         }
 
         try
         {
-            await calendar.DeleteEventAsync(zrodlo, identyfikator);
+            await calendar.DeleteEventAsync(source, id);
             await log.RecordAsync("Kalendarz: skasowanie wydarzenia", OpenedTitle);
 
             Opened = null;

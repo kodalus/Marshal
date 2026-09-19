@@ -258,7 +258,7 @@ public sealed class TaskItem : Entity
             ? []
             : ReminderLeadsCsv
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(w => int.TryParse(w, out var minuty) ? minuty : -1)
+                .Select(w => int.TryParse(w, out var minute) ? minute : -1)
                 .Where(m => m >= 0)
                 .Distinct()
                 .OrderBy(m => m)
@@ -276,9 +276,9 @@ public sealed class TaskItem : Entity
     {
         ArgumentNullException.ThrowIfNull(minutes);
 
-        var zestaw = minutes.Where(m => m >= 0).Distinct().OrderBy(m => m).ToList();
+        var sorted = minutes.Where(m => m >= 0).Distinct().OrderBy(m => m).ToList();
 
-        ReminderLeadsCsv = zestaw.Count == 0 ? null : string.Join(',', zestaw);
+        ReminderLeadsCsv = sorted.Count == 0 ? null : string.Join(',', sorted);
         Touch(stamp);
     }
 
@@ -385,7 +385,7 @@ public sealed class TaskItem : Entity
     internal TaskItem SpawnNextOccurrence(
         DateOnly doDate, RecurrenceRule rule, DateTimeOffset now, Hlc stamp)
     {
-        var nastepne = new TaskItem(Guid.CreateVersion7(), now, stamp, Title)
+        var next = new TaskItem(Guid.CreateVersion7(), now, stamp, Title)
         {
             Note = Note,
             State = TaskState.Scheduled,
@@ -410,20 +410,20 @@ public sealed class TaskItem : Entity
         // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"
         // przy racie robionej 5-go to pięć dni zapasu, co miesiąc tyle samo. Skopiowany
         // wprost byłby od razu przeterminowany (N5) i N5 zacząłby kłamać.
-        if (Deadline is { } termin && DoDate is { } planowana)
+        if (Deadline is { } deadline && DoDate is { } planned)
         {
-            nastepne.Deadline = doDate.AddDays(termin.DayNumber - planowana.DayNumber);
+            next.Deadline = doDate.AddDays(deadline.DayNumber - planned.DayNumber);
         }
 
         // Przypomnienie tak samo: „w przeddzień o dwudziestej" ma zostać przeddniem
         // o dwudziestej, a nie przenieść się co do daty i odezwać się natychmiast.
-        if (ReminderAt is { } przypomnienie && DoDate is { } dzien)
+        if (ReminderAt is { } reminder && DoDate is { } day)
         {
-            nastepne.ReminderAt = przypomnienie.AddDays(doDate.DayNumber - dzien.DayNumber);
+            next.ReminderAt = reminder.AddDays(doDate.DayNumber - day.DayNumber);
         }
 
-        nastepne.SetRecurrence(rule, stamp);
-        return nastepne;
+        next.SetRecurrence(rule, stamp);
+        return next;
     }
 
     /// <summary>
@@ -584,14 +584,14 @@ public sealed class TaskItem : Entity
             return;
         }
 
-        if (AreaId is not { } obszar)
+        if (AreaId is not { } area)
         {
             throw new InvalidOperationException(
                 "Zadanie z kiedyś-może bez obszaru — nie da się go uczynić następną akcją (N11).");
         }
 
         DeferUntil = null;
-        MakeNext(obszar, stamp);
+        MakeNext(area, stamp);
     }
 
     public void Complete(DateTimeOffset now, Hlc stamp)

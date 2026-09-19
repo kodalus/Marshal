@@ -52,23 +52,23 @@ public sealed class FilterServiceTests : IDisposable
             _hlc);
     }
 
-    private TaskItem Zadanie(string tytul, Action<TaskItem>? ustaw = null)
+    private TaskItem TaskId(string title, Action<TaskItem>? ustaw = null)
     {
-        var zadanie = TaskItem.Capture(tytul, _zegar.Now, _hlc.Next());
-        zadanie.MakeNext(_obszar, _hlc.Next());
-        ustaw?.Invoke(zadanie);
+        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        task.MakeNext(_obszar, _hlc.Next());
+        ustaw?.Invoke(task);
 
-        _db.Tasks.Add(zadanie);
+        _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        return zadanie;
+        return task;
     }
 
-    private Guid Otaguj(TaskItem zadanie, string nazwa)
+    private Guid Otaguj(TaskItem task, string name)
     {
-        var tag = new Tag(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), nazwa, sortOrder: 0);
+        var tag = new Tag(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), name, sortOrder: 0);
         _db.Tags.Add(tag);
-        _db.TaskTags.Add(new TaskTag(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), zadanie.Id, tag.Id));
+        _db.TaskTags.Add(new TaskTag(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), task.Id, tag.Id));
         _db.SaveChanges();
 
         return tag.Id;
@@ -77,25 +77,25 @@ public sealed class FilterServiceTests : IDisposable
     [Fact]
     public async Task Filtr_oddaje_tylko_pasujace_zadania()
     {
-        Zadanie("zadzwonić do przychodni", z => z.SetEstimate(10, Energy.Low, _hlc.Next()));
-        Zadanie("przeczytać umowę", z => z.SetEstimate(90, Energy.High, _hlc.Next()));
-        Zadanie("nieoszacowane");
+        TaskId("zadzwonić do przychodni", z => z.SetEstimate(10, Energy.Low, _hlc.Next()));
+        TaskId("przeczytać umowę", z => z.SetEstimate(90, Energy.High, _hlc.Next()));
+        TaskId("nieoszacowane");
 
-        var wynik = await _usluga.RunAsync(new FilterQuery([FilterCondition.Estimate(15)]));
+        var result = await _usluga.RunAsync(new FilterQuery([FilterCondition.Estimate(15)]));
 
-        wynik.Should().ContainSingle().Which.Title.Should().Be("zadzwonić do przychodni");
+        result.Should().ContainSingle().Which.Title.Should().Be("zadzwonić do przychodni");
     }
 
     [Fact]
     public async Task Filtr_po_tagu_siega_do_powiazan()
     {
-        var otagowane = Zadanie("kupić mleko");
-        Zadanie("bez tagu");
+        var otagowane = TaskId("kupić mleko");
+        TaskId("bez tagu");
         var tag = Otaguj(otagowane, "zakupy");
 
-        var wynik = await _usluga.RunAsync(new FilterQuery([FilterCondition.Tags(tag)]));
+        var result = await _usluga.RunAsync(new FilterQuery([FilterCondition.Tags(tag)]));
 
-        wynik.Should().ContainSingle().Which.Id.Should().Be(otagowane.Id);
+        result.Should().ContainSingle().Which.Id.Should().Be(otagowane.Id);
     }
 
     [Fact]
@@ -103,8 +103,8 @@ public sealed class FilterServiceTests : IDisposable
     {
         // Powiązanie ma własny nagrobek właśnie po to (zob. TaskTag) — bez tego
         // zdjęty tag wracałby przy każdym scaleniu i filtr kłamałby na obu urządzeniach.
-        var zadanie = Zadanie("kupić mleko");
-        var tag = Otaguj(zadanie, "zakupy");
+        var task = TaskId("kupić mleko");
+        var tag = Otaguj(task, "zakupy");
 
         var powiazanie = _db.TaskTags.Single();
         powiazanie.MarkDeleted(_hlc.Next());
@@ -116,7 +116,7 @@ public sealed class FilterServiceTests : IDisposable
     [Fact]
     public async Task Pusty_filtr_nie_wysypuje_bazy_na_ekran()
     {
-        Zadanie("cokolwiek");
+        TaskId("cokolwiek");
 
         (await _usluga.RunAsync(FilterQuery.Empty)).Should().BeEmpty();
         (await _usluga.RunAsync(null)).Should().BeEmpty();
@@ -125,12 +125,12 @@ public sealed class FilterServiceTests : IDisposable
     [Fact]
     public async Task Zapisany_widok_wraca_z_warunkami()
     {
-        var filtr = new FilterQuery([
+        var filter = new FilterQuery([
             FilterCondition.States(TaskState.Next),
             FilterCondition.Estimate(15),
         ]);
 
-        var zapisany = await _usluga.SaveAsync("Kwadrans", filtr);
+        var zapisany = await _usluga.SaveAsync("Kwadrans", filter);
 
         var ulubione = await _usluga.FavouritesAsync();
         ulubione.Should().ContainSingle();

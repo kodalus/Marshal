@@ -114,9 +114,9 @@ public static class DependencyInjection
         services.AddSingleton<IContactRepository, ContactRepository>();
         // Brama na bazę przed jednostką pracy, bo to ona przez nią przechodzi.
         // Jedna na proces — dwie bramy to brak bramy.
-        services.AddSingleton<IKolejkaBazy, KolejkaBazy>();
+        services.AddSingleton<IDbQueue, KolejkaBazy>();
         // Znak zapisu: jeden na proces, bo podnosi go jednostka pracy, a nasłuchuje okno.
-        services.AddSingleton<ISygnalZapisu, SygnalZapisu>();
+        services.AddSingleton<IWriteSignal, SygnalZapisu>();
         services.AddSingleton<IUnitOfWork, UnitOfWork>();
 
         // Dziennik bierze same opcje, nie wspólny kontekst: zapis w środku cudzej
@@ -142,7 +142,7 @@ public static class DependencyInjection
         // odbicia idzie przez sieć i trwa sekundę albo dwie, a odhaczenie zadania nie
         // może tyle trwać. Okno, które woła o udostępnienie wprost, dostaje wersję
         // nieodłożoną — tam użytkownik czeka świadomie i na wynik.
-        services.AddSingleton<ITaskMirror>(sp => new OdlozoneOdbicie(
+        services.AddSingleton<ITaskMirror>(sp => new DeferredMirror(
             sp.GetRequiredService<TaskMirror>(),
             sp.GetRequiredService<IActivityLog>()));
 
@@ -175,7 +175,7 @@ public static class DependencyInjection
         services.AddSingleton<TaskEditService>();
         services.AddSingleton<FocusService>();
         services.AddSingleton<NowService>();
-        services.AddSingleton<PlanDniaService>();
+        services.AddSingleton<DayPlanService>();
         services.AddSingleton<DayRolloverService>();
         services.AddSingleton<ReminderService>();
         services.AddSingleton<NoteService>();
@@ -202,7 +202,7 @@ public static class DependencyInjection
             sp.GetRequiredService<IHlcSource>(),
             sp.GetRequiredService<IDeviceIdentity>(),
             databasePath,
-            sp.GetRequiredService<IKolejkaBazy>()));
+            sp.GetRequiredService<IDbQueue>()));
         services.AddSingleton<InboxService>();
         services.AddSingleton<StructureEditService>();
         services.AddSingleton<TagService>();

@@ -52,22 +52,22 @@ public sealed partial class JournalViewModel(IActivityLog log, IClock clock) : O
 
     public async Task LoadAsync()
     {
-        var strefa = clock.Now.Offset;
-        var wpisy = await log.RecentAsync();
+        var zone = clock.Now.Offset;
+        var entries = await log.RecentAsync();
 
         var widoczne = OnlyProblems
-            ? wpisy.Where(w => w.Level == ActivityLevel.Problem).ToList()
-            : wpisy;
+            ? entries.Where(w => w.Level == ActivityLevel.Problem).ToList()
+            : entries;
 
         Rows.Clear();
-        foreach (var wpis in widoczne)
+        foreach (var entry in widoczne)
         {
             Rows.Add(new JournalRow(
-                wpis.At.ToOffset(strefa).ToString("MM-dd HH:mm:ss"),
-                wpis.Operation,
-                wpis.Outcome,
-                wpis.Detail,
-                wpis.Level == ActivityLevel.Problem));
+                entry.At.ToOffset(zone).ToString("MM-dd HH:mm:ss"),
+                entry.Operation,
+                entry.Outcome,
+                entry.Detail,
+                entry.Level == ActivityLevel.Problem));
         }
 
         var problemy = Rows.Count(w => w.IsProblem);
