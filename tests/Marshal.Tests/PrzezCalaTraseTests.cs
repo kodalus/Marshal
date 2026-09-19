@@ -626,13 +626,13 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // jak awaria, a nie jak nawigacja.
         var main = Usluga<MainViewModel>();
 
-        await main.ShowCalendarCommand.ExecuteAsync(null);
+        await main.ShowNotesCommand.ExecuteAsync(null);
         await main.ShowJournalCommand.ExecuteAsync(null);
 
         main.MaDokadWrocic.Should().BeTrue();
         await main.WrocAsync();
 
-        main.IsCalendar.Should().BeTrue("cofnięcie ma wrócić tam, skąd się przyszło");
+        main.IsNotes.Should().BeTrue("cofnięcie ma wrócić tam, skąd się przyszło");
     }
 
     [Fact]
@@ -655,17 +655,22 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
-    public async Task Wstecz_z_pustego_sladu_wraca_na_Dzisiaj_i_dopiero_stamtad_oddaje()
+    public async Task Wstecz_z_pustego_sladu_wraca_na_ekran_domowy_i_dopiero_stamtad_oddaje()
     {
-        // „Dzisiaj" jest ekranem domowym tej aplikacji, więc cofnięcie bez śladu kończy
-        // się tam. Dopiero stojąc na nim oddajemy cofnięcie systemowi — przycisk wstecz,
-        // który nigdy nie wychodzi z aplikacji, przestaje być przyciskiem wstecz.
+        // Ekranem domowym jest **kalendarz**, bo to on jest wartością początkową ekranu
+        // i pierwszym pytaniem dnia. Pisałem to najpierw na „Dzisiaj" i test to wyłapał:
+        // cofanie kończyło się gdzie indziej, niż mówiło o tym pytanie „czy jest dokąd".
+        //
+        // Dopiero stojąc na ekranie domowym oddajemy cofnięcie systemowi — przycisk
+        // wstecz, który nigdy nie wychodzi z aplikacji, przestaje być przyciskiem wstecz.
         var main = Usluga<MainViewModel>();
+
+        main.IsCalendar.Should().BeTrue("aplikacja otwiera się na kalendarzu");
 
         await main.ShowJournalCommand.ExecuteAsync(null);
         await main.WrocAsync();
 
-        main.Current.Should().Be(Screen.Today);
+        main.Current.Should().Be(Screen.Calendar);
         main.MaDokadWrocic.Should().BeFalse("z ekranu domowego cofnięcie należy do systemu");
     }
 

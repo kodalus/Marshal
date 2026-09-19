@@ -450,6 +450,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Najdłuższy zapamiętywany ślad.</summary>
     private const int DlugoscSladu = 16;
 
+    /// <summary>
+    /// Ekran domowy — ten, na którym kończy się cofanie.
+    /// </summary>
+    /// <remarks>
+    /// Kalendarz, bo to on jest wartością początkową <see cref="Current"/> i pierwszym
+    /// pytaniem dnia. Napisane tu raz, a nie wpisane w dwóch miejscach: dwa razy
+    /// wpisany ekran domowy to dwa miejsca, w których trzeba pamiętać o zmianie —
+    /// a przy rozjechanych cofanie kończy się gdzie indziej, niż pyta o to okno.
+    /// </remarks>
+    private const Screen Domowy = Screen.Calendar;
+
     /// <summary>Czy trwa cofanie. Wtedy zmiana ekranu nie dopisuje się do śladu.</summary>
     /// <remarks>
     /// Bez tego cofnięcie dokładałoby do śladu ekran, z którego się cofa — i drugie
@@ -494,12 +505,12 @@ public sealed partial class MainViewModel : ObservableObject
     /// <remarks>
     /// <para>
     /// Kolejność jest tu całą treścią. Najpierw ślad — czyli to, skąd się przyszło.
-    /// Gdy śladu nie ma, zostaje „Dzisiaj": ekran domowy tej aplikacji, i wracanie
+    /// Gdy śladu nie ma, zostaje kalendarz: ekran domowy tej aplikacji, i wracanie
     /// tam jest lepsze niż zamknięcie, bo zamknięcie z widoku „Co się działo" wygląda
     /// jak awaria, a nie jak nawigacja.
     /// </para>
     /// <para>
-    /// Dopiero stojąc na „Dzisiaj" z pustym śladem oddajemy cofnięcie systemowi —
+    /// Dopiero stojąc na ekranie domowym z pustym śladem oddajemy cofnięcie systemowi —
     /// czyli aplikacja się zamyka. Tak działa każda inna aplikacja na tym telefonie
     /// i odebranie tego byłoby zamknięciem człowieka w środku: przycisk wstecz, który
     /// nigdy nie wychodzi, przestaje być przyciskiem wstecz.
@@ -535,7 +546,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// się cofnięciem. Android nie czeka na zakończenie wczytywania ekranu: albo
     /// odpowiedź jest w tej chwili, albo cofnięcie idzie dalej i zamyka aplikację.
     /// </remarks>
-    public bool MaDokadWrocic => _slad.Any(e => e != Current) || Current != Screen.Today;
+    public bool MaDokadWrocic => _slad.Any(e => e != Current) || Current != Domowy;
 
     /// <summary>Dokąd cofnąć. Puste, gdy nie ma dokąd i cofnięcie należy do systemu.</summary>
     private Screen? Zdejmij()
@@ -553,7 +564,7 @@ public sealed partial class MainViewModel : ObservableObject
             }
         }
 
-        return Current == Screen.Today ? null : Screen.Today;
+        return Current == Domowy ? null : Domowy;
     }
 
     private Task OtworzAsync(Screen ekran)
