@@ -50,6 +50,27 @@ jobs:
             -p src/Marshal.Infrastructure \
             -s src/Marshal.Infrastructure
 
+      # Model bazy budowany przy starcie z odbicia typów kosztuje na telefonie 1,6 s
+      # przy **każdym** uruchomieniu (dziennik, wpis „Start: przygotowanie"). Skompilowany
+      # z góry kosztuje tyle, ile jego wczytanie. Generowany tutaj, bo wymaga narzędzi EF
+      # i SDK; wynik wchodzi do repozytorium i jest sprawdzany krokiem niżej.
+      - name: Model skompilowany — wygenerowanie
+        run: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef dbcontext optimize \
+            -p src/Marshal.Infrastructure \
+            -s src/Marshal.Infrastructure \
+            -o Data/Compiled \
+            -n Marshal.Infrastructure.Data.Compiled
+
+      - name: Model skompilowany — do pobrania
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-skompilowany
+          path: src/Marshal.Infrastructure/Data/Compiled
+          if-no-files-found: ignore
+
       - name: Wyniki testów
         if: always()
         uses: actions/upload-artifact@v4
