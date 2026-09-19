@@ -190,6 +190,62 @@ public sealed class DayPlanServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Kropki_tygodnia_zapalaja_sie_tam_gdzie_plan_nie_jest_pusty()
+    {
+        // Kropki liczą się teraz czterema zapytaniami na cały zakres, a nie siedmioma
+        // planami dnia. Ma z tego wyjść **to samo**, więc pytanie brzmi: czy kropka jest
+        // dokładnie tam, gdzie plan dnia ma treść.
+        Add("Dzisiejsze", time: new TimeOnly(9, 0));
+        Add("Za trzy dni", day: Today.AddDays(3));
+
+        // Sam termin, bez dnia wykonania: plan dnia pokazuje go tak samo.
+        var deadline = Add("Rozliczenie", day: Today.AddDays(5));
+        deadline.MoveDoDate(null, _hlc.Next());
+        deadline.SetDeadline(Today.AddDays(5), _hlc.Next());
+
+        // Wybór na ostatnim dniu okna — granica, o którą najłatwiej się potknąć.
+        var picked = Add("Wzięte", day: Today.AddDays(20));
+        picked.Focus(Today.AddDays(6), _hlc.Next());
+
+        _db.SaveChanges();
+
+        var busy = await _plan.BusyAsync(Today, 7);
+
+        for (var i = 0; i < 7; i++)
+        {
+            var day = Today.AddDays(i);
+            var plan = await _plan.ForDayAsync(day);
+
+            busy.Contains(day).Should().Be(
+                plan.Count > 0, $"dzień {day:yyyy-MM-dd} ma mówić to samo obiema drogami");
+        }
+    }
+
+    [Fact]
+    public async Task Kropka_tygodnia_nie_zapala_sie_od_odhaczonego()
+    {
+        // Ta sama zasada co w planie: kropka mówi „coś przed tobą", nie „coś było".
+        var task = Add("Zrobione", day: Today.AddDays(2));
+        task.Complete(_clock.Now, _hlc.Next());
+        _db.SaveChanges();
+
+        (await _plan.BusyAsync(Today, 7)).Should().NotContain(Today.AddDays(2));
+    }
+
+    [Fact]
+    public async Task Kropka_dzisiaj_zapala_sie_od_zaleglego()
+    {
+        // Zaległe należy do dzisiaj — i jedyne zapytanie, którego nie da się zadać dla
+        // całego okna naraz, odpowiada właśnie za ten przypadek.
+        Add("Rozliczenie", day: Today.AddDays(-3), time: new TimeOnly(7, 0));
+
+        var busy = await _plan.BusyAsync(Today, 7);
+
+        busy.Should().Contain(Today);
+        busy.Should().HaveCount(1, "zaległe zajmuje dzisiaj, a nie dzień, w którym miało być");
+    }
+
+    [Fact]
     public async Task Zalegle_naleza_do_dzisiaj_a_nie_do_kazdego_ogladanego_dnia()
     {
         // Zaległe należą do dziś, bo to dziś trzeba z nimi coś zrobić. Dołożone do

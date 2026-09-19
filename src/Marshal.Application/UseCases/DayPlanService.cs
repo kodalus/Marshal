@@ -45,13 +45,13 @@ public sealed class DayPlanService(
     IProjectRepository projects,
     IAreaRepository areas,
     IClock clock,
-    CalendarSyncService? calendarId = null)
+    CalendarSyncService? calendar = null)
 {
     public Task<IReadOnlyList<PlanRow>> TodayAsync(CancellationToken ct = default) =>
         ForDayAsync(clock.Today, ct);
 
     /// <summary>
-    /// Które dni w podanym zakresie mają cokolwiek w planie.
+    /// Które dni z podanego zakresu mają cokolwiek w planie — na kropki paska tygodnia.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -60,11 +60,20 @@ public sealed class DayPlanService(
     /// i żeby dowiedzieć się czegokolwiek, trzeba by dotknąć każdego dnia po kolei.
     /// </para>
     /// <para>
-    /// <b>Ten sam plan, zapytany siedem razy</b>, a nie osobne, tańsze zapytanie.
-    /// Tańsze byłoby drugą definicją tego, co znaczy „dzień zajęty" — a dwie definicje
-    /// rozjeżdżają się przy pierwszej zmianie w jednej z nich i kropka zaczyna kłamać
-    /// względem listy pod nią. Zakres to tydzień, baza jest lokalna i mała, a kafelek
-    /// przerysowuje się po zmianie, nie w pętli.
+    /// <b>Nie przez plan dnia.</b> Najpierw stało tu siedem pełnych planów — po jednym
+    /// na dzień. Każdy sięgał po zadania, wybory, projekty, obszary i siatkę kalendarza,
+    /// budował wiersze z podpisami i barwami, sortował je, a odpowiedź z tego wszystkiego
+    /// brzmiała „pusto czy nie". Trzydzieści pięć zapytań na siedem pytań tak–nie, przy
+    /// każdym przerysowaniu kafelka, w odbiorniku rozgłoszenia, któremu Android liczy
+    /// czas. Teraz są cztery zapytania na cały zakres.
+    /// </para>
+    /// <para>
+    /// Cena jest taka, że „dzień zajęty" ma tu drugą definicję i może rozjechać się
+    /// z listą pod kropką. Dlatego jest ona wypisana wprost — dzień zajmuje zadanie
+    /// z dniem wykonania albo terminem, wybór na ten dzień, zaległe (należące do dzisiaj,
+    /// nie do dnia, w którym miały być) i wydarzenie z kalendarza inne niż odbicie
+    /// zadania; odhaczone nie liczy się tak samo jak w planie — a test porównuje obie
+    /// definicje dzień po dniu, żeby rozjazd wyszedł w CI, nie na kafelku.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlySet<DateOnly>> BusyAsync(
@@ -72,13 +81,77 @@ public sealed class DayPlanService(
     {
         var busy = new HashSet<DateOnly>();
 
-        for (var i = 0; i < days; i++)
+        if (days <= 0)
         {
-            var day = od.AddDays(i);
+            return busy;
+        }
 
-            if ((await ForDayAsync(day, ct)).Count > 0)
+        var today = clock.Today;
+        var last = od.AddDays(days - 1);
+
+        void Mark(DateOnly day)
+        {
+            if (day >= od && day <= last)
             {
                 busy.Add(day);
+            }
+        }
+
+        // Dzień i termin osobno: składnica oddaje zadanie, gdy w oknie jest którekolwiek
+        // z nich, a plan dnia pokazuje je w obu tych dniach. Zapalenie kropki tylko po
+        // dniu wykonania gasiłoby dni, w których stoi sam termin.
+        foreach (var task in await tasks.UpcomingAsync(od.AddDays(-1), last, ct))
+        {
+            if (task.State == TaskState.Done)
+            {
+                continue;
+            }
+
+            if (task.DoDate is { } doDate)
+            {
+                Mark(doDate);
+            }
+
+            if (task.Deadline is { } deadline)
+            {
+                Mark(deadline);
+            }
+        }
+
+        // Wybór na dzień nie jest umówieniem i nie ma dnia wykonania, ale dzień zajmuje
+        // tak samo — w planie dnia stoi obok terminów. Górna granica jest wyłączna,
+        // stąd dzień po ostatnim.
+        foreach (var task in await tasks.FocusedBetweenAsync(od, last.AddDays(1), ct))
+        {
+            if (task.State != TaskState.Done && task.FocusDate is { } day)
+            {
+                Mark(day);
+            }
+        }
+
+        // Zaległe należą do dzisiaj, nie do dnia, w którym miały być — tak samo jak
+        // w planie dnia. Pytane tylko wtedy, gdy dzisiaj jest w zakresie i jeszcze nie
+        // ma kropki, bo to jedyne zapytanie, którego nie da się zadać dla całego okna.
+        if (today >= od && today <= last && !busy.Contains(today)
+            && (await tasks.TodayAsync(today, ct)).Any(z => z.State != TaskState.Done))
+        {
+            Mark(today);
+        }
+
+        // Jedna siatka na cały zakres zamiast siedmiu jednodniowych.
+        if (calendar is not null)
+        {
+            foreach (var day in await calendar.AgendaAsync(od, days, ct))
+            {
+                // Ten sam przesiew co w planie dnia: odbicia zadań nie liczą się drugi
+                // raz, odhaczone nie liczą się wcale.
+                var anything = day.AllDay.Any(e => e.Kind == AgendaKind.Event && !e.IsDone)
+                    || day.Timed.Any(s => s.Entry.Kind == AgendaKind.Event && !s.Entry.IsDone);
+
+                if (anything)
+                {
+                    Mark(day.Date);
+                }
             }
         }
 
@@ -149,12 +222,12 @@ public sealed class DayPlanService(
     private async Task<IEnumerable<(TimeOnly? Time, PlanRow Entry)>> EventsAsync(
         DateOnly day, CancellationToken ct)
     {
-        if (calendarId is null)
+        if (calendar is null)
         {
             return [];
         }
 
-        var days = await calendarId.AgendaAsync(day, 1, ct);
+        var days = await calendar.AgendaAsync(day, 1, ct);
 
         if (days.Count == 0)
         {
