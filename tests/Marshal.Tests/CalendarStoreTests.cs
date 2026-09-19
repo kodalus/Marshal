@@ -1938,17 +1938,20 @@ public sealed class CalendarStoreTests : IDisposable
         // Przy kalendarzu tylko do odczytu — świątecznym, fazach księżyca, cudzym bez
         // prawa zmian — pierwsze się udaje, drugie wraca odmową. Zostawała odmowa
         // na ekranie **i** kopia, o którą nikt nie prosił.
+        _kanal.Next = new FeedResult(
+            [Wydarzenie("ksiezyc", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
+
+        await _usluga.RefreshAsync(force: true);
+
+        // Kalendarz obszaru zakładany **po** pobraniu: atrapa kanału oddaje tę samą
+        // listę każdemu podłączeniu, więc założony wcześniej dostałby kopię wydarzenia
+        // z pobrania i test mówiłby o duplikacie, którego nie badamy.
         var docelowy = new CalendarSource(
             Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/moj.ics", "Rozwój własny");
 
         _db.CalendarSources.Add(docelowy);
         await _db.SaveChangesAsync();
-
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("ksiezyc", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
-
-        await _usluga.RefreshAsync(force: true);
 
         // Stary kalendarz przestaje przyjmować zapisy — tak jak świąteczny u Google.
         _pisarz.TylkoDoOdczytu.Add(_zrodlo.Id);
@@ -1957,12 +1960,19 @@ public sealed class CalendarStoreTests : IDisposable
 
         await proba.Should().ThrowAsync<InvalidOperationException>();
 
-        // Kopia w nowym kalendarzu zdjęta z powrotem — u źródła i u nas.
+        // Kopia zdjęta u źródła…
         _pisarz.Wyslane.Should().Contain(w => w.Co == "skasowanie" && w.Id == "nowe-1");
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0]
-            .Timed.Should().ContainSingle(
-                "po nieudanym przeniesieniu zostaje samo wydarzenie u źródła");
+        var dzien = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0];
+
+        // …i u nas. To jest cała treść poprawki: po odmowie nie zostaje nic, o co nikt
+        // nie prosił.
+        dzien.Timed.Should().NotContain(
+            s => s.Entry.ExternalId == "nowe-1",
+            "kopia w nowym kalendarzu ma zniknąć razem z nieudanym przeniesieniem");
+
+        // A wydarzenie u źródła zostaje nietknięte — bo właśnie nie dało się go zdjąć.
+        dzien.Timed.Should().Contain(s => s.Entry.ExternalId == "ksiezyc");
     }
 
     [Fact]
