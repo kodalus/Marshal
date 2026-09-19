@@ -5,6 +5,7 @@ using Android.Views;
 using Marshal.Application.Abstractions;
 using Android.Widget;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Diagnostics;
 using Marshal.UI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -113,6 +114,8 @@ public sealed class TodayWidgetService : RemoteViewsService
                 return;
             }
 
+            var zegar = System.Diagnostics.Stopwatch.StartNew();
+
             try
             {
                 _wiersze = WczytajAsync(kontekst, widgetId)
@@ -121,6 +124,21 @@ public sealed class TodayWidgetService : RemoteViewsService
                     .GetResult();
 
                 Zapamietaj(kontekst, widgetId, _wiersze);
+
+                // Ta metoda wykonuje się na wątku, którym ekran domowy pyta nasz proces,
+                // więc każda jej sekunda jest sekundą cudzego czekania. Dopisywane tylko
+                // wtedy, gdy trwa długo — to jedyne miejsce, z którego da się tę liczbę
+                // zobaczyć bez kabla.
+                if (zegar.ElapsedMilliseconds > 1000)
+                {
+                    // Bez czekania: ta metoda i tak trwała już za długo, a wpis
+                    // o tym nie ma prawa jej przedłużać.
+                    _ = AppServices.Provider.GetRequiredService<IActivityLog>()
+                        .RecordAsync(
+                            "Widget: wiersze",
+                            $"{zegar.ElapsedMilliseconds} ms",
+                            ActivityLevel.Problem);
+                }
             }
             catch (TimeoutException)
             {

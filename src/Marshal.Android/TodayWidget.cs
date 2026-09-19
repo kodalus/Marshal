@@ -6,6 +6,7 @@ using Android.Appwidget;
 using Android.Content;
 using Android.Widget;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Diagnostics;
 using Marshal.UI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -241,7 +242,11 @@ public sealed class TodayWidget : AppWidgetProvider
         {
             try
             {
+                var zegar = System.Diagnostics.Stopwatch.StartNew();
+
                 var services = await ServicesAsync(okno.ApplicationContext ?? okno);
+                var gotowe = zegar.ElapsedMilliseconds;
+
                 var dzis = services.GetRequiredService<IClock>().Today;
                 var plan = services.GetRequiredService<PlanDniaService>();
 
@@ -256,6 +261,21 @@ public sealed class TodayWidget : AppWidgetProvider
                     var zajete = await plan.ZajeteAsync(poniedzialek, DniTygodnia);
 
                     menedzer.UpdateAppWidget(id, Rama(okno, id, dzis, zajete));
+                }
+
+                // Przerysowanie kafelka idzie w odbiorniku rozgłoszenia, czyli z budżetem
+                // czasu, którego nie widać. Kropki w pasku tygodnia liczą siedem planów
+                // dnia na kafelek — a plan dnia sięga do zadań, projektów, obszarów
+                // i kalendarza. Dopisywane tylko wtedy, gdy trwa **długo**: wpis przy
+                // każdym przerysowaniu byłby szumem, a tu chodzi o jedną liczbę, której
+                // nie da się zmierzyć inaczej niż stąd.
+                if (zegar.ElapsedMilliseconds > 1000)
+                {
+                    await services.GetRequiredService<IActivityLog>().RecordAsync(
+                        "Widget: przerysowanie",
+                        $"{zegar.ElapsedMilliseconds} ms na {identyfikatory.Length}, "
+                            + $"w tym czekanie na bazę {gotowe} ms",
+                        ActivityLevel.Problem);
                 }
             }
             catch (Exception e)
