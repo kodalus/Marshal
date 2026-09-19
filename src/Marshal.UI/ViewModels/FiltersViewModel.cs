@@ -431,9 +431,9 @@ public sealed partial class FiltersViewModel : ObservableObject
     }
 
     private void Fill(
-        ObservableCollection<FilterToggle> where, IEnumerable<(string Value, string Label)> co)
+        ObservableCollection<FilterToggle> where, IEnumerable<(string Value, string Label)> what)
     {
-        foreach (var (value, label) in co)
+        foreach (var (value, label) in what)
         {
             Add(where, value, label);
         }

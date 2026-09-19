@@ -658,6 +658,11 @@ public sealed partial class MainViewModel : ObservableObject
         // otwarta na telefonie pokazywała stan sprzed ostatniej synchronizacji i nie
         // było po niej widać, że jest nieświeży.
         Safely("Synchronizacja przy starcie", SyncQuietlyAsync);
+
+        // Kalendarze tak samo: obok, bez czekania. Odświeżenie zeszło z drogi do
+        // gotowości — sięga po sieć i potrafiło zatrzymać start na osiem sekund — więc
+        // siatka rusza z tym, co w bazie, a świeże wydarzenia dochodzą do niej same.
+        Safely("Kalendarze przy starcie", Calendar.RefreshFromSourcesAsync);
     }
 
     /// <summary>
@@ -951,9 +956,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// bez śladu w oknie i bez śladu nigdzie indziej. Wyglądało to dokładnie tak,
     /// jakby zapis się nie udał — a zapis się udawał.
     /// </remarks>
-    private void Safely(string co, Func<Task> work) => _ = Try(co, work);
+    private void Safely(string what, Func<Task> work) => _ = Try(what, work);
 
-    private async Task Try(string co, Func<Task> work)
+    private async Task Try(string what, Func<Task> work)
     {
         try
         {
@@ -962,7 +967,7 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception e) when (e is not OperationCanceledException)
         {
             await _activity.RecordAsync(
-                co, "nie udało się", ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
+                what, "nie udało się", ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
         }
     }
 
@@ -986,7 +991,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// pięćset — bez tego zjadłby sam siebie i nie byłoby w nim widać niczego innego.
     /// Awarie i przebiegi, które coś przeniosły, zostają zawsze.
     /// </param>
-    private async Task RunAsync(string co, bool quiet = false)
+    private async Task RunAsync(string what, bool quiet = false)
     {
         if (!_drive.HasCredentials || !Directory.Exists(_drive.TokenFolder))
         {
@@ -1015,7 +1020,7 @@ public sealed partial class MainViewModel : ObservableObject
         if (!silently)
         {
             await _activity.RecordAsync(
-                co,
+                what,
                 result.Ok ? $"wysłane {result.Sent}, przyjęte {result.Applied}" : result.Message,
                 result.Ok ? ActivityLevel.Ok : ActivityLevel.Problem);
         }

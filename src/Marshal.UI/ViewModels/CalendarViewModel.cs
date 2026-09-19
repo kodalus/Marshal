@@ -1012,6 +1012,31 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>
+    /// Odświeżenie przy starcie: bez wymuszania i bez wpisu, gdy się udało.
+    /// </summary>
+    /// <remarks>
+    /// Siatka składa się z tego, co w bazie, a odświeżenie zeszło z drogi do gotowości
+    /// i biegnie obok niej — więc gdy dojdzie, nikt jej o tym nie mówi. Zapis kalendarzy
+    /// nie podnosi znaku zapisu, bo ten należy do zapisów z okna. Stąd to przerysowanie
+    /// tutaj, po pierwszym ekranie: bez niego świeże wydarzenia leżałyby w bazie
+    /// i czekały na pierwsze dotknięcie strzałki.
+    ///
+    /// Bez wymuszania, więc gdy przygotowanie zdążyło odświeżyć swoją drogą, ten
+    /// przebieg jest pustym sprawdzeniem odstępu, a nie drugim pobraniem.
+    /// </remarks>
+    public async Task RefreshFromSourcesAsync()
+    {
+        var report = await calendar.RefreshAsync();
+
+        Problem = report.Failed > 0
+            ? $"Nie udało się odświeżyć {report.Failed} z {report.Failed + report.Sources} kalendarzy."
+            : null;
+
+        OnPropertyChanged(nameof(HasProblem));
+        await RefreshAsync();
+    }
+
+    /// <summary>
     /// Pobranie świeżych wydarzeń na żądanie. Osobno od przerysowania, bo to dwie różne
     /// rzeczy: siatkę składamy z tego, co w bazie, a sieć bywa niedostępna.
     /// </summary>
@@ -1498,12 +1523,12 @@ public sealed partial class CalendarViewModel(
             return;
         }
 
-        var co = block.IsDone ? "Kalendarz: zdjęcie ptaszka w Google" : "Kalendarz: odhaczenie w Google";
+        var what = block.IsDone ? "Kalendarz: zdjęcie ptaszka w Google" : "Kalendarz: odhaczenie w Google";
 
         try
         {
             await calendar.SetEventDoneAsync(source, external, !block.IsDone);
-            await log.RecordAsync(co, block.Title);
+            await log.RecordAsync(what, block.Title);
         }
         catch (EventGone e)
         {
@@ -1512,7 +1537,7 @@ public sealed partial class CalendarViewModel(
             Problem = e.Message;
             OnPropertyChanged(nameof(HasProblem));
 
-            await log.RecordAsync(co, block.Title, ActivityLevel.Problem, e.Message);
+            await log.RecordAsync(what, block.Title, ActivityLevel.Problem, e.Message);
             await RefreshAsync();
 
             return;
@@ -1522,7 +1547,7 @@ public sealed partial class CalendarViewModel(
             Problem = e.Message;
             OnPropertyChanged(nameof(HasProblem));
 
-            await log.RecordAsync(co, "nie udało się", ActivityLevel.Problem, e.Message);
+            await log.RecordAsync(what, "nie udało się", ActivityLevel.Problem, e.Message);
         }
 
         await RefreshAsync();

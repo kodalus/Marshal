@@ -77,7 +77,7 @@ public sealed class DeferredMirror(ITaskMirror mirror, IActivityLog journal) : I
     /// kto ją zlecił, już się rozłączył — o to właśnie chodzi w odłożeniu. Odwołanie
     /// przekazane tutaj znaczyłoby odbicie przerwane w połowie przez zamknięcie ekranu.
     /// </remarks>
-    private void Defer(string co, TaskItem task, Func<TaskItem, CancellationToken, Task> work)
+    private void Defer(string what, TaskItem task, Func<TaskItem, CancellationToken, Task> work)
     {
         ArgumentNullException.ThrowIfNull(task);
 
@@ -98,13 +98,13 @@ public sealed class DeferredMirror(ITaskMirror mirror, IActivityLog journal) : I
             // dobiegł, a tu jest ustalona, zanim cokolwiek ruszy.
             var previous = _tail;
 
-            _tail = Task.Run(() => OneByOneAsync(previous, co, title, task, work));
+            _tail = Task.Run(() => OneByOneAsync(previous, what, title, task, work));
         }
     }
 
     private async Task OneByOneAsync(
         Task previous,
-        string co,
+        string what,
         string title,
         TaskItem task,
         Func<TaskItem, CancellationToken, Task> work)
@@ -125,7 +125,7 @@ public sealed class DeferredMirror(ITaskMirror mirror, IActivityLog journal) : I
             try
             {
                 await journal.RecordAsync(
-                    co, title, ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
+                    what, title, ActivityLevel.Problem, $"{e.GetType().Name}: {e.Message}");
             }
             catch
             {

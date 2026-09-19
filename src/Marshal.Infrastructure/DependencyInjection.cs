@@ -219,13 +219,22 @@ public static class DependencyInjection
         var clock = System.Diagnostics.Stopwatch.StartNew();
 
         var db = services.GetRequiredService<MarshalDbContext>();
+
+        // Zbudowanie modelu bazy mierzone osobno od samych migracji. To dwa różne
+        // koszty i dwa różne lekarstwa: model buduje się z odbicia typów przy pierwszym
+        // dotknięciu kontekstu i da się go skompilować z góry, a machina migracji
+        // przegląda dwadzieścia klas i pyta bazę, co już zastosowano. Z jednej liczby
+        // nie wiadomo, którego z nich szukać.
+        _ = db.Model;
+        var model = clock.ElapsedMilliseconds;
+
         await db.Database.MigrateAsync(ct);
-        var migrations = clock.ElapsedMilliseconds;
+        var migrations = clock.ElapsedMilliseconds - model;
 
         // Identyfikator urządzenia rozstrzygany zaraz po migracji: zakłada go przy
         // pierwszym uruchomieniu, a zegar logiczny potrzebuje go do wznowienia.
         _ = services.GetRequiredService<IDeviceIdentity>().Id;
-        var identity = clock.ElapsedMilliseconds - migrations;
+        var identity = clock.ElapsedMilliseconds - model - migrations;
 
         await AreaSeed.EnsureAsync(
             db,
@@ -233,9 +242,18 @@ public static class DependencyInjection
             services.GetRequiredService<IHlcSource>(),
             ct);
 
-        var seed = clock.ElapsedMilliseconds - migrations - identity;
+        var seed = clock.ElapsedMilliseconds - model - migrations - identity;
 
         var catchUp = await CatchUpAsync(services, ct);
+
+        // **Kalendarze idą obok, a nie na drodze.** Odświeżenie sięga po sieć, więc jego
+        // czas nie zależy od nas: w dzienniku stoi przebieg, w którym wzięło 8,5 sekundy.
+        // Wszystko, co czeka na gotowość — okno przy starcie i widget w odbiorniku
+        // rozgłoszenia z budżetem dziesięciu sekund — czekało przez ten czas na Google.
+        //
+        // Puszczone bokiem, bo proces bez okna też ma prawo mieć świeże wydarzenia:
+        // widget budzony budzikiem jest jedynym, który je wtedy pokaże.
+        _ = RefreshCalendarsAsync(services, ct);
 
         // Przygotowanie jest tym, na co czeka wszystko inne: okno przy starcie i widget
         // w odbiorniku rozgłoszenia, który ma na to około dziesięciu sekund. W dzienniku
@@ -245,8 +263,9 @@ public static class DependencyInjection
         {
             await services.GetRequiredService<IActivityLog>().RecordAsync(
                 "Start: przygotowanie",
-                $"razem {clock.ElapsedMilliseconds} ms — migracje {migrations} ms, "
-                    + $"tożsamość {identity} ms, obszary {seed} ms, {catchUp}",
+                $"razem {clock.ElapsedMilliseconds} ms — model {model} ms, "
+                    + $"migracje {migrations} ms, tożsamość {identity} ms, "
+                    + $"obszary {seed} ms, {catchUp}",
                 ActivityLevel.Problem);
         }
     }
@@ -278,16 +297,43 @@ public static class DependencyInjection
         await services.GetRequiredService<ReminderService>().RunAsync(ct);
         var reminders = clock.ElapsedMilliseconds - rollover - focus;
 
-        // Kalendarze odświeżane przy okazji, nie osobnym zadaniem w tle. Kanał, który
-        // nie odpowiedział, ma znaczyć „brak świeżych wydarzeń", a nie zatrzymać start.
-        //
-        // **To jest jedyny krok, który sięga po sieć**, i jedyny, którego czas nie zależy
-        // od nas. Mierzony osobno właśnie dlatego.
-        await services.GetRequiredService<CalendarSyncService>().RefreshAsync(ct: ct);
-        var calendars = clock.ElapsedMilliseconds - rollover - focus - reminders;
-
         return $"przejście dnia {rollover} ms, wybory {focus} ms, "
-            + $"przypomnienia {reminders} ms, kalendarze {calendars} ms";
+            + $"przypomnienia {reminders} ms";
+    }
+
+    /// <summary>
+    /// Odświeżenie kalendarzy — obok gotowości, nie w niej.
+    /// </summary>
+    /// <remarks>
+    /// Jedyny krok rozruchu, który sięga po sieć, i jedyny, którego czas nie zależy od
+    /// nas. Kanał, który nie odpowiedział, ma znaczyć „brak świeżych wydarzeń", a nie
+    /// zatrzymać start — stąd własne przechwycenie wyjątku: nikt na to nie czeka, więc
+    /// nie ma komu ich pokazać.
+    /// </remarks>
+    public static async Task RefreshCalendarsAsync(
+        IServiceProvider services, CancellationToken ct = default)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+
+        try
+        {
+            var report = await services.GetRequiredService<CalendarSyncService>()
+                .RefreshAsync(ct: ct);
+
+            if (report.Failed > 0 || clock.ElapsedMilliseconds > 3000)
+            {
+                await services.GetRequiredService<IActivityLog>().RecordAsync(
+                    "Start: kalendarze",
+                    $"{clock.ElapsedMilliseconds} ms, odświeżonych {report.Sources}, "
+                        + $"nieudanych {report.Failed}",
+                    report.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok);
+            }
+        }
+        catch (Exception e)
+        {
+            await services.GetRequiredService<IActivityLog>().RecordAsync(
+                "Start: kalendarze", "nie udało się", ActivityLevel.Problem, e.ToString());
+        }
     }
 }
 

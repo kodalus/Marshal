@@ -99,12 +99,12 @@ internal static class Alarm
 
     /// <summary>Wpis do dziennika, który nie wywraca wołającego, gdy baza nie stoi.</summary>
     public static async Task Save(
-        string co, string content, Exception? error = null, ActivityLevel? level = null)
+        string what, string content, Exception? error = null, ActivityLevel? level = null)
     {
         try
         {
             await AppServices.Provider.GetRequiredService<IActivityLog>().RecordAsync(
-                co, content,
+                what, content,
                 level ?? (error is null ? ActivityLevel.Ok : ActivityLevel.Problem),
                 error?.ToString());
         }

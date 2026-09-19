@@ -580,10 +580,10 @@ public sealed class TodayWidget : AppWidgetProvider
         // więc to, co wiersz chce zgłosić, może przyjechać wyłącznie jako dodatek.
         // Skoro tak, to i strzałki dni idą tą samą drogą — dwie drogi do jednego
         // odbiornika znaczyłyby dwa miejsca, w których trzeba pamiętać o tej regule.
-        var co = intent.GetStringExtra(CoExtra) ?? WhatDone;
+        var what = intent.GetStringExtra(CoExtra) ?? WhatDone;
         var window = context.ApplicationContext ?? context;
 
-        if (co == OpenWhat)
+        if (what == OpenWhat)
         {
             // Z odbiornika, a nie zamiarem oczekującym: wiersz listy nie ma własnego
             // zamiaru, a wzorzec jest rozgłoszeniem i okna nie otworzy.
@@ -603,7 +603,7 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
-        if (co == Daily)
+        if (what == Daily)
         {
             var widgetId = intent.GetIntExtra(
                 AppWidgetManager.ExtraAppwidgetId, AppWidgetManager.InvalidAppwidgetId);
