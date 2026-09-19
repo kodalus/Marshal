@@ -287,6 +287,12 @@ public sealed class TodayWidget : AppWidgetProvider
                     manager.UpdateAppWidget(id, Frame(window, id, today, busy));
                 }
 
+                // Świeże wydarzenia dla procesu bez okna: widget budzony budzikiem jest
+                // wtedy jedynym, który je pokaże. Bez wymuszania, więc gdy okno odświeżyło
+                // swoją drogą, jest to sprawdzenie odstępu, a nie drugie pobranie —
+                // i bez czekania, bo kafelek jest już narysowany z tego, co w bazie.
+                _ = Marshal.Infrastructure.DependencyInjection.RefreshCalendarsAsync(services);
+
                 // Przerysowanie kafelka idzie w odbiorniku rozgłoszenia, czyli z budżetem
                 // czasu, którego nie widać. Kropki w pasku tygodnia liczą siedem planów
                 // dnia na kafelek — a plan dnia sięga do zadań, projektów, obszarów

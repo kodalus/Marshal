@@ -246,14 +246,16 @@ public static class DependencyInjection
 
         var catchUp = await CatchUpAsync(services, ct);
 
-        // **Kalendarze idą obok, a nie na drodze.** Odświeżenie sięga po sieć, więc jego
-        // czas nie zależy od nas: w dzienniku stoi przebieg, w którym wzięło 8,5 sekundy.
-        // Wszystko, co czeka na gotowość — okno przy starcie i widget w odbiorniku
-        // rozgłoszenia z budżetem dziesięciu sekund — czekało przez ten czas na Google.
+        // Kalendarzy **nie ma tutaj** i to jest treść, nie przeoczenie. Odświeżenie sięga
+        // po sieć, więc jego czas nie zależy od nas — w dzienniku stoi przebieg, w którym
+        // wzięło 8,5 sekundy — a wszystko, co czeka na gotowość, czekało przez ten czas
+        // na Google. Woła je ten, kto świeżych wydarzeń potrzebuje: okno po pierwszym
+        // ekranie i widget przy przerysowaniu.
         //
-        // Puszczone bokiem, bo proces bez okna też ma prawo mieć świeże wydarzenia:
-        // widget budzony budzikiem jest jedynym, który je wtedy pokaże.
-        _ = RefreshCalendarsAsync(services, ct);
+        // Puszczenie go stąd bokiem wyglądało na sprytniejsze i było gorsze: „gotowe"
+        // zaczynało znaczyć „gotowe, ale coś jeszcze pisze do bazy". Wywrócił to test
+        // startu, który zaraz po przygotowaniu zapisuje własnym zapisem — i miał rację,
+        // bo po powrocie z przygotowania kontekst ma być wolny.
 
         // Przygotowanie jest tym, na co czeka wszystko inne: okno przy starcie i widget
         // w odbiorniku rozgłoszenia, który ma na to około dziesięciu sekund. W dzienniku
