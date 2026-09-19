@@ -94,6 +94,14 @@ public sealed class TodayWidget : AppWidgetProvider
     /// </remarks>
     private const string Ustawienia = "widget";
 
+    /// <summary>Ta sama składnica dla wierszy zapamiętanych przez listę kafelka.</summary>
+    /// <remarks>
+    /// Wspólna nazwa, bo to ten sam kafelek i ten sam rodzaj stanu: nie dane aplikacji,
+    /// tylko to, co jeden prostokąt na jednym ekranie domowym ma o sobie pamiętać.
+    /// Zapomina się o tym razem z nim, w jednym miejscu.
+    /// </remarks>
+    internal const string Pamiec = Ustawienia;
+
     internal static int Przesuniecie(Context kontekst, int widgetId) =>
         kontekst.GetSharedPreferences(Ustawienia, FileCreationMode.Private)
             ?.GetInt($"dzien-{widgetId}", 0) ?? 0;
@@ -132,6 +140,7 @@ public sealed class TodayWidget : AppWidgetProvider
         foreach (var id in appWidgetIds)
         {
             edycja?.Remove($"dzien-{id}");
+            edycja?.Remove($"wiersze-{id}");
         }
 
         edycja?.Apply();

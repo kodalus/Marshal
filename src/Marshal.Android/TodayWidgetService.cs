@@ -99,6 +99,16 @@ public sealed class TodayWidgetService : RemoteViewsService
 
             if (!przygotowanie.IsCompleted)
             {
+                // Zapamiętane wiersze zamiast pustki. „Zostawiamy widgetowi to, co ma"
+                // brzmiało rozsądnie i było nieprawdą w jedynym przypadku, w którym
+                // to naprawdę boli: zamknięcie aplikacji zabija proces razem z tą
+                // fabryką, więc nowa nie ma **nic**. Kafelek gasł wtedy na dwie sekundy
+                // i wracał — czyli przez dwie sekundy mówił „nic dziś nie masz".
+                if (_wiersze.Count == 0)
+                {
+                    _wiersze = Zapamietane(kontekst, widgetId);
+                }
+
                 _ = PoPrzygotowaniuAsync(kontekst);
                 return;
             }
@@ -109,6 +119,8 @@ public sealed class TodayWidgetService : RemoteViewsService
                     .WaitAsync(TimeSpan.FromSeconds(2))
                     .GetAwaiter()
                     .GetResult();
+
+                Zapamietaj(kontekst, widgetId, _wiersze);
             }
             catch (TimeoutException)
             {
@@ -123,6 +135,94 @@ public sealed class TodayWidgetService : RemoteViewsService
                 global::Android.Util.Log.Warn("Marshal", e.ToString());
             }
         }
+
+        /// <summary>
+        /// Ostatnio pokazane wiersze, trzymane poza bazą.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// W ustawieniach systemu, nie w bazie, i to jest cały sens: kafelek musi umieć
+        /// narysować się <b>zanim</b> baza będzie gotowa, bo ekran domowy pyta o wiersze
+        /// dokładnie wtedy, gdy proces dopiero wstaje. Odczyt ustawień systemu trwa
+        /// ułamek milisekundy i nie zależy od niczego, co się właśnie przygotowuje.
+        /// </para>
+        /// <para>
+        /// To nie są dane aplikacji, tylko ostatni obrazek jednego kafelka — dlatego
+        /// leżą tam, gdzie jego przesunięcie dnia, i giną razem z nim.
+        /// </para>
+        /// <para>
+        /// Własny zapis, nie JSON: wydanie na Androida jest przycinane, a serializacja
+        /// przez odbicie typów potrafi się wtedy wywrócić dopiero na urządzeniu.
+        /// Cztery pola rozdzielone znakami, których w tekście nie ma, wywrócić się
+        /// nie mają jak.
+        /// </para>
+        /// </remarks>
+        private const char Miedzy = '\u001f';
+
+        private const char Wiersz = '\u001e';
+
+        private static string Klucz(int widgetId) => $"wiersze-{widgetId}";
+
+        private static IReadOnlyList<PozycjaPlanu> Zapamietane(Context kontekst, int widgetId)
+        {
+            try
+            {
+                var zapis = kontekst
+                    .GetSharedPreferences(TodayWidget.Pamiec, FileCreationMode.Private)
+                    ?.GetString(Klucz(widgetId), null);
+
+                if (string.IsNullOrEmpty(zapis))
+                {
+                    return [];
+                }
+
+                return zapis
+                    .Split(Wiersz, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w.Split(Miedzy))
+                    .Where(p => p.Length == 4)
+                    .Select(p => new PozycjaPlanu(
+                        Guid.TryParse(p[0], out var zadanie) ? zadanie : null,
+                        p[1],
+                        p[2],
+                        p[3].Length == 0 ? null : p[3]))
+                    .ToList();
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // Zapamiętany obrazek jest wygodą, nie prawdą. Jego brak znaczy pusty
+                // kafelek na dwie sekundy, a nie awarię.
+                global::Android.Util.Log.Warn("Marshal", e.ToString());
+
+                return [];
+            }
+        }
+
+        private static void Zapamietaj(
+            Context kontekst, int widgetId, IReadOnlyList<PozycjaPlanu> wiersze)
+        {
+            try
+            {
+                var zapis = string.Join(
+                    Wiersz,
+                    wiersze.Select(w => string.Join(
+                        Miedzy,
+                        w.Zadanie?.ToString() ?? string.Empty,
+                        Czysto(w.Tytul),
+                        Czysto(w.Podpis),
+                        Czysto(w.Barwa ?? string.Empty))));
+
+                kontekst.GetSharedPreferences(TodayWidget.Pamiec, FileCreationMode.Private)
+                    ?.Edit()?.PutString(Klucz(widgetId), zapis)?.Apply();
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                global::Android.Util.Log.Warn("Marshal", e.ToString());
+            }
+        }
+
+        /// <summary>Bez znaków rozdzielających — tytuł jest cudzym tekstem.</summary>
+        private static string Czysto(string tekst) =>
+            tekst.Replace(Miedzy, ' ').Replace(Wiersz, ' ');
 
         /// <summary>Ponowna prośba o wiersze, gdy baza będzie już gotowa.</summary>
         /// <remarks>
