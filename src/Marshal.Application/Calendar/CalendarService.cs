@@ -636,6 +636,9 @@ public sealed class CalendarSyncService(
 
         await FixPrimaryAsync(ct);
 
+        // Plan przed pobieraniem: które podłączenia w ogóle idą do sieci.
+        var planned = new List<(CalendarSource Source, CalendarCursor? Cursor, ICalendarFeed Feed)>();
+
         foreach (var source in await store.SourcesAsync(ct))
         {
             var cursor = await store.CursorAsync(source.Id, ct);
@@ -654,10 +657,54 @@ public sealed class CalendarSyncService(
                 continue;
             }
 
+            planned.Add((source, cursor, feed));
+        }
+
+        // **Sieć równolegle, baza po kolei.**
+        //
+        // Szesnaście kalendarzy pobieranych jeden po drugim to w dzienniku 7–9 sekund,
+        // z czego prawie wszystko to czekanie na cudzy serwer. Czekanie da się złożyć;
+        // zapis nie. Baza zostaje więc pod jednym wątkiem i w tej samej kolejności co
+        // dotąd — inaczej kilkanaście wątków dobijałoby się do jednego kontekstu, a to
+        // jest ten sam błąd, który zatrzymał dziś start („a second operation was started
+        // on this context instance").
+        //
+        // Czwórka, nie szesnastka: tyle równoczesnych połączeń telefon otwiera bez
+        // wysiłku, a rozstawienie ich wszystkich naraz na słabym zasięgu kończy się
+        // przeterminowaniami zamiast oszczędnością.
+        var fetched = new (FeedResult? Result, string? Problem)[planned.Count];
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, planned.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct },
+            async (i, token) =>
+            {
+                var (source, cursor, feed) = planned[i];
+
+                try
+                {
+                    fetched[i] = (await feed.FetchAsync(source, cursor?.SyncToken, token), null);
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                {
+                    fetched[i] = (null, $"{source.Name}: {e.Message}");
+                }
+            });
+
+        for (var i = 0; i < planned.Count; i++)
+        {
+            var (source, _, _) = planned[i];
+            var (result, problem) = fetched[i];
+
+            if (result is null)
+            {
+                failed++;
+                reasons.Add(problem ?? $"{source.Name}: pobranie nie doszło do skutku.");
+                continue;
+            }
+
             try
             {
-                var result = await feed.FetchAsync(source, cursor?.SyncToken, ct);
-
                 await store.UpsertAsync(source.Id, result.Events, ct);
 
                 if (result.IsFull)
