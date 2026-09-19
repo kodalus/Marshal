@@ -730,9 +730,23 @@ public partial class MainView : UserControl
     /// <summary>Ile trzeba przejechać, żeby to było przeciąganie, a nie drgnięcie ręki.</summary>
     private const double DragThreshold = 6;
 
+    /// <summary>
+    /// Ile palcowi wolno zjechać, zanim minie przytrzymanie.
+    /// </summary>
+    /// <remarks>
+    /// Sześć punktów wystarczy myszy, która stoi tam, gdzie ją zostawisz. Palec przez
+    /// cztery dziesiąte sekundy nie stoi nigdy — i każde drgnięcie ponad ten próg
+    /// kasowało chwyt, zanim zdążył się zacząć. Stąd osobny, większy luz na ten czas:
+    /// po przytrzymaniu wraca zwykły próg, bo wtedy każdy ruch jest już przeciąganiem.
+    /// </remarks>
+    private const double HoldSlop = 18;
+
     private SlotBox? _pressed;
 
     private Point _from;
+
+    /// <summary>Ostatnie znane położenie wskaźnika — podgląd rysuje się także bez zdarzenia.</summary>
+    private Point _last;
 
     private bool _dragging;
 
@@ -746,9 +760,19 @@ public partial class MainView : UserControl
 
     /// <summary>Ile punktów od dolnej krawędzi bloku łapie za jego koniec.</summary>
     /// <remarks>
+    /// <para>
     /// Sześć, tyle samo co próg przeciągnięcia. Więcej znaczyłoby, że kwadransowy blok
     /// jest w połowie krawędzią i nie da się go już przesunąć; mniej, że w krawędź
     /// trzeba celować.
+    /// </para>
+    /// <para>
+    /// <b>Tylko myszą.</b> Sześć punktów to dla palca nic — na godzinnym bloku jest to
+    /// dolna ósma część, a kwadransowy jest krawędzią prawie w całości. Chwyt, który
+    /// na dotyku miał przenieść zadanie, wpadał więc w rozciąganie: kopia stawała
+    /// w miejscu i rosła w dół, zamiast iść za palcem. Do tego rozciąganie za krawędź
+    /// jest wiedzą z kursora — a kursora na telefonie nie ma, więc nie ma też jak
+    /// się o tej krawędzi dowiedzieć. Długość zmienia się tam kartą zadania.
+    /// </para>
     /// </remarks>
     private const double EdgeZone = 6;
 
@@ -788,6 +812,7 @@ public partial class MainView : UserControl
         _pressedBlock = block;
         _pressedPointer = e.Pointer;
         _from = e.GetPosition(this);
+        _last = _from;
         _dragging = false;
 
         // Myszą przeciąga się od razu; palcem dopiero po przytrzymaniu. Na dotyku
@@ -818,6 +843,7 @@ public partial class MainView : UserControl
         // Za dolną krawędź ciągnie się koniec, nie cały blok. Tylko przy zadaniach:
         // długość wydarzenia z cudzego kalendarza zmienia się świadomą drogą.
         _stretching = slot.TaskId is not null
+            && e.Pointer.Type != PointerType.Touch
             && e.GetPosition(block).Y >= block.Bounds.Height - EdgeZone;
     }
 
@@ -924,11 +950,23 @@ public partial class MainView : UserControl
         _paused.Clear();
     }
 
+    /// <summary>Zadania ruszamy zawsze, wydarzenia tylko takie, które mają dokąd wrócić.</summary>
+    private static bool CanMove(SlotBox slot) =>
+        slot.TaskId is not null || (slot.SourceId is not null && slot.ExternalId is not null);
+
     private void LongPressElapsed()
     {
         _dragAllowed = true;
 
-        if (_pressed is null || _pressedBlock is not { } block)
+        if (_pressed is not { } slot || _pressedBlock is not { } block)
+        {
+            return;
+        }
+
+        // Blok, który i tak nie ma dokąd pójść, nie zabiera wskaźnika siatce:
+        // przytrzymanie na cudzym wydarzeniu kończyło przewijanie na ten gest
+        // i nie dawało w zamian niczego.
+        if (!CanMove(slot))
         {
             return;
         }
@@ -936,6 +974,11 @@ public partial class MainView : UserControl
         _pressedPointer?.Capture(block);
         PauseScrolling(block);
         block.Opacity = 0.7;
+
+        // Kopia pojawia się już teraz, pod palcem, a nie dopiero po przejechaniu progu.
+        // Przytrzymanie, po którym nie dzieje się nic widocznego poza przygaszeniem,
+        // nie mówi ręce, że blok jest już w niej — a wtedy ruch zaczyna się od zgadywania.
+        ShowPreview(_last, slot);
     }
 
     private void ReleaseBlock()
@@ -972,20 +1015,22 @@ public partial class MainView : UserControl
     /// Z położenia wskaźnika, a nie z tego, co pod nim: przy przechwyconym wskaźniku
     /// zdarzenia trafiają do przeciąganego bloku niezależnie od tego, nad czym stoi.
     /// </remarks>
-    private (DateOnly Day, double Height)? Target(PointerEventArgs e)
+    private (DateOnly Day, double Height)? Target(Point where)
     {
         if (_calendar is null
             || _hourLayer is null
-            || this.FindControl<ItemsControl>("KolumnyDni") is not { } columns)
+            || this.FindControl<ItemsControl>("KolumnyDni") is not { } columns
+            || this.TranslatePoint(where, columns) is not { } inColumns
+            || this.TranslatePoint(where, _hourLayer) is not { } inHours)
         {
             return null;
         }
 
         var width = _calendar.ColumnWidth + 2;
         var number = Math.Clamp(
-            (int)(e.GetPosition(columns).X / width), 0, _calendar.VisibleDays - 1);
+            (int)(inColumns.X / width), 0, _calendar.VisibleDays - 1);
 
-        return (_calendar.Anchor.AddDays(number), e.GetPosition(_hourLayer).Y);
+        return (_calendar.Anchor.AddDays(number), inHours.Y);
     }
 
     /// <summary>
@@ -996,14 +1041,14 @@ public partial class MainView : UserControl
     /// się dopiero po puszczeniu, czyli po zapisie. Przy wydarzeniach z Google znaczy
     /// to po zapisie w cudzym kalendarzu.
     /// </remarks>
-    private void ShowPreview(PointerEventArgs e, SlotBox slot)
+    private void ShowPreview(Point where, SlotBox slot)
     {
         if (this.FindControl<Border>("Podglad") is not { } preview
             || this.FindControl<TextBlock>("PodgladTytul") is not { } title
             || this.FindControl<TextBlock>("PodgladOd") is not { } od
             || this.FindControl<TextBlock>("PodgladDo") is not { } toHour
             || this.FindControl<StackPanel>("PodgladGodziny") is not { } hours
-            || Target(e) is not var (day, height))
+            || Target(where) is not var (day, height))
         {
             return;
         }
@@ -1051,7 +1096,6 @@ public partial class MainView : UserControl
             toHour.Text = $"{end:HH}:{end:mm}";
             hours.IsVisible = slot.Width >= 120;
 
-            var where = e.GetPosition(this);
             Canvas.SetLeft(preview, where.X - _grip.X);
             Canvas.SetTop(preview, where.Y - _grip.Y);
         }
@@ -1080,21 +1124,19 @@ public partial class MainView : UserControl
             return;
         }
 
-        // Zadania ruszamy zawsze, wydarzenia tylko takie, które mają dokąd wrócić.
-        var toMove = slot.TaskId is not null
-            || (slot.SourceId is not null && slot.ExternalId is not null);
-
-        if (!toMove)
+        if (!CanMove(slot))
         {
             return;
         }
 
+        _last = e.GetPosition(this);
+
         if (!_dragging)
         {
-            var now = e.GetPosition(this);
+            var slop = _dragAllowed ? DragThreshold : HoldSlop;
 
-            if (Math.Abs(now.X - _from.X) <= DragThreshold
-                && Math.Abs(now.Y - _from.Y) <= DragThreshold)
+            if (Math.Abs(_last.X - _from.X) <= slop
+                && Math.Abs(_last.Y - _from.Y) <= slop)
             {
                 return;
             }
@@ -1117,7 +1159,7 @@ public partial class MainView : UserControl
             }
         }
 
-        ShowPreview(e, slot);
+        ShowPreview(_last, slot);
     }
 
     /// <summary>
@@ -1163,7 +1205,7 @@ public partial class MainView : UserControl
             return;
         }
 
-        if (Target(e) is not var (day, height) || _calendar is null)
+        if (Target(e.GetPosition(this)) is not var (day, height) || _calendar is null)
         {
             return;
         }
