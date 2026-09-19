@@ -1726,17 +1726,17 @@ public sealed class CalendarStoreTests : IDisposable
         await model.LoadAsync();
 
         await model.ShowWeekCommand.ExecuteAsync(null);
-        model.Range!.Days.Should().Be(7);
+        model.SelectedRange!.Days.Should().Be(7);
 
         await model.ShowMonthCommand.ExecuteAsync(null);
-        model.Range!.Month.Should().BeTrue();
+        model.SelectedRange!.Month.Should().BeTrue();
 
         // Dotknięcie dnia w miesiącu schodzi na jego siatkę godzinową.
         await model.OpenMonthDayCommand.ExecuteAsync(
             new MonthCell(new DateOnly(2026, 9, 16), "16", true, false, [], 0));
 
-        model.Range!.Month.Should().BeFalse();
-        model.Range!.Days.Should().Be(1);
+        model.SelectedRange!.Month.Should().BeFalse();
+        model.SelectedRange!.Days.Should().Be(1);
     }
 
     [Fact]

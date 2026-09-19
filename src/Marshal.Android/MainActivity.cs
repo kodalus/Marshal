@@ -69,7 +69,7 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // pyta o to, co w tym oknie jest otwarte.
         OnBackPressedDispatcher.AddCallback(this, new BackHandler(this));
 
-        Handle(Intent);
+        HandleIntent(Intent);
 
         // Droga po zgodę Google. Kontekst aplikacji, nie okna: zgoda przeżywa obrót
         // telefonu i zamknięcie okna, a okno zapamiętane w polu statycznym zostałoby
@@ -110,10 +110,10 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         // Zapamiętany, bo system nie podmienia go sam: bez tego kolejne odczyty
         // widziałyby wciąż zamiar, którym okno zostało otwarte za pierwszym razem.
         Intent = intent;
-        Handle(intent);
+        HandleIntent(intent);
     }
 
-    private static void Handle(Intent? intent)
+    private static void HandleIntent(Intent? intent)
     {
         if (intent?.GetBooleanExtra(CalendarExtra, false) != true)
         {

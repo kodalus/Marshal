@@ -3,8 +3,8 @@ using Android.Runtime;
 using Android.Widget;
 
 // Nazwa własna: sama „App" w tej przestrzeni mogłaby oznaczać przestrzeń Android.App,
-// a chodzi o naszą aplikację Avalonii.
-using Application = Marshal.UI.App;
+// a „Application" — przestrzeń Marshal.Application. Chodzi o naszą aplikację Avalonii.
+using AvaloniaApp = Marshal.UI.App;
 
 namespace Marshal.Android;
 
@@ -59,7 +59,7 @@ internal static class Crash
             }
 
             var trace = File.ReadAllText(path);
-            Application.PlatformTrace = $"Poprzednie uruchomienie padło.\n\n{trace}";
+            AvaloniaApp.PlatformTrace = $"Poprzednie uruchomienie padło.\n\n{trace}";
             File.Delete(path);
 
             // Dymek systemowy, a nie tylko wpis w dzienniku. Dziennik wymaga udanego
@@ -69,7 +69,7 @@ internal static class Crash
         }
         catch (Exception e)
         {
-            Application.PlatformTrace = $"Nie udało się odczytać śladu awarii: {e.Message}";
+            AvaloniaApp.PlatformTrace = $"Nie udało się odczytać śladu awarii: {e.Message}";
         }
     }
 
