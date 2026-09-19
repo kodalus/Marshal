@@ -65,6 +65,37 @@ public sealed class LatestOnlyTests
     }
 
     [Fact]
+    public async Task Wolanie_w_trakcie_czeka_az_odswiezenie_naprawde_sie_wydarzy()
+    {
+        // Objaw, przez który to powstało: „await" na poleceniu odświeżenia kończył się,
+        // zanim cokolwiek się odświeżyło, bo zgłoszenie w trakcie wracało natychmiast.
+        // Dopóki odczyt z bazy kończył się bez oddania sterowania, przebieg i tak zdążył
+        // przed następną linijką i nie dawało się tego zauważyć.
+        var kolejka = new LatestOnly();
+        var wpuszczenie = new TaskCompletionSource();
+        var przebiegi = 0;
+
+        async Task Praca()
+        {
+            await wpuszczenie.Task;
+            przebiegi++;
+        }
+
+        var pierwsze = kolejka.RunAsync(Praca);
+        var drugie = kolejka.RunAsync(Praca);
+
+        drugie.IsCompleted.Should().BeFalse("nic się jeszcze nie odświeżyło");
+
+        wpuszczenie.SetResult();
+
+        // Z ogranicznikiem czasu, bo pomyłka w tej klasie objawia się zawiśnięciem —
+        // a test, który wisi, nie mówi nic poza tym, że przebieg trwa.
+        await Task.WhenAll(pierwsze, drugie).WaitAsync(TimeSpan.FromSeconds(10));
+
+        przebiegi.Should().Be(2, "drugie zgłoszenie ma doczekać się własnego przebiegu");
+    }
+
+    [Fact]
     public async Task Bledny_przebieg_nie_zatrzaskuje_kolejki()
     {
         var kolejka = new LatestOnly();
