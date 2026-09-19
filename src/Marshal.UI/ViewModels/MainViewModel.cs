@@ -571,6 +571,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private IAsyncRelayCommand Polecenie(Screen ekran) => ekran switch
     {
+        Screen.Today => ShowTodayCommand,
         Screen.Now => ShowNowCommand,
         Screen.Inbox => ShowInboxCommand,
         Screen.Next => ShowNextCommand,

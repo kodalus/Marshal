@@ -665,7 +665,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await main.ShowJournalCommand.ExecuteAsync(null);
         await main.WrocAsync();
 
-        main.IsToday.Should().BeTrue();
+        main.Current.Should().Be(Screen.Today);
         main.MaDokadWrocic.Should().BeFalse("z ekranu domowego cofnięcie należy do systemu");
     }
 
