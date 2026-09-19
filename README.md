@@ -77,6 +77,21 @@ w całości, tylko offline i na jednym urządzeniu.
 
 .NET 10, Avalonia UI 11, EF Core 10 + SQLite. Jeden projekt UI na Windows i Androida.
 
+## Język
+
+Nazwy w kodzie — klasy, metody, właściwości, pola, parametry, zmienne — są po angielsku.
+Reszta jest po polsku: komentarze, dokumentacja XML, teksty w interfejsie, opisy zmian
+i dokumenty w `docs/`.
+
+Dwa wyjątki, oba świadome:
+
+- **Nazwy testów zostają po polsku.** Nazwa testu w tym repozytorium jest zdaniem —
+  `Odhaczenie_dwa_razy_tego_samego_dnia_nie_robi_dwoch_nastepnikow` — i należy do opisu,
+  a nie do kodu. Angielskie są za to nazwy klas testowych, pomocników i zmiennych.
+- **Nazwy migracji zostają po polsku.** Trafiły do tabeli `__EFMigrationsHistory` na każdym
+  urządzeniu, które je zastosowało, więc są dziennikiem zdarzeń, a nie kodem do czytania.
+  Nowe migracje dostają nazwy angielskie.
+
 ## Synchronizacja
 
 Każde urządzenie zapisuje wyłącznie własny plik zmian w folderze na Dysku Google i nigdy
