@@ -14,7 +14,7 @@ internal sealed class FakeDrive : IDriveClient
 {
     private readonly Dictionary<string, string> _folders = [];
     private readonly List<(string Folder, DriveFile File, string Content)> _files = [];
-    private int _kolejny;
+    private int _next;
 
     public int Zapisow { get; private set; }
 
@@ -26,7 +26,7 @@ internal sealed class FakeDrive : IDriveClient
 
         if (!_folders.TryGetValue(name, out var id))
         {
-            id = "kat-" + (++_kolejny);
+            id = "kat-" + (++_next);
             _folders[name] = id;
         }
 
@@ -45,7 +45,7 @@ internal sealed class FakeDrive : IDriveClient
         string folderId, string name, string content, CancellationToken ct = default)
     {
         Zapisow++;
-        _files.Add((folderId, new DriveFile("plik-" + (++_kolejny), name), content));
+        _files.Add((folderId, new DriveFile("plik-" + (++_next), name), content));
         return Task.CompletedTask;
     }
 
@@ -53,7 +53,7 @@ internal sealed class FakeDrive : IDriveClient
     public void Zdubluj(string name)
     {
         var oryginal = _files.First(f => f.File.Name == name);
-        _files.Add((oryginal.Folder, new DriveFile("plik-" + (++_kolejny), name), oryginal.Content));
+        _files.Add((oryginal.Folder, new DriveFile("plik-" + (++_next), name), oryginal.Content));
     }
 
     public void PodrzucSmiec(string name) =>
@@ -64,18 +64,18 @@ public sealed class GoogleDriveTransportTests
 {
     private readonly FakeDrive _drive = new();
 
-    private GoogleDriveTransport Skladnica() => new(_drive);
+    private GoogleDriveTransport NewStore() => new(_drive);
 
     [Fact]
     public async Task Pusty_dysk_nie_ma_zadnych_porcji()
     {
-        (await Skladnica().ListSegmentsAsync()).Should().BeEmpty();
+        (await NewStore().ListSegmentsAsync()).Should().BeEmpty();
     }
 
     [Fact]
     public async Task Zapisana_porcja_wraca_w_calosci()
     {
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000001", "pierwsza\ndruga\n");
 
@@ -90,7 +90,7 @@ public sealed class GoogleDriveTransportTests
     {
         // Płaskie nazewnictwo to jedyne, co odróżnia urządzenia na Dysku — katalogów
         // na urządzenie nie ma celowo, bo nazwy katalogów nie są unikalne.
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000001", "z biurka\n");
         await store.WriteSegmentAsync("telefon", "000001", "z telefonu\n");
@@ -105,7 +105,7 @@ public sealed class GoogleDriveTransportTests
     [Fact]
     public async Task Porcje_wracaja_w_porzadku_nazw()
     {
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000010", "dziesiąta\n");
         await store.WriteSegmentAsync("biurko", "000002", "druga\n");
@@ -120,7 +120,7 @@ public sealed class GoogleDriveTransportTests
     {
         // Ponowienie zapisu po zerwanym połączeniu zostawia na Dysku dwa pliki o tej
         // samej nazwie. Treść jest ta sama, więc porcja ma się pojawić na liście raz.
-        var store = Skladnica();
+        var store = NewStore();
         await store.WriteSegmentAsync("biurko", "000001", "treść\n");
         _drive.Zdubluj("biurko.000001.jsonl");
 
@@ -131,7 +131,7 @@ public sealed class GoogleDriveTransportTests
     public async Task Obcy_plik_w_katalogu_nie_jest_porcja()
     {
         // Katalog roboczy może dostać cokolwiek — choćby notatkę wrzuconą ręcznie.
-        var store = Skladnica();
+        var store = NewStore();
         await store.WriteSegmentAsync("biurko", "000001", "treść\n");
         _drive.PodrzucSmiec("notatka.txt");
         _drive.PodrzucSmiec("bez-kropki.jsonl");
@@ -143,7 +143,7 @@ public sealed class GoogleDriveTransportTests
     [Fact]
     public async Task Zapisana_porcja_nie_daje_sie_nadpisac()
     {
-        var store = Skladnica();
+        var store = NewStore();
         await store.WriteSegmentAsync("biurko", "000001", "pierwotna\n");
 
         var again = async () =>
@@ -156,7 +156,7 @@ public sealed class GoogleDriveTransportTests
     [Fact]
     public async Task Odczyt_nieistniejacej_porcji_zwraca_pustke()
     {
-        (await Skladnica().ReadSegmentAsync(new LogSegment("nieznane", "000001")))
+        (await NewStore().ReadSegmentAsync(new LogSegment("nieznane", "000001")))
             .Should().BeEmpty();
     }
 
@@ -165,7 +165,7 @@ public sealed class GoogleDriveTransportTests
     {
         // Każde szukanie katalogu to osobne odpytanie sieci. Przy synchronizacji
         // wołanej co kilka minut na telefonie to nie jest kosmetyka.
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000001", "a\n");
         await store.ListSegmentsAsync();
@@ -185,7 +185,7 @@ public sealed class GoogleDriveTransportTests
         // Kropka rozdziela człony nazwy, więc kropka w identyfikatorze rozsypałaby
         // odczyt: „a.b.000001.jsonl" przeczytałoby się jako urządzenie „a".
         var save = async () =>
-            await Skladnica().WriteSegmentAsync(device, "000001", "cokolwiek\n");
+            await NewStore().WriteSegmentAsync(device, "000001", "cokolwiek\n");
 
         await save.Should().ThrowAsync<ArgumentException>();
     }

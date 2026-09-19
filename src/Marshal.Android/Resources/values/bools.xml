@@ -5,5 +5,5 @@
   a nie jego powtórzeniem.
 -->
 <resources>
-  <bool name="ciemne_ikony_paskow">true</bool>
+  <bool name="dark_bar_icons">true</bool>
 </resources>

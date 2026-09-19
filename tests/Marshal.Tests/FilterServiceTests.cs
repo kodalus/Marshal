@@ -25,37 +25,37 @@ public sealed class FilterServiceTests : IDisposable
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Clock _zegar = new();
+    private readonly Clock _clock = new();
     private readonly HlcSource _hlc;
-    private readonly FilterService _usluga;
-    private readonly Guid _obszar = Guid.CreateVersion7();
+    private readonly FilterService _service;
+    private readonly Guid _area = Guid.CreateVersion7();
 
     public FilterServiceTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
-                .UseSqlite(_polaczenie)
+                .UseSqlite(_connection)
                 .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
         _db.Database.Migrate();
-        _hlc = new HlcSource(_zegar, "biurko");
+        _hlc = new HlcSource(_clock, "biurko");
 
-        _usluga = new FilterService(
+        _service = new FilterService(
             new SavedFilterRepository(_db),
             new TaskRepository(_db),
             new TagRepository(_db),
             new UnitOfWork(_db),
-            _zegar,
+            _clock,
             _hlc);
     }
 
     private TaskItem TaskId(string title, Action<TaskItem>? set = null)
     {
-        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
-        task.MakeNext(_obszar, _hlc.Next());
+        var task = TaskItem.Capture(title, _clock.Now, _hlc.Next());
+        task.MakeNext(_area, _hlc.Next());
         set?.Invoke(task);
 
         _db.Tasks.Add(task);
@@ -66,9 +66,9 @@ public sealed class FilterServiceTests : IDisposable
 
     private Guid Otaguj(TaskItem task, string name)
     {
-        var tag = new Tag(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), name, sortOrder: 0);
+        var tag = new Tag(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), name, sortOrder: 0);
         _db.Tags.Add(tag);
-        _db.TaskTags.Add(new TaskTag(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), task.Id, tag.Id));
+        _db.TaskTags.Add(new TaskTag(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), task.Id, tag.Id));
         _db.SaveChanges();
 
         return tag.Id;
@@ -81,7 +81,7 @@ public sealed class FilterServiceTests : IDisposable
         TaskId("przeczytać umowę", z => z.SetEstimate(90, Energy.High, _hlc.Next()));
         TaskId("nieoszacowane");
 
-        var result = await _usluga.RunAsync(new FilterQuery([FilterCondition.Estimate(15)]));
+        var result = await _service.RunAsync(new FilterQuery([FilterCondition.Estimate(15)]));
 
         result.Should().ContainSingle().Which.Title.Should().Be("zadzwonić do przychodni");
     }
@@ -93,7 +93,7 @@ public sealed class FilterServiceTests : IDisposable
         TaskId("bez tagu");
         var tag = Otaguj(otagowane, "zakupy");
 
-        var result = await _usluga.RunAsync(new FilterQuery([FilterCondition.Tags(tag)]));
+        var result = await _service.RunAsync(new FilterQuery([FilterCondition.Tags(tag)]));
 
         result.Should().ContainSingle().Which.Id.Should().Be(otagowane.Id);
     }
@@ -110,7 +110,7 @@ public sealed class FilterServiceTests : IDisposable
         powiazanie.MarkDeleted(_hlc.Next());
         await _db.SaveChangesAsync();
 
-        (await _usluga.RunAsync(new FilterQuery([FilterCondition.Tags(tag)]))).Should().BeEmpty();
+        (await _service.RunAsync(new FilterQuery([FilterCondition.Tags(tag)]))).Should().BeEmpty();
     }
 
     [Fact]
@@ -118,8 +118,8 @@ public sealed class FilterServiceTests : IDisposable
     {
         TaskId("cokolwiek");
 
-        (await _usluga.RunAsync(FilterQuery.Empty)).Should().BeEmpty();
-        (await _usluga.RunAsync(null)).Should().BeEmpty();
+        (await _service.RunAsync(FilterQuery.Empty)).Should().BeEmpty();
+        (await _service.RunAsync(null)).Should().BeEmpty();
     }
 
     [Fact]
@@ -130,9 +130,9 @@ public sealed class FilterServiceTests : IDisposable
             FilterCondition.Estimate(15),
         ]);
 
-        var saved = await _usluga.SaveAsync("Kwadrans", filter);
+        var saved = await _service.SaveAsync("Kwadrans", filter);
 
-        var ulubione = await _usluga.FavouritesAsync();
+        var ulubione = await _service.FavouritesAsync();
         ulubione.Should().ContainSingle();
         ulubione[0].Name.Should().Be("Kwadrans");
         ulubione[0].Id.Should().Be(saved.Id);
@@ -143,31 +143,31 @@ public sealed class FilterServiceTests : IDisposable
     [Fact]
     public async Task Ulubione_trzymaja_kolejnosc_zapisywania()
     {
-        await _usluga.SaveAsync("Pierwszy", new FilterQuery([FilterCondition.States(TaskState.Next)]));
-        await _usluga.SaveAsync("Drugi", new FilterQuery([FilterCondition.States(TaskState.Waiting)]));
-        await _usluga.SaveAsync("Trzeci", new FilterQuery([FilterCondition.States(TaskState.Someday)]));
+        await _service.SaveAsync("Pierwszy", new FilterQuery([FilterCondition.States(TaskState.Next)]));
+        await _service.SaveAsync("Drugi", new FilterQuery([FilterCondition.States(TaskState.Waiting)]));
+        await _service.SaveAsync("Trzeci", new FilterQuery([FilterCondition.States(TaskState.Someday)]));
 
-        (await _usluga.FavouritesAsync()).Select(f => f.Name)
+        (await _service.FavouritesAsync()).Select(f => f.Name)
             .Should().ContainInOrder("Pierwszy", "Drugi", "Trzeci");
     }
 
     [Fact]
     public async Task Widoku_bez_warunkow_nie_da_sie_zapisac()
     {
-        var patch = async () => await _usluga.SaveAsync("Pusty", FilterQuery.Empty);
+        var patch = async () => await _service.SaveAsync("Pusty", FilterQuery.Empty);
         await patch.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]
     public async Task Skasowany_widok_znika_z_ulubionych_ale_zostaje_nagrobek()
     {
-        var saved = await _usluga.SaveAsync(
+        var saved = await _service.SaveAsync(
             "Do skasowania", new FilterQuery([FilterCondition.States(TaskState.Next)]));
 
-        await _usluga.DeleteAsync(saved.Id);
+        await _service.DeleteAsync(saved.Id);
 
-        (await _usluga.FavouritesAsync()).Should().BeEmpty();
-        (await _usluga.FindAsync(saved.Id)).Should().BeNull();
+        (await _service.FavouritesAsync()).Should().BeEmpty();
+        (await _service.FindAsync(saved.Id)).Should().BeNull();
 
         // Usunięcia fizycznego nie ma (spec 5.1) — inaczej drugie urządzenie
         // wskrzesiłoby widok przy najbliższym scaleniu.
@@ -177,13 +177,13 @@ public sealed class FilterServiceTests : IDisposable
     [Fact]
     public async Task Zmiana_widoku_zapisuje_sie_bez_tworzenia_drugiego()
     {
-        var saved = await _usluga.SaveAsync(
+        var saved = await _service.SaveAsync(
             "Kwadrans", new FilterQuery([FilterCondition.Estimate(15)]));
 
-        await _usluga.UpdateAsync(
+        await _service.UpdateAsync(
             saved.Id, "Pół godziny", new FilterQuery([FilterCondition.Estimate(30)]));
 
-        var ulubione = await _usluga.FavouritesAsync();
+        var ulubione = await _service.FavouritesAsync();
         ulubione.Should().ContainSingle();
         ulubione[0].Name.Should().Be("Pół godziny");
         ulubione[0].Query!.Conditions[0].MaxMinutes.Should().Be(30);
@@ -195,10 +195,10 @@ public sealed class FilterServiceTests : IDisposable
         // Cały filtr w jednej kolumnie znaczy jeden wpis w dzienniku — i to jest
         // powód, dla którego kolumna jest jedna: scalanie per pole nie ma jak złożyć
         // widoku z połówek dwóch różnych decyzji.
-        var saved = await _usluga.SaveAsync(
+        var saved = await _service.SaveAsync(
             "Kwadrans", new FilterQuery([FilterCondition.Estimate(15)]));
 
-        await _usluga.UpdateAsync(
+        await _service.UpdateAsync(
             saved.Id, "Kwadrans", new FilterQuery([
                 FilterCondition.Estimate(30),
                 FilterCondition.States(TaskState.Next),
@@ -214,6 +214,6 @@ public sealed class FilterServiceTests : IDisposable
     public void Dispose()
     {
         _db.Dispose();
-        _polaczenie.Dispose();
+        _connection.Dispose();
     }
 }

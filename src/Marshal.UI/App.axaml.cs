@@ -74,9 +74,9 @@ public partial class App : Avalonia.Application
     }
 
     /// <summary>Podpięcie okna. Spełnia prośbę, która przyszła, zanim okno powstało.</summary>
-    private static void HookCalendar(Action<Guid?> pokaz)
+    private static void HookCalendar(Action<Guid?> show)
     {
-        _showCalendar = pokaz;
+        _showCalendar = show;
 
         if (!_calendarAsked)
         {
@@ -88,7 +88,7 @@ public partial class App : Avalonia.Application
         var task = _askedTask;
         _askedTask = null;
 
-        pokaz(task);
+        show(task);
     }
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);

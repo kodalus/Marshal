@@ -22,10 +22,10 @@ public static class SyncScope
     public static IDisposable Begin()
     {
         Applying.Value = true;
-        return new Zakres();
+        return new Scope();
     }
 
-    private sealed class Zakres : IDisposable
+    private sealed class Scope : IDisposable
     {
         public void Dispose() => Applying.Value = false;
     }

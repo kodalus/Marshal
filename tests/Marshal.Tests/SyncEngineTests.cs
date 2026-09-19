@@ -67,17 +67,17 @@ public sealed class SyncEngineTests : IDisposable
         }
     }
 
-    private readonly string _katalog =
+    private readonly string _folder =
         Path.Combine(Path.GetTempPath(), "marshal-sync-" + Guid.NewGuid().ToString("N"));
 
     private readonly Device _biurko;
     private readonly Device _telefon;
-    private readonly Guid _obszar = Guid.CreateVersion7();
+    private readonly Guid _area = Guid.CreateVersion7();
 
     public SyncEngineTests()
     {
-        _biurko = new Device("biurko", _katalog);
-        _telefon = new Device("telefon", _katalog);
+        _biurko = new Device("biurko", _folder);
+        _telefon = new Device("telefon", _folder);
     }
 
     private static Guid Add(Device u, string title)
@@ -224,7 +224,7 @@ public sealed class SyncEngineTests : IDisposable
         Add(_biurko, "pierwsze");
         await _biurko.Engine.SyncAsync();
 
-        var store = new LocalFolderTransport(_katalog);
+        var store = new LocalFolderTransport(_folder);
         await store.WriteSegmentAsync("biurko", "000002", "{\"e\":\"Tasks\",\"id\":\n");
 
         Add(_biurko, "trzecie");
@@ -244,7 +244,7 @@ public sealed class SyncEngineTests : IDisposable
         Add(_biurko, "drugie");
         await _biurko.Engine.SyncAsync();
 
-        var chunks = await new LocalFolderTransport(_katalog).ListSegmentsAsync();
+        var chunks = await new LocalFolderTransport(_folder).ListSegmentsAsync();
 
         chunks.Where(s => s.DeviceId == "biurko").Select(s => s.Name)
             .Should().Equal("000001", "000002");
@@ -320,9 +320,9 @@ public sealed class SyncEngineTests : IDisposable
         _biurko.Dispose();
         _telefon.Dispose();
 
-        if (Directory.Exists(_katalog))
+        if (Directory.Exists(_folder))
         {
-            Directory.Delete(_katalog, recursive: true);
+            Directory.Delete(_folder, recursive: true);
         }
     }
 }

@@ -570,9 +570,9 @@ public sealed partial class CalendarViewModel(
             return MonthFallback;
         }
 
-        var naWpisy = (_weekHeight / weeks) - CellBorder - DayNumber;
+        var forEntries = (_weekHeight / weeks) - CellBorder - DayNumber;
 
-        return Math.Clamp((int)Math.Floor(naWpisy / EntryHeight), 1, 20);
+        return Math.Clamp((int)Math.Floor(forEntries / EntryHeight), 1, 20);
     }
 
     public double GridHeight => 24 * HourHeight;

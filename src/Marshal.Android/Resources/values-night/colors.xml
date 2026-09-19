@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Tylko to, co różni się od motywu jasnego. Reszta bierze się z values/colors.xml. -->
 <resources>
-  <color name="tlo_okna">#121729</color>
+  <color name="window_background">#121729</color>
 </resources>

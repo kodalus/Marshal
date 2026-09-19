@@ -87,12 +87,12 @@ public sealed class RecurrenceScheduleTests
     [InlineData("2026-01-31", "2026-02-28")]
     [InlineData("2026-03-31", "2026-04-30")]
     [InlineData("2028-01-31", "2028-02-29")]
-    public void Trzydziesty_pierwszy_przycina_sie_do_dlugosci_miesiaca(string baza, string oczekiwana)
+    public void Trzydziesty_pierwszy_przycina_sie_do_dlugosci_miesiaca(string db, string oczekiwana)
     {
         // Dlatego „ostatniego każdego miesiąca" nie potrzebuje osobnego pola.
         var rule = new RecurrenceRule(RecurrenceKind.Monthly, dayOfMonth: RecurrenceRule.LastDay);
 
-        RecurrenceSchedule.Next(rule, D(baza)).Should().Be(D(oczekiwana));
+        RecurrenceSchedule.Next(rule, D(db)).Should().Be(D(oczekiwana));
     }
 
     [Fact]

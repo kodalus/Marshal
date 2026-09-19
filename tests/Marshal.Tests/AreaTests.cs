@@ -9,13 +9,13 @@ public class AreaTests
 {
     private static readonly DateTimeOffset Kiedys = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
 
-    private static Area Obszar(string name = "Zdrowie") =>
+    private static Area NewArea(string name = "Zdrowie") =>
         new(Guid.CreateVersion7(), Kiedys, new Hlc(1000, 0, "a"), name, sortOrder: 1.0);
 
     [Fact]
     public void Nowy_obszar_jest_aktywny_i_ma_progi_domyslne()
     {
-        var area = Obszar();
+        var area = NewArea();
 
         area.IsActive.Should().BeTrue();
         area.Deleted.Should().BeFalse();
@@ -26,7 +26,7 @@ public class AreaTests
     [Fact]
     public void Nazwa_jest_przycinana_z_bialych_znakow()
     {
-        Obszar("  Sprawy urzędowe  ").Name.Should().Be("Sprawy urzędowe");
+        NewArea("  Sprawy urzędowe  ").Name.Should().Be("Sprawy urzędowe");
     }
 
     [Theory]
@@ -34,7 +34,7 @@ public class AreaTests
     [InlineData("   ")]
     public void Pusta_nazwa_jest_odrzucana(string name)
     {
-        var utworz = () => Obszar(name);
+        var utworz = () => NewArea(name);
 
         utworz.Should().Throw<ArgumentException>();
     }
@@ -42,7 +42,7 @@ public class AreaTests
     [Fact]
     public void Progi_musza_byc_dodatnie()
     {
-        var area = Obszar();
+        var area = NewArea();
 
         var zeroweCiche = () => area.SetThresholds(0, 7, new Hlc(2000, 0, "a"));
 
@@ -52,7 +52,7 @@ public class AreaTests
     [Fact]
     public void Zmiana_pola_podnosi_znacznik_zmiany()
     {
-        var area = Obszar();
+        var area = NewArea();
         var before = area.UpdatedAt;
 
         area.Rename("Zdrowie moje", new Hlc(2000, 0, "a"));
@@ -63,17 +63,17 @@ public class AreaTests
     [Fact]
     public void Znacznik_nie_moze_sie_cofnac()
     {
-        var area = Obszar();
+        var area = NewArea();
 
-        var cofnij = () => area.Rename("Cokolwiek", new Hlc(500, 0, "a"));
+        var undo = () => area.Rename("Cokolwiek", new Hlc(500, 0, "a"));
 
-        cofnij.Should().Throw<ArgumentException>();
+        undo.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void Usuniecie_jest_logiczne_i_odwracalne()
     {
-        var area = Obszar();
+        var area = NewArea();
 
         area.MarkDeleted(new Hlc(2000, 0, "a"));
         area.Deleted.Should().BeTrue();

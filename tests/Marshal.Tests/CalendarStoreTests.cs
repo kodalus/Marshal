@@ -33,7 +33,7 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>Kanał, który oddaje to, co mu się włoży. Bez sieci i bez niespodzianek.</summary>
-    private sealed class Kanal(CalendarKind kind) : ICalendarFeed
+    private sealed class NewFeed(CalendarKind kind) : ICalendarFeed
     {
         public FeedResult Next { get; set; } = new([], null, true);
 
@@ -57,7 +57,7 @@ public sealed class CalendarStoreTests : IDisposable
     /// <summary>Dziennik, który tylko zapamiętuje — żeby dało się sprawdzić, co by zapisał.</summary>
     private sealed class Notes : IActivityLog
     {
-        public List<(string Operation, string Outcome, ActivityLevel Level)> Wpisy { get; } = [];
+        public List<(string Operation, string Outcome, ActivityLevel Level)> Entries { get; } = [];
 
         public int Dropped => 0;
 
@@ -65,7 +65,7 @@ public sealed class CalendarStoreTests : IDisposable
             string operation, string outcome, ActivityLevel level = ActivityLevel.Ok,
             string? detail = null, CancellationToken ct = default)
         {
-            Wpisy.Add((operation, outcome, level));
+            Entries.Add((operation, outcome, level));
             return Task.CompletedTask;
         }
 
@@ -77,7 +77,7 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>Ustawienia z jedną strefą. Warszawa, bo o nią w tym projekcie chodzi.</summary>
-    private sealed class Ustawienia : ISettings
+    private sealed class Settings : ISettings
     {
         public TimeZoneInfo Zone { get; } = TimeZoneInfo.FindSystemTimeZoneById("Europe/Warsaw");
 
@@ -95,13 +95,13 @@ public sealed class CalendarStoreTests : IDisposable
 
         public void SetMainCalendar(Guid? calendarId) => MainCalendarId = calendarId;
 
-        public List<string> Konta { get; } = [];
+        public List<string> Accounts { get; } = [];
 
-        public IReadOnlyList<string> CalendarAccounts => Konta;
+        public IReadOnlyList<string> CalendarAccounts => Accounts;
 
-        public void AddCalendarAccount(string email) => Konta.Add(email);
+        public void AddCalendarAccount(string email) => Accounts.Add(email);
 
-        public void RemoveCalendarAccount(string email) => Konta.Remove(email);
+        public void RemoveCalendarAccount(string email) => Accounts.Remove(email);
 
         public void SetGoogleCalendarEnabled(bool enabled) => throw new NotSupportedException();
 
@@ -114,9 +114,9 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>Pisarz, który tylko zapamiętuje, co by wysłał.</summary>
-    private sealed class Pisarz : ICalendarWriter
+    private sealed class NewWriter : ICalendarWriter
     {
-        public List<(string Co, string Title, string? Id, bool Calodniowe)> Wyslane { get; } = [];
+        public List<(string Co, string Title, string? Id, bool AllDay)> Wyslane { get; } = [];
 
         public bool Rzuca { get; set; }
 
@@ -188,7 +188,7 @@ public sealed class CalendarStoreTests : IDisposable
         }
 
         /// <summary>Kto już jest gościem którego wydarzenia — atrapa listy u źródła.</summary>
-        public Dictionary<string, List<string>> Goscie { get; } = [];
+        public Dictionary<string, List<string>> Guests { get; } = [];
 
         public Task<bool> InviteAsync(
             CalendarSource source, string externalId, string email, CancellationToken ct = default)
@@ -198,10 +198,10 @@ public sealed class CalendarStoreTests : IDisposable
                 throw new HttpRequestException("kalendarz nie odpowiada");
             }
 
-            if (!Goscie.TryGetValue(externalId, out var list))
+            if (!Guests.TryGetValue(externalId, out var list))
             {
                 list = [];
-                Goscie[externalId] = list;
+                Guests[externalId] = list;
             }
 
             if (list.Contains(email, StringComparer.OrdinalIgnoreCase))
@@ -216,41 +216,41 @@ public sealed class CalendarStoreTests : IDisposable
         }
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Clock _zegar = new();
+    private readonly Clock _clock = new();
     private readonly HlcSource _hlc;
     private readonly CalendarStore _sklad;
-    private readonly Kanal _kanal = new(CalendarKind.Ical);
-    private readonly CalendarSyncService _usluga;
-    private readonly CalendarSource _zrodlo;
-    private readonly Pisarz _pisarz = new();
-    private readonly TaskEditService _edycja;
+    private readonly NewFeed _feed = new(CalendarKind.Ical);
+    private readonly CalendarSyncService _service;
+    private readonly CalendarSource _source;
+    private readonly NewWriter _writer = new();
+    private readonly TaskEditService _edit;
 
     public CalendarStoreTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
-                .UseSqlite(_polaczenie)
+                .UseSqlite(_connection)
                 .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
         _db.Database.Migrate();
-        _hlc = new HlcSource(_zegar, "biurko");
+        _hlc = new HlcSource(_clock, "biurko");
         _sklad = new CalendarStore(_db);
 
-        _usluga = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), [_pisarz],
+        _service = new CalendarSyncService(
+            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, new Settings(), [_writer],
             new ProjectRepository(_db), new AreaRepository(_db));
 
-        _edycja = new TaskEditService(
-            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar, new AreaRepository(_db),
+        _edit = new TaskEditService(
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _clock, new AreaRepository(_db),
             new NoTaskMirror());
 
-        _zrodlo = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+        _source = new CalendarSource(
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
-        _db.CalendarSources.Add(_zrodlo);
+        _db.CalendarSources.Add(_source);
         _db.SaveChanges();
     }
 
@@ -262,9 +262,9 @@ public sealed class CalendarStoreTests : IDisposable
     /// <see cref="IClock"/>, a takich nie widać przez typ, który interfejs realizuje.
     /// Drugi raz w tym projekcie.
     /// </remarks>
-    private DateOnly Dzis => ((IClock)_zegar).Today;
+    private DateOnly Today => ((IClock)_clock).Today;
 
-    private static FeedEvent Wydarzenie(string id, string title, string day, int od, int toHour) =>
+    private static FeedEvent NewEvent(string id, string title, string day, int od, int toHour) =>
         new(id, title,
             new DateTimeOffset(DateOnly.Parse(day).ToDateTime(new TimeOnly(od, 0)), TimeSpan.FromHours(2)),
             new DateTimeOffset(DateOnly.Parse(day).ToDateTime(new TimeOnly(toHour, 0)), TimeSpan.FromHours(2)),
@@ -273,9 +273,9 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Pierwsze_pobranie_zapisuje_wydarzenia()
     {
-        _kanal.Next = new FeedResult([Wydarzenie("a", "Zebranie", "2026-09-17", 17, 18)], null, true);
+        _feed.Next = new FeedResult([NewEvent("a", "Zebranie", "2026-09-17", 17, 18)], null, true);
 
-        var report = await _usluga.RefreshAsync();
+        var report = await _service.RefreshAsync();
 
         report.Sources.Should().Be(1);
         report.Events.Should().Be(1);
@@ -292,17 +292,17 @@ public sealed class CalendarStoreTests : IDisposable
         // Minuta później, żeby „najstarsze" miało jednoznaczne znaczenie: dwa wiersze
         // założone w tej samej milisekundzie rozstrzyga dopiero identyfikator, a te są
         // wtedy względem siebie nieuporządkowane.
-        _zegar.Now = _zegar.Now.AddMinutes(1);
+        _clock.Now = _clock.Now.AddMinutes(1);
 
         var zDrugiegoUrzadzenia = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
         _db.CalendarSources.Add(zDrugiegoUrzadzenia);
         _db.SaveChanges();
 
-        _kanal.Next = new FeedResult([Wydarzenie("a", "Zebranie", "2026-09-17", 17, 18)], null, true);
+        _feed.Next = new FeedResult([NewEvent("a", "Zebranie", "2026-09-17", 17, 18)], null, true);
 
-        var report = await _usluga.RefreshAsync(force: true);
+        var report = await _service.RefreshAsync(force: true);
 
         report.Folded.Should().Be(1, "zostaje najstarsze podłączenie, reszta odpada");
 
@@ -312,7 +312,7 @@ public sealed class CalendarStoreTests : IDisposable
         _db.CalendarEvents.Should().ContainSingle();
 
         var zostale = await _sklad.SourcesAsync();
-        zostale.Should().ContainSingle().Which.Id.Should().Be(_zrodlo.Id);
+        zostale.Should().ContainSingle().Which.Id.Should().Be(_source.Id);
     }
 
     [Fact]
@@ -322,35 +322,35 @@ public sealed class CalendarStoreTests : IDisposable
         // przy zapisie: „tego kalendarza już nie ma na liście podłączonych" przy zadaniu,
         // którego nikt nie ruszał. Odczyt szedł przez to, co zostało, a zapis przez to,
         // co zniknęło.
-        _zegar.Now = _zegar.Now.AddMinutes(1);
+        _clock.Now = _clock.Now.AddMinutes(1);
 
         var mlodsze = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
         _db.CalendarSources.Add(mlodsze);
 
-        var task = TaskItem.Capture("Zebranie", _zegar.Now, _hlc.Next());
+        var task = TaskItem.Capture("Zebranie", _clock.Now, _hlc.Next());
         task.Share(mlodsze.Id, "zewnetrzny-1", _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        var settings = new Ustawienia();
+        var settings = new Settings();
         settings.SetMainCalendar(mlodsze.Id);
 
         var service = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, settings, [_pisarz],
+            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, settings, [_writer],
             new ProjectRepository(_db), new AreaRepository(_db));
 
-        _kanal.Next = new FeedResult([], null, true);
+        _feed.Next = new FeedResult([], null, true);
 
         (await service.RefreshAsync(force: true)).Folded.Should().Be(1);
 
         // Obie strony wskazywały **ten sam** kalendarz u źródła — na tym polega bycie
         // duplikatem — więc identyfikator wydarzenia zostaje ważny.
-        settings.MainCalendarId.Should().Be(_zrodlo.Id);
+        settings.MainCalendarId.Should().Be(_source.Id);
 
         var przepiete = _db.Tasks.Single(t => t.Id == task.Id);
-        przepiete.SharedCalendarId.Should().Be(_zrodlo.Id);
+        przepiete.SharedCalendarId.Should().Be(_source.Id);
         przepiete.SharedEventId.Should().Be("zewnetrzny-1");
     }
 
@@ -361,22 +361,22 @@ public sealed class CalendarStoreTests : IDisposable
         // identyfikator wiersza. Wybór kalendarza się synchronizuje, więc zadanie
         // udostępnione na komputerze przyjeżdża na telefon ze wskazaniem na wiersz
         // komputera — a składanie duplikatów robi z jednego z nich nagrobek.
-        _zegar.Now = _zegar.Now.AddMinutes(1);
+        _clock.Now = _clock.Now.AddMinutes(1);
 
         var zDrugiegoUrzadzenia = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
         _db.CalendarSources.Add(zDrugiegoUrzadzenia);
         _db.SaveChanges();
 
-        _kanal.Next = new FeedResult([], null, true);
-        (await _usluga.RefreshAsync(force: true)).Folded.Should().Be(1);
+        _feed.Next = new FeedResult([], null, true);
+        (await _service.RefreshAsync(force: true)).Folded.Should().Be(1);
 
         // Sedno: wskazanie na nagrobek nie jest brakiem kalendarza. Odmowa przy nim
         // wyglądała absurdalnie — wszystkie kalendarze wyświetlały się poprawnie,
         // a zadania z drugiego urządzenia nie dawały się ani zapisać, ani skasować.
-        (await _usluga.LiveCalendarAsync(zDrugiegoUrzadzenia.Id)).Should().Be(_zrodlo.Id);
-        (await _usluga.LiveCalendarAsync(_zrodlo.Id)).Should().Be(_zrodlo.Id);
+        (await _service.LiveCalendarAsync(zDrugiegoUrzadzenia.Id)).Should().Be(_source.Id);
+        (await _service.LiveCalendarAsync(_source.Id)).Should().Be(_source.Id);
     }
 
     [Fact]
@@ -384,7 +384,7 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Jedyny przypadek, w którym zapis ma odmówić: odłączono ręcznie i nic nie
         // zajęło miejsca. Bez tego rozróżnienia naprawa przykrywałaby prawdziwy brak.
-        (await _usluga.LiveCalendarAsync(Guid.CreateVersion7())).Should().BeNull();
+        (await _service.LiveCalendarAsync(Guid.CreateVersion7())).Should().BeNull();
     }
 
     [Fact]
@@ -393,25 +393,25 @@ public sealed class CalendarStoreTests : IDisposable
         // Składanie duplikatów przepina to, co widzi w chwili składania. Aplikacja,
         // w której złożenie odbyło się przed tą poprawką, zostałaby ze wskazaniem
         // wiszącym na zawsze — stąd naprawa przy każdym odświeżeniu.
-        _zegar.Now = _zegar.Now.AddMinutes(1);
+        _clock.Now = _clock.Now.AddMinutes(1);
 
         var mlodsze = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
         mlodsze.MarkDeleted(_hlc.Next());
         _db.CalendarSources.Add(mlodsze);
         _db.SaveChanges();
 
-        var settings = new Ustawienia { MainCalendarId = mlodsze.Id };
+        var settings = new Settings { MainCalendarId = mlodsze.Id };
 
         var service = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, settings, [_pisarz],
+            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, settings, [_writer],
             new ProjectRepository(_db), new AreaRepository(_db));
 
-        _kanal.Next = new FeedResult([], null, true);
+        _feed.Next = new FeedResult([], null, true);
         await service.RefreshAsync(force: true);
 
-        settings.MainCalendarId.Should().Be(_zrodlo.Id);
+        settings.MainCalendarId.Should().Be(_source.Id);
     }
 
     [Fact]
@@ -420,10 +420,10 @@ public sealed class CalendarStoreTests : IDisposable
         // Odrzucone źródło zostawiało po sobie wydarzenia: niewidoczne, bo źródła już
         // nie ma, ale policzone w „ile w bazie" — czyli mylące dokładnie w tym miejscu,
         // w którym się patrzy, szukając duplikatów.
-        _zegar.Now = _zegar.Now.AddMinutes(1);
+        _clock.Now = _clock.Now.AddMinutes(1);
 
         var drugie = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole");
         _db.CalendarSources.Add(drugie);
         _db.CalendarEvents.Add(new CalendarEvent(
@@ -433,9 +433,9 @@ public sealed class CalendarStoreTests : IDisposable
             false));
         _db.SaveChanges();
 
-        _kanal.Next = new FeedResult([], null, true);
+        _feed.Next = new FeedResult([], null, true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
         _db.CalendarEvents.Should().BeEmpty();
         (await _sklad.CountAsync()).Should().Be(0);
@@ -446,11 +446,11 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Klucz to para źródło–identyfikator zewnętrzny, więc to samo wydarzenie
         // przychodzące drugi raz ma się zaktualizować, a nie dopisać.
-        _kanal.Next = new FeedResult([Wydarzenie("a", "Zebranie", "2026-09-17", 17, 18)], null, true);
-        await _usluga.RefreshAsync();
+        _feed.Next = new FeedResult([NewEvent("a", "Zebranie", "2026-09-17", 17, 18)], null, true);
+        await _service.RefreshAsync();
 
-        _kanal.Next = new FeedResult([Wydarzenie("a", "Zebranie przełożone", "2026-09-17", 18, 19)], null, true);
-        await _usluga.RefreshAsync(force: true);
+        _feed.Next = new FeedResult([NewEvent("a", "Zebranie przełożone", "2026-09-17", 18, 19)], null, true);
+        await _service.RefreshAsync(force: true);
 
         _db.CalendarEvents.Should().ContainSingle();
         _db.CalendarEvents.Single().Title.Should().Be("Zebranie przełożone");
@@ -459,13 +459,13 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Pelne_pobranie_oznacza_zniknione_jako_odwolane()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("a", "Zostaje", "2026-09-17", 17, 18),
-             Wydarzenie("b", "Znika", "2026-09-18", 17, 18)], null, true);
-        await _usluga.RefreshAsync();
+        _feed.Next = new FeedResult(
+            [NewEvent("a", "Zostaje", "2026-09-17", 17, 18),
+             NewEvent("b", "Znika", "2026-09-18", 17, 18)], null, true);
+        await _service.RefreshAsync();
 
-        _kanal.Next = new FeedResult([Wydarzenie("a", "Zostaje", "2026-09-17", 17, 18)], null, true);
-        await _usluga.RefreshAsync(force: true);
+        _feed.Next = new FeedResult([NewEvent("a", "Zostaje", "2026-09-17", 17, 18)], null, true);
+        await _service.RefreshAsync(force: true);
 
         // Nagrobek, nie usunięcie — tak samo jak wszędzie indziej w tym modelu.
         _db.CalendarEvents.Should().HaveCount(2);
@@ -477,11 +477,11 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Przy przyrostowym „nie przyszło" znaczy „bez zmian". To samo sprzątanie
         // skasowałoby cały kalendarz przy pierwszym pobraniu, w którym nic się nie zmieniło.
-        _kanal.Next = new FeedResult([Wydarzenie("a", "Zostaje", "2026-09-17", 17, 18)], "zeton", true);
-        await _usluga.RefreshAsync();
+        _feed.Next = new FeedResult([NewEvent("a", "Zostaje", "2026-09-17", 17, 18)], "zeton", true);
+        await _service.RefreshAsync();
 
-        _kanal.Next = new FeedResult([], "zeton2", IsFull: false);
-        await _usluga.RefreshAsync(force: true);
+        _feed.Next = new FeedResult([], "zeton2", IsFull: false);
+        await _service.RefreshAsync(force: true);
 
         _db.CalendarEvents.Single().Cancelled.Should().BeFalse();
     }
@@ -489,19 +489,19 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zeton_jest_zapamietywany_i_podawany_dalej()
     {
-        _kanal.Next = new FeedResult([], "zeton-1", true);
-        await _usluga.RefreshAsync();
+        _feed.Next = new FeedResult([], "zeton-1", true);
+        await _service.RefreshAsync();
 
-        (await _sklad.CursorAsync(_zrodlo.Id))!.SyncToken.Should().Be("zeton-1");
+        (await _sklad.CursorAsync(_source.Id))!.SyncToken.Should().Be("zeton-1");
     }
 
     [Fact]
     public async Task Swiezo_pobrany_kalendarz_nie_jest_pobierany_znowu()
     {
-        await _usluga.RefreshAsync();
-        await _usluga.RefreshAsync();
+        await _service.RefreshAsync();
+        await _service.RefreshAsync();
 
-        _kanal.Wywolan.Should().Be(1);
+        _feed.Wywolan.Should().Be(1);
     }
 
     /// <summary>Po odstępie kalendarz pobiera się ponownie — sam, bez proszenia.</summary>
@@ -513,11 +513,11 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Po_odstepie_kalendarz_jest_pobierany_ponownie()
     {
-        await _usluga.RefreshAsync();
-        _zegar.Now = _zegar.Now.Add(CalendarSyncService.RefreshInterval).AddMinutes(1);
-        await _usluga.RefreshAsync();
+        await _service.RefreshAsync();
+        _clock.Now = _clock.Now.Add(CalendarSyncService.RefreshInterval).AddMinutes(1);
+        await _service.RefreshAsync();
 
-        _kanal.Wywolan.Should().Be(2);
+        _feed.Wywolan.Should().Be(2);
     }
 
     [Fact]
@@ -525,9 +525,9 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Kalendarz jest dodatkiem do zadań. Niedostępny kanał ma znaczyć „brak świeżych
         // wydarzeń", a nie „aplikacja się nie otwiera".
-        _kanal.Rzuca = true;
+        _feed.Rzuca = true;
 
-        var report = await _usluga.RefreshAsync();
+        var report = await _service.RefreshAsync();
 
         report.Failed.Should().Be(1);
         report.Sources.Should().Be(0);
@@ -536,26 +536,26 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Ukryty_kalendarz_znika_z_siatki_ale_zostaje_w_bazie()
     {
-        _kanal.Next = new FeedResult([Wydarzenie("a", "Zebranie", "2026-09-16", 17, 18)], null, true);
-        await _usluga.RefreshAsync();
+        _feed.Next = new FeedResult([NewEvent("a", "Zebranie", "2026-09-16", 17, 18)], null, true);
+        await _service.RefreshAsync();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().ContainSingle();
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().ContainSingle();
 
-        _zrodlo.SetVisible(false, _hlc.Next());
+        _source.SetVisible(false, _hlc.Next());
         _db.SaveChanges();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().BeEmpty();
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().BeEmpty();
         _db.CalendarEvents.Should().ContainSingle();
     }
 
     [Fact]
     public async Task Odwolane_wydarzenie_nie_trafia_na_siatke()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("a", "Odwołane", "2026-09-16", 17, 18) with { Cancelled = true }], null, true);
-        await _usluga.RefreshAsync();
+        _feed.Next = new FeedResult(
+            [NewEvent("a", "Odwołane", "2026-09-16", 17, 18) with { Cancelled = true }], null, true);
+        await _service.RefreshAsync();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().BeEmpty();
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().BeEmpty();
     }
 
     [Fact]
@@ -563,20 +563,20 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Zgadywanie godziny zrobiłoby z listy zadań kalendarz, w którym wszystko jest
         // umówione — a to jest ten rodzaj planowania, który się nie utrzymuje.
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var withHour = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
+        var withHour = TaskItem.Capture("Zadzwonić", _clock.Now, _hlc.Next());
         withHour.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
         withHour.SetDoTime(new TimeOnly(14, 0), _hlc.Next());
 
-        var bezGodziny = TaskItem.Capture("Kupić mleko", _zegar.Now, _hlc.Next());
-        bezGodziny.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        var withoutTime = TaskItem.Capture("Kupić mleko", _clock.Now, _hlc.Next());
+        withoutTime.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
 
-        _db.Tasks.AddRange(withHour, bezGodziny);
+        _db.Tasks.AddRange(withHour, withoutTime);
         _db.SaveChanges();
 
-        var day = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0];
+        var day = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0];
 
         day.Timed.Should().ContainSingle();
         day.Timed[0].Entry.Title.Should().Be("Zadzwonić");
@@ -595,20 +595,20 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zadanie_dziedziczy_barwe_obszaru_i_projektu()
     {
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         area.SetColor("#3FA36B", _hlc.Next());
         _db.Areas.Add(area);
 
         var project = new Project(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Opony na aucie", area.Id, 0);
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Opony na aucie", area.Id, 0);
         project.SetColor("#CF5757", _hlc.Next());
         _db.Projects.Add(project);
 
-        var fromArea = TaskItem.Capture("Z obszaru", _zegar.Now, _hlc.Next());
+        var fromArea = TaskItem.Capture("Z obszaru", _clock.Now, _hlc.Next());
         fromArea.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
         fromArea.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
 
-        var fromProject = TaskItem.Capture("Z projektu", _zegar.Now, _hlc.Next());
+        var fromProject = TaskItem.Capture("Z projektu", _clock.Now, _hlc.Next());
         fromProject.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
         fromProject.SetDoTime(new TimeOnly(11, 0), _hlc.Next());
         fromProject.MoveTo(area.Id, project.Id, _hlc.Next());
@@ -616,7 +616,7 @@ public sealed class CalendarStoreTests : IDisposable
         _db.Tasks.AddRange(fromArea, fromProject);
         _db.SaveChanges();
 
-        var day = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0];
+        var day = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0];
 
         day.Timed.Single(s => s.Entry.Title == "Z obszaru").Entry.Color.Should().Be("#3FA36B");
         day.Timed.Single(s => s.Entry.Title == "Z projektu").Entry.Color.Should().Be("#CF5757");
@@ -634,23 +634,23 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Przeciagniecie_odhaczonego_zadania_zostawia_ptaszek()
     {
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Zrobione", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Zrobione", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        await _edycja.CompleteAsync(task.Id);
-        await _edycja.RescheduleAsync(task.Id, Dzis, new TimeOnly(15, 30));
+        await _edit.CompleteAsync(task.Id);
+        await _edit.RescheduleAsync(task.Id, Today, new TimeOnly(15, 30));
 
         var poPrzeciagnieciu = _db.Tasks.Single(t => t.Id == task.Id);
         poPrzeciagnieciu.State.Should().Be(TaskState.Done);
         poPrzeciagnieciu.DoTime.Should().Be(new TimeOnly(15, 30));
 
-        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+        (await _service.AgendaAsync(Today, 1))[0].Timed
             .Single(b => b.Entry.TaskId == task.Id).Entry.IsDone.Should().BeTrue();
     }
 
@@ -664,23 +664,23 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zdjecie_ptaszka_przywraca_zadanie_do_zaplanowanych()
     {
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Pomyłka", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Pomyłka", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        await _edycja.CompleteAsync(task.Id);
-        await _edycja.ReopenAsync(task.Id);
+        await _edit.CompleteAsync(task.Id);
+        await _edit.ReopenAsync(task.Id);
 
         var poZdjeciu = _db.Tasks.Single(t => t.Id == task.Id);
         poZdjeciu.State.Should().Be(TaskState.Scheduled);
         poZdjeciu.CompletedAt.Should().BeNull();
 
-        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+        (await _service.AgendaAsync(Today, 1))[0].Timed
             .Single(b => b.Entry.TaskId == task.Id).Entry.IsDone.Should().BeFalse();
     }
 
@@ -695,17 +695,17 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Odhaczenie_wydarzenia_stawia_ptaszek_w_nazwie_u_zrodla()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: true);
+        await _service.SetEventDoneAsync(_source.Id, "s1", done: true);
 
-        _pisarz.Wyslane.Should().ContainSingle()
+        _writer.Wyslane.Should().ContainSingle()
             .Which.Should().Be(("nazwa", "✓ Spotkanie", "s1", false));
 
-        var entry = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Single();
+        var entry = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Single();
         entry.Entry.IsDone.Should().BeTrue();
 
         // Sam ptaszek nie jest częścią nazwy: obok kwadracika stałby drugi raz,
@@ -716,20 +716,20 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zdjecie_ptaszka_z_wydarzenia_wraca_do_czystej_nazwy()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "✓ Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "✓ Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
             .Timed.Single().Entry.IsDone.Should().BeTrue();
 
-        await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: false);
+        await _service.SetEventDoneAsync(_source.Id, "s1", done: false);
 
-        _pisarz.Wyslane.Should().ContainSingle()
+        _writer.Wyslane.Should().ContainSingle()
             .Which.Should().Be(("nazwa", "Spotkanie", "s1", false));
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
             .Timed.Single().Entry.IsDone.Should().BeFalse();
     }
 
@@ -744,17 +744,17 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Nieudane_odhaczenie_wydarzenia_nie_zostawia_ptaszka_u_nas()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
-        _pisarz.Rzuca = true;
+        await _service.RefreshAsync(force: true);
+        _writer.Rzuca = true;
 
-        var complete = async () => await _usluga.SetEventDoneAsync(_zrodlo.Id, "s1", done: true);
+        var complete = async () => await _service.SetEventDoneAsync(_source.Id, "s1", done: true);
 
         await complete.Should().ThrowAsync<HttpRequestException>();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
             .Timed.Single().Entry.IsDone.Should().BeFalse();
     }
 
@@ -770,17 +770,17 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Rozciagniecie_bloku_zmienia_dlugosc_a_nie_pore()
     {
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Spotkanie", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Spotkanie", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
         task.SetEstimate(30, Energy.Medium, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         var block = model.Columns.SelectMany(k => k.Slots).Single(b => b.TaskId == task.Id);
@@ -798,17 +798,17 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Rozciagniecie_ponad_poczatek_daje_najkrotszy_blok()
     {
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Spotkanie", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Spotkanie", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
         task.SetEstimate(60, Energy.Medium, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         var block = model.Columns.SelectMany(k => k.Slots).Single(b => b.TaskId == task.Id);
@@ -830,44 +830,44 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Udostepnione_zadanie_ma_swoje_wydarzenie_i_nadaza_za_zmianami()
     {
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Settings(), new Notes(),
             new AreaRepository(_db));
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Odebrać Sanię", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Odebrać Sanię", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(16, 0), _hlc.Next());
         task.SetEstimate(30, Energy.Medium, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        (await mirror.ShareAsync(task.Id, _zrodlo.Id)).Should().BeNull("miało się udać");
+        (await mirror.ShareAsync(task.Id, _source.Id)).Should().BeNull("miało się udać");
 
-        _pisarz.Wyslane.Should().ContainSingle()
+        _writer.Wyslane.Should().ContainSingle()
             .Which.Should().Be(("utworzenie", "Odebrać Sanię", (string?)null, false));
 
         _db.Tasks.Single(t => t.Id == task.Id).SharedEventId.Should().Be("nowe-1");
 
         // Przesunięcie po siatce ma dojść do kalendarza, bo tam ktoś na to patrzy.
-        var edycja = new TaskEditService(
-            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar,
+        var edit = new TaskEditService(
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _clock,
             new AreaRepository(_db), mirror);
 
-        await edycja.RescheduleAsync(task.Id, Dzis, new TimeOnly(17, 30));
+        await edit.RescheduleAsync(task.Id, Today, new TimeOnly(17, 30));
 
-        _pisarz.Wyslane.Should().HaveCount(2);
-        _pisarz.Wyslane[1].Co.Should().Be("zmiana");
+        _writer.Wyslane.Should().HaveCount(2);
+        _writer.Wyslane[1].Co.Should().Be("zmiana");
 
         // Odhaczenie dokłada ptaszek do nazwy — druga osoba widzi, że zrobione.
-        await edycja.CompleteAsync(task.Id);
-        _pisarz.Wyslane[^1].Title.Should().Be("✓ Odebrać Sanię");
+        await edit.CompleteAsync(task.Id);
+        _writer.Wyslane[^1].Title.Should().Be("✓ Odebrać Sanię");
 
         // I najważniejsze: na siatce stoi **jeden** blok, nie dwa. Zapis do kalendarza
         // wraca do naszej kopii jako wydarzenie; narysowane obok zadania dałoby dwa
         // bloki na tę samą rzecz, z których jeden nie dawałby się odhaczyć.
-        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+        (await _service.AgendaAsync(Today, 1))[0].Timed
             .Should().ContainSingle()
             .Which.Entry.TaskId.Should().Be(task.Id);
     }
@@ -883,27 +883,27 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Kosz_zabiera_ze_soba_udostepnione_wydarzenie()
     {
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Settings(), new Notes(),
             new AreaRepository(_db));
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Odwołane", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Odwołane", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        await mirror.ShareAsync(task.Id, _zrodlo.Id);
+        await mirror.ShareAsync(task.Id, _source.Id);
 
         var skrzynka = new InboxService(
             new TaskRepository(_db), new ProjectRepository(_db), new UnitOfWork(_db),
-            _zegar, _hlc, mirror);
+            _clock, _hlc, mirror);
 
         await skrzynka.TrashAsync(task.Id);
 
-        _pisarz.Wyslane[^1].Co.Should().Be("skasowanie");
+        _writer.Wyslane[^1].Co.Should().Be("skasowanie");
 
         var po = _db.Tasks.Single(t => t.Id == task.Id);
         po.SharedCalendarId.Should().BeNull();
@@ -927,25 +927,25 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Nieudane_kasowanie_odbicia_zostaje_dokonczone()
     {
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Settings(), new Notes(),
             new AreaRepository(_db));
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Zostanie sierotą", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Zostanie sierotą", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(11, 0), _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        await mirror.ShareAsync(task.Id, _zrodlo.Id);
+        await mirror.ShareAsync(task.Id, _source.Id);
 
         // Wyrzucenie bez odbicia — dokładnie to, co zostaje po odłożonym kasowaniu,
         // które nie doszło do skutku: zadanie w koszu, wskazanie na wydarzenie całe.
         var skrzynka = new InboxService(
             new TaskRepository(_db), new ProjectRepository(_db), new UnitOfWork(_db),
-            _zegar, _hlc, new NoTaskMirror());
+            _clock, _hlc, new NoTaskMirror());
 
         await skrzynka.TrashAsync(task.Id);
 
@@ -955,28 +955,28 @@ public sealed class CalendarStoreTests : IDisposable
         //
         // Ten test opisywał kiedyś objaw odwrotny — wpis stojący dalej, ale już nie jako
         // zadanie — i objaw ten był całą usterką, a nie umową.
-        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed
+        (await _service.AgendaAsync(Today, 1))[0].Timed
             .Should().BeEmpty("cień nie staje się osobnym wpisem, dopóki wskazanie trwa");
 
         // Pierwsze podejście pada — sieć nie odpowiada. Ma nie rzucić wyżej: dokańczanie
         // chodzi z minutnika i wywrotka zabrałaby ze sobą wszystko, co robi się obok.
-        _pisarz.Rzuca = true;
+        _writer.Rzuca = true;
         await mirror.FinishDeletionAsync();
 
         _db.Tasks.Single(t => t.Id == task.Id).SharedEventId
             .Should().NotBeNull("nieudane kasowanie nie ma prawa zapomnieć wskazania");
 
         // Drugie dochodzi — i wtedy znika i u źródła, i u nas.
-        _pisarz.Rzuca = false;
+        _writer.Rzuca = false;
         await mirror.FinishDeletionAsync();
 
-        _pisarz.Wyslane[^1].Co.Should().Be("skasowanie");
+        _writer.Wyslane[^1].Co.Should().Be("skasowanie");
 
         var po = _db.Tasks.Single(t => t.Id == task.Id);
         po.SharedCalendarId.Should().BeNull();
         po.SharedEventId.Should().BeNull();
 
-        (await _usluga.AgendaAsync(Dzis, 1))[0].Timed.Should().BeEmpty();
+        (await _service.AgendaAsync(Today, 1))[0].Timed.Should().BeEmpty();
     }
 
     /// <summary>Bez daty nie ma czego udostępnić — i mówimy to wprost.</summary>
@@ -988,20 +988,20 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Zadanie_bez_daty_nie_da_sie_udostepnic()
     {
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Settings(), new Notes(),
             new AreaRepository(_db));
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Kiedyś, nie wiadomo kiedy", _zegar.Now, _hlc.Next());
+        var task = TaskItem.Capture("Kiedyś, nie wiadomo kiedy", _clock.Now, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        (await mirror.ShareAsync(task.Id, _zrodlo.Id))
+        (await mirror.ShareAsync(task.Id, _source.Id))
             .Should().Contain("Najpierw dzień");
 
-        _pisarz.Wyslane.Should().BeEmpty("odmowa nie dotyka kalendarza");
+        _writer.Wyslane.Should().BeEmpty("odmowa nie dotyka kalendarza");
     }
 
     /// <summary>
@@ -1014,37 +1014,37 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zadanie_z_godzina_trafia_do_kalendarza_glownego_samo()
     {
-        var settings = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var settings = new Settings { MainCalendarId = _source.Id };
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
             new AreaRepository(_db));
 
-        var edycja = new TaskEditService(
-            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _zegar,
+        var edit = new TaskEditService(
+            new TaskRepository(_db), new UnitOfWork(_db), _hlc, _clock,
             new AreaRepository(_db), mirror);
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Odebrać Sanię", _zegar.Now, _hlc.Next());
+        var task = TaskItem.Capture("Odebrać Sanię", _clock.Now, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
         // Sam dzień wystarczy — idzie jako wydarzenie całodniowe. Zgadnięta godzina
         // zrobiłaby z zadania spotkanie, którego nikt nie umawiał.
-        await edycja.RescheduleAsync(task.Id, Dzis, null);
+        await edit.RescheduleAsync(task.Id, Today, null);
 
-        _pisarz.Wyslane.Should().ContainSingle()
-            .Which.Should().Match<(string Co, string Title, string? Id, bool Calodniowe)>(
-                w => w.Co == "utworzenie" && w.Calodniowe);
+        _writer.Wyslane.Should().ContainSingle()
+            .Which.Should().Match<(string Co, string Title, string? Id, bool AllDay)>(
+                w => w.Co == "utworzenie" && w.AllDay);
 
         // Dopisana godzina zmienia to samo wydarzenie, a nie zakłada drugiego.
-        await edycja.RescheduleAsync(task.Id, Dzis, new TimeOnly(16, 0));
+        await edit.RescheduleAsync(task.Id, Today, new TimeOnly(16, 0));
 
-        _pisarz.Wyslane.Should().HaveCount(2);
-        _pisarz.Wyslane[^1].Co.Should().Be("zmiana");
-        _pisarz.Wyslane[^1].Calodniowe.Should().BeFalse("od tej chwili ma swoją porę");
-        _db.Tasks.Single(t => t.Id == task.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
+        _writer.Wyslane.Should().HaveCount(2);
+        _writer.Wyslane[^1].Co.Should().Be("zmiana");
+        _writer.Wyslane[^1].AllDay.Should().BeFalse("od tej chwili ma swoją porę");
+        _db.Tasks.Single(t => t.Id == task.Id).SharedCalendarId.Should().Be(_source.Id);
     }
 
     /// <summary>
@@ -1060,21 +1060,21 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Odbicie_zadania_zdjetego_z_dnia_nie_rysuje_sie_jako_wydarzenie()
     {
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Ustawienia(), new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, new Settings(), new Notes(),
             new AreaRepository(_db));
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Wzięte na dziś", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Wzięte na dziś", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        await mirror.ShareAsync(task.Id, _zrodlo.Id);
+        await mirror.ShareAsync(task.Id, _source.Id);
 
         // Jeden blok: zadanie. Jego wydarzenie w Google jest cieniem i nie rysuje się.
-        (await _usluga.AgendaAsync(Dzis, 1))[0].AllDay
+        (await _service.AgendaAsync(Today, 1))[0].AllDay
             .Should().ContainSingle().Which.TaskId.Should().Be(task.Id);
 
         // Zdjęcie z dnia — bez zdejmowania odbicia, czyli dokładnie stan z tej sekundy,
@@ -1082,7 +1082,7 @@ public sealed class CalendarStoreTests : IDisposable
         _db.Tasks.Single(t => t.Id == task.Id).LeaveAsDebt(_hlc.Next());
         _db.SaveChanges();
 
-        (await _usluga.AgendaAsync(Dzis, 1))[0].AllDay
+        (await _service.AgendaAsync(Today, 1))[0].AllDay
             .Should().BeEmpty("cień nie ma prawa stać się osobnym wpisem");
     }
 
@@ -1097,26 +1097,26 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Plan_dnia_pokazuje_wydarzenia_z_kalendarza()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "Lekarz", Dzis.ToString("yyyy-MM-dd"), 10, 11)],
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Lekarz", Today.ToString("yyyy-MM-dd"), 10, 11)],
             SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Kupić mleko", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Kupić mleko", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(8, 0), _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
         var plan = new DayPlanService(
             new TaskRepository(_db), new ProjectRepository(_db), new AreaRepository(_db),
-            _zegar, _usluga);
+            _clock, _service);
 
-        var rows = await plan.ForDayAsync(Dzis);
+        var rows = await plan.ForDayAsync(Today);
 
         // Po godzinach, niezależnie od tego, skąd wpis pochodzi — dzień ma jedną oś.
         rows.Select(p => p.Title).Should().Equal("Kupić mleko", "Lekarz");
@@ -1139,20 +1139,20 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Pokazanie_osobie_dopisuje_ja_do_gosci()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "Wywiadówka", "2026-09-16", 17, 18)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Wywiadówka", "2026-09-16", 17, 18)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.InviteAsync(_zrodlo.Id, "s1", "sylw@example.test"))
+        (await _service.InviteAsync(_source.Id, "s1", "sylw@example.test"))
             .Should().BeTrue("tej osoby jeszcze nie było na liście");
 
-        _pisarz.Wyslane[^1].Should().Be(("zaproszenie", "sylw@example.test", "s1", false));
+        _writer.Wyslane[^1].Should().Be(("zaproszenie", "sylw@example.test", "s1", false));
 
-        (await _usluga.InviteAsync(_zrodlo.Id, "s1", "sylw@example.test"))
+        (await _service.InviteAsync(_source.Id, "s1", "sylw@example.test"))
             .Should().BeFalse("już to widzi");
 
-        _pisarz.Goscie["s1"].Should().ContainSingle();
+        _writer.Guests["s1"].Should().ContainSingle();
     }
 
     /// <summary>
@@ -1168,26 +1168,26 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Przelozenie_wydarzenia_zaklada_przed_skasowaniem()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "Zebranie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Zebranie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
         var rodzinny = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/rodzina.ics", "Rodzina");
 
         _db.CalendarSources.Add(rodzinny);
         _db.SaveChanges();
 
-        var created = await _usluga.MoveEventAsync(_zrodlo.Id, "s1", rodzinny.Id);
+        var created = await _service.MoveEventAsync(_source.Id, "s1", rodzinny.Id);
 
         created.Should().NotBe("s1", "u Google to jest inne wydarzenie w innym kalendarzu");
 
-        _pisarz.Wyslane.Select(w => w.Co).Should().Equal("utworzenie", "skasowanie");
+        _writer.Wyslane.Select(w => w.Co).Should().Equal("utworzenie", "skasowanie");
 
         // U nas zostaje jeden wpis, w nowym kalendarzu.
-        var onGrid = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed;
+        var onGrid = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed;
 
         onGrid.Should().ContainSingle();
         onGrid.Single().Entry.SourceId.Should().Be(rodzinny.Id);
@@ -1205,18 +1205,18 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Wydarzenie_bierze_barwe_obszaru_swojego_kalendarza()
     {
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "Zebranie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Zebranie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        var children = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dzieci", 0);
+        var children = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dzieci", 0);
         children.SetColor("#FF8800", _hlc.Next());
-        children.SetCalendar(_zrodlo.Id, _hlc.Next());
+        children.SetCalendar(_source.Id, _hlc.Next());
         _db.Areas.Add(children);
         _db.SaveChanges();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
             .Timed.Single().Entry.Color.Should().Be("#FF8800");
 
         // Zdjęcie przypisania oddaje wydarzenie barwie samego kalendarza — tam wracają
@@ -1224,7 +1224,7 @@ public sealed class CalendarStoreTests : IDisposable
         children.SetCalendar(null, _hlc.Next());
         _db.SaveChanges();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0]
             .Timed.Single().Entry.Color.Should().NotBe("#FF8800");
     }
 
@@ -1242,20 +1242,20 @@ public sealed class CalendarStoreTests : IDisposable
     {
         var shell = new StructureEditService(
             new ProjectRepository(_db), new AreaRepository(_db), new TaskRepository(_db),
-            new UnitOfWork(_db), _zegar, _hlc);
+            new UnitOfWork(_db), _clock, _hlc);
 
-        var children = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dzieci", 0);
-        var dom = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 1);
+        var children = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dzieci", 0);
+        var dom = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 1);
         _db.Areas.AddRange(children, dom);
         _db.SaveChanges();
 
-        await shell.SetAreaCalendarAsync(children.Id, _zrodlo.Id);
-        _db.Areas.Single(o => o.Id == children.Id).CalendarId.Should().Be(_zrodlo.Id);
+        await shell.SetAreaCalendarAsync(children.Id, _source.Id);
+        _db.Areas.Single(o => o.Id == children.Id).CalendarId.Should().Be(_source.Id);
 
         // Ten sam kalendarz przy drugim obszarze zdejmuje go z pierwszego.
-        await shell.SetAreaCalendarAsync(dom.Id, _zrodlo.Id);
+        await shell.SetAreaCalendarAsync(dom.Id, _source.Id);
 
-        _db.Areas.Single(o => o.Id == dom.Id).CalendarId.Should().Be(_zrodlo.Id);
+        _db.Areas.Single(o => o.Id == dom.Id).CalendarId.Should().Be(_source.Id);
         _db.Areas.Single(o => o.Id == children.Id).CalendarId.Should().BeNull();
     }
 
@@ -1271,31 +1271,31 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Zadanie_idzie_do_kalendarza_swojego_obszaru()
     {
-        var settings = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var settings = new Settings { MainCalendarId = _source.Id };
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
             new AreaRepository(_db));
 
         var rodzinny = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/rodzina.ics", "Rodzina");
 
         _db.CalendarSources.Add(rodzinny);
 
-        var children = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dzieci", 0);
+        var children = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dzieci", 0);
         children.SetCalendar(rodzinny.Id, _hlc.Next());
         _db.Areas.Add(children);
 
-        var work = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Praca", 1);
+        var work = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Praca", 1);
         _db.Areas.Add(work);
 
-        var odbior = TaskItem.Capture("Odebrać Sanię", _zegar.Now, _hlc.Next());
-        odbior.Schedule(children.Id, Dzis, _hlc.Next());
+        var odbior = TaskItem.Capture("Odebrać Sanię", _clock.Now, _hlc.Next());
+        odbior.Schedule(children.Id, Today, _hlc.Next());
         odbior.SetDoTime(new TimeOnly(16, 0), _hlc.Next());
         _db.Tasks.Add(odbior);
 
-        var report = TaskItem.Capture("Raport", _zegar.Now, _hlc.Next());
-        report.Schedule(work.Id, Dzis, _hlc.Next());
+        var report = TaskItem.Capture("Raport", _clock.Now, _hlc.Next());
+        report.Schedule(work.Id, Today, _hlc.Next());
         report.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
         _db.Tasks.Add(report);
         _db.SaveChanges();
@@ -1308,7 +1308,7 @@ public sealed class CalendarStoreTests : IDisposable
 
         // Obszar bez własnego kalendarza spada do głównego — tam idą też wrzuty,
         // których jeszcze nikt nie rozstrzygnął.
-        _db.Tasks.Single(t => t.Id == report.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
+        _db.Tasks.Single(t => t.Id == report.Id).SharedCalendarId.Should().Be(_source.Id);
     }
 
     /// <summary>
@@ -1322,58 +1322,58 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Przeniesienie_do_wspolnego_i_z_powrotem_zostawia_jeden_wpis()
     {
-        var settings = new Ustawienia { MainCalendarId = _zrodlo.Id };
+        var settings = new Settings { MainCalendarId = _source.Id };
         var mirror = new TaskMirror(
-            _usluga, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
+            _service, new TaskRepository(_db), new UnitOfWork(_db), _hlc, settings, new Notes(),
             new AreaRepository(_db));
 
         // Drugi kalendarz zakładany tutaj, nie w konstruktorze: odświeżanie przechodzi
         // po **wszystkich** źródłach tym samym kanałem atrapy, więc stały drugi kalendarz
         // podwajałby wydarzenia w każdym innym teście w tym pliku.
         var wspolny = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/wspolny.ics", "Rodzina");
 
         _db.CalendarSources.Add(wspolny);
 
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Wywiadówka", _zegar.Now, _hlc.Next());
-        task.Schedule(area.Id, Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Wywiadówka", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(17, 0), _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
         await mirror.PushAsync(_db.Tasks.Single(t => t.Id == task.Id));
-        _db.Tasks.Single(t => t.Id == task.Id).SharedCalendarId.Should().Be(_zrodlo.Id);
+        _db.Tasks.Single(t => t.Id == task.Id).SharedCalendarId.Should().Be(_source.Id);
 
         (await mirror.ShareAsync(task.Id, wspolny.Id)).Should().BeNull();
 
         // Najpierw znika ze starego, dopiero potem powstaje w nowym — inaczej przy
         // nieudanym zapisie zostałyby dwa wpisy na jedną rzecz.
-        _pisarz.Wyslane.Select(w => w.Co).Should().ContainInOrder("skasowanie", "utworzenie");
+        _writer.Wyslane.Select(w => w.Co).Should().ContainInOrder("skasowanie", "utworzenie");
         _db.Tasks.Single(t => t.Id == task.Id).SharedCalendarId.Should().Be(wspolny.Id);
 
         await mirror.UnshareAsync(task.Id);
 
         _db.Tasks.Single(t => t.Id == task.Id).SharedCalendarId
-            .Should().Be(_zrodlo.Id, "cofnięcie wraca na główny, a nie znikąd");
-        _pisarz.Wyslane[^1].Co.Should().Be("utworzenie");
+            .Should().Be(_source.Id, "cofnięcie wraca na główny, a nie znikąd");
+        _writer.Wyslane[^1].Co.Should().Be("utworzenie");
     }
 
     [Fact]
     public async Task Zadanie_bez_dnia_wykonania_nie_trafia_na_siatke()
     {
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);
 
-        var task = TaskItem.Capture("Kiedyś", _zegar.Now, _hlc.Next());
+        var task = TaskItem.Capture("Kiedyś", _clock.Now, _hlc.Next());
         task.MakeNext(area.Id, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
 
-        var day = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0];
+        var day = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0];
 
         day.Timed.Should().BeEmpty();
         day.AllDay.Should().BeEmpty();
@@ -1383,16 +1383,16 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Wydarzenie_trwajace_przez_dzisiaj_pokazuje_sie_mimo_ze_zaczelo_sie_wczoraj()
     {
         // Warunek zachodzenia zakresów, nie „start w zakresie".
-        _kanal.Next = new FeedResult(
+        _feed.Next = new FeedResult(
             [new FeedEvent(
                 "a", "Wyjazd",
                 new DateTimeOffset(2026, 9, 14, 8, 0, 0, TimeSpan.FromHours(2)),
                 new DateTimeOffset(2026, 9, 18, 20, 0, 0, TimeSpan.FromHours(2)),
                 false, null, false)],
             null, true);
-        await _usluga.RefreshAsync();
+        await _service.RefreshAsync();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().ContainSingle();
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().ContainSingle();
     }
 
     [Fact]
@@ -1400,14 +1400,14 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Do dziś nie było **żadnej** drogi, żeby dodać źródło: odświeżanie przechodziło
         // po kalendarzach, których nic nie umiało utworzyć, i kończyło się po cichu.
-        var dodany = await _usluga.AddAsync(
+        var dodany = await _service.AddAsync(
             CalendarKind.Ical, "https://example.test/drugi.ics", "Zajęcia");
 
-        (await _usluga.SourcesAsync()).Should().Contain(z => z.Id == dodany.Id);
+        (await _service.SourcesAsync()).Should().Contain(z => z.Id == dodany.Id);
 
-        await _usluga.RemoveAsync(dodany.Id);
+        await _service.RemoveAsync(dodany.Id);
 
-        (await _usluga.SourcesAsync()).Should().NotContain(z => z.Id == dodany.Id);
+        (await _service.SourcesAsync()).Should().NotContain(z => z.Id == dodany.Id);
 
         // Nagrobek, nie usunięcie — wybór kalendarzy się synchronizuje (spec 5.1).
         _db.CalendarSources.Count(z => z.Id == dodany.Id).Should().Be(1);
@@ -1418,14 +1418,14 @@ public sealed class CalendarStoreTests : IDisposable
     {
         var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
 
-        var id = await _usluga.SaveEventAsync(
-            _zrodlo.Id, externalId: null,
+        var id = await _service.SaveEventAsync(
+            _source.Id, externalId: null,
             new CalendarDraft("Dentysta", start, start.AddHours(1)));
 
         id.Should().Be("nowe-1");
-        _pisarz.Wyslane.Should().ContainSingle(w => w.Co == "utworzenie" && w.Title == "Dentysta");
+        _writer.Wyslane.Should().ContainSingle(w => w.Co == "utworzenie" && w.Title == "Dentysta");
 
-        var days = await _usluga.AgendaAsync(new DateOnly(2026, 9, 17), 1);
+        var days = await _service.AgendaAsync(new DateOnly(2026, 9, 17), 1);
         days[0].Timed.Should().ContainSingle(s => s.Entry.Title == "Dentysta");
     }
 
@@ -1435,30 +1435,30 @@ public sealed class CalendarStoreTests : IDisposable
         // Kolejność jest tu treścią, nie szczegółem. Gdyby baza szła pierwsza,
         // nieudany zapis zostawiłby wydarzenie widoczne w Marshalu, a nieistniejące
         // w kalendarzu — czyli dokładnie to, przed czym zapis dwustronny ma chronić.
-        _pisarz.Rzuca = true;
+        _writer.Rzuca = true;
         var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
 
-        var patch = async () => await _usluga.SaveEventAsync(
-            _zrodlo.Id, externalId: null,
+        var patch = async () => await _service.SaveEventAsync(
+            _source.Id, externalId: null,
             new CalendarDraft("Nie zapisze się", start, start.AddHours(1)));
 
         await patch.Should().ThrowAsync<HttpRequestException>();
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 17), 1))[0]
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 17), 1))[0]
             .Timed.Should().BeEmpty();
     }
 
     [Fact]
     public async Task Kalendarz_bez_pisarza_mowi_ze_jest_do_odczytu()
     {
-        var bezPisarza = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_kanal], _zegar, _hlc, new Ustawienia(), [],
+        var withoutWriter = new CalendarSyncService(
+            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, new Settings(), [],
             new ProjectRepository(_db), new AreaRepository(_db));
 
         var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
 
-        var patch = async () => await bezPisarza.SaveEventAsync(
-            _zrodlo.Id, null, new CalendarDraft("Cokolwiek", start, start.AddHours(1)));
+        var patch = async () => await withoutWriter.SaveEventAsync(
+            _source.Id, null, new CalendarDraft("Cokolwiek", start, start.AddHours(1)));
 
         (await patch.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*tylko do odczytu*");
@@ -1472,18 +1472,18 @@ public sealed class CalendarStoreTests : IDisposable
         // odpowiedzią na omsknięcie ręki, więc ma odtwarzać **poprzednie** godziny.
         var start = new DateTimeOffset(2026, 9, 17, 10, 0, 0, TimeSpan.FromHours(2));
 
-        await _sklad.UpsertAsync(_zrodlo.Id,
+        await _sklad.UpsertAsync(_source.Id,
             [new FeedEvent("w1", "Zebranie", start, start.AddHours(1), false, null, false)]);
         await _sklad.SaveChangesAsync();
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         var block = model.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Zebranie");
 
         await model.MoveEventAsync(block, new DateOnly(2026, 9, 18), 14 * 48);
 
-        _pisarz.Wyslane.Should().Contain(w => w.Co == "zmiana" && w.Id == "w1");
+        _writer.Wyslane.Should().Contain(w => w.Co == "zmiana" && w.Id == "w1");
         model.CanUndo.Should().BeTrue();
 
         await model.UndoMoveCommand.ExecuteAsync(null);
@@ -1503,15 +1503,15 @@ public sealed class CalendarStoreTests : IDisposable
         // Zadanie bez godziny znikało po odhaczeniu z kalendarza bez śladu, więc
         // wieczorem nie było z czego odczytać, na co poszedł dzień. Blok zapisuje się
         // wstecz: kończy się teraz, zaczyna tyle wcześniej, ile miało trwać.
-        _zegar.Now = new DateTimeOffset(2026, 9, 17, 14, 37, 0, TimeSpan.FromHours(2));
+        _clock.Now = new DateTimeOffset(2026, 9, 17, 14, 37, 0, TimeSpan.FromHours(2));
 
-        var task = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
-        task.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Zadzwonić", _clock.Now, _hlc.Next());
+        task.Schedule(Guid.CreateVersion7(), Today, _hlc.Next());
         task.SetEstimate(15, Energy.Unknown, _hlc.Next());
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
 
-        await _edycja.CompleteAsync(task.Id);
+        await _edit.CompleteAsync(task.Id);
 
         var po = _db.Tasks.Single(z => z.Id == task.Id);
 
@@ -1524,15 +1524,15 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Odhaczenie_nie_rusza_godziny_wpisanej_wczesniej()
     {
         // Godzina wpisana wcześniej była decyzją, a nie zapisem tego, co się stało.
-        _zegar.Now = new DateTimeOffset(2026, 9, 17, 14, 37, 0, TimeSpan.FromHours(2));
+        _clock.Now = new DateTimeOffset(2026, 9, 17, 14, 37, 0, TimeSpan.FromHours(2));
 
-        var task = TaskItem.Capture("Spotkanie", _zegar.Now, _hlc.Next());
-        task.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Spotkanie", _clock.Now, _hlc.Next());
+        task.Schedule(Guid.CreateVersion7(), Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
 
-        await _edycja.CompleteAsync(task.Id);
+        await _edit.CompleteAsync(task.Id);
 
         _db.Tasks.Single(z => z.Id == task.Id).DoTime.Should().Be(new TimeOnly(9, 0));
     }
@@ -1540,22 +1540,22 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Przeciagniecie_zmienia_dzien_i_godzine_a_nie_dlugosc()
     {
-        var task = TaskItem.Capture("Przesunąć", _zegar.Now, _hlc.Next());
-        task.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Przesunąć", _clock.Now, _hlc.Next());
+        task.Schedule(Guid.CreateVersion7(), Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
         task.SetEstimate(90, Energy.Unknown, _hlc.Next());
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         // Jutro, czternasta — czyli 14 * 48 punktów od góry siatki.
-        await model.MoveAsync(task.Id, Dzis.AddDays(1), 14 * 48);
+        await model.MoveAsync(task.Id, Today.AddDays(1), 14 * 48);
 
         var po = _db.Tasks.Single(z => z.Id == task.Id);
 
-        po.DoDate.Should().Be(Dzis.AddDays(1));
+        po.DoDate.Should().Be(Today.AddDays(1));
         po.DoTime.Should().Be(new TimeOnly(14, 0));
         po.EstimatedMinutes.Should().Be(90, "przeciągnięcie przesuwa, a nie skraca");
     }
@@ -1566,7 +1566,7 @@ public sealed class CalendarStoreTests : IDisposable
         // Pięć minut, nie kwadrans: kwadrans był za grubą miarką na spotkanie o 9:35.
         // Minuta co do punktu byłaby za to udawaną precyzją — trafienie w 14:07 nie
         // znaczy, że ktoś planuje na 14:07.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
 
         (DateOnly Day, TimeOnly Time)? poproszono = null;
         model.NewTaskRequested += (day, time) => poproszono = (day, time);
@@ -1592,7 +1592,7 @@ public sealed class CalendarStoreTests : IDisposable
         // Wydarzenia z cudzego kalendarza nie da się tu zmienić i to jest zamierzone.
         // Ale przycisk, który po kliknięciu nie robi nic, wygląda jak zepsuty — a nie
         // jak granica, która ma powód.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
 
         var ev = new SlotBox(
             "Zebranie", 0, 48, 0, 200, IsTask: false, Color: null,
@@ -1617,14 +1617,14 @@ public sealed class CalendarStoreTests : IDisposable
         // Pełnia widoczna w Google na piątek stała u nas na piątku i sobocie.
         var day = new DateTimeOffset(2026, 9, 18, 0, 0, 0, TimeSpan.Zero);
 
-        await _sklad.UpsertAsync(_zrodlo.Id,
+        await _sklad.UpsertAsync(_source.Id,
         [
             new FeedEvent("ksiezyc", "Pierwsza kwadra", day, day.AddDays(1),
                 IsAllDay: true, null, false),
         ]);
         await _sklad.SaveChangesAsync();
 
-        var days = await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 2);
+        var days = await _service.AgendaAsync(new DateOnly(2026, 9, 18), 2);
 
         days[0].AllDay.Should().ContainSingle(e => e.Title == "Pierwsza kwadra");
         days[1].AllDay.Should().BeEmpty("to jest jeden dzień, a nie dwa");
@@ -1642,15 +1642,15 @@ public sealed class CalendarStoreTests : IDisposable
         var lato = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
         var zima = new DateTimeOffset(2026, 12, 15, 12, 0, 0, TimeSpan.Zero);
 
-        await _sklad.UpsertAsync(_zrodlo.Id,
+        await _sklad.UpsertAsync(_source.Id,
         [
             new FeedEvent("lato", "Lipiec", lato, lato.AddHours(1), false, null, false),
             new FeedEvent("zima", "Grudzień", zima, zima.AddHours(1), false, null, false),
         ]);
         await _sklad.SaveChangesAsync();
 
-        var wLipcu = await _usluga.AgendaAsync(new DateOnly(2026, 7, 15), 1);
-        var wGrudniu = await _usluga.AgendaAsync(new DateOnly(2026, 12, 15), 1);
+        var wLipcu = await _service.AgendaAsync(new DateOnly(2026, 7, 15), 1);
+        var wGrudniu = await _service.AgendaAsync(new DateOnly(2026, 12, 15), 1);
 
         wLipcu[0].Timed.Single().Entry.Start.Hour.Should().Be(14, "w lipcu Polska ma +2");
         wGrudniu[0].Timed.Single().Entry.Start.Hour.Should().Be(13, "w grudniu +1");
@@ -1662,12 +1662,12 @@ public sealed class CalendarStoreTests : IDisposable
         // Stała szerokość na widok zostawiała dwie trzecie pustego miejsca obok siatki
         // na monitorze i kazała przewijać w bok w wąskim oknie. Bloki liczą się od
         // szerokości kolumny, więc muszą się przeliczyć razem z nią.
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Spotkanie", "2026-09-16", 10, 11)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         // Jawnie trzy dni: widokiem domyślnym jest tydzień, a ten test mówi o dzieleniu
@@ -1703,7 +1703,7 @@ public sealed class CalendarStoreTests : IDisposable
         // jest teraz — ale w linii ze strzałkami i pobieraniem mieszczą się dopiero
         // przy szerokim oknie. Zawsze dokładnie jedno z dwojga: żadnego naraz ani
         // obu naraz.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         model.SetAvailableWidth(1200);
@@ -1722,7 +1722,7 @@ public sealed class CalendarStoreTests : IDisposable
         // to samo jednym dotknięciem komórki. Gdyby pole zostało wtedy na „miesiącu",
         // pokazywałoby coś innego niż siatka pod nim — a to jedyne miejsce, w którym
         // widać, jak szeroko patrzymy.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         await model.ShowWeekCommand.ExecuteAsync(null);
@@ -1742,13 +1742,13 @@ public sealed class CalendarStoreTests : IDisposable
     [Fact]
     public async Task Kreska_teraz_stoi_tylko_na_dzisiejszej_kolumnie()
     {
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         var dzisiejsze = model.Columns.Where(k => k.IsToday).ToList();
 
         dzisiejsze.Should().ContainSingle("dzisiaj jest jedno");
-        dzisiejsze[0].Date.Should().Be(Dzis);
+        dzisiejsze[0].Date.Should().Be(Today);
 
         // Zegar testu stoi na 9:00, godzina ma 48 punktów.
         dzisiejsze[0].NowTop.Should().Be(9 * 48);
@@ -1760,13 +1760,13 @@ public sealed class CalendarStoreTests : IDisposable
         // Odhaczenie ma iść tą samą drogą co z ekranu szczegółu — przez usługę edycji,
         // a nie przez wyrzucenie bloku z siatki. Blok znikający bez zapisu wyglądałby
         // identycznie i wracałby przy następnym odświeżeniu.
-        var task = TaskItem.Capture("Zadzwonić", _zegar.Now, _hlc.Next());
-        task.Schedule(Guid.CreateVersion7(), Dzis, _hlc.Next());
+        var task = TaskItem.Capture("Zadzwonić", _clock.Now, _hlc.Next());
+        task.Schedule(Guid.CreateVersion7(), Today, _hlc.Next());
         task.SetDoTime(new TimeOnly(10, 0), _hlc.Next());
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
 
         var block = model.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Zadzwonić");
@@ -1783,7 +1783,7 @@ public sealed class CalendarStoreTests : IDisposable
         // Doba ma 1152 punkty, a ekran telefonu mieści z tego jakąś jedną czwartą:
         // otwarcie o północy pokazuje godziny, w których się śpi, i za każdym razem
         // zaczyna się od przewijania. Godzina zapasu u góry, stąd nie 9 * 48, a 8 * 48.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
 
         double? to = null;
         model.ScrollRequested += score => to = score;
@@ -1798,7 +1798,7 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Godzina z innego dnia nie jest odpowiedzią na nic, a skok kasowałby
         // pozycję, którą użytkownik ustawił ręką przed chwilą.
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
 
         await model.LoadAsync();
 
@@ -1818,17 +1818,17 @@ public sealed class CalendarStoreTests : IDisposable
         // siatce, zero narysowanych — i trzy różne możliwe przyczyny wyglądające
         // identycznie. Wpis zapisuje się **tylko** wtedy, bo przy każdym przerysowaniu
         // zalałby dziennik tym, co i tak widać na ekranie.
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("d1", "Dawno temu", "2026-01-05", 10, 11)], SyncToken: null, IsFull: true);
+        _feed.Next = new FeedResult(
+            [NewEvent("d1", "Dawno temu", "2026-01-05", 10, 11)], SyncToken: null, IsFull: true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
         var notes = new Notes();
-        var model = new CalendarViewModel(_usluga, _zegar, notes, _edycja);
+        var model = new CalendarViewModel(_service, _clock, notes, _edit);
 
         await model.LoadAsync();
 
-        notes.Wpisy.Should().Contain(w =>
+        notes.Entries.Should().Contain(w =>
             w.Operation == "Kalendarz: siatka" && w.Level == ActivityLevel.Problem);
     }
 
@@ -1838,12 +1838,12 @@ public sealed class CalendarStoreTests : IDisposable
         // Kalendarze podłączone przed wprowadzeniem barw mają w bazie pusto i bez
         // tego zostałyby szare na zawsze — a jedyną drogą byłoby odłączenie ich
         // i dodanie od nowa, czyli naprawianie ręką czegoś, co aplikacja wie.
-        _kanal.Next = new FeedResult([], SyncToken: null, IsFull: true, Color: "#8E24AA");
+        _feed.Next = new FeedResult([], SyncToken: null, IsFull: true, Color: "#8E24AA");
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.SourcesAsync())
-            .Single(z => z.Id == _zrodlo.Id).Color.Should().Be("#8E24AA");
+        (await _service.SourcesAsync())
+            .Single(z => z.Id == _source.Id).Color.Should().Be("#8E24AA");
     }
 
     [Fact]
@@ -1851,14 +1851,14 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // „Nie wiem" i „bez koloru" to dwie różne odpowiedzi. Kanał, który barwy nie
         // podaje, nie ma podstaw, żeby czyścić tę, którą już mamy.
-        _kanal.Next = new FeedResult([], SyncToken: null, IsFull: true, Color: "#8E24AA");
-        await _usluga.RefreshAsync(force: true);
+        _feed.Next = new FeedResult([], SyncToken: null, IsFull: true, Color: "#8E24AA");
+        await _service.RefreshAsync(force: true);
 
-        _kanal.Next = new FeedResult([], SyncToken: null, IsFull: true);
-        await _usluga.RefreshAsync(force: true);
+        _feed.Next = new FeedResult([], SyncToken: null, IsFull: true);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.SourcesAsync())
-            .Single(z => z.Id == _zrodlo.Id).Color.Should().Be("#8E24AA");
+        (await _service.SourcesAsync())
+            .Single(z => z.Id == _source.Id).Color.Should().Be("#8E24AA");
     }
 
     [Fact]
@@ -1868,14 +1868,14 @@ public sealed class CalendarStoreTests : IDisposable
         // rzecz, po której przy jedenastu podłączonych kalendarzach widać, do
         // którego z nich coś należy. Droga wiedzie przez cztery warstwy, więc
         // urwana po cichu w dowolnej z nich wygląda jak „wszystko jest szare".
-        var kolorowy = await _usluga.AddAsync(
+        var kolorowy = await _service.AddAsync(
             CalendarKind.Ical, "https://example.test/praca.ics", "Praca", "#8E24AA");
 
         await _sklad.UpsertAsync(
-            kolorowy.Id, [Wydarzenie("p1", "Spotkanie", "2026-09-16", 10, 11)]);
+            kolorowy.Id, [NewEvent("p1", "Spotkanie", "2026-09-16", 10, 11)]);
         await _sklad.SaveChangesAsync();
 
-        var days = await _usluga.AgendaAsync(new DateOnly(2026, 9, 16), 1);
+        var days = await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1);
 
         days[0].Timed.Should().ContainSingle(s => s.Entry.Title == "Spotkanie")
             .Which.Entry.Color.Should().Be("#8E24AA");
@@ -1887,14 +1887,14 @@ public sealed class CalendarStoreTests : IDisposable
         // Klikanie „Dodaj" w reakcji na to, że nic się nie pojawiło, jest odruchem —
         // a duplikaty mnożą potem te same błędy w raporcie i zaciemniają ten jeden,
         // który coś znaczy.
-        var first = await _usluga.AddAsync(
+        var first = await _service.AddAsync(
             CalendarKind.Google, "primary", "Mój kalendarz");
 
-        var drugi = await _usluga.AddAsync(
+        var drugi = await _service.AddAsync(
             CalendarKind.Google, "primary", "Mój kalendarz jeszcze raz");
 
         drugi.Id.Should().Be(first.Id);
-        (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(1);
+        (await _service.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(1);
     }
 
     [Fact]
@@ -1910,8 +1910,8 @@ public sealed class CalendarStoreTests : IDisposable
         // **następnego dnia** — jeden wpis rozlany na dwie doby.
         var day = new DateOnly(2026, 9, 18);
 
-        await _usluga.SaveEventAsync(
-            _zrodlo.Id,
+        await _service.SaveEventAsync(
+            _source.Id,
             externalId: null,
             new CalendarDraft(
                 "Pierwsza kwadra",
@@ -1925,7 +1925,7 @@ public sealed class CalendarStoreTests : IDisposable
 
         // I to samo od strony siatki: wpis całodniowy stoi na pasku jednego dnia,
         // a nie jako bloczek godzinowy rozciągnięty na dwa.
-        var days = await _usluga.AgendaAsync(day, 2);
+        var days = await _service.AgendaAsync(day, 2);
 
         days[0].AllDay.Should().ContainSingle(w => w.Title == "Pierwsza kwadra");
         days[0].Timed.Should().NotContain(s => s.Entry.Title == "Pierwsza kwadra");
@@ -1938,19 +1938,19 @@ public sealed class CalendarStoreTests : IDisposable
         // Odmowa po fakcie przy przenoszeniu wydarzenia znaczy kopię założoną w nowym
         // kalendarzu, zanim odmowa przyszła ze starego. Poziom dostępu Google znamy
         // z listy kalendarzy, więc da się odpowiedzieć, zanim cokolwiek się wydarzy.
-        _zrodlo.SetReadOnly(true);
+        _source.SetReadOnly(true);
         await _db.SaveChangesAsync();
 
-        var proba = async () => await _usluga.SaveEventAsync(
-            _zrodlo.Id,
+        var proba = async () => await _service.SaveEventAsync(
+            _source.Id,
             externalId: null,
-            new CalendarDraft("Cokolwiek", _zegar.Now, _zegar.Now.AddHours(1)));
+            new CalendarDraft("Cokolwiek", _clock.Now, _clock.Now.AddHours(1)));
 
         (await proba.Should().ThrowAsync<InvalidOperationException>())
             .WithMessage("*tylko do odczytu*");
 
         // Nic nie poszło do źródła — o to właśnie chodzi w słowie „przed".
-        _pisarz.Wyslane.Should().BeEmpty();
+        _writer.Wyslane.Should().BeEmpty();
     }
 
     [Fact]
@@ -1959,15 +1959,15 @@ public sealed class CalendarStoreTests : IDisposable
         // Pole wyboru przy wydarzeniu, którego nie da się odhaczyć, uczy nieufności
         // do wszystkich pozostałych. To samo rozstrzyga o polu „Obszar" na karcie:
         // czego nie wolno zmienić, tego się nie proponuje.
-        _zrodlo.SetReadOnly(true);
+        _source.SetReadOnly(true);
         await _db.SaveChangesAsync();
 
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("a", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
+        _feed.Next = new FeedResult(
+            [NewEvent("a", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0]
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0]
             .Timed.Single().Entry.CanWrite.Should().BeFalse();
     }
 
@@ -1977,17 +1977,17 @@ public sealed class CalendarStoreTests : IDisposable
         // Dostęp się zmienia: ktoś dopuszcza do swojego kalendarza albo odbiera dostęp.
         // Aplikacja, która pyta o to raz przy podłączaniu, myli się od tamtej chwili
         // do końca.
-        _kanal.Next = new FeedResult([], null, true, Color: null, ReadOnly: true);
-        await _usluga.RefreshAsync(force: true);
+        _feed.Next = new FeedResult([], null, true, Color: null, ReadOnly: true);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.SourcesAsync()).Single(z => z.Id == _zrodlo.Id)
+        (await _service.SourcesAsync()).Single(z => z.Id == _source.Id)
             .ReadOnly.Should().BeTrue();
 
-        _zegar.Now = _zegar.Now.Add(CalendarSyncService.RefreshInterval).AddMinutes(1);
-        _kanal.Next = new FeedResult([], null, true, Color: null, ReadOnly: false);
-        await _usluga.RefreshAsync(force: true);
+        _clock.Now = _clock.Now.Add(CalendarSyncService.RefreshInterval).AddMinutes(1);
+        _feed.Next = new FeedResult([], null, true, Color: null, ReadOnly: false);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.SourcesAsync()).Single(z => z.Id == _zrodlo.Id)
+        (await _service.SourcesAsync()).Single(z => z.Id == _source.Id)
             .ReadOnly.Should().BeFalse("dostęp wrócił, więc pole „Obszar” ma znów być czynne");
     }
 
@@ -1997,13 +1997,13 @@ public sealed class CalendarStoreTests : IDisposable
         // Kanał iCal nie zna pojęcia poziomu dostępu. Puste znaczy „nie mówię", a nie
         // „wolno pisać" — inaczej pierwsze pobranie z kanału kasowałoby odpowiedź,
         // którą podało Google.
-        _zrodlo.SetReadOnly(true);
+        _source.SetReadOnly(true);
         await _db.SaveChangesAsync();
 
-        _kanal.Next = new FeedResult([], null, true);
-        await _usluga.RefreshAsync(force: true);
+        _feed.Next = new FeedResult([], null, true);
+        await _service.RefreshAsync(force: true);
 
-        (await _usluga.SourcesAsync()).Single(z => z.Id == _zrodlo.Id)
+        (await _service.SourcesAsync()).Single(z => z.Id == _source.Id)
             .ReadOnly.Should().BeTrue();
     }
 
@@ -2014,32 +2014,32 @@ public sealed class CalendarStoreTests : IDisposable
         // Przy kalendarzu tylko do odczytu — świątecznym, fazach księżyca, cudzym bez
         // prawa zmian — pierwsze się udaje, drugie wraca odmową. Zostawała odmowa
         // na ekranie **i** kopia, o którą nikt nie prosił.
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("ksiezyc", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
+        _feed.Next = new FeedResult(
+            [NewEvent("ksiezyc", "Pierwsza kwadra", "2026-09-18", 8, 9)], null, true);
 
-        await _usluga.RefreshAsync(force: true);
+        await _service.RefreshAsync(force: true);
 
         // Kalendarz obszaru zakładany **po** pobraniu: atrapa kanału oddaje tę samą
         // listę każdemu podłączeniu, więc założony wcześniej dostałby kopię wydarzenia
         // z pobrania i test mówiłby o duplikacie, którego nie badamy.
         var target = new CalendarSource(
-            Guid.CreateVersion7(), _zegar.Now, _hlc.Next(),
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
             CalendarKind.Ical, "https://example.test/moj.ics", "Rozwój własny");
 
         _db.CalendarSources.Add(target);
         await _db.SaveChangesAsync();
 
         // Stary kalendarz przestaje przyjmować zapisy — tak jak świąteczny u Google.
-        _pisarz.ReadOnly.Add(_zrodlo.Id);
+        _writer.ReadOnly.Add(_source.Id);
 
-        var proba = async () => await _usluga.MoveEventAsync(_zrodlo.Id, "ksiezyc", target.Id);
+        var proba = async () => await _service.MoveEventAsync(_source.Id, "ksiezyc", target.Id);
 
         await proba.Should().ThrowAsync<InvalidOperationException>();
 
         // Kopia zdjęta u źródła…
-        _pisarz.Wyslane.Should().Contain(w => w.Co == "skasowanie" && w.Id == "nowe-1");
+        _writer.Wyslane.Should().Contain(w => w.Co == "skasowanie" && w.Id == "nowe-1");
 
-        var day = (await _usluga.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0];
+        var day = (await _service.AgendaAsync(new DateOnly(2026, 9, 18), 1))[0];
 
         // …i u nas. To jest cała treść poprawki: po odmowie nie zostaje nic, o co nikt
         // nie prosił.
@@ -2058,17 +2058,17 @@ public sealed class CalendarStoreTests : IDisposable
         // Gdyby konto nie liczyło się do rozpoznania duplikatu, drugie podłączenie
         // po cichu oddawałoby pierwsze — czyli kalendarz służbowy czytany byłby
         // żetonem konta prywatnego, które nie ma do niego prawa.
-        var work = await _usluga.AddAsync(
+        var work = await _service.AddAsync(
             CalendarKind.Google, "wspolny@group.calendar.google.com", "Wspólny",
             account: "praca@example.test");
 
-        var dom = await _usluga.AddAsync(
+        var dom = await _service.AddAsync(
             CalendarKind.Google, "wspolny@group.calendar.google.com", "Wspólny",
             account: "dom@example.test");
 
         dom.Id.Should().NotBe(work.Id);
 
-        var sources = await _usluga.SourcesAsync();
+        var sources = await _service.SourcesAsync();
         sources.Where(z => z.ExternalId == "wspolny@group.calendar.google.com")
             .Select(z => z.Account)
             .Should().BeEquivalentTo(["praca@example.test", "dom@example.test"]);
@@ -2080,14 +2080,14 @@ public sealed class CalendarStoreTests : IDisposable
         // Ta sama para rodzaj–identyfikator, różne konta: składanie duplikatów przy
         // odświeżaniu ma zostawić oba. Objaw pomyłki byłby cichy — jeden z dwóch
         // kalendarzy przestałby się pobierać, bez śladu na ekranie.
-        await _usluga.AddAsync(CalendarKind.Google, "primary", "Mój");
-        await _usluga.AddAsync(
+        await _service.AddAsync(CalendarKind.Google, "primary", "Mój");
+        await _service.AddAsync(
             CalendarKind.Google, "primary", "Służbowy", account: "praca@example.test");
 
-        var report = await _usluga.RefreshAsync(force: true);
+        var report = await _service.RefreshAsync(force: true);
 
         report.Folded.Should().Be(0);
-        (await _usluga.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(2);
+        (await _service.SourcesAsync()).Count(z => z.ExternalId == "primary").Should().Be(2);
     }
 
     [Fact]
@@ -2097,35 +2097,35 @@ public sealed class CalendarStoreTests : IDisposable
         // licznikiem rzeczy, na które było miejsce, a na telefonie przy sześciu
         // tygodniach czwarta linijka i tak się nie mieściła — więc licznik mówił „+1",
         // gdy niewidoczne były dwie.
-        _kanal.Next = new FeedResult(
+        _feed.Next = new FeedResult(
             [
-                Wydarzenie("a", "Pierwsze", "2026-09-17", 8, 9),
-                Wydarzenie("b", "Drugie", "2026-09-17", 10, 11),
-                Wydarzenie("c", "Trzecie", "2026-09-17", 12, 13),
-                Wydarzenie("d", "Czwarte", "2026-09-17", 14, 15),
-                Wydarzenie("e", "Piąte", "2026-09-17", 16, 17),
-                Wydarzenie("f", "Szóste", "2026-09-17", 18, 19),
+                NewEvent("a", "Pierwsze", "2026-09-17", 8, 9),
+                NewEvent("b", "Drugie", "2026-09-17", 10, 11),
+                NewEvent("c", "Trzecie", "2026-09-17", 12, 13),
+                NewEvent("d", "Czwarte", "2026-09-17", 14, 15),
+                NewEvent("e", "Piąte", "2026-09-17", 16, 17),
+                NewEvent("f", "Szóste", "2026-09-17", 18, 19),
             ],
             null,
             true);
 
-        await _usluga.RefreshAsync();
+        await _service.RefreshAsync();
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
         await model.ShowMonthCommand.ExecuteAsync(null);
 
         // Siatka na tyle wysoka, że w komórce mieści się wszystko sześć.
         model.SetMonthHeight(1200);
 
-        var day = Komorka(model, new DateOnly(2026, 9, 17));
+        var day = NewCell(model, new DateOnly(2026, 9, 17));
         day.Entries.Should().HaveCount(6);
         day.Overflow.Should().Be(0);
 
         // Ta sama siatka na telefonie: mieści mniej i mówi, ile schowała.
         model.SetMonthHeight(420);
 
-        var ciasno = Komorka(model, new DateOnly(2026, 9, 17));
+        var ciasno = NewCell(model, new DateOnly(2026, 9, 17));
         ciasno.Entries.Should().HaveCountLessThan(6);
         ciasno.Overflow.Should().Be(6 - ciasno.Entries.Count);
     }
@@ -2135,22 +2135,22 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Komórka, w której nie widać niczego poza liczbą, przestaje mówić cokolwiek
         // o tym, czym dzień jest zajęty — a po to się na miesiąc patrzy.
-        _kanal.Next = new FeedResult(
-            [Wydarzenie("a", "Jedyne", "2026-09-17", 8, 9)], null, true);
+        _feed.Next = new FeedResult(
+            [NewEvent("a", "Jedyne", "2026-09-17", 8, 9)], null, true);
 
-        await _usluga.RefreshAsync();
+        await _service.RefreshAsync();
 
-        var model = new CalendarViewModel(_usluga, _zegar, new Notes(), _edycja);
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
         await model.LoadAsync();
         await model.ShowMonthCommand.ExecuteAsync(null);
 
         // Wysokość, przy której nie mieści się nawet jeden wiersz.
         model.SetMonthHeight(60);
 
-        Komorka(model, new DateOnly(2026, 9, 17)).Entries.Should().ContainSingle();
+        NewCell(model, new DateOnly(2026, 9, 17)).Entries.Should().ContainSingle();
     }
 
-    private static MonthCell Komorka(CalendarViewModel model, DateOnly day) =>
+    private static MonthCell NewCell(CalendarViewModel model, DateOnly day) =>
         model.MonthWeeks.SelectMany(t => t.Cells).Single(k => k.Date == day);
 
     [Fact]
@@ -2165,7 +2165,7 @@ public sealed class CalendarStoreTests : IDisposable
             "Zadanie", 0, 30, 0, 100, true, null, "09:00", "10:00",
             Guid.CreateVersion7(), "śr", null, null, false);
 
-        var bylo = Platform.Touch;
+        var before = Platform.Touch;
 
         try
         {
@@ -2180,7 +2180,7 @@ public sealed class CalendarStoreTests : IDisposable
         }
         finally
         {
-            Platform.Touch = bylo;
+            Platform.Touch = before;
         }
     }
 
@@ -2214,10 +2214,10 @@ public sealed class CalendarStoreTests : IDisposable
         var entry = new MonthEntry("09:00", "Spotkanie", null, false, color);
 
         var onGrid = ((SolidColorBrush)block.Background).Color;
-        var wKomorce = ((SolidColorBrush)entry.Background).Color;
+        var inCell = ((SolidColorBrush)entry.Background).Color;
 
-        (wKomorce.R, wKomorce.G, wKomorce.B).Should().Be((onGrid.R, onGrid.G, onGrid.B));
-        wKomorce.A.Should().BeLessThan(onGrid.A);
+        (inCell.R, inCell.G, inCell.B).Should().Be((onGrid.R, onGrid.G, onGrid.B));
+        inCell.A.Should().BeLessThan(onGrid.A);
     }
 
     [Fact]
@@ -2227,11 +2227,11 @@ public sealed class CalendarStoreTests : IDisposable
         // wyglądać jak wszystko inne bez barwy. Powrót do krycia pełnego dawał jedyny
         // nieprzezroczysty prostokąt na siatce — czyli wpis wyróżniony za to, że coś
         // z nim nie tak.
-        var bezBarwy = new MonthEntry("09:00", "Bez barwy", null, false, null);
+        var withoutColor = new MonthEntry("09:00", "Bez barwy", null, false, null);
         var zeSmieciem = new MonthEntry("09:00", "Ze śmieciem", null, false, "obszar Praca");
 
         ((SolidColorBrush)zeSmieciem.Background).Color
-            .Should().Be(((SolidColorBrush)bezBarwy.Background).Color);
+            .Should().Be(((SolidColorBrush)withoutColor.Background).Color);
     }
 
     [Fact]
@@ -2239,9 +2239,9 @@ public sealed class CalendarStoreTests : IDisposable
     {
         // Sama liczba porażek wygląda tak samo przy braku zgody, złym adresie i padniętej
         // sieci. Powód jest jedyną rzeczą, z której da się coś zrobić.
-        _kanal.Rzuca = true;
+        _feed.Rzuca = true;
 
-        var report = await _usluga.RefreshAsync(force: true);
+        var report = await _service.RefreshAsync(force: true);
 
         report.Failed.Should().Be(1);
         report.Problems.Should().ContainSingle()
@@ -2251,6 +2251,6 @@ public sealed class CalendarStoreTests : IDisposable
     public void Dispose()
     {
         _db.Dispose();
-        _polaczenie.Dispose();
+        _connection.Dispose();
     }
 }

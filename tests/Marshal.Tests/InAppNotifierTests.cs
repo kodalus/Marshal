@@ -107,4 +107,4 @@ public sealed class InAppNotifierTests : IDisposable
 /// xUnita nie zrównolegla swoich klas, więc sama przynależność wystarcza.
 /// </summary>
 [CollectionDefinition("Powiadomienia systemowe")]
-public sealed class PowiadomieniaSystemoweCollection;
+public sealed class SystemNotificationsCollection;

@@ -11,10 +11,10 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class RecurrenceRunnerTests
 {
-    private readonly Guid _obszar = Guid.CreateVersion7();
-    private Hlc _zegar = Hlc.Zero("test");
+    private readonly Guid _area = Guid.CreateVersion7();
+    private Hlc _clock = Hlc.Zero("test");
 
-    private Hlc Stempel() => _zegar = Hlc.Next(_zegar, _zegar.WallMs + 1);
+    private Hlc Stempel() => _clock = Hlc.Next(_clock, _clock.WallMs + 1);
 
     private static DateOnly D(string iso) => DateOnly.Parse(iso);
 
@@ -24,7 +24,7 @@ public sealed class RecurrenceRunnerTests
     private TaskItem Zaplanowane(string doDate, RecurrenceRule? rule = null)
     {
         var task = TaskItem.Capture("Wynieść śmieci", Moment(doDate), Stempel());
-        task.Schedule(_obszar, D(doDate), Stempel());
+        task.Schedule(_area, D(doDate), Stempel());
 
         if (rule is not null)
         {
@@ -92,13 +92,13 @@ public sealed class RecurrenceRunnerTests
     {
         var task = Zaplanowane("2026-09-14", new RecurrenceRule(RecurrenceKind.Daily));
         var project = Guid.CreateVersion7();
-        task.MoveTo(_obszar, project, Stempel());
+        task.MoveTo(_area, project, Stempel());
         task.SetPriority(Priority.High, Stempel());
         task.SetNote("z kluczem do piwnicy", Stempel());
 
         var next = RecurrenceRunner.Complete(task, Moment("2026-09-14"), Stempel)!;
 
-        next.AreaId.Should().Be(_obszar);
+        next.AreaId.Should().Be(_area);
         next.ProjectId.Should().Be(project);
         next.Priority.Should().Be(Priority.High);
         next.Note.Should().Be("z kluczem do piwnicy");

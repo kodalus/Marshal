@@ -8,7 +8,7 @@ namespace Marshal.Tests;
 
 public class HlcSourceTests
 {
-    private sealed class ZegarStojacy : IClock
+    private sealed class StoppedClock : IClock
     {
         public DateTimeOffset Now { get; set; } = DateTimeOffset.UnixEpoch;
     }
@@ -16,7 +16,7 @@ public class HlcSourceTests
     [Fact]
     public void Kolejne_znaczniki_sa_scisle_rosnace_przy_stojacym_zegarze()
     {
-        var source = new HlcSource(new ZegarStojacy(), "biurko");
+        var source = new HlcSource(new StoppedClock(), "biurko");
 
         var stamps = Enumerable.Range(0, 100).Select(_ => source.Next()).ToArray();
 
@@ -27,7 +27,7 @@ public class HlcSourceTests
     [Fact]
     public void Znaczniki_sa_unikalne_przy_zapisach_wspolbieznych()
     {
-        var source = new HlcSource(new ZegarStojacy(), "biurko");
+        var source = new HlcSource(new StoppedClock(), "biurko");
         var result = new System.Collections.Concurrent.ConcurrentBag<Hlc>();
 
         Parallel.For(0, 1000, _ => result.Add(source.Next()));
@@ -39,7 +39,7 @@ public class HlcSourceTests
     [Fact]
     public void Observe_podnosi_zegar_ponad_znacznik_zdalny()
     {
-        var source = new HlcSource(new ZegarStojacy(), "biurko");
+        var source = new HlcSource(new StoppedClock(), "biurko");
         var remote = new Hlc(9_000_000, 3, "telefon");
 
         source.Observe(remote);
@@ -53,7 +53,7 @@ public class HlcSourceTests
         // Sprawdzenie przeniesione z konstruktora do pierwszego użycia: zegar powstaje
         // przy składaniu zależności, a tożsamość i wznowienie leżą w bazie, której
         // wtedy jeszcze nie ma. Odrzucenie nadal obowiązuje, tylko później.
-        var source = new HlcSource(new ZegarStojacy(), "biurko", new Hlc(1, 0, "telefon"));
+        var source = new HlcSource(new StoppedClock(), "biurko", new Hlc(1, 0, "telefon"));
 
         var uzycie = () => source.Next();
         uzycie.Should().Throw<InvalidOperationException>();
@@ -67,7 +67,7 @@ public class HlcSourceTests
         var siegnieto = false;
 
         _ = new HlcSource(
-            new ZegarStojacy(),
+            new StoppedClock(),
             () => { siegnieto = true; return "biurko"; },
             () => { siegnieto = true; return null; });
 

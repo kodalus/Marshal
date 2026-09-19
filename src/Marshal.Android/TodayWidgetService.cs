@@ -272,7 +272,7 @@ public sealed class TodayWidgetService : RemoteViewsService
             }
 
             var item = _rows[position];
-            var view = new RemoteViews(context.PackageName, Resource.Layout.widget_wiersz);
+            var view = new RemoteViews(context.PackageName, Resource.Layout.widget_row);
 
             view.SetTextViewText(Resource.Id.title, item.Title);
             view.SetTextViewText(Resource.Id.caption, item.Caption);
@@ -312,9 +312,9 @@ public sealed class TodayWidgetService : RemoteViewsService
             var opening = new Intent();
             opening.PutExtra(TodayWidget.OpenWhatExtra, TodayWidget.OpenWhat);
 
-            if (item.TaskId is { } otwierane)
+            if (item.TaskId is { } opened)
             {
-                opening.PutExtra(TodayWidget.TaskIdExtra, otwierane.ToString());
+                opening.PutExtra(TodayWidget.TaskIdExtra, opened.ToString());
             }
 
             view.SetOnClickFillInIntent(Resource.Id.content, opening);

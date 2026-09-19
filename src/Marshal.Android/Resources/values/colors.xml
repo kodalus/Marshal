@@ -12,15 +12,15 @@
 -->
 <resources>
   <!-- Motyw jasny; ciemny w values-night. -->
-  <color name="tlo_okna">#F4F6FC</color>
+  <color name="window_background">#F4F6FC</color>
 
   <!-- Znak aplikacji ma jedno tło niezależnie od motywu — taki sam jak na pulpicie. -->
-  <color name="tlo_znaku">#121729</color>
+  <color name="mark_background">#121729</color>
 
   <!-- Widget stoi na tapecie, nie na tle aplikacji, więc odrobinę przezroczysty:
        nieprzezroczysty prostokąt na ekranie domowym wygląda jak wycięta dziura. -->
-  <color name="tlo_widgetu">#F2121729</color>
-  <color name="akcent">#7C6CF5</color>
-  <color name="tekst">#FFFFFFFF</color>
-  <color name="tekst_przygaszony">#FF9AA2C4</color>
+  <color name="widget_background">#F2121729</color>
+  <color name="accent">#7C6CF5</color>
+  <color name="text">#FFFFFFFF</color>
+  <color name="text_dim">#FF9AA2C4</color>
 </resources>

@@ -14,22 +14,22 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class SettingsTests : IDisposable
 {
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly LocalSettings _ustawienia;
+    private readonly LocalSettings _settings;
 
     public SettingsTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         // Z przechwytywaczem dziennika, inaczej sprawdzenie „poświadczenia nie trafiają
         // do dziennika" przechodziłoby dlatego, że dziennika nie ma wcale.
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
-                .UseSqlite(_polaczenie)
+                .UseSqlite(_connection)
                 .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
         _db.Database.Migrate();
-        _ustawienia = new LocalSettings(_db);
+        _settings = new LocalSettings(_db);
     }
 
     [Fact]
@@ -37,8 +37,8 @@ public sealed class SettingsTests : IDisposable
     {
         // Wpisana wprost, nie brana z systemu — świeżo zainstalowana aplikacja ma
         // liczyć dni tak samo na telefonie kupionym z inną strefą fabryczną.
-        _ustawienia.Zone.Should().Be(TimeZoneInfo.FindSystemTimeZoneById(LocalSettings.DefaultZoneId));
-        _ustawienia.Theme.Should().Be(ThemeChoice.System);
+        _settings.Zone.Should().Be(TimeZoneInfo.FindSystemTimeZoneById(LocalSettings.DefaultZoneId));
+        _settings.Theme.Should().Be(ThemeChoice.System);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class SettingsTests : IDisposable
         // Kopiowanie z konsoli Google wciąga spację albo koniec wiersza, a logowanie
         // odbija się wtedy komunikatem o złym kliencie — po którym nie widać, że
         // chodziło o jeden znak.
-        _ustawienia.SetGoogle("  123.apps.googleusercontent.com\n", " GOCSPX-tajne ");
+        _settings.SetGoogle("  123.apps.googleusercontent.com\n", " GOCSPX-tajne ");
 
         var znowu = new LocalSettings(_db);
 
@@ -60,7 +60,7 @@ public sealed class SettingsTests : IDisposable
     {
         // Dziennik zmian jest zwykłym tekstem lądującym na Dysku. Poświadczenia do
         // Dysku nie mają jechać przez Dysk — na drugim urządzeniu wkleja się je jeszcze raz.
-        _ustawienia.SetGoogle("123.apps.googleusercontent.com", "GOCSPX-tajne");
+        _settings.SetGoogle("123.apps.googleusercontent.com", "GOCSPX-tajne");
 
         _db.Changes.Should().BeEmpty();
     }
@@ -68,8 +68,8 @@ public sealed class SettingsTests : IDisposable
     [Fact]
     public void Ustawienia_przezywaja_ponowne_otwarcie_bazy()
     {
-        _ustawienia.SetTheme(ThemeChoice.Dark);
-        _ustawienia.SetZone("UTC");
+        _settings.SetTheme(ThemeChoice.Dark);
+        _settings.SetZone("UTC");
 
         var znowu = new LocalSettings(_db);
 
@@ -101,11 +101,11 @@ public sealed class SettingsTests : IDisposable
     public void Dzialajaca_strefa_nie_zglasza_klopotu()
     {
         // Ostrzeżenie, które świeci zawsze, przestaje być ostrzeżeniem.
-        _ustawienia.ZoneProblem.Should().BeNull();
+        _settings.ZoneProblem.Should().BeNull();
     }
 
     /// <summary>Ustawienia o jednej wartości — na potrzeby sprawdzenia samego zegara.</summary>
-    private sealed class Strefa(string id) : ISettings
+    private sealed class NewZone(string id) : ISettings
     {
         public TimeZoneInfo Zone { get; } = TimeZoneInfo.FindSystemTimeZoneById(id);
 
@@ -150,8 +150,8 @@ public sealed class SettingsTests : IDisposable
         // Sedno spec 3.4. Ten sam moment fizyczny ma w dwóch strefach różne
         // przesunięcie — i to jest dokładnie ta różnica, przez którą po wyjeździe
         // zadanie jutrzejsze robi się dzisiejszym.
-        var wUtc = new SystemClock(new Strefa("UTC"));
-        var wWarszawie = new SystemClock(new Strefa("Europe/Warsaw"));
+        var wUtc = new SystemClock(new NewZone("UTC"));
+        var wWarszawie = new SystemClock(new NewZone("Europe/Warsaw"));
 
         (wWarszawie.Now.Offset - wUtc.Now.Offset).Should().BeGreaterThan(TimeSpan.Zero);
         wUtc.Now.Offset.Should().Be(TimeSpan.Zero);
@@ -174,6 +174,6 @@ public sealed class SettingsTests : IDisposable
     public void Dispose()
     {
         _db.Dispose();
-        _polaczenie.Dispose();
+        _connection.Dispose();
     }
 }

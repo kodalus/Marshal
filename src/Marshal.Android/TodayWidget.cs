@@ -427,12 +427,12 @@ public sealed class TodayWidget : AppWidgetProvider
             view.SetInt(
                 Dots[i],
                 "setBackgroundResource",
-                busy.Contains(day) ? Resource.Drawable.kropka_widgetu : Resource.Drawable.transparent);
+                busy.Contains(day) ? Resource.Drawable.widget_dot : Resource.Drawable.transparent);
 
             view.SetInt(
                 Dashes[i],
                 "setBackgroundResource",
-                selected ? Resource.Drawable.kreska_widgetu : Resource.Drawable.transparent);
+                selected ? Resource.Drawable.widget_dash : Resource.Drawable.transparent);
 
             // Dotknięcie kolumny przestawia widget na ten dzień. Przez różnicę, bo
             // przesunięcie liczone jest od dzisiejszego dnia i tak je zapisujemy.
@@ -444,32 +444,32 @@ public sealed class TodayWidget : AppWidgetProvider
 
     private static readonly int[] Columns =
     [
-        Resource.Id.dzien0, Resource.Id.dzien1, Resource.Id.dzien2, Resource.Id.dzien3,
-        Resource.Id.dzien4, Resource.Id.dzien5, Resource.Id.dzien6,
+        Resource.Id.day0, Resource.Id.day1, Resource.Id.day2, Resource.Id.day3,
+        Resource.Id.day4, Resource.Id.day5, Resource.Id.day6,
     ];
 
     private static readonly int[] Names =
     [
-        Resource.Id.nazwa0, Resource.Id.nazwa1, Resource.Id.nazwa2, Resource.Id.nazwa3,
-        Resource.Id.nazwa4, Resource.Id.nazwa5, Resource.Id.nazwa6,
+        Resource.Id.name0, Resource.Id.name1, Resource.Id.name2, Resource.Id.name3,
+        Resource.Id.name4, Resource.Id.name5, Resource.Id.name6,
     ];
 
     private static readonly int[] Numbers =
     [
-        Resource.Id.numer0, Resource.Id.numer1, Resource.Id.numer2, Resource.Id.numer3,
-        Resource.Id.numer4, Resource.Id.numer5, Resource.Id.numer6,
+        Resource.Id.number0, Resource.Id.number1, Resource.Id.number2, Resource.Id.number3,
+        Resource.Id.number4, Resource.Id.number5, Resource.Id.number6,
     ];
 
     private static readonly int[] Dots =
     [
-        Resource.Id.kropka0, Resource.Id.kropka1, Resource.Id.kropka2, Resource.Id.kropka3,
-        Resource.Id.kropka4, Resource.Id.kropka5, Resource.Id.kropka6,
+        Resource.Id.dot0, Resource.Id.dot1, Resource.Id.dot2, Resource.Id.dot3,
+        Resource.Id.dot4, Resource.Id.dot5, Resource.Id.dot6,
     ];
 
     private static readonly int[] Dashes =
     [
-        Resource.Id.kreska0, Resource.Id.kreska1, Resource.Id.kreska2, Resource.Id.kreska3,
-        Resource.Id.kreska4, Resource.Id.kreska5, Resource.Id.kreska6,
+        Resource.Id.dash0, Resource.Id.dash1, Resource.Id.dash2, Resource.Id.dash3,
+        Resource.Id.dash4, Resource.Id.dash5, Resource.Id.dash6,
     ];
 
     /// <summary>

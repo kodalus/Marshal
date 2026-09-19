@@ -28,10 +28,10 @@
     zostają dla starszych telefonów.
   -->
   <style name="MyTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
-    <item name="android:windowBackground">@color/tlo_okna</item>
-    <item name="android:statusBarColor">@color/tlo_okna</item>
-    <item name="android:navigationBarColor">@color/tlo_okna</item>
-    <item name="android:windowLightStatusBar">@bool/ciemne_ikony_paskow</item>
-    <item name="android:windowLightNavigationBar">@bool/ciemne_ikony_paskow</item>
+    <item name="android:windowBackground">@color/window_background</item>
+    <item name="android:statusBarColor">@color/window_background</item>
+    <item name="android:navigationBarColor">@color/window_background</item>
+    <item name="android:windowLightStatusBar">@bool/dark_bar_icons</item>
+    <item name="android:windowLightNavigationBar">@bool/dark_bar_icons</item>
   </style>
 </resources>

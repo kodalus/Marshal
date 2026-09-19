@@ -17,12 +17,12 @@
   niż co pół godziny, a widget ma być aktualny **po zmianie**, nie co pół godziny.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:id="@+id/korzen"
+              android:id="@+id/root"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
               android:orientation="vertical"
               android:padding="10dp"
-              android:background="@drawable/tlo_widgetu">
+              android:background="@drawable/widget_background">
 
   <LinearLayout
       android:layout_width="match_parent"
@@ -31,7 +31,7 @@
       android:orientation="horizontal">
 
     <Button
-        android:id="@+id/wstecz"
+        android:id="@+id/back"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:minWidth="0dp"
@@ -40,13 +40,13 @@
         android:paddingEnd="10dp"
         android:paddingTop="2dp"
         android:paddingBottom="2dp"
-        android:background="@drawable/przycisk_widgetu"
-        android:textColor="@color/tekst"
+        android:background="@drawable/widget_button"
+        android:textColor="@color/text"
         android:textSize="15sp"
         android:text="‹" />
 
     <TextView
-        android:id="@+id/naglowek"
+        android:id="@+id/heading"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -55,12 +55,12 @@
         android:gravity="center"
         android:maxLines="1"
         android:ellipsize="end"
-        android:textColor="@color/tekst"
+        android:textColor="@color/text"
         android:textSize="16sp"
         android:text="Wrzesień" />
 
     <Button
-        android:id="@+id/naprzod"
+        android:id="@+id/forward"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:minWidth="0dp"
@@ -70,13 +70,13 @@
         android:paddingTop="2dp"
         android:paddingBottom="2dp"
         android:layout_marginEnd="6dp"
-        android:background="@drawable/przycisk_widgetu"
-        android:textColor="@color/tekst"
+        android:background="@drawable/widget_button"
+        android:textColor="@color/text"
         android:textSize="15sp"
         android:text="›" />
 
     <Button
-        android:id="@+id/wrzut"
+        android:id="@+id/capture"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:minWidth="0dp"
@@ -85,21 +85,21 @@
         android:paddingEnd="10dp"
         android:paddingTop="2dp"
         android:paddingBottom="2dp"
-        android:background="@drawable/przycisk_widgetu"
-        android:textColor="@color/tekst"
+        android:background="@drawable/widget_button"
+        android:textColor="@color/text"
         android:textSize="15sp"
         android:text="+" />
   </LinearLayout>
 
   <LinearLayout
-      android:id="@+id/tydzien"
+      android:id="@+id/week"
       android:layout_width="match_parent"
       android:layout_height="wrap_content"
       android:layout_marginTop="8dp"
       android:orientation="horizontal">
 
     <LinearLayout
-        android:id="@+id/dzien0"
+        android:id="@+id/day0"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -107,41 +107,41 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/nazwa0"
+          android:id="@+id/name0"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:maxLines="1"
-          android:textColor="@color/tekst_przygaszony"
+          android:textColor="@color/text_dim"
           android:textSize="11sp" />
 
       <TextView
-          android:id="@+id/numer0"
+          android:id="@+id/number0"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_marginTop="1dp"
           android:maxLines="1"
-          android:textColor="@color/tekst"
+          android:textColor="@color/text"
           android:textSize="16sp" />
 
       <ImageView
-          android:id="@+id/kropka0"
+          android:id="@+id/dot0"
           android:layout_width="5dp"
           android:layout_height="5dp"
           android:layout_marginTop="3dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
 
       <ImageView
-          android:id="@+id/kreska0"
+          android:id="@+id/dash0"
           android:layout_width="match_parent"
           android:layout_height="3dp"
           android:layout_marginTop="4dp"
           android:layout_marginStart="4dp"
           android:layout_marginEnd="4dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dzien1"
+        android:id="@+id/day1"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -149,41 +149,41 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/nazwa1"
+          android:id="@+id/name1"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:maxLines="1"
-          android:textColor="@color/tekst_przygaszony"
+          android:textColor="@color/text_dim"
           android:textSize="11sp" />
 
       <TextView
-          android:id="@+id/numer1"
+          android:id="@+id/number1"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_marginTop="1dp"
           android:maxLines="1"
-          android:textColor="@color/tekst"
+          android:textColor="@color/text"
           android:textSize="16sp" />
 
       <ImageView
-          android:id="@+id/kropka1"
+          android:id="@+id/dot1"
           android:layout_width="5dp"
           android:layout_height="5dp"
           android:layout_marginTop="3dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
 
       <ImageView
-          android:id="@+id/kreska1"
+          android:id="@+id/dash1"
           android:layout_width="match_parent"
           android:layout_height="3dp"
           android:layout_marginTop="4dp"
           android:layout_marginStart="4dp"
           android:layout_marginEnd="4dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dzien2"
+        android:id="@+id/day2"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -191,41 +191,41 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/nazwa2"
+          android:id="@+id/name2"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:maxLines="1"
-          android:textColor="@color/tekst_przygaszony"
+          android:textColor="@color/text_dim"
           android:textSize="11sp" />
 
       <TextView
-          android:id="@+id/numer2"
+          android:id="@+id/number2"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_marginTop="1dp"
           android:maxLines="1"
-          android:textColor="@color/tekst"
+          android:textColor="@color/text"
           android:textSize="16sp" />
 
       <ImageView
-          android:id="@+id/kropka2"
+          android:id="@+id/dot2"
           android:layout_width="5dp"
           android:layout_height="5dp"
           android:layout_marginTop="3dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
 
       <ImageView
-          android:id="@+id/kreska2"
+          android:id="@+id/dash2"
           android:layout_width="match_parent"
           android:layout_height="3dp"
           android:layout_marginTop="4dp"
           android:layout_marginStart="4dp"
           android:layout_marginEnd="4dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dzien3"
+        android:id="@+id/day3"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -233,41 +233,41 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/nazwa3"
+          android:id="@+id/name3"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:maxLines="1"
-          android:textColor="@color/tekst_przygaszony"
+          android:textColor="@color/text_dim"
           android:textSize="11sp" />
 
       <TextView
-          android:id="@+id/numer3"
+          android:id="@+id/number3"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_marginTop="1dp"
           android:maxLines="1"
-          android:textColor="@color/tekst"
+          android:textColor="@color/text"
           android:textSize="16sp" />
 
       <ImageView
-          android:id="@+id/kropka3"
+          android:id="@+id/dot3"
           android:layout_width="5dp"
           android:layout_height="5dp"
           android:layout_marginTop="3dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
 
       <ImageView
-          android:id="@+id/kreska3"
+          android:id="@+id/dash3"
           android:layout_width="match_parent"
           android:layout_height="3dp"
           android:layout_marginTop="4dp"
           android:layout_marginStart="4dp"
           android:layout_marginEnd="4dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dzien4"
+        android:id="@+id/day4"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -275,41 +275,41 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/nazwa4"
+          android:id="@+id/name4"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:maxLines="1"
-          android:textColor="@color/tekst_przygaszony"
+          android:textColor="@color/text_dim"
           android:textSize="11sp" />
 
       <TextView
-          android:id="@+id/numer4"
+          android:id="@+id/number4"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_marginTop="1dp"
           android:maxLines="1"
-          android:textColor="@color/tekst"
+          android:textColor="@color/text"
           android:textSize="16sp" />
 
       <ImageView
-          android:id="@+id/kropka4"
+          android:id="@+id/dot4"
           android:layout_width="5dp"
           android:layout_height="5dp"
           android:layout_marginTop="3dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
 
       <ImageView
-          android:id="@+id/kreska4"
+          android:id="@+id/dash4"
           android:layout_width="match_parent"
           android:layout_height="3dp"
           android:layout_marginTop="4dp"
           android:layout_marginStart="4dp"
           android:layout_marginEnd="4dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dzien5"
+        android:id="@+id/day5"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -317,41 +317,41 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/nazwa5"
+          android:id="@+id/name5"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:maxLines="1"
-          android:textColor="@color/tekst_przygaszony"
+          android:textColor="@color/text_dim"
           android:textSize="11sp" />
 
       <TextView
-          android:id="@+id/numer5"
+          android:id="@+id/number5"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_marginTop="1dp"
           android:maxLines="1"
-          android:textColor="@color/tekst"
+          android:textColor="@color/text"
           android:textSize="16sp" />
 
       <ImageView
-          android:id="@+id/kropka5"
+          android:id="@+id/dot5"
           android:layout_width="5dp"
           android:layout_height="5dp"
           android:layout_marginTop="3dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
 
       <ImageView
-          android:id="@+id/kreska5"
+          android:id="@+id/dash5"
           android:layout_width="match_parent"
           android:layout_height="3dp"
           android:layout_marginTop="4dp"
           android:layout_marginStart="4dp"
           android:layout_marginEnd="4dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
     </LinearLayout>
 
     <LinearLayout
-        android:id="@+id/dzien6"
+        android:id="@+id/day6"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
@@ -359,52 +359,52 @@
         android:orientation="vertical">
 
       <TextView
-          android:id="@+id/nazwa6"
+          android:id="@+id/name6"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:maxLines="1"
-          android:textColor="@color/tekst_przygaszony"
+          android:textColor="@color/text_dim"
           android:textSize="11sp" />
 
       <TextView
-          android:id="@+id/numer6"
+          android:id="@+id/number6"
           android:layout_width="wrap_content"
           android:layout_height="wrap_content"
           android:layout_marginTop="1dp"
           android:maxLines="1"
-          android:textColor="@color/tekst"
+          android:textColor="@color/text"
           android:textSize="16sp" />
 
       <ImageView
-          android:id="@+id/kropka6"
+          android:id="@+id/dot6"
           android:layout_width="5dp"
           android:layout_height="5dp"
           android:layout_marginTop="3dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
 
       <ImageView
-          android:id="@+id/kreska6"
+          android:id="@+id/dash6"
           android:layout_width="match_parent"
           android:layout_height="3dp"
           android:layout_marginTop="4dp"
           android:layout_marginStart="4dp"
           android:layout_marginEnd="4dp"
-          android:background="@drawable/przezroczyste" />
+          android:background="@drawable/transparent" />
     </LinearLayout>
   </LinearLayout>
 
   <TextView
-      android:id="@+id/pusto"
+      android:id="@+id/empty"
       android:layout_width="match_parent"
       android:layout_height="0dp"
       android:layout_weight="1"
       android:layout_marginTop="10dp"
-      android:textColor="@color/tekst_przygaszony"
+      android:textColor="@color/text_dim"
       android:textSize="13sp"
       android:text="Nic na ten dzień." />
 
   <ListView
-      android:id="@+id/lista"
+      android:id="@+id/list"
       android:layout_width="match_parent"
       android:layout_height="0dp"
       android:layout_weight="1"

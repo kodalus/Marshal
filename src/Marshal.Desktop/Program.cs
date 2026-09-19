@@ -2,7 +2,7 @@ using Avalonia;
 using Marshal.Infrastructure.Notifications;
 using Marshal.UI;
 
-#if DYMKI
+#if TOASTS
 using DesktopNotifications;
 using DesktopNotifications.Windows;
 #endif
@@ -14,16 +14,16 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        var budowniczy = BuildAvaloniaApp();
+        var builder = BuildAvaloniaApp();
 
         // Powiadomienia systemowe podpinane **przed** startem i z pełnym
         // zabezpieczeniem. Toast to jedyny kawałek aplikacji, który zależy od rzeczy
         // spoza niej: na Windowsie od skrótu w menu Start, na Linuksie od usługi
         // powiadomień. Gdy któregoś zabraknie, aplikacja ma wstać tak samo — z paskiem
         // przypomnień w oknie, który działał do dziś.
-        PodepnijPowiadomienia();
+        HookNotifications();
 
-        budowniczy.StartWithClassicDesktopLifetime(args);
+        builder.StartWithClassicDesktopLifetime(args);
     }
 
     /// <summary>
@@ -36,9 +36,9 @@ internal static class Program
     /// chodzi na Linuksie, tych kilkunastu linii nie kompiluje; sprawdzenie systemu
     /// w środku zostaje, bo ten sam plik buduje się też pod zwykłym celem.
     /// </remarks>
-    private static void PodepnijPowiadomienia()
+    private static void HookNotifications()
     {
-#if DYMKI
+#if TOASTS
         if (!OperatingSystem.IsWindows())
         {
             InAppNotifier.SystemStatus = "ten system nie ma dymków Windowsa";
@@ -47,17 +47,17 @@ internal static class Program
 
         try
         {
-            var menedzer = new WindowsNotificationManager(
+            var manager = new WindowsNotificationManager(
                 WindowsApplicationContext.FromCurrentProcess("Marshal"));
 
-            menedzer.Initialize().GetAwaiter().GetResult();
+            manager.Initialize().GetAwaiter().GetResult();
             InAppNotifier.SystemStatus = "podpięte";
 
             // Drugi parametr to chwila wygaśnięcia i jest wymagany. Puste znaczy
             // „niech zostanie w centrum powiadomień" — przypomnienie, które znika samo
             // po minucie, jest bezużyteczne dokładnie wtedy, gdy się go nie widziało.
             InAppNotifier.SystemSink = (reminder, _) =>
-                menedzer.ShowNotification(
+                manager.ShowNotification(
                     new Notification
                     {
                         Title = reminder.Title,

@@ -140,8 +140,8 @@ public static class MarkdownReader
                         link);
                     break;
 
-                case LinkInline link:
-                    Collect(link, output, bold, italic, link.Url);
+                case LinkInline inline:
+                    Collect(inline, output, bold, italic, inline.Url);
                     break;
 
                 case LineBreakInline:

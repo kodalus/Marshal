@@ -22,23 +22,23 @@ public sealed class MarshalDbContextTests : IDisposable
         _connection.Open();
     }
 
-    private MarshalDbContext Kontekst()
+    private MarshalDbContext NewContext()
     {
         var options = new DbContextOptionsBuilder<MarshalDbContext>()
             .UseSqlite(_connection)
             .Options;
 
-        var kontekst = new MarshalDbContext(options);
-        kontekst.Database.Migrate();
-        return kontekst;
+        var context = new MarshalDbContext(options);
+        context.Database.Migrate();
+        return context;
     }
 
     [Fact]
     public void Model_daje_sie_zbudowac_i_utworzyc_schemat()
     {
-        using var kontekst = Kontekst();
+        using var context = NewContext();
 
-        kontekst.Model.Should().NotBeNull();
+        context.Model.Should().NotBeNull();
     }
 
     [Fact]
@@ -48,14 +48,14 @@ public sealed class MarshalDbContextTests : IDisposable
         var utworzony = new DateTimeOffset(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
         var stamp = new Hlc(1757942400123, 7, "a3f1");
 
-        using (var patch = Kontekst())
+        using (var patch = NewContext())
         {
             patch.Areas.Add(new Area(id, utworzony, stamp, "Sprawy urzędowe", 9.0, 60, 21, "#8899AA"));
             patch.SaveChanges();
         }
 
-        using var odczyt = Kontekst();
-        var area = odczyt.Areas.Single();
+        using var read = NewContext();
+        var area = read.Areas.Single();
 
         area.Id.Should().Be(id);
         area.Name.Should().Be("Sprawy urzędowe");
@@ -70,15 +70,15 @@ public sealed class MarshalDbContextTests : IDisposable
     [Fact]
     public void Znacznik_zegara_jest_skladowany_jako_tekst()
     {
-        using var kontekst = Kontekst();
-        kontekst.Areas.Add(new Area(
+        using var context = NewContext();
+        context.Areas.Add(new Area(
             Guid.CreateVersion7(), DateTimeOffset.UnixEpoch, new Hlc(1757942400123, 7, "a3f1"), "Dom", 4.0));
-        kontekst.SaveChanges();
+        context.SaveChanges();
 
-        using var polecenie = _connection.CreateCommand();
-        polecenie.CommandText = "SELECT UpdatedAt FROM Areas LIMIT 1";
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT UpdatedAt FROM Areas LIMIT 1";
 
-        polecenie.ExecuteScalar().Should().Be("1757942400123.000007.a3f1");
+        command.ExecuteScalar().Should().Be("1757942400123.000007.a3f1");
     }
 
     [Fact]
@@ -86,14 +86,14 @@ public sealed class MarshalDbContextTests : IDisposable
     {
         var id = Guid.CreateVersion7();
 
-        using var kontekst = Kontekst();
-        kontekst.Areas.Add(new Area(id, DateTimeOffset.UnixEpoch, new Hlc(1, 0, "a"), "Praca", 1.0));
-        kontekst.SaveChanges();
+        using var context = NewContext();
+        context.Areas.Add(new Area(id, DateTimeOffset.UnixEpoch, new Hlc(1, 0, "a"), "Praca", 1.0));
+        context.SaveChanges();
 
-        using var polecenie = _connection.CreateCommand();
-        polecenie.CommandText = "SELECT Id FROM Areas LIMIT 1";
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT Id FROM Areas LIMIT 1";
 
-        polecenie.ExecuteScalar().Should().BeOfType<string>();
+        command.ExecuteScalar().Should().BeOfType<string>();
     }
 
     [Fact]
@@ -101,15 +101,15 @@ public sealed class MarshalDbContextTests : IDisposable
     {
         var id = Guid.CreateVersion7();
 
-        using var kontekst = Kontekst();
+        using var context = NewContext();
         var area = new Area(id, DateTimeOffset.UnixEpoch, new Hlc(1, 0, "a"), "Relacje", 10.0);
-        kontekst.Areas.Add(area);
-        kontekst.SaveChanges();
+        context.Areas.Add(area);
+        context.SaveChanges();
 
         area.MarkDeleted(new Hlc(2, 0, "a"));
-        kontekst.SaveChanges();
+        context.SaveChanges();
 
-        kontekst.Areas.Single().Deleted.Should().BeTrue();
+        context.Areas.Single().Deleted.Should().BeTrue();
     }
 
     public void Dispose() => _connection.Dispose();

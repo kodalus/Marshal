@@ -29,22 +29,22 @@ public sealed class StaleCacheTests : IDisposable
             new(2026, 9, 17, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Clock _zegar = new();
+    private readonly Clock _clock = new();
     private readonly HlcSource _hlc;
-    private readonly Guid _obszar = Guid.CreateVersion7();
+    private readonly Guid _area = Guid.CreateVersion7();
 
     public StaleCacheTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
-                .UseSqlite(_polaczenie)
+                .UseSqlite(_connection)
                 .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
         _db.Database.Migrate();
-        _hlc = new HlcSource(_zegar, "biurko");
+        _hlc = new HlcSource(_clock, "biurko");
     }
 
     /// <summary>Wpisanie wartości tak, jak robi to scalanie: prosto we właściwość.</summary>
@@ -55,8 +55,8 @@ public sealed class StaleCacheTests : IDisposable
     [Fact]
     public void Regula_powtarzania_odswieza_sie_po_wpisaniu_z_boku()
     {
-        var task = TaskItem.Capture("podlać kwiaty", _zegar.Now, _hlc.Next());
-        task.MakeNext(_obszar, _hlc.Next());
+        var task = TaskItem.Capture("podlać kwiaty", _clock.Now, _hlc.Next());
+        task.MakeNext(_area, _hlc.Next());
         task.SetRecurrence(
             new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday), _hlc.Next());
 
@@ -83,7 +83,7 @@ public sealed class StaleCacheTests : IDisposable
         var filter = SavedFilter.Create(
             "Kwadrans",
             new FilterQuery([FilterCondition.Estimate(15)]),
-            _zegar.Now,
+            _clock.Now,
             _hlc.Next());
 
         _db.SavedFilters.Add(filter);
@@ -102,8 +102,8 @@ public sealed class StaleCacheTests : IDisposable
     [Fact]
     public void Wyczyszczenie_reguly_z_boku_tez_widac()
     {
-        var task = TaskItem.Capture("podlać kwiaty", _zegar.Now, _hlc.Next());
-        task.MakeNext(_obszar, _hlc.Next());
+        var task = TaskItem.Capture("podlać kwiaty", _clock.Now, _hlc.Next());
+        task.MakeNext(_area, _hlc.Next());
         task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), _hlc.Next());
 
         _db.Tasks.Add(task);
@@ -119,6 +119,6 @@ public sealed class StaleCacheTests : IDisposable
     public void Dispose()
     {
         _db.Dispose();
-        _polaczenie.Dispose();
+        _connection.Dispose();
     }
 }

@@ -7,21 +7,21 @@ namespace Marshal.Tests;
 
 public sealed class LocalFolderTransportTests : IDisposable
 {
-    private readonly string _katalog =
+    private readonly string _folder =
         Path.Combine(Path.GetTempPath(), "marshal-testy-" + Guid.NewGuid().ToString("N"));
 
-    private LocalFolderTransport Skladnica() => new(_katalog);
+    private LocalFolderTransport NewStore() => new(_folder);
 
     [Fact]
     public async Task Pusta_skladnica_nie_ma_zadnych_porcji()
     {
-        (await Skladnica().ListSegmentsAsync()).Should().BeEmpty();
+        (await NewStore().ListSegmentsAsync()).Should().BeEmpty();
     }
 
     [Fact]
     public async Task Zapisana_porcja_wraca_w_calosci()
     {
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000001", "pierwsza\ndruga\n");
 
@@ -37,7 +37,7 @@ public sealed class LocalFolderTransportTests : IDisposable
     {
         // Zapis i odczyt muszą chodzić tym samym kodowaniem. Rozjazd nie rzuca
         // wyjątku — daje zniekształcony tekst dopiero na drugim urządzeniu.
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000001", "zażółć gęślą jaźń\n");
 
@@ -51,7 +51,7 @@ public sealed class LocalFolderTransportTests : IDisposable
         // Niezmienność porcji jest warunkiem poprawności kursora: skoro
         // „przeczytana zostaje przeczytana", to zmiana treści pod tą samą nazwą
         // przepadłaby na wszystkich urządzeniach, które ją już minęły.
-        var store = Skladnica();
+        var store = NewStore();
         await store.WriteSegmentAsync("biurko", "000001", "pierwotna\n");
 
         var again = async () =>
@@ -65,7 +65,7 @@ public sealed class LocalFolderTransportTests : IDisposable
     [Fact]
     public async Task Porcje_wracaja_w_porzadku_nazw()
     {
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000010", "dziesiąta\n");
         await store.WriteSegmentAsync("biurko", "000002", "druga\n");
@@ -78,14 +78,14 @@ public sealed class LocalFolderTransportTests : IDisposable
     [Fact]
     public async Task Odczyt_nieistniejacej_porcji_zwraca_pustke()
     {
-        (await Skladnica().ReadSegmentAsync(new LogSegment("nieznane", "000001")))
+        (await NewStore().ReadSegmentAsync(new LogSegment("nieznane", "000001")))
             .Should().BeEmpty();
     }
 
     [Fact]
     public async Task Porcje_roznych_urzadzen_sa_rozlaczne()
     {
-        var store = Skladnica();
+        var store = NewStore();
 
         await store.WriteSegmentAsync("biurko", "000001", "z biurka\n");
         await store.WriteSegmentAsync("telefon", "000001", "z telefonu\n");
@@ -103,10 +103,10 @@ public sealed class LocalFolderTransportTests : IDisposable
     {
         // Przerwany zapis zostawia plik tymczasowy obok porcji. Gdyby trafił na
         // listę, drugie urządzenie przeczytałoby dziennik ucięty w pół wiersza.
-        var store = Skladnica();
+        var store = NewStore();
         await store.WriteSegmentAsync("biurko", "000001", "cała\n");
         await File.WriteAllTextAsync(
-            Path.Combine(_katalog, "log", "biurko", "000002.jsonl.tmp"), "urwana");
+            Path.Combine(_folder, "log", "biurko", "000002.jsonl.tmp"), "urwana");
 
         (await store.ListSegmentsAsync()).Select(s => s.Name).Should().Equal("000001");
     }
@@ -119,7 +119,7 @@ public sealed class LocalFolderTransportTests : IDisposable
     public async Task Identyfikator_psujacy_nazwe_pliku_jest_odrzucany(string device)
     {
         var save = async () =>
-            await Skladnica().WriteSegmentAsync(device, "000001", "cokolwiek\n");
+            await NewStore().WriteSegmentAsync(device, "000001", "cokolwiek\n");
 
         await save.Should().ThrowAsync<ArgumentException>();
     }
@@ -131,16 +131,16 @@ public sealed class LocalFolderTransportTests : IDisposable
     public async Task Nazwa_porcji_psujaca_sciezke_jest_odrzucana(string porcja)
     {
         var save = async () =>
-            await Skladnica().WriteSegmentAsync("biurko", porcja, "cokolwiek\n");
+            await NewStore().WriteSegmentAsync("biurko", porcja, "cokolwiek\n");
 
         await save.Should().ThrowAsync<ArgumentException>();
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_katalog))
+        if (Directory.Exists(_folder))
         {
-            Directory.Delete(_katalog, recursive: true);
+            Directory.Delete(_folder, recursive: true);
         }
     }
 }

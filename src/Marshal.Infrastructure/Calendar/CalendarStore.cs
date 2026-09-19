@@ -102,7 +102,7 @@ public sealed class CalendarStore(MarshalDbContext db, IDbQueue? queue = null)
     public async Task<int> MarkMissingCancelledAsync(
         Guid sourceId, IReadOnlyList<string> seen, CancellationToken ct = default)
     {
-        var seen = seen.ToHashSet(StringComparer.Ordinal);
+        var kept = seen.ToHashSet(StringComparer.Ordinal);
 
         var gone = await _queue.RunAsync(() => db.CalendarEvents
             .Where(e => e.SourceId == sourceId && !e.Cancelled)
@@ -110,7 +110,7 @@ public sealed class CalendarStore(MarshalDbContext db, IDbQueue? queue = null)
 
         var counted = 0;
 
-        foreach (var ev in gone.Where(e => !seen.Contains(e.ExternalId)))
+        foreach (var ev in gone.Where(e => !kept.Contains(e.ExternalId)))
         {
             // Nagrobek, nie usunięcie — tak samo jak wszędzie indziej w tym modelu.
             ev.Update(

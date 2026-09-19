@@ -81,9 +81,9 @@ public sealed class GoogleDriveClient(DriveService service) : IDriveClient
         string folderId, string name, string content, CancellationToken ct = default)
     {
         var description = new GoogleFile { Name = name, Parents = [folderId] };
-        using var content = new MemoryStream(Encoding.UTF8.GetBytes(content));
+        using var body = new MemoryStream(Encoding.UTF8.GetBytes(content));
 
-        var send = service.Files.Create(description, content, "application/json");
+        var send = service.Files.Create(description, body, "application/json");
         send.Fields = "id";
 
         var postep = await send.UploadAsync(ct);

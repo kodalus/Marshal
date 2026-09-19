@@ -20,16 +20,16 @@ public sealed class ActivityLogTests : IDisposable
             new(2026, 9, 17, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly DbContextOptions<MarshalDbContext> _opcje;
-    private readonly Clock _zegar = new();
+    private readonly Clock _clock = new();
     private readonly ActivityLog _journal;
 
     public ActivityLogTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         _opcje = new DbContextOptionsBuilder<MarshalDbContext>()
-            .UseSqlite(_polaczenie)
+            .UseSqlite(_connection)
             .Options;
 
         using (var db = new MarshalDbContext(_opcje))
@@ -37,7 +37,7 @@ public sealed class ActivityLogTests : IDisposable
             db.Database.Migrate();
         }
 
-        _journal = new ActivityLog(_opcje, _zegar);
+        _journal = new ActivityLog(_opcje, _clock);
     }
 
     [Fact]
@@ -50,14 +50,14 @@ public sealed class ActivityLogTests : IDisposable
         entry.Operation.Should().Be("Kalendarz: pobranie");
         entry.Outcome.Should().Be("11 kalendarzy, 52 wydarzenia");
         entry.Level.Should().Be(ActivityLevel.Ok);
-        entry.At.Should().Be(_zegar.Now);
+        entry.At.Should().Be(_clock.Now);
     }
 
     [Fact]
     public async Task Najnowsze_ida_na_gore()
     {
         await _journal.RecordAsync("Pierwsza", "-");
-        _zegar.Now = _zegar.Now.AddMinutes(1);
+        _clock.Now = _clock.Now.AddMinutes(1);
         await _journal.RecordAsync("Druga", "-");
 
         (await _journal.RecentAsync()).Select(w => w.Operation)
@@ -73,7 +73,7 @@ public sealed class ActivityLogTests : IDisposable
             new DbContextOptionsBuilder<MarshalDbContext>()
                 .UseSqlite("Data Source=/nie-ma-takiego-katalogu/marshal.db")
                 .Options,
-            _zegar);
+            _clock);
 
         var patch = async () => await zepsuty.RecordAsync("Cokolwiek", "-");
 
@@ -111,5 +111,5 @@ public sealed class ActivityLogTests : IDisposable
         (await _journal.RecentAsync()).Should().BeEmpty();
     }
 
-    public void Dispose() => _polaczenie.Dispose();
+    public void Dispose() => _connection.Dispose();
 }

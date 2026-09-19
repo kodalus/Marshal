@@ -11,9 +11,9 @@ namespace Marshal.Tests;
 /// </summary>
 public sealed class FilterQueryTests
 {
-    private static readonly DateOnly Dzis = new(2026, 9, 16);
+    private static readonly DateOnly Today = new(2026, 9, 16);
     private static readonly DateTimeOffset Now = new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
-    private static readonly Guid Obszar = Guid.CreateVersion7();
+    private static readonly Guid NewArea = Guid.CreateVersion7();
 
     private static int _licznik;
 
@@ -22,7 +22,7 @@ public sealed class FilterQueryTests
     private static TaskItem TaskId(string title = "cokolwiek")
     {
         var z = TaskItem.Capture(title, Now, Stamp());
-        z.MakeNext(Obszar, Stamp());
+        z.MakeNext(NewArea, Stamp());
         return z;
     }
 
@@ -33,7 +33,7 @@ public sealed class FilterQueryTests
     public void Filtr_bez_warunkow_nie_pasuje_do_niczego()
     {
         // Logika mówi co innego, interfejs mówi to. Zob. FilterQuery.IsEmpty.
-        FilterQuery.Empty.Matches(Podmiot(TaskId()), Dzis).Should().BeFalse();
+        FilterQuery.Empty.Matches(Podmiot(TaskId()), Today).Should().BeFalse();
         FilterQuery.Empty.IsEmpty.Should().BeTrue();
     }
 
@@ -50,8 +50,8 @@ public sealed class FilterQueryTests
             FilterCondition.Priorities(Priority.High),
         ]);
 
-        filter.Matches(Podmiot(pasuje), Dzis).Should().BeTrue();
-        filter.Matches(Podmiot(niepasuje), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(pasuje), Today).Should().BeTrue();
+        filter.Matches(Podmiot(niepasuje), Today).Should().BeFalse();
     }
 
     [Fact]
@@ -60,16 +60,16 @@ public sealed class FilterQueryTests
         var next = TaskId();
 
         var zaplanowane = TaskId();
-        zaplanowane.Schedule(Obszar, Dzis, Stamp());
+        zaplanowane.Schedule(NewArea, Today, Stamp());
 
         var kiedys = TaskId();
-        kiedys.Postpone(Obszar, null, Stamp());
+        kiedys.Postpone(NewArea, null, Stamp());
 
         var filter = new FilterQuery([FilterCondition.States(TaskState.Next, TaskState.Scheduled)]);
 
-        filter.Matches(Podmiot(next), Dzis).Should().BeTrue();
-        filter.Matches(Podmiot(zaplanowane), Dzis).Should().BeTrue();
-        filter.Matches(Podmiot(kiedys), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(next), Today).Should().BeTrue();
+        filter.Matches(Podmiot(zaplanowane), Today).Should().BeTrue();
+        filter.Matches(Podmiot(kiedys), Today).Should().BeFalse();
     }
 
     [Fact]
@@ -83,7 +83,7 @@ public sealed class FilterQueryTests
         ]);
 
         filter.Conditions.Should().HaveCount(1);
-        filter.Matches(Podmiot(TaskId()), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(TaskId()), Today).Should().BeTrue();
     }
 
     [Theory]
@@ -102,10 +102,10 @@ public sealed class FilterQueryTests
     public void Okna_czasowe_liczone_wzgledem_dzisiaj(int offset, DateWindow window, bool waiting)
     {
         var task = TaskId();
-        task.SetDeadline(Dzis.AddDays(offset), Stamp());
+        task.SetDeadline(Today.AddDays(offset), Stamp());
 
         new FilterQuery([FilterCondition.Deadline(window)])
-            .Matches(Podmiot(task), Dzis).Should().Be(waiting);
+            .Matches(Podmiot(task), Today).Should().Be(waiting);
     }
 
     [Fact]
@@ -114,10 +114,10 @@ public sealed class FilterQueryTests
         var task = TaskId();
 
         new FilterQuery([FilterCondition.DoDate(DateWindow.None)])
-            .Matches(Podmiot(task), Dzis).Should().BeTrue();
+            .Matches(Podmiot(task), Today).Should().BeTrue();
 
         new FilterQuery([FilterCondition.DoDate(DateWindow.Any)])
-            .Matches(Podmiot(task), Dzis).Should().BeFalse();
+            .Matches(Podmiot(task), Today).Should().BeFalse();
     }
 
     [Fact]
@@ -146,8 +146,8 @@ public sealed class FilterQueryTests
 
         var filter = new FilterQuery([FilterCondition.Estimate(15)]);
 
-        filter.Matches(Podmiot(bez), Dzis).Should().BeFalse();
-        filter.Matches(Podmiot(z), Dzis).Should().BeTrue();
+        filter.Matches(Podmiot(bez), Today).Should().BeFalse();
+        filter.Matches(Podmiot(z), Today).Should().BeTrue();
     }
 
     [Fact]
@@ -159,8 +159,8 @@ public sealed class FilterQueryTests
 
         var filter = new FilterQuery([FilterCondition.Tags(dom, telefon)]);
 
-        filter.Matches(Podmiot(TaskId(), zakupy, telefon), Dzis).Should().BeTrue();
-        filter.Matches(Podmiot(TaskId(), zakupy), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(TaskId(), zakupy, telefon), Today).Should().BeTrue();
+        filter.Matches(Podmiot(TaskId(), zakupy), Today).Should().BeFalse();
     }
 
     [Fact]
@@ -171,12 +171,12 @@ public sealed class FilterQueryTests
         var luzem = TaskId();
 
         var wProjekcie = TaskId();
-        wProjekcie.MoveTo(Obszar, Guid.CreateVersion7(), Stamp());
+        wProjekcie.MoveTo(NewArea, Guid.CreateVersion7(), Stamp());
 
         var filter = new FilterQuery([FilterCondition.Projects(Guid.Empty)]);
 
-        filter.Matches(Podmiot(luzem), Dzis).Should().BeTrue();
-        filter.Matches(Podmiot(wProjekcie), Dzis).Should().BeFalse();
+        filter.Matches(Podmiot(luzem), Today).Should().BeTrue();
+        filter.Matches(Podmiot(wProjekcie), Today).Should().BeFalse();
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public sealed class FilterQueryTests
         var task = TaskId("Zadzwonić do Żłobka");
 
         new FilterQuery([FilterCondition.Contains("żłobka")])
-            .Matches(Podmiot(task), Dzis).Should().BeTrue();
+            .Matches(Podmiot(task), Today).Should().BeTrue();
     }
 
     [Fact]
@@ -195,29 +195,29 @@ public sealed class FilterQueryTests
         task.SetNote("numer w kalendarzu na lodówce", Stamp());
 
         new FilterQuery([FilterCondition.Contains("lodówce")])
-            .Matches(Podmiot(task), Dzis).Should().BeTrue();
+            .Matches(Podmiot(task), Today).Should().BeTrue();
     }
 
     [Fact]
     public void Wykonane_i_wyrzucone_nie_wchodza_dopoki_filtr_o_nie_nie_poprosi()
     {
-        var zrobione = TaskId();
-        zrobione.Complete(Now, Stamp());
+        var done = TaskId();
+        done.Complete(Now, Stamp());
 
         var wykosz = TaskId();
         wykosz.Trash(Stamp());
 
-        var poObszarze = new FilterQuery([FilterCondition.Areas(Obszar)]);
-        poObszarze.Matches(Podmiot(zrobione), Dzis).Should().BeFalse();
-        poObszarze.Matches(Podmiot(wykosz), Dzis).Should().BeFalse();
+        var poObszarze = new FilterQuery([FilterCondition.Areas(NewArea)]);
+        poObszarze.Matches(Podmiot(done), Today).Should().BeFalse();
+        poObszarze.Matches(Podmiot(wykosz), Today).Should().BeFalse();
 
         var poStanie = new FilterQuery([
-            FilterCondition.Areas(Obszar),
+            FilterCondition.Areas(NewArea),
             FilterCondition.States(TaskState.Done),
         ]);
 
-        poStanie.Matches(Podmiot(zrobione), Dzis).Should().BeTrue();
-        poStanie.Matches(Podmiot(wykosz), Dzis).Should().BeFalse();
+        poStanie.Matches(Podmiot(done), Today).Should().BeTrue();
+        poStanie.Matches(Podmiot(wykosz), Today).Should().BeFalse();
     }
 
     [Fact]
@@ -227,7 +227,7 @@ public sealed class FilterQueryTests
         skasowane.MarkDeleted(Stamp());
 
         new FilterQuery([FilterCondition.States(TaskState.Next)])
-            .Matches(Podmiot(skasowane), Dzis).Should().BeFalse();
+            .Matches(Podmiot(skasowane), Today).Should().BeFalse();
     }
 
     [Fact]

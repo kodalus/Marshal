@@ -23,28 +23,28 @@ public sealed class DeviceIdentityTests : IDisposable
         public DateTimeOffset Now { get; set; } = new(2026, 9, 16, 12, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
 
     public DeviceIdentityTests()
     {
-        _polaczenie.Open();
-        using var db = Baza();
+        _connection.Open();
+        using var db = NewDb();
         db.Database.Migrate();
     }
 
-    private MarshalDbContext Baza() => new(
+    private MarshalDbContext NewDb() => new(
         new DbContextOptionsBuilder<MarshalDbContext>()
-            .UseSqlite(_polaczenie)
+            .UseSqlite(_connection)
             .AddInterceptors(new ChangeJournalInterceptor())
             .Options);
 
     [Fact]
     public void Identyfikator_nadany_raz_wraca_ten_sam_po_ponownym_uruchomieniu()
     {
-        using var pierwsze = Baza();
-        var id = new DeviceIdentity(pierwsze).Id;
+        using var first = NewDb();
+        var id = new DeviceIdentity(first).Id;
 
-        using var drugie = Baza();
+        using var drugie = NewDb();
         new DeviceIdentity(drugie).Id.Should().Be(id);
     }
 
@@ -52,7 +52,7 @@ public sealed class DeviceIdentityTests : IDisposable
     public void Identyfikator_nadaje_sie_na_nazwe_pliku()
     {
         // Trafia do nazw porcji w składnicy, więc same małe litery, cyfry i myślnik.
-        using var db = Baza();
+        using var db = NewDb();
 
         new DeviceIdentity(db).Id.Should()
             .MatchRegex("^[a-z0-9][a-z0-9-]*$").And.NotBeEmpty();
@@ -79,18 +79,18 @@ public sealed class DeviceIdentityTests : IDisposable
         var clock = new Clock();
         Hlc last;
 
-        using (var pierwsze = Baza())
+        using (var first = NewDb())
         {
-            var id = new DeviceIdentity(pierwsze).Id;
-            var hlc = new HlcSource(clock, id, LastHlcStore.Read(pierwsze, id));
-            pierwsze.Tasks.Add(TaskItem.Capture("kupić mleko", clock.Now, hlc.Next()));
-            pierwsze.SaveChanges();
+            var id = new DeviceIdentity(first).Id;
+            var hlc = new HlcSource(clock, id, LastHlcStore.Read(first, id));
+            first.Tasks.Add(TaskItem.Capture("kupić mleko", clock.Now, hlc.Next()));
+            first.SaveChanges();
             last = hlc.Last;
         }
 
         clock.Now = clock.Now.AddHours(-5);
 
-        using var drugie = Baza();
+        using var drugie = NewDb();
         var id2 = new DeviceIdentity(drugie).Id;
         var resumed = new HlcSource(clock, id2, LastHlcStore.Read(drugie, id2));
 
@@ -103,7 +103,7 @@ public sealed class DeviceIdentityTests : IDisposable
         // Baza przeniesiona z innego urządzenia. Zegar jest zegarem tego urządzenia
         // i tylko jego — wznowienie z cudzego znacznika dałoby znacznik z cudzym
         // identyfikatorem, czyli rozstrzyganie remisów przestałoby działać.
-        using var db = Baza();
+        using var db = NewDb();
         db.LocalSettings.Add(new LocalSetting(
             LocalSetting.LastHlcKey, Hlc.Zero("obce").ToString()));
         db.SaveChanges();
@@ -111,5 +111,5 @@ public sealed class DeviceIdentityTests : IDisposable
         LastHlcStore.Read(db, "moje").Should().BeNull();
     }
 
-    public void Dispose() => _polaczenie.Dispose();
+    public void Dispose() => _connection.Dispose();
 }

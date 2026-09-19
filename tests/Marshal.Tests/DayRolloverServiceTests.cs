@@ -25,19 +25,19 @@ public sealed class DayRolloverServiceTests : IDisposable
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Clock _zegar = new();
-    private readonly DayRolloverService _usluga;
+    private readonly Clock _clock = new();
+    private readonly DayRolloverService _service;
     private readonly HlcSource _hlc;
-    private readonly Guid _obszar = Guid.CreateVersion7();
+    private readonly Guid _area = Guid.CreateVersion7();
 
     public DayRolloverServiceTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
-                .UseSqlite(_polaczenie)
+                .UseSqlite(_connection)
                 .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
         _db.Database.Migrate();
@@ -45,17 +45,17 @@ public sealed class DayRolloverServiceTests : IDisposable
         // Jeden zegar logiczny na urządzenie, tak jak w aplikacji. Dwa niezależne
         // ruszające od zera wydałyby te same znaczniki dwa razy i drugi zapis zostałby
         // odrzucony jako cofnięcie zegara — co jest zachowaniem prawidłowym.
-        _hlc = new HlcSource(_zegar, "biurko");
-        _usluga = new DayRolloverService(
-            new TaskRepository(_db), new UnitOfWork(_db), _zegar, _hlc);
+        _hlc = new HlcSource(_clock, "biurko");
+        _service = new DayRolloverService(
+            new TaskRepository(_db), new UnitOfWork(_db), _clock, _hlc);
     }
 
     private static DateOnly D(string iso) => DateOnly.Parse(iso);
 
     private TaskItem Add(string title, string doDate, RecurrenceRule? rule = null)
     {
-        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
-        task.Schedule(_obszar, D(doDate), _hlc.Next());
+        var task = TaskItem.Capture(title, _clock.Now, _hlc.Next());
+        task.Schedule(_area, D(doDate), _hlc.Next());
 
         if (rule is not null)
         {
@@ -70,7 +70,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     [Fact]
     public async Task Pusta_baza_nie_ma_czego_przesuwac()
     {
-        (await _usluga.RunAsync()).Should().Be(new RolloverReport(0, 0));
+        (await _service.RunAsync()).Should().Be(new RolloverReport(0, 0));
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     {
         var id = Add("Zadzwonić", "2026-09-10").Id;
 
-        var report = await _usluga.RunAsync();
+        var report = await _service.RunAsync();
 
         report.Moved.Should().Be(1);
         _db.Tasks.Single(t => t.Id == id).DoDate.Should().Be(D("2026-09-16"));
@@ -88,11 +88,11 @@ public sealed class DayRolloverServiceTests : IDisposable
     public async Task Zadanie_ze_skrzynki_nie_jest_ruszane()
     {
         // Skrzynka nie ma dnia wykonania i nie powinna go dostać z przypadku.
-        var wrzut = TaskItem.Capture("do przemyślenia", _zegar.Now, _hlc.Next());
-        _db.Tasks.Add(wrzut);
+        var capture = TaskItem.Capture("do przemyślenia", _clock.Now, _hlc.Next());
+        _db.Tasks.Add(capture);
         _db.SaveChanges();
 
-        (await _usluga.RunAsync()).Should().Be(new RolloverReport(0, 0));
+        (await _service.RunAsync()).Should().Be(new RolloverReport(0, 0));
     }
 
     [Fact]
@@ -101,8 +101,8 @@ public sealed class DayRolloverServiceTests : IDisposable
         Add("Zadzwonić", "2026-09-10");
         Add("Podlać", "2026-09-12", new RecurrenceRule(RecurrenceKind.Daily));
 
-        await _usluga.RunAsync();
-        var drugie = await _usluga.RunAsync();
+        await _service.RunAsync();
+        var drugie = await _service.RunAsync();
 
         drugie.Should().Be(new RolloverReport(0, 0));
     }
@@ -115,7 +115,7 @@ public sealed class DayRolloverServiceTests : IDisposable
         Add("Trening", "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
 
-        var report = await _usluga.RunAsync();
+        var report = await _service.RunAsync();
 
         report.Spawned.Should().Be(7);
 
@@ -125,7 +125,7 @@ public sealed class DayRolloverServiceTests : IDisposable
         _db.Tasks.Count(t => t.State == TaskState.Next).Should().Be(7);
         _db.Tasks.Single(t => t.RecurrenceJson != null).DoDate.Should().Be(D("2026-09-16"));
 
-        (await _usluga.RunAsync()).Should().Be(new RolloverReport(0, 0));
+        (await _service.RunAsync()).Should().Be(new RolloverReport(0, 0));
     }
 
     [Fact]
@@ -134,7 +134,7 @@ public sealed class DayRolloverServiceTests : IDisposable
         Add("Wynieść śmieci", "2026-09-09",
             new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
 
-        var report = await _usluga.RunAsync();
+        var report = await _service.RunAsync();
 
         report.Spawned.Should().Be(1);
         _db.Tasks.Count(t => t.State == TaskState.Scheduled).Should().Be(1);
@@ -146,7 +146,7 @@ public sealed class DayRolloverServiceTests : IDisposable
     {
         var id = Add("Zapłacić", "2026-09-09", new RecurrenceRule(RecurrenceKind.Daily)).Id;
 
-        await _usluga.RunAsync();
+        await _service.RunAsync();
 
         var task = _db.Tasks.Single(t => t.Id == id);
         task.DoDate.Should().Be(D("2026-09-16"));
@@ -173,6 +173,6 @@ public sealed class DayRolloverServiceTests : IDisposable
     public void Dispose()
     {
         _db.Dispose();
-        _polaczenie.Dispose();
+        _connection.Dispose();
     }
 }

@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <bool name="ciemne_ikony_paskow">false</bool>
+  <bool name="dark_bar_icons">false</bool>
 </resources>

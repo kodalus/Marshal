@@ -20,8 +20,8 @@ public sealed class ChangeJournalTests : IDisposable
 
     private readonly SqliteConnection _connection;
     private readonly MarshalDbContext _db;
-    private readonly Guid _obszar = Guid.CreateVersion7();
-    private long _znacznik = 1000;
+    private readonly Guid _area = Guid.CreateVersion7();
+    private long _stamp = 1000;
 
     public ChangeJournalTests()
     {
@@ -35,7 +35,7 @@ public sealed class ChangeJournalTests : IDisposable
         _db.Database.Migrate();
     }
 
-    private Hlc Stamp() => new(_znacznik += 10, 0, "biurko");
+    private Hlc Stamp() => new(_stamp += 10, 0, "biurko");
 
     private TaskItem Save(string title = "Zadzwonić do przychodni")
     {
@@ -81,7 +81,7 @@ public sealed class ChangeJournalTests : IDisposable
 
         // Bez poprawki leci tu wyjątek o instancji, której nie da się śledzić:
         // zapytanie o znaczniki szło wyłącznie do bazy i tego dopisanego nie widziało.
-        _db.Invoking(baza => baza.SaveChanges()).Should().NotThrow();
+        _db.Invoking(db => db.SaveChanges()).Should().NotThrow();
 
         _db.FieldStamps.Count(z => z.EntityId == task.Id && z.Field == "Note")
             .Should().Be(1, "jeden znacznik na pole, niezależnie od tego, kto go dopisał");
@@ -153,14 +153,14 @@ public sealed class ChangeJournalTests : IDisposable
     public void Znaczniki_pol_powstaja_i_sa_podnoszone_przy_zmianie()
     {
         var task = Save();
-        var tytulPrzed = _db.FieldStamps.Single(f => f.Field == "Title").Hlc;
+        var titleBefore = _db.FieldStamps.Single(f => f.Field == "Title").Hlc;
 
         task.Rename("inny tytuł", Stamp());
         _db.SaveChanges();
 
-        var tytulPo = _db.FieldStamps.Single(f => f.Field == "Title").Hlc;
-        tytulPo.Should().NotBe(tytulPrzed);
-        Hlc.Parse(tytulPo).Should().BeGreaterThan(Hlc.Parse(tytulPrzed));
+        var titleAfter = _db.FieldStamps.Single(f => f.Field == "Title").Hlc;
+        titleAfter.Should().NotBe(titleBefore);
+        Hlc.Parse(titleAfter).Should().BeGreaterThan(Hlc.Parse(titleBefore));
     }
 
     [Fact]
@@ -169,12 +169,12 @@ public sealed class ChangeJournalTests : IDisposable
         // To jest cały sens tabeli: bez niej po zmianie tytułu nie dałoby się
         // stwierdzić, że lokalna waga pochodzi sprzed tej zmiany.
         var task = Save();
-        var stanPrzed = _db.FieldStamps.Single(f => f.Field == "State").Hlc;
+        var stateBefore = _db.FieldStamps.Single(f => f.Field == "State").Hlc;
 
         task.Rename("inny tytuł", Stamp());
         _db.SaveChanges();
 
-        _db.FieldStamps.Single(f => f.Field == "State").Hlc.Should().Be(stanPrzed);
+        _db.FieldStamps.Single(f => f.Field == "State").Hlc.Should().Be(stateBefore);
     }
 
     [Fact]

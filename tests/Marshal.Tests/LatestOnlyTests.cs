@@ -20,18 +20,18 @@ public sealed class LatestOnlyTests
 
         var wpuszczenie = new TaskCompletionSource();
 
-        async Task Praca()
+        async Task Work()
         {
             szczyt = Math.Max(szczyt, ++jednoczesnie);
             await wpuszczenie.Task;
             jednoczesnie--;
         }
 
-        var pierwsze = queue.RunAsync(Praca);
-        var drugie = queue.RunAsync(Praca);
+        var first = queue.RunAsync(Work);
+        var drugie = queue.RunAsync(Work);
 
         wpuszczenie.SetResult();
-        await Task.WhenAll(pierwsze, drugie);
+        await Task.WhenAll(first, drugie);
 
         szczyt.Should().Be(1);
     }
@@ -45,21 +45,21 @@ public sealed class LatestOnlyTests
         var przebiegi = 0;
         var wpuszczenie = new TaskCompletionSource();
 
-        async Task Praca()
+        async Task Work()
         {
             przebiegi++;
             await wpuszczenie.Task;
         }
 
-        var pierwsze = queue.RunAsync(Praca);
+        var first = queue.RunAsync(Work);
 
         for (var i = 0; i < 6; i++)
         {
-            _ = queue.RunAsync(Praca);
+            _ = queue.RunAsync(Work);
         }
 
         wpuszczenie.SetResult();
-        await pierwsze;
+        await first;
 
         przebiegi.Should().Be(2);
     }
@@ -75,14 +75,14 @@ public sealed class LatestOnlyTests
         var wpuszczenie = new TaskCompletionSource();
         var przebiegi = 0;
 
-        async Task Praca()
+        async Task Work()
         {
             await wpuszczenie.Task;
             przebiegi++;
         }
 
-        var pierwsze = queue.RunAsync(Praca);
-        var drugie = queue.RunAsync(Praca);
+        var first = queue.RunAsync(Work);
+        var drugie = queue.RunAsync(Work);
 
         drugie.IsCompleted.Should().BeFalse("nic się jeszcze nie odświeżyło");
 
@@ -90,7 +90,7 @@ public sealed class LatestOnlyTests
 
         // Z ogranicznikiem czasu, bo pomyłka w tej klasie objawia się zawiśnięciem —
         // a test, który wisi, nie mówi nic poza tym, że przebieg trwa.
-        await Task.WhenAll(pierwsze, drugie).WaitAsync(TimeSpan.FromSeconds(10));
+        await Task.WhenAll(first, drugie).WaitAsync(TimeSpan.FromSeconds(10));
 
         przebiegi.Should().Be(2, "drugie zgłoszenie ma doczekać się własnego przebiegu");
     }

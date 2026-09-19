@@ -20,12 +20,12 @@ public sealed class TaskMappingTests : IDisposable
         _connection.Open();
     }
 
-    private MarshalDbContext Kontekst()
+    private MarshalDbContext NewContext()
     {
-        var kontekst = new MarshalDbContext(
+        var context = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>().UseSqlite(_connection).Options);
-        kontekst.Database.Migrate();
-        return kontekst;
+        context.Database.Migrate();
+        return context;
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public sealed class TaskMappingTests : IDisposable
         var deadline = new DateOnly(2026, 9, 30);
         Guid id;
 
-        using (var patch = Kontekst())
+        using (var patch = NewContext())
         {
             var task = TaskItem.Capture("Złożyć wniosek", Now, new Hlc(1000, 0, "a"));
             task.Schedule(area, day, new Hlc(2000, 0, "a"));
@@ -47,8 +47,8 @@ public sealed class TaskMappingTests : IDisposable
             patch.SaveChanges();
         }
 
-        using var odczyt = Kontekst();
-        var wczytane = odczyt.Tasks.Single();
+        using var read = NewContext();
+        var wczytane = read.Tasks.Single();
 
         wczytane.Id.Should().Be(id);
         wczytane.Title.Should().Be("Złożyć wniosek");
@@ -62,28 +62,28 @@ public sealed class TaskMappingTests : IDisposable
     [Fact]
     public void Pozycja_w_skrzynce_zapisuje_sie_bez_obszaru()
     {
-        using var kontekst = Kontekst();
-        kontekst.Tasks.Add(TaskItem.Capture("luźna myśl", Now, new Hlc(1000, 0, "a")));
+        using var context = NewContext();
+        context.Tasks.Add(TaskItem.Capture("luźna myśl", Now, new Hlc(1000, 0, "a")));
 
-        var save = () => kontekst.SaveChanges();
+        var save = () => context.SaveChanges();
 
         save.Should().NotThrow();
-        kontekst.Tasks.Single().AreaId.Should().BeNull();
+        context.Tasks.Single().AreaId.Should().BeNull();
     }
 
     [Fact]
     public void Stan_jest_skladowany_jako_liczba()
     {
-        using var kontekst = Kontekst();
+        using var context = NewContext();
         var task = TaskItem.Capture("cokolwiek", Now, new Hlc(1000, 0, "a"));
         task.Postpone(Guid.CreateVersion7(), null, new Hlc(2000, 0, "a"));
-        kontekst.Tasks.Add(task);
-        kontekst.SaveChanges();
+        context.Tasks.Add(task);
+        context.SaveChanges();
 
-        using var polecenie = _connection.CreateCommand();
-        polecenie.CommandText = "SELECT State FROM Tasks LIMIT 1";
+        using var command = _connection.CreateCommand();
+        command.CommandText = "SELECT State FROM Tasks LIMIT 1";
 
-        Convert.ToInt32(polecenie.ExecuteScalar()).Should().Be((int)TaskState.Someday);
+        Convert.ToInt32(command.ExecuteScalar()).Should().Be((int)TaskState.Someday);
     }
 
     [Fact]
@@ -93,16 +93,16 @@ public sealed class TaskMappingTests : IDisposable
         var project = new Project(
             Guid.CreateVersion7(), Now, new Hlc(1000, 0, "a"), "Wniosek jest złożony", area, 1.0);
 
-        using var kontekst = Kontekst();
-        kontekst.Projects.Add(project);
+        using var context = NewContext();
+        context.Projects.Add(project);
 
         var task = TaskItem.Capture("Zebrać dokumenty", Now, new Hlc(1000, 0, "a"));
         task.MakeNext(area, new Hlc(2000, 0, "a"));
         task.MoveTo(area, project.Id, new Hlc(3000, 0, "a"));
-        kontekst.Tasks.Add(task);
-        kontekst.SaveChanges();
+        context.Tasks.Add(task);
+        context.SaveChanges();
 
-        kontekst.Tasks.Single(t => t.ProjectId == project.Id).Title.Should().Be("Zebrać dokumenty");
+        context.Tasks.Single(t => t.ProjectId == project.Id).Title.Should().Be("Zebrać dokumenty");
     }
 
     [Fact]
@@ -110,13 +110,13 @@ public sealed class TaskMappingTests : IDisposable
     {
         // Brak kluczy obcych jest celowy: przy synchronizacji zmiany przychodzą
         // w kolejności zapisu, nie zależności, więc zadanie potrafi wyprzedzić projekt.
-        using var kontekst = Kontekst();
+        using var context = NewContext();
         var task = TaskItem.Capture("Krok projektu, który dopiero nadejdzie", Now, new Hlc(1000, 0, "a"));
         task.MakeNext(Guid.CreateVersion7(), new Hlc(2000, 0, "a"));
         task.MoveTo(task.AreaId!.Value, Guid.CreateVersion7(), new Hlc(3000, 0, "a"));
-        kontekst.Tasks.Add(task);
+        context.Tasks.Add(task);
 
-        var save = () => kontekst.SaveChanges();
+        var save = () => context.SaveChanges();
 
         save.Should().NotThrow();
     }

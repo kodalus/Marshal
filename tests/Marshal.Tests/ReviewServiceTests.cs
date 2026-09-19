@@ -27,40 +27,40 @@ public sealed class ReviewServiceTests : IDisposable
             new(2026, 9, 16, 20, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
-    private readonly Clock _zegar = new();
+    private readonly Clock _clock = new();
     private readonly HlcSource _hlc;
-    private readonly ReviewService _przeglad;
-    private readonly Area _obszar;
+    private readonly ReviewService _review;
+    private readonly Area _area;
 
     public ReviewServiceTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
-                .UseSqlite(_polaczenie)
+                .UseSqlite(_connection)
                 .AddInterceptors(new ChangeJournalInterceptor())
                 .Options);
         _db.Database.Migrate();
-        _hlc = new HlcSource(_zegar, "biurko");
+        _hlc = new HlcSource(_clock, "biurko");
 
-        _przeglad = new ReviewService(
+        _review = new ReviewService(
             new ReviewQueries(_db),
             new TaskRepository(_db),
             new ReviewSessionRepository(_db),
             new UnitOfWork(_db),
-            _zegar,
+            _clock,
             _hlc);
 
-        _obszar = new Area(Guid.CreateVersion7(), _zegar.Now, _hlc.Next(), "Dom", 0);
-        _db.Areas.Add(_obszar);
+        _area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(_area);
         _db.SaveChanges();
     }
 
-    private TaskItem Wrzut(string title)
+    private TaskItem NewCapture(string title)
     {
-        var task = TaskItem.Capture(title, _zegar.Now, _hlc.Next());
+        var task = TaskItem.Capture(title, _clock.Now, _hlc.Next());
         _db.Tasks.Add(task);
         _db.SaveChanges();
         return task;
@@ -69,7 +69,7 @@ public sealed class ReviewServiceTests : IDisposable
     [Fact]
     public async Task Pierwsze_otwarcie_zaklada_przeglad()
     {
-        var sesja = await _przeglad.StartOrResumeAsync();
+        var sesja = await _review.StartOrResumeAsync();
 
         sesja.CurrentStep.Should().Be(0);
         sesja.IsCompleted.Should().BeFalse();
@@ -81,24 +81,24 @@ public sealed class ReviewServiceTests : IDisposable
     {
         // Wznowienie jest domyślne i nie pyta. Ekran „masz niedokończony przegląd, wrócić?"
         // dawałby okazję do zaczęcia od nowa, czyli do tego, przed czym ten mechanizm chroni.
-        var pierwsze = await _przeglad.StartOrResumeAsync();
-        await _przeglad.GoToAsync(pierwsze, 3);
+        var first = await _review.StartOrResumeAsync();
+        await _review.GoToAsync(first, 3);
 
-        var drugie = await _przeglad.StartOrResumeAsync();
+        var drugie = await _review.StartOrResumeAsync();
 
-        drugie.Id.Should().Be(pierwsze.Id);
+        drugie.Id.Should().Be(first.Id);
         drugie.CurrentStep.Should().Be(3);
     }
 
     [Fact]
     public async Task Ukonczony_przeglad_nie_jest_wznawiany()
     {
-        var pierwsze = await _przeglad.StartOrResumeAsync();
-        await _przeglad.CompleteAsync(pierwsze);
+        var first = await _review.StartOrResumeAsync();
+        await _review.CompleteAsync(first);
 
-        var drugie = await _przeglad.StartOrResumeAsync();
+        var drugie = await _review.StartOrResumeAsync();
 
-        drugie.Id.Should().NotBe(pierwsze.Id);
+        drugie.Id.Should().NotBe(first.Id);
         drugie.CurrentStep.Should().Be(0);
     }
 
@@ -107,24 +107,24 @@ public sealed class ReviewServiceTests : IDisposable
     {
         // Bez presji terminu i bez czerwonej plakietki: przegląd rozłożony na pięć
         // wieczorów jest przeglądem zrobionym (8.3).
-        var sesja = await _przeglad.StartOrResumeAsync();
-        _zegar.Now = _zegar.Now.AddDays(21);
+        var sesja = await _review.StartOrResumeAsync();
+        _clock.Now = _clock.Now.AddDays(21);
 
-        (await _przeglad.StartOrResumeAsync()).Id.Should().Be(sesja.Id);
+        (await _review.StartOrResumeAsync()).Id.Should().Be(sesja.Id);
     }
 
     [Fact]
     public async Task Rozpatrzona_pozycja_znika_z_kroku()
     {
-        Wrzut("pierwsze");
-        var drugie = Wrzut("drugie");
-        var sesja = await _przeglad.StartOrResumeAsync();
+        NewCapture("pierwsze");
+        var drugie = NewCapture("drugie");
+        var sesja = await _review.StartOrResumeAsync();
 
-        (await _przeglad.ItemsAsync(ReviewStep.Inbox, sesja)).Should().HaveCount(2);
+        (await _review.ItemsAsync(ReviewStep.Inbox, sesja)).Should().HaveCount(2);
 
-        await _przeglad.MarkProcessedAsync(sesja, drugie.Id);
+        await _review.MarkProcessedAsync(sesja, drugie.Id);
 
-        (await _przeglad.ItemsAsync(ReviewStep.Inbox, sesja)).Select(i => i.Title)
+        (await _review.ItemsAsync(ReviewStep.Inbox, sesja)).Select(i => i.Title)
             .Should().Equal("pierwsze");
     }
 
@@ -133,30 +133,30 @@ public sealed class ReviewServiceTests : IDisposable
     {
         // Sedno mechanizmu: przerwanie przez dziecko po czterech minutach to przegląd
         // w trakcie, a nie przegląd do zrobienia od nowa.
-        var pierwsze = Wrzut("pierwsze");
-        Wrzut("drugie");
+        var first = NewCapture("pierwsze");
+        NewCapture("drugie");
 
-        var sesja = await _przeglad.StartOrResumeAsync();
-        await _przeglad.MarkProcessedAsync(sesja, pierwsze.Id);
-        await _przeglad.GoToAsync(sesja, 4);
+        var sesja = await _review.StartOrResumeAsync();
+        await _review.MarkProcessedAsync(sesja, first.Id);
+        await _review.GoToAsync(sesja, 4);
 
         _db.ChangeTracker.Clear();
 
-        var wznowiona = await _przeglad.StartOrResumeAsync();
+        var wznowiona = await _review.StartOrResumeAsync();
         wznowiona.CurrentStep.Should().Be(4);
-        wznowiona.IsProcessed(pierwsze.Id).Should().BeTrue();
-        (await _przeglad.ItemsAsync(ReviewStep.Inbox, wznowiona)).Select(i => i.Title)
+        wznowiona.IsProcessed(first.Id).Should().BeTrue();
+        (await _review.ItemsAsync(ReviewStep.Inbox, wznowiona)).Select(i => i.Title)
             .Should().Equal("drugie");
     }
 
     [Fact]
     public async Task Ta_sama_pozycja_oznaczona_dwa_razy_liczy_sie_raz()
     {
-        var wrzut = Wrzut("pierwsze");
-        var sesja = await _przeglad.StartOrResumeAsync();
+        var capture = NewCapture("pierwsze");
+        var sesja = await _review.StartOrResumeAsync();
 
-        await _przeglad.MarkProcessedAsync(sesja, wrzut.Id);
-        await _przeglad.MarkProcessedAsync(sesja, wrzut.Id);
+        await _review.MarkProcessedAsync(sesja, capture.Id);
+        await _review.MarkProcessedAsync(sesja, capture.Id);
 
         sesja.ProcessedCount.Should().Be(1);
     }
@@ -166,29 +166,29 @@ public sealed class ReviewServiceTests : IDisposable
     {
         // Pierwszy jest tekstem do przeczytania, drugi tabelą do obejrzenia.
         // Nie każdy krok przeglądu kończy się czynnością — to jest celowe.
-        Wrzut("cokolwiek");
-        var sesja = await _przeglad.StartOrResumeAsync();
+        NewCapture("cokolwiek");
+        var sesja = await _review.StartOrResumeAsync();
 
-        (await _przeglad.ItemsAsync(ReviewStep.Pinned, sesja)).Should().BeEmpty();
-        (await _przeglad.ItemsAsync(ReviewStep.Balance, sesja)).Should().BeEmpty();
+        (await _review.ItemsAsync(ReviewStep.Pinned, sesja)).Should().BeEmpty();
+        (await _review.ItemsAsync(ReviewStep.Balance, sesja)).Should().BeEmpty();
     }
 
     [Fact]
     public async Task Liczniki_licza_to_co_kroki_pokazuja()
     {
-        Wrzut("w skrzynce");
+        NewCapture("w skrzynce");
 
-        var przeterminowane = TaskItem.Capture("po terminie", _zegar.Now, _hlc.Next());
-        przeterminowane.MakeNext(_obszar.Id, _hlc.Next());
+        var przeterminowane = TaskItem.Capture("po terminie", _clock.Now, _hlc.Next());
+        przeterminowane.MakeNext(_area.Id, _hlc.Next());
         przeterminowane.SetDeadline(new DateOnly(2026, 9, 1), _hlc.Next());
         _db.Tasks.Add(przeterminowane);
 
-        var pending = TaskItem.Capture("na kimś", _zegar.Now, _hlc.Next());
-        pending.Delegate(_obszar.Id, "urząd", new DateOnly(2026, 8, 1), null, _hlc.Next());
+        var pending = TaskItem.Capture("na kimś", _clock.Now, _hlc.Next());
+        pending.Delegate(_area.Id, "urząd", new DateOnly(2026, 8, 1), null, _hlc.Next());
         _db.Tasks.Add(pending);
         _db.SaveChanges();
 
-        var liczniki = await _przeglad.CountsAsync();
+        var liczniki = await _review.CountsAsync();
 
         liczniki.Inbox.Should().Be(1);
         liczniki.Overdue.Should().Be(1);
@@ -201,20 +201,20 @@ public sealed class ReviewServiceTests : IDisposable
     {
         // Zbiór idzie do bazy jako tekst. Gdyby odczyt go nie odtwarzał, wznowiony
         // przegląd pokazywałby wszystko od nowa — i to bez żadnego błędu.
-        var wrzut = Wrzut("pierwsze");
-        var sesja = await _przeglad.StartOrResumeAsync();
-        await _przeglad.MarkProcessedAsync(sesja, wrzut.Id);
+        var capture = NewCapture("pierwsze");
+        var sesja = await _review.StartOrResumeAsync();
+        await _review.MarkProcessedAsync(sesja, capture.Id);
 
         _db.ChangeTracker.Clear();
 
         var read = _db.ReviewSessions.Single();
-        read.IsProcessed(wrzut.Id).Should().BeTrue();
+        read.IsProcessed(capture.Id).Should().BeTrue();
         read.ProcessedCount.Should().Be(1);
     }
 
     public void Dispose()
     {
         _db.Dispose();
-        _polaczenie.Dispose();
+        _connection.Dispose();
     }
 }

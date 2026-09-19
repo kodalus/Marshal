@@ -25,27 +25,27 @@ public sealed class BackupServiceTests : IDisposable
             new(2026, 9, 16, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private sealed class Baza(string device, Clock clock) : IDisposable
+    private sealed class NewDb(string device, Clock clock) : IDisposable
     {
-        private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+        private readonly SqliteConnection _connection = new("Filename=:memory:");
 
         public MarshalDbContext Db { get; private set; } = null!;
 
         public HlcSource Hlc { get; private set; } = null!;
 
-        public BackupService Kopia { get; private set; } = null!;
+        public BackupService NewBackup { get; private set; } = null!;
 
-        public Baza Open()
+        public NewDb Open()
         {
-            _polaczenie.Open();
+            _connection.Open();
             Db = new MarshalDbContext(
                 new DbContextOptionsBuilder<MarshalDbContext>()
-                    .UseSqlite(_polaczenie)
+                    .UseSqlite(_connection)
                     .AddInterceptors(new ChangeJournalInterceptor())
                     .Options);
             Db.Database.Migrate();
             Hlc = new HlcSource(clock, device);
-            Kopia = new BackupService(Db, Hlc, clock, new StaleId(device));
+            NewBackup = new BackupService(Db, Hlc, clock, new StaleId(device));
 
             return this;
         }
@@ -53,7 +53,7 @@ public sealed class BackupServiceTests : IDisposable
         public void Dispose()
         {
             Db.Dispose();
-            _polaczenie.Dispose();
+            _connection.Dispose();
         }
     }
 
@@ -62,15 +62,15 @@ public sealed class BackupServiceTests : IDisposable
         public string Id { get; } = id;
     }
 
-    private readonly Clock _zegar = new();
-    private readonly Baza _biurko;
+    private readonly Clock _clock = new();
+    private readonly NewDb _biurko;
 
     public BackupServiceTests()
     {
-        _biurko = new Baza("biurko", _zegar).Open();
+        _biurko = new NewDb("biurko", _clock).Open();
     }
 
-    private static MemoryStream Plik(byte[] bajty) => new(bajty);
+    private static MemoryStream FileName(byte[] bytes) => new(bytes);
 
     private static async Task<byte[]> EksportAsync(BackupService copy)
     {
@@ -79,21 +79,21 @@ public sealed class BackupServiceTests : IDisposable
         return stream.ToArray();
     }
 
-    private TaskItem TaskId(Baza baza, string title, Guid area)
+    private TaskItem TaskId(NewDb db, string title, Guid area)
     {
-        var task = TaskItem.Capture(title, _zegar.Now, baza.Hlc.Next());
-        task.MakeNext(area, baza.Hlc.Next());
-        baza.Db.Tasks.Add(task);
-        baza.Db.SaveChanges();
+        var task = TaskItem.Capture(title, _clock.Now, db.Hlc.Next());
+        task.MakeNext(area, db.Hlc.Next());
+        db.Db.Tasks.Add(task);
+        db.Db.SaveChanges();
 
         return task;
     }
 
-    private Guid Obszar(Baza baza, string name)
+    private Guid NewArea(NewDb db, string name)
     {
-        var area = new Area(Guid.CreateVersion7(), _zegar.Now, baza.Hlc.Next(), name, sortOrder: 0);
-        baza.Db.Areas.Add(area);
-        baza.Db.SaveChanges();
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, db.Hlc.Next(), name, sortOrder: 0);
+        db.Db.Areas.Add(area);
+        db.Db.SaveChanges();
 
         return area.Id;
     }
@@ -101,14 +101,14 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Kopia_odtwarza_zadania_na_pustej_bazie()
     {
-        var area = Obszar(_biurko, "Dom");
+        var area = NewArea(_biurko, "Dom");
         TaskId(_biurko, "kupić mleko", area);
         TaskId(_biurko, "zadzwonić do przychodni", area);
 
-        var file = await EksportAsync(_biurko.Kopia);
+        var file = await EksportAsync(_biurko.NewBackup);
 
-        using var telefon = new Baza("telefon", _zegar).Open();
-        var report = await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        using var telefon = new NewDb("telefon", _clock).Open();
+        var report = await telefon.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
         report.Applied.Should().BeGreaterThan(0);
         telefon.Db.Tasks.Select(z => z.Title)
@@ -121,9 +121,9 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Kopia, której nie da się obejrzeć notatnikiem, jest obietnicą,
         // a nie zabezpieczeniem.
-        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "kupić mleko", NewArea(_biurko, "Dom"));
 
-        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia));
+        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.NewBackup));
 
         text.Should().Contain("kupić mleko");
         text.Should().Contain("\"Tasks\"");
@@ -138,9 +138,9 @@ public sealed class BackupServiceTests : IDisposable
         // reguły — że po modelu nie przeszło **za dużo**. Kursory, pokazane
         // przypomnienia i pobrane wydarzenia należą do urządzenia, nie do danych,
         // a dziennik zmian w kopii oznaczałby wysłanie wszystkiego na nowo.
-        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "kupić mleko", NewArea(_biurko, "Dom"));
 
-        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia));
+        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.NewBackup));
 
         foreach (var local in new[]
                  {
@@ -155,18 +155,18 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Nowsza_zmiana_lokalna_wygrywa_ze_starszym_wpisem_z_pliku()
     {
-        var area = Obszar(_biurko, "Dom");
+        var area = NewArea(_biurko, "Dom");
         var task = TaskId(_biurko, "stary tytuł", area);
 
-        var file = await EksportAsync(_biurko.Kopia);
+        var file = await EksportAsync(_biurko.NewBackup);
 
         // Zmiana po zrobieniu kopii. Wgranie kopii nie może jej cofnąć — inaczej
         // odtworzenie byłoby cichą utratą wszystkiego, co powstało po eksporcie.
-        _zegar.Now = _zegar.Now.AddHours(1);
+        _clock.Now = _clock.Now.AddHours(1);
         task.Rename("nowy tytuł", _biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
-        await _biurko.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        await _biurko.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
         _biurko.Db.Tasks.Single().Title.Should().Be("nowy tytuł");
     }
@@ -174,7 +174,7 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Scalanie_idzie_pole_po_polu_a_nie_calym_rekordem()
     {
-        var area = Obszar(_biurko, "Dom");
+        var area = NewArea(_biurko, "Dom");
         var task = TaskId(_biurko, "kupić mleko", area);
 
         // Waga ustawiona przed kopią, tytuł zmieniony po niej. Gdyby cały rekord
@@ -183,13 +183,13 @@ public sealed class BackupServiceTests : IDisposable
         task.SetPriority(Priority.High, _biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
-        var file = await EksportAsync(_biurko.Kopia);
+        var file = await EksportAsync(_biurko.NewBackup);
 
-        _zegar.Now = _zegar.Now.AddHours(1);
+        _clock.Now = _clock.Now.AddHours(1);
         task.Rename("kupić mleko i chleb", _biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
-        await _biurko.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        await _biurko.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
         var po = _biurko.Db.Tasks.Single();
         po.Title.Should().Be("kupić mleko i chleb");
@@ -199,15 +199,15 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Podmiana_calosci_czysci_to_co_bylo()
     {
-        var area = Obszar(_biurko, "Dom");
+        var area = NewArea(_biurko, "Dom");
         TaskId(_biurko, "było przed kopią", area);
 
-        var file = await EksportAsync(_biurko.Kopia);
+        var file = await EksportAsync(_biurko.NewBackup);
 
-        _zegar.Now = _zegar.Now.AddHours(1);
+        _clock.Now = _clock.Now.AddHours(1);
         TaskId(_biurko, "powstało po kopii", area);
 
-        await _biurko.Kopia.ImportAsync(Plik(file), ImportMode.Replace);
+        await _biurko.NewBackup.ImportAsync(FileName(file), ImportMode.Replace);
 
         // Przy scalaniu drugie zadanie by zostało — jest nowsze niż cokolwiek
         // w pliku. Podmiana znaczy podmianę.
@@ -219,11 +219,11 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Inaczej każdy odtworzony rekord poleciałby na Dysk jako świeża zmiana
         // i wskrzesił na drugim urządzeniu rzeczy skasowane po zrobieniu kopii.
-        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
-        var file = await EksportAsync(_biurko.Kopia);
+        TaskId(_biurko, "kupić mleko", NewArea(_biurko, "Dom"));
+        var file = await EksportAsync(_biurko.NewBackup);
 
-        using var telefon = new Baza("telefon", _zegar).Open();
-        await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        using var telefon = new NewDb("telefon", _clock).Open();
+        await telefon.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
         telefon.Db.Changes.Should().BeEmpty();
     }
@@ -233,14 +233,14 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Bez tego kolejna zmiana na tym urządzeniu byłaby wcześniejsza niż to,
         // co przed chwilą przyszło z pliku, i przegrałaby przy scalaniu (spec 9.6).
-        _zegar.Now = _zegar.Now.AddDays(3);
-        TaskId(_biurko, "kupić mleko", Obszar(_biurko, "Dom"));
-        var file = await EksportAsync(_biurko.Kopia);
+        _clock.Now = _clock.Now.AddDays(3);
+        TaskId(_biurko, "kupić mleko", NewArea(_biurko, "Dom"));
+        var file = await EksportAsync(_biurko.NewBackup);
 
-        var wczesniej = new Clock { Now = _zegar.Now.AddDays(-3) };
-        using var telefon = new Baza("telefon", wczesniej).Open();
+        var wczesniej = new Clock { Now = _clock.Now.AddDays(-3) };
+        using var telefon = new NewDb("telefon", wczesniej).Open();
 
-        await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        await telefon.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
         telefon.Hlc.Last.WallMs.Should().BeGreaterThan(wczesniej.Now.ToUnixTimeMilliseconds());
     }
@@ -248,17 +248,17 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Nagrobek_z_kopii_kasuje_rekord_wskrzeszony_gdzie_indziej()
     {
-        var area = Obszar(_biurko, "Dom");
+        var area = NewArea(_biurko, "Dom");
         var task = TaskId(_biurko, "do skasowania", area);
 
-        _zegar.Now = _zegar.Now.AddHours(1);
+        _clock.Now = _clock.Now.AddHours(1);
         task.MarkDeleted(_biurko.Hlc.Next());
         await _biurko.Db.SaveChangesAsync();
 
-        var file = await EksportAsync(_biurko.Kopia);
+        var file = await EksportAsync(_biurko.NewBackup);
 
-        using var telefon = new Baza("telefon", _zegar).Open();
-        await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        using var telefon = new NewDb("telefon", _clock).Open();
+        await telefon.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
         // Usunięcie jest zawsze logiczne (spec 5.1), więc rekord jest w kopii —
         // z nagrobkiem, a nie przez nieobecność.
@@ -268,8 +268,8 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Plik_nie_bedacy_kopia_konczy_sie_bledem_a_nie_polowa_wgranej_bazy()
     {
-        var wgranie = async () => await _biurko.Kopia.ImportAsync(
-            Plik(Encoding.UTF8.GetBytes("{to nie jest kopia")), ImportMode.Merge);
+        var wgranie = async () => await _biurko.NewBackup.ImportAsync(
+            FileName(Encoding.UTF8.GetBytes("{to nie jest kopia")), ImportMode.Merge);
 
         await wgranie.Should().ThrowAsync<Exception>();
     }
@@ -280,22 +280,22 @@ public sealed class BackupServiceTests : IDisposable
         // Dziennik pomija puste pola przy zakładaniu rekordu, więc nie mają znacznika.
         // Gdyby kopia wypisywała je mimo to, byłyby jawnym „wyczyść to" ze znacznikiem
         // całej encji — i skasowałyby wartość nadaną w międzyczasie gdzie indziej.
-        var area = Obszar(_biurko, "Dom");
+        var area = NewArea(_biurko, "Dom");
         var task = TaskId(_biurko, "kupić mleko", area);
 
-        var file = await EksportAsync(_biurko.Kopia);
+        var file = await EksportAsync(_biurko.NewBackup);
 
         // Drugie urządzenie nadaje termin — czyli coś, czego oryginał nigdy nie miał.
-        using var telefon = new Baza("telefon", _zegar).Open();
-        await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        using var telefon = new NewDb("telefon", _clock).Open();
+        await telefon.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
-        _zegar.Now = _zegar.Now.AddHours(1);
+        _clock.Now = _clock.Now.AddHours(1);
         var uNich = telefon.Db.Tasks.Single(z => z.Id == task.Id);
         uNich.SetDeadline(new DateOnly(2026, 10, 1), telefon.Hlc.Next());
         await telefon.Db.SaveChangesAsync();
 
         // Ta sama, stara kopia wgrana jeszcze raz nie ma prawa go zdjąć.
-        await telefon.Kopia.ImportAsync(Plik(file), ImportMode.Merge);
+        await telefon.NewBackup.ImportAsync(FileName(file), ImportMode.Merge);
 
         telefon.Db.Tasks.Single(z => z.Id == task.Id)
             .Deadline.Should().Be(new DateOnly(2026, 10, 1));
@@ -304,18 +304,18 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Uszkodzona_wartosc_pomija_pole_a_nie_wywraca_wgrywania()
     {
-        var area = Obszar(_biurko, "Dom");
+        var area = NewArea(_biurko, "Dom");
         TaskId(_biurko, "kupić mleko", area);
 
-        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia));
+        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.NewBackup));
 
         // Liczba przesunięć przestawiona na tekst, którego nie da się wczytać w liczbę.
         var zepsuty = text.Replace("\"RollCount\": 0", "\"RollCount\": \"nie liczba\"");
         zepsuty.Should().NotBe(text, "podmiana miała trafić w plik");
 
-        using var telefon = new Baza("telefon", _zegar).Open();
-        var report = await telefon.Kopia.ImportAsync(
-            Plik(Encoding.UTF8.GetBytes(zepsuty)), ImportMode.Merge);
+        using var telefon = new NewDb("telefon", _clock).Open();
+        var report = await telefon.NewBackup.ImportAsync(
+            FileName(Encoding.UTF8.GetBytes(zepsuty)), ImportMode.Merge);
 
         // Reszta rekordu wchodzi. Jedna zła wartość nie może blokować wszystkiego,
         // co przyszło po niej.
@@ -328,17 +328,17 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Podmiana czyści tabele przed wgraniem. Bez transakcji błąd w połowie
         // zostawiłby bazę pustą i nieodtworzoną.
-        TaskId(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "to ma zostać", NewArea(_biurko, "Dom"));
 
-        var file = await EksportAsync(_biurko.Kopia);
+        var file = await EksportAsync(_biurko.NewBackup);
 
         // Tytuł wyzerowany: plik jest poprawnym JSON-em i wgrywa się bez szemrania,
         // a wywraca się dopiero na zapisie, bo kolumna jest wymagana.
         var text = Encoding.UTF8.GetString(file).Replace("\"to ma zostać\"", "null");
         text.Should().NotBe(Encoding.UTF8.GetString(file), "podmiana miała trafić w plik");
 
-        var wgranie = async () => await _biurko.Kopia.ImportAsync(
-            Plik(Encoding.UTF8.GetBytes(text)), ImportMode.Replace);
+        var wgranie = async () => await _biurko.NewBackup.ImportAsync(
+            FileName(Encoding.UTF8.GetBytes(text)), ImportMode.Replace);
 
         await wgranie.Should().ThrowAsync<Exception>();
 
@@ -348,12 +348,12 @@ public sealed class BackupServiceTests : IDisposable
     [Fact]
     public async Task Podmiana_z_pliku_bez_wpisow_jest_odrzucana()
     {
-        TaskId(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "to ma zostać", NewArea(_biurko, "Dom"));
 
         var pusty = Encoding.UTF8.GetBytes(
             """{"wersja":1,"utworzono":"2026-09-17T09:00:00+02:00","urzadzenie":"skads","wiersze":[]}""");
 
-        var wgranie = async () => await _biurko.Kopia.ImportAsync(Plik(pusty), ImportMode.Replace);
+        var wgranie = async () => await _biurko.NewBackup.ImportAsync(FileName(pusty), ImportMode.Replace);
         await wgranie.Should().ThrowAsync<InvalidDataException>();
 
         _biurko.Db.Tasks.Should().ContainSingle();
@@ -364,13 +364,13 @@ public sealed class BackupServiceTests : IDisposable
     {
         // Pominięcie nieznanej tabeli jest przy scalaniu słuszne, ale przy podmianie
         // znaczyłoby bazę wyczyszczoną i nieodtworzoną — po cichu.
-        TaskId(_biurko, "to ma zostać", Obszar(_biurko, "Dom"));
+        TaskId(_biurko, "to ma zostać", NewArea(_biurko, "Dom"));
 
-        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.Kopia))
+        var text = Encoding.UTF8.GetString(await EksportAsync(_biurko.NewBackup))
             .Replace("\"e\": \"", "\"e\": \"Obce");
 
-        var wgranie = async () => await _biurko.Kopia.ImportAsync(
-            Plik(Encoding.UTF8.GetBytes(text)), ImportMode.Replace);
+        var wgranie = async () => await _biurko.NewBackup.ImportAsync(
+            FileName(Encoding.UTF8.GetBytes(text)), ImportMode.Replace);
 
         await wgranie.Should().ThrowAsync<InvalidDataException>();
 

@@ -12,19 +12,19 @@ public sealed class IcalFeedTests
 {
     private static readonly DateTime Now = new(2026, 9, 16, 12, 0, 0, DateTimeKind.Utc);
 
-    private static string Kalendarz(string wnetrze) =>
+    private static string NewCalendar(string wnetrze) =>
         "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//PL\r\n" + wnetrze + "END:VCALENDAR\r\n";
 
     [Fact]
     public void Pusty_kalendarz_nie_ma_wydarzen()
     {
-        IcalFeed.Parse(Kalendarz(string.Empty), Now).Should().BeEmpty();
+        IcalFeed.Parse(NewCalendar(string.Empty), Now).Should().BeEmpty();
     }
 
     [Fact]
     public void Zwykle_wydarzenie_wraca_z_tytulem_i_godzinami()
     {
-        var file = Kalendarz(
+        var file = NewCalendar(
             "BEGIN:VEVENT\r\nUID:a1\r\nSUMMARY:Wizyta u pediatry\r\n" +
             "DTSTART:20260917T090000Z\r\nDTEND:20260917T100000Z\r\n" +
             "LOCATION:Przychodnia\r\nEND:VEVENT\r\n");
@@ -43,7 +43,7 @@ public sealed class IcalFeedTests
     public void Wydarzenie_calodniowe_jest_rozpoznane()
     {
         // W iCal poznaje się je po dacie bez pory dnia, nie po osobnym polu.
-        var file = Kalendarz(
+        var file = NewCalendar(
             "BEGIN:VEVENT\r\nUID:a2\r\nSUMMARY:Urlop\r\n" +
             "DTSTART;VALUE=DATE:20260920\r\nDTEND;VALUE=DATE:20260922\r\nEND:VEVENT\r\n");
 
@@ -54,7 +54,7 @@ public sealed class IcalFeedTests
     public void Wydarzenie_bez_tytulu_dostaje_zastepczy()
     {
         // Pusty wiersz na siatce nie daje się w nic kliknąć ani niczego nie mówi.
-        var file = Kalendarz(
+        var file = NewCalendar(
             "BEGIN:VEVENT\r\nUID:a3\r\nDTSTART:20260917T090000Z\r\nDTEND:20260917T100000Z\r\nEND:VEVENT\r\n");
 
         IcalFeed.Parse(file, Now).Single().Title.Should().Be("(bez tytułu)");
@@ -63,7 +63,7 @@ public sealed class IcalFeedTests
     [Fact]
     public void Wydarzenie_powtarzalne_rozwija_sie_na_wystapienia()
     {
-        var file = Kalendarz(
+        var file = NewCalendar(
             "BEGIN:VEVENT\r\nUID:a4\r\nSUMMARY:Krav maga\r\n" +
             "DTSTART:20260917T170000Z\r\nDTEND:20260917T180000Z\r\n" +
             "RRULE:FREQ=WEEKLY;COUNT=4\r\nEND:VEVENT\r\n");
@@ -76,7 +76,7 @@ public sealed class IcalFeedTests
     {
         // Wszystkie mają ten sam UID, więc bez daty w kluczu cotygodniowe zajęcia
         // zapisałyby się do bazy raz i siatka pokazałaby jedno.
-        var file = Kalendarz(
+        var file = NewCalendar(
             "BEGIN:VEVENT\r\nUID:a5\r\nSUMMARY:Krav maga\r\n" +
             "DTSTART:20260917T170000Z\r\nDTEND:20260917T180000Z\r\n" +
             "RRULE:FREQ=WEEKLY;COUNT=4\r\nEND:VEVENT\r\n");
@@ -92,7 +92,7 @@ public sealed class IcalFeedTests
     {
         // Kanał z cotygodniowym wydarzeniem bez daty końca rozwinąłby się
         // w nieskończoność, a pamięć skończyłaby się wcześniej.
-        var file = Kalendarz(
+        var file = NewCalendar(
             "BEGIN:VEVENT\r\nUID:a6\r\nSUMMARY:Bez końca\r\n" +
             "DTSTART:20260917T170000Z\r\nDTEND:20260917T180000Z\r\n" +
             "RRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\n");
@@ -106,7 +106,7 @@ public sealed class IcalFeedTests
     [Fact]
     public void Wydarzenie_spoza_okna_nie_wchodzi()
     {
-        var file = Kalendarz(
+        var file = NewCalendar(
             "BEGIN:VEVENT\r\nUID:a7\r\nSUMMARY:Za rok\r\n" +
             "DTSTART:20270917T090000Z\r\nDTEND:20270917T100000Z\r\nEND:VEVENT\r\n");
 
@@ -119,7 +119,7 @@ public sealed class IcalFeedTests
         // Pole spoza normy, ale wystawia je wszystko, co w ogóle podaje kolor.
         // Biblioteka do rozbioru nie wpuszcza własnych pól na X, stąd szukanie
         // w tekście — i stąd ten test, bo to jedyne miejsce, gdzie widać literówkę.
-        var file = Kalendarz("X-APPLE-CALENDAR-COLOR:#34AADC\r\n");
+        var file = NewCalendar("X-APPLE-CALENDAR-COLOR:#34AADC\r\n");
 
         IcalFeed.ParseColor(file).Should().Be("#34AADC");
     }
@@ -127,6 +127,6 @@ public sealed class IcalFeedTests
     [Fact]
     public void Kanal_bez_barwy_nie_zmysla_koloru()
     {
-        IcalFeed.ParseColor(Kalendarz(string.Empty)).Should().BeNull();
+        IcalFeed.ParseColor(NewCalendar(string.Empty)).Should().BeNull();
     }
 }

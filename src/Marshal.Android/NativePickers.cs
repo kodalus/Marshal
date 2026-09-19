@@ -89,7 +89,7 @@ internal static class NativePickers
     /// zamknięcie. Wygrywa pierwsza.
     /// </para>
     /// </remarks>
-    private static Task<T> ShowAsync<T>(Activity window, Action<Action<T>> pokaz)
+    private static Task<T> ShowAsync<T>(Activity window, Action<Action<T>> show)
     {
         var response = new TaskCompletionSource<T>(
             TaskCreationOptions.RunContinuationsAsynchronously);
@@ -98,7 +98,7 @@ internal static class NativePickers
         {
             try
             {
-                pokaz(result => response.TrySetResult(result));
+                show(result => response.TrySetResult(result));
             }
             catch (Exception e)
             {

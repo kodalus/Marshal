@@ -34,17 +34,17 @@ namespace Marshal.Tests;
 /// </remarks>
 public sealed class PrzezCalaTraseTests : IDisposable
 {
-    private readonly string _katalog = Path.Combine(
+    private readonly string _folder = Path.Combine(
         Path.GetTempPath(), "marshal-trasa-" + Guid.NewGuid().ToString("N"));
 
     private readonly ServiceProvider _services;
 
     public PrzezCalaTraseTests()
     {
-        Directory.CreateDirectory(_katalog);
+        Directory.CreateDirectory(_folder);
 
         _services = new ServiceCollection()
-            .AddMarshal(Path.Combine(_katalog, "marshal.db"))
+            .AddMarshal(Path.Combine(_folder, "marshal.db"))
             .AddMarshalViewModels()
             .BuildServiceProvider();
 
@@ -53,20 +53,20 @@ public sealed class PrzezCalaTraseTests : IDisposable
         DependencyInjection.PrepareAsync(_services).GetAwaiter().GetResult();
     }
 
-    private T Usluga<T>() where T : notnull => _services.GetRequiredService<T>();
+    private T NewService<T>() where T : notnull => _services.GetRequiredService<T>();
 
     /// <summary>Zadanie zaplanowane na dziś, zapisane tak, jak zapisuje je aplikacja.</summary>
     private async Task<TaskItem> ZaplanowaneAsync(string title)
     {
-        var tasks = Usluga<ITaskRepository>();
-        var hlc = Usluga<IHlcSource>();
-        var clock = Usluga<IClock>();
+        var tasks = NewService<ITaskRepository>();
+        var hlc = NewService<IHlcSource>();
+        var clock = NewService<IClock>();
 
         var task = TaskItem.Capture(title, clock.Now, hlc.Next());
         task.Schedule(Guid.CreateVersion7(), clock.Today, hlc.Next());
 
         tasks.Add(task);
-        await Usluga<IUnitOfWork>().SaveChangesAsync();
+        await NewService<IUnitOfWork>().SaveChangesAsync();
 
         return task;
     }
@@ -76,30 +76,30 @@ public sealed class PrzezCalaTraseTests : IDisposable
     {
         // Dokładnie ta droga, którą idzie ręka: klik w pustą siatkę, wypełnienie,
         // zapis. Bez atrap — kontener ten sam, co w oknie.
-        var calendarId = Usluga<CalendarViewModel>();
-        var szczegol = Usluga<TaskDetailViewModel>();
+        var calendarId = NewService<CalendarViewModel>();
+        var detail = NewService<TaskDetailViewModel>();
 
         (DateOnly Day, TimeOnly Time)? poproszono = null;
         calendarId.NewTaskRequested += (day, time) => poproszono = (day, time);
 
         await calendarId.LoadAsync();
 
-        var today = Usluga<IClock>().Today;
+        var today = NewService<IClock>().Today;
 
         // 16:00 na siatce to 16 * 48 punktów od góry.
         calendarId.NewAt(today, 16 * 48);
         poproszono.Should().NotBeNull("klik w pustą siatkę ma poprosić o nowe zadanie");
 
-        await szczegol.NewAsync(poproszono!.Value.Day, poproszono.Value.Time);
+        await detail.NewAsync(poproszono!.Value.Day, poproszono.Value.Time);
 
-        szczegol.IsOpen.Should().BeTrue();
-        szczegol.DoTime.Should().Be(new TimeSpan(16, 0, 0));
+        detail.IsOpen.Should().BeTrue();
+        detail.DoTime.Should().Be(new TimeSpan(16, 0, 0));
 
-        szczegol.Title = "Odebrać Sanię";
-        await szczegol.SaveAsync();
+        detail.Title = "Odebrać Sanię";
+        await detail.SaveAsync();
 
-        szczegol.Problem.Should().BeNull("zapis miał się udać");
-        szczegol.IsOpen.Should().BeFalse("udany zapis zamyka okno");
+        detail.Problem.Should().BeNull("zapis miał się udać");
+        detail.IsOpen.Should().BeFalse("udany zapis zamyka okno");
 
         // I to jest pytanie właściwe: czy widać je tam, gdzie się je założyło.
         await calendarId.LoadAsync();
@@ -122,17 +122,17 @@ public sealed class PrzezCalaTraseTests : IDisposable
     [Fact]
     public async Task Zadanie_z_kiedys_da_sie_wziac_na_dzis_i_zobaczyc_w_teraz()
     {
-        var main = Usluga<MainViewModel>();
-        var area = (await Usluga<IAreaRepository>().ActiveAsync())[0];
+        var main = NewService<MainViewModel>();
+        var area = (await NewService<IAreaRepository>().ActiveAsync())[0];
 
-        var tasks = Usluga<ITaskRepository>();
-        var hlc = Usluga<IHlcSource>();
-        var clock = Usluga<IClock>();
+        var tasks = NewService<ITaskRepository>();
+        var hlc = NewService<IHlcSource>();
+        var clock = NewService<IClock>();
 
         var task = TaskItem.Capture("Nauczyć się szyć", clock.Now, hlc.Next());
         task.Postpone(area.Id, clock.Today.AddDays(90), hlc.Next());
         tasks.Add(task);
-        await Usluga<IUnitOfWork>().SaveChangesAsync();
+        await NewService<IUnitOfWork>().SaveChangesAsync();
 
         await main.ShowSomedayCommand.ExecuteAsync(null);
         main.SomedayItems.Should().ContainSingle(t => t.Id == task.Id);
@@ -176,18 +176,18 @@ public sealed class PrzezCalaTraseTests : IDisposable
     [Fact]
     public async Task Kiedys_z_dlugoscia_i_sila_da_sie_pokazac_w_teraz_i_w_kandydatach()
     {
-        var main = Usluga<MainViewModel>();
-        var area = (await Usluga<IAreaRepository>().ActiveAsync())[0];
+        var main = NewService<MainViewModel>();
+        var area = (await NewService<IAreaRepository>().ActiveAsync())[0];
 
-        var tasks = Usluga<ITaskRepository>();
-        var hlc = Usluga<IHlcSource>();
-        var clock = Usluga<IClock>();
+        var tasks = NewService<ITaskRepository>();
+        var hlc = NewService<IHlcSource>();
+        var clock = NewService<IClock>();
 
         var task = TaskItem.Capture("test na 15 minut i resztkę energii", clock.Now, hlc.Next());
         task.Postpone(area.Id, null, hlc.Next());
         task.SetEstimate(15, Energy.Low, hlc.Next());
         tasks.Add(task);
-        await Usluga<IUnitOfWork>().SaveChangesAsync();
+        await NewService<IUnitOfWork>().SaveChangesAsync();
 
         await main.Now.LoadAsync();
         main.Now.AlsoSomeday.Should().BeFalse("wejście na ekran nie otwiera go na wszystko");
@@ -196,7 +196,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // Sam dobór sprawdzany wprost w usłudze, nie przez przełącznik w oknie:
         // przeliczenie po zmianie pola idzie bez czekania i test nie ma czego dopilnować,
         // a pytanie dotyczy tego, kogo dobieranie bierze pod uwagę.
-        var now = Usluga<NowService>();
+        var now = NewService<NowService>();
         (await now.PickAsync(30, Energy.Medium))
             .Should().NotContain(w => w.Task.Id == task.Id);
         (await now.PickAsync(30, Energy.Medium, includeSomeday: true))
@@ -222,7 +222,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
     [Fact]
     public async Task Obszar_da_sie_zalozyc_przemianowac_i_usunac_gdy_pusty()
     {
-        var main = Usluga<MainViewModel>();
+        var main = NewService<MainViewModel>();
 
         main.NewAreaName = "Rodzina";
         await main.AddAreaCommand.ExecuteAsync(null);
@@ -253,15 +253,15 @@ public sealed class PrzezCalaTraseTests : IDisposable
         main.ProjectRows.Should().Contain(w => w.Id == poNazwie.Id);
 
         // Zadanie w projekcie blokuje usunięcie projektu z tego samego powodu.
-        var tasks = Usluga<ITaskRepository>();
-        var hlc = Usluga<IHlcSource>();
-        var clock = Usluga<IClock>();
+        var tasks = NewService<ITaskRepository>();
+        var hlc = NewService<IHlcSource>();
+        var clock = NewService<IClock>();
 
         var task = TaskItem.Capture("Zakupy", clock.Now, hlc.Next());
         task.MakeNext(poNazwie.Id, hlc.Next());
         task.MoveTo(poNazwie.Id, project.Id, hlc.Next());
         tasks.Add(task);
-        await Usluga<IUnitOfWork>().SaveChangesAsync();
+        await NewService<IUnitOfWork>().SaveChangesAsync();
 
         await main.ShowProjectsCommand.ExecuteAsync(null);
         await main.DeleteRowAsync(main.ProjectRows.Single(w => w.Id == project.Id));
@@ -291,7 +291,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
     [Fact]
     public async Task Wrzut_da_sie_wziac_na_dzis_wprost_z_przetwarzania()
     {
-        var main = Usluga<MainViewModel>();
+        var main = NewService<MainViewModel>();
         main.CaptureText = "Zrobić zakupy";
         await main.CaptureCommand.ExecuteAsync(null);
 
@@ -308,17 +308,17 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         clarify.Problem.Should().BeNull("piątka jest pusta, nie ma czego odmawiać");
 
-        var task = (await Usluga<ITaskRepository>().ByStateAsync(TaskState.Next))
+        var task = (await NewService<ITaskRepository>().ByStateAsync(TaskState.Next))
             .Should().ContainSingle(t => t.Title == "Zrobić zakupy").Which;
 
         task.EstimatedMinutes.Should().Be(30);
         task.Energy.Should().Be(Energy.Medium);
-        task.FocusDate.Should().Be(Usluga<IClock>().Today, "„dzisiaj” znaczy piątkę na dziś");
+        task.FocusDate.Should().Be(NewService<IClock>().Today, "„dzisiaj” znaczy piątkę na dziś");
 
         await main.ShowTodayCommand.ExecuteAsync(null);
         main.FocusItems.Should().ContainSingle(t => t.Id == task.Id);
 
-        (await Usluga<NowService>().PickAsync(30, Energy.Medium))
+        (await NewService<NowService>().PickAsync(30, Energy.Medium))
             .Should().Contain(w => w.Task.Id == task.Id);
     }
 
@@ -329,26 +329,26 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // się na siatce. Oba przejścia stanu wymagały, żeby zadanie miało już obszar —
         // a zadanie z wrzutu go nie ma. Data **znikała bez słowa**: zapis się udawał,
         // okno zamykało, i tyle.
-        var main = Usluga<MainViewModel>();
+        var main = NewService<MainViewModel>();
         main.CaptureText = "Zadzwonić do przedszkola";
         await main.CaptureCommand.ExecuteAsync(null);
 
-        var wrzut = main.InboxItems.Single();
-        wrzut.AreaId.Should().BeNull("wrzut nie ma obszaru i to jest cała trudność");
+        var capture = main.InboxItems.Single();
+        capture.AreaId.Should().BeNull("wrzut nie ma obszaru i to jest cała trudność");
 
-        var szczegol = Usluga<TaskDetailViewModel>();
-        await szczegol.LoadAsync(wrzut);
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(capture);
 
-        var today = Usluga<IClock>().Today;
-        szczegol.DoDate = new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
-        szczegol.DoTime = new TimeSpan(16, 0, 0);
-        szczegol.EndTime = new TimeSpan(17, 30, 0);
+        var today = NewService<IClock>().Today;
+        detail.DoDate = new DateTimeOffset(today.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        detail.DoTime = new TimeSpan(16, 0, 0);
+        detail.EndTime = new TimeSpan(17, 30, 0);
 
-        await szczegol.SaveAsync();
+        await detail.SaveAsync();
 
-        szczegol.Problem.Should().BeNull("zapis miał się udać");
+        detail.Problem.Should().BeNull("zapis miał się udać");
 
-        var saved = await Usluga<ITaskRepository>().FindAsync(wrzut.Id);
+        var saved = await NewService<ITaskRepository>().FindAsync(capture.Id);
 
         saved!.DoDate.Should().Be(today);
         saved.DoTime.Should().Be(new TimeOnly(16, 0));
@@ -359,10 +359,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         // I dopiero to jest odpowiedź na „dlaczego Dzisiaj jest puste".
         await main.ShowTodayCommand.ExecuteAsync(null);
-        main.TodayItems.Should().ContainSingle(w => w.Task.Id == wrzut.Id);
+        main.TodayItems.Should().ContainSingle(w => w.Task.Id == capture.Id);
 
         // Na siatce też, o właściwej godzinie.
-        var calendarId = Usluga<CalendarViewModel>();
+        var calendarId = NewService<CalendarViewModel>();
         await calendarId.LoadAsync();
 
         calendarId.Columns.SelectMany(k => k.Slots)
@@ -375,15 +375,15 @@ public sealed class PrzezCalaTraseTests : IDisposable
     {
         var task = await ZaplanowaneAsync("Przerwa");
 
-        var szczegol = Usluga<TaskDetailViewModel>();
-        await szczegol.LoadAsync(task);
-        szczegol.DoTime = new TimeSpan(9, 0, 0);
-        szczegol.EndTime = null;
-        szczegol.EstimatedMinutes = null;
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
+        detail.DoTime = new TimeSpan(9, 0, 0);
+        detail.EndTime = null;
+        detail.EstimatedMinutes = null;
 
-        await szczegol.SaveAsync();
+        await detail.SaveAsync();
 
-        var calendarId = Usluga<CalendarViewModel>();
+        var calendarId = NewService<CalendarViewModel>();
         await calendarId.LoadAsync();
 
         var block = calendarId.Columns.SelectMany(k => k.Slots).Single(b => b.Title == "Przerwa");
@@ -398,12 +398,12 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // Sedno: ekran „Teraz" dobiera pod dostępne minuty i poziom sił, więc zadanie
         // bez oszacowania nie trafia tam nigdy. Dotąd dało się to wpisać dopiero
         // w szczegółach — po przetworzeniu, z listy, drugim otwarciem.
-        var main = Usluga<MainViewModel>();
+        var main = NewService<MainViewModel>();
 
         main.CaptureText = "Zadzwonić do przychodni";
         await main.CaptureCommand.ExecuteAsync(null);
 
-        var przetwarzanie = Usluga<ClarifyViewModel>();
+        var przetwarzanie = NewService<ClarifyViewModel>();
         await przetwarzanie.LoadAsync();
 
         przetwarzanie.Current.Should().NotBeNull();
@@ -428,19 +428,19 @@ public sealed class PrzezCalaTraseTests : IDisposable
     {
         // W menu mają być **tylko rzeczy, które działają**: pozycja, która nic nie robi,
         // uczy nieufności do całego menu, a nieufne menu przestaje być skrótem.
-        var main = Usluga<MainViewModel>();
-        var today = Usluga<IClock>().Today;
+        var main = NewService<MainViewModel>();
+        var today = NewService<IClock>().Today;
 
         var jutro = await ZaplanowaneAsync("Przełożyć");
         await main.PostponeTaskCommand.ExecuteAsync(jutro);
 
-        (await Usluga<ITaskRepository>().FindAsync(jutro.Id))!
+        (await NewService<ITaskRepository>().FindAsync(jutro.Id))!
             .DoDate.Should().Be(today.AddDays(1));
 
         var kosz = await ZaplanowaneAsync("Wyrzucić");
         await main.TrashTaskCommand.ExecuteAsync(kosz);
 
-        (await Usluga<ITaskRepository>().FindAsync(kosz.Id))!
+        (await NewService<ITaskRepository>().FindAsync(kosz.Id))!
             .State.Should().Be(TaskState.Trashed);
 
         var piatka = await ZaplanowaneAsync("Na dziś");
@@ -448,10 +448,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         main.FocusItems.Should().Contain(z => z.Id == piatka.Id);
 
-        var szczegol = await ZaplanowaneAsync("Otworzyć");
-        await main.OpenTaskCommand.ExecuteAsync(szczegol);
+        var detail = await ZaplanowaneAsync("Otworzyć");
+        await main.OpenTaskCommand.ExecuteAsync(detail);
 
-        Usluga<TaskDetailViewModel>().IsOpen.Should().BeTrue();
+        NewService<TaskDetailViewModel>().IsOpen.Should().BeTrue();
     }
 
     [Fact]
@@ -461,18 +461,18 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // Sześć warstw, z których każda ma własny test i każdy przechodzi.
         var task = await ZaplanowaneAsync("Wynieść śmieci");
 
-        var szczegol = Usluga<TaskDetailViewModel>();
-        szczegol.Load(task);
-        szczegol.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
+        var detail = NewService<TaskDetailViewModel>();
+        detail.Load(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
 
-        await szczegol.SaveAsync();
+        await detail.SaveAsync();
 
         // Odczyt z bazy, nie z obiektu w pamięci: chodzi o to, czy reguła **przeżyła zapis**.
-        var saved = await Usluga<ITaskRepository>().FindAsync(task.Id);
+        var saved = await NewService<ITaskRepository>().FindAsync(task.Id);
         saved!.Recurrence.Should().NotBeNull();
         saved.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
 
-        var next = await Usluga<TaskEditService>().CompleteAsync(task.Id);
+        var next = await NewService<TaskEditService>().CompleteAsync(task.Id);
 
         next.Should().NotBeNull();
         next!.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
@@ -487,23 +487,23 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // znika bez śladu — sama pora bez dnia nie znaczy nic i ma nie zapisać niczego.
         var task = await ZaplanowaneAsync("Zadzwonić do przychodni");
 
-        var szczegol = Usluga<TaskDetailViewModel>();
-        szczegol.Load(task);
-        szczegol.ReminderTime = new TimeSpan(14, 30, 0);
+        var detail = NewService<TaskDetailViewModel>();
+        detail.Load(task);
+        detail.ReminderTime = new TimeSpan(14, 30, 0);
 
-        await szczegol.SaveAsync();
+        await detail.SaveAsync();
 
-        (await Usluga<ITaskRepository>().FindAsync(task.Id))!
+        (await NewService<ITaskRepository>().FindAsync(task.Id))!
             .ReminderAt.Should().BeNull("sama pora bez dnia nie wskazuje chwili");
 
-        szczegol.Load(task);
-        szczegol.ReminderDay = new DateTimeOffset(
-            Usluga<IClock>().Today.ToDateTime(TimeOnly.MinValue), Usluga<IClock>().Now.Offset);
-        szczegol.ReminderTime = new TimeSpan(14, 30, 0);
+        detail.Load(task);
+        detail.ReminderDay = new DateTimeOffset(
+            NewService<IClock>().Today.ToDateTime(TimeOnly.MinValue), NewService<IClock>().Now.Offset);
+        detail.ReminderTime = new TimeSpan(14, 30, 0);
 
-        await szczegol.SaveAsync();
+        await detail.SaveAsync();
 
-        var saved = await Usluga<ITaskRepository>().FindAsync(task.Id);
+        var saved = await NewService<ITaskRepository>().FindAsync(task.Id);
 
         saved!.ReminderAt.Should().NotBeNull();
         saved.ReminderAt!.Value.TimeOfDay.Should().Be(new TimeSpan(14, 30, 0));
@@ -517,49 +517,49 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // przejście jest miejscem, w którym wyprzedzenie może cicho zniknąć.
         var task = await ZaplanowaneAsync("Wizyta u lekarza");
 
-        var szczegol = Usluga<TaskDetailViewModel>();
-        await szczegol.LoadAsync(task);
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
 
-        szczegol.HasTime.Should().BeFalse("zadanie jeszcze nie ma godziny");
+        detail.HasTime.Should().BeFalse("zadanie jeszcze nie ma godziny");
 
-        szczegol.DoTime = new TimeSpan(14, 0, 0);
+        detail.DoTime = new TimeSpan(14, 0, 0);
 
-        szczegol.HasTime.Should().BeTrue();
-        szczegol.Leads.Single(w => w.Minutes == 0).IsChecked
+        detail.HasTime.Should().BeTrue();
+        detail.Leads.Single(w => w.Minutes == 0).IsChecked
             .Should().BeTrue("wpisana godzina sama włącza przypomnienie o czasie");
 
-        szczegol.Leads.Single(w => w.Minutes == 30).IsChecked = true;
+        detail.Leads.Single(w => w.Minutes == 30).IsChecked = true;
 
         // Dowolnie: dwie godziny. Ma wskoczyć na listę na swoje miejsce w kolejności
         // czasu i od razu zostać zaznaczone.
-        szczegol.CustomLead = 2;
-        szczegol.SelectedLeadUnit = LeadUnitChoice.All.Single(j => j.Label == "godzin");
-        szczegol.AddLeadCommand.Execute(null);
+        detail.CustomLead = 2;
+        detail.SelectedLeadUnit = LeadUnitChoice.All.Single(j => j.Label == "godzin");
+        detail.AddLeadCommand.Execute(null);
 
-        var dopisane = szczegol.Leads.Single(w => w.Minutes == 120);
+        var dopisane = detail.Leads.Single(w => w.Minutes == 120);
         dopisane.IsChecked.Should().BeTrue();
         dopisane.Label.Should().Be("2 godz. wcześniej");
-        szczegol.Leads.Select(w => w.Minutes).Should().BeInAscendingOrder();
+        detail.Leads.Select(w => w.Minutes).Should().BeInAscendingOrder();
 
-        await szczegol.SaveAsync();
+        await detail.SaveAsync();
 
-        var saved = await Usluga<ITaskRepository>().FindAsync(task.Id);
+        var saved = await NewService<ITaskRepository>().FindAsync(task.Id);
         saved!.ReminderLeads.Should().Equal(0, 30, 120);
 
         // Droga powrotna: okno otwarte drugi raz ma pokazać to samo.
-        szczegol.Load(saved);
-        szczegol.Leads.Where(w => w.IsChecked).Select(w => w.Minutes)
+        detail.Load(saved);
+        detail.Leads.Where(w => w.IsChecked).Select(w => w.Minutes)
             .Should().Equal(new[] { 0, 30, 120 }, "wczytanie ma pokazać to samo, co się zapisało");
 
         // Zabrana godzina zabiera to, od czego wyprzedzenia się liczyły — więc i je.
-        szczegol.DoTime = null;
+        detail.DoTime = null;
 
-        szczegol.Leads.Should().NotContain(
+        detail.Leads.Should().NotContain(
             w => w.IsChecked, "okno ma pokazywać to, co się zapisze");
 
-        await szczegol.SaveAsync();
+        await detail.SaveAsync();
 
-        (await Usluga<ITaskRepository>().FindAsync(task.Id))!
+        (await NewService<ITaskRepository>().FindAsync(task.Id))!
             .ReminderLeads.Should().BeEmpty("bez godziny nie ma od czego liczyć");
     }
 
@@ -572,17 +572,17 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var task = await ZaplanowaneAsync("Zadzwonić do przedszkola");
 
         // Bez dnia wykonania: samo wzięcie na dziś ma wystarczyć.
-        var tasks = Usluga<ITaskRepository>();
-        task.MoveDoDate(null, Usluga<IHlcSource>().Next());
-        await Usluga<IUnitOfWork>().SaveChangesAsync();
+        var tasks = NewService<ITaskRepository>();
+        task.MoveDoDate(null, NewService<IHlcSource>().Next());
+        await NewService<IUnitOfWork>().SaveChangesAsync();
 
-        var calendarId = Usluga<CalendarViewModel>();
+        var calendarId = NewService<CalendarViewModel>();
         await calendarId.LoadAsync();
 
         calendarId.Columns.SelectMany(k => k.AllDay).Should()
             .NotContain(b => b.Title == task.Title, "jeszcze nie zostało wzięte");
 
-        (await Usluga<FocusService>().TryFocusAsync(task.Id)).Accepted.Should().BeTrue();
+        (await NewService<FocusService>().TryFocusAsync(task.Id)).Accepted.Should().BeTrue();
 
         await calendarId.LoadAsync();
 
@@ -602,16 +602,16 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // jedno pole gubi się przy zapisie albo przy odczycie.
         await ZaplanowaneAsync("Zrobić przelew");
 
-        var filtry = Usluga<FiltersViewModel>();
-        await filtry.LoadAsync();
+        var filters = NewService<FiltersViewModel>();
+        await filters.LoadAsync();
 
-        filtry.Name = "Na dziś";
-        filtry.Text = "przelew";
+        filters.Name = "Na dziś";
+        filters.Text = "przelew";
 
-        await filtry.SaveCommand.ExecuteAsync(null);
-        filtry.OpenId.Should().NotBe(Guid.Empty, "zapis miał zwrócić identyfikator");
+        await filters.SaveCommand.ExecuteAsync(null);
+        filters.OpenId.Should().NotBe(Guid.Empty, "zapis miał zwrócić identyfikator");
 
-        var saved = (await Usluga<ISavedFilterRepository>().AllAsync())
+        var saved = (await NewService<ISavedFilterRepository>().AllAsync())
             .Single(f => f.Name == "Na dziś");
 
         saved.Query.Should().NotBeNull("definicja ma się dać odczytać z powrotem");
@@ -624,7 +624,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // Objaw: z widoku „Co się działo" przycisk wstecz zamykał aplikację. Zamknięcie
         // w odpowiedzi na cofnięcie z ekranu, na który się przed chwilą weszło, wygląda
         // jak awaria, a nie jak nawigacja.
-        var main = Usluga<MainViewModel>();
+        var main = NewService<MainViewModel>();
 
         await main.ShowNotesCommand.ExecuteAsync(null);
         await main.ShowJournalCommand.ExecuteAsync(null);
@@ -641,7 +641,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         // Bez znacznika „trwa cofanie" samo cofnięcie dopisywałoby do śladu ekran,
         // z którego się cofa — i drugie cofnięcie wracałoby tam, skąd się właśnie
         // przyszło. Przycisk wstecz byłby wtedy przełącznikiem, nie cofnięciem.
-        var main = Usluga<MainViewModel>();
+        var main = NewService<MainViewModel>();
 
         await main.ShowNotesCommand.ExecuteAsync(null);
         await main.ShowCalendarCommand.ExecuteAsync(null);
@@ -663,7 +663,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         //
         // Dopiero stojąc na ekranie domowym oddajemy cofnięcie systemowi — przycisk
         // wstecz, który nigdy nie wychodzi z aplikacji, przestaje być przyciskiem wstecz.
-        var main = Usluga<MainViewModel>();
+        var main = NewService<MainViewModel>();
 
         main.IsCalendar.Should().BeTrue("aplikacja otwiera się na kalendarzu");
 
@@ -678,9 +678,9 @@ public sealed class PrzezCalaTraseTests : IDisposable
     {
         _services.Dispose();
 
-        if (Directory.Exists(_katalog))
+        if (Directory.Exists(_folder))
         {
-            Directory.Delete(_katalog, recursive: true);
+            Directory.Delete(_folder, recursive: true);
         }
     }
 }

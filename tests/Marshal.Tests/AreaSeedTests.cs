@@ -17,7 +17,7 @@ public sealed class AreaSeedTests : IDisposable
 
     private readonly SqliteConnection _connection;
     private readonly MarshalDbContext _db;
-    private readonly Clock _zegar = new();
+    private readonly Clock _clock = new();
 
     public AreaSeedTests()
     {
@@ -28,12 +28,12 @@ public sealed class AreaSeedTests : IDisposable
         _db.Database.Migrate();
     }
 
-    private Task Zaloz() => AreaSeed.EnsureAsync(_db, _zegar, new HlcSource(_zegar, "testy"));
+    private Task Create() => AreaSeed.EnsureAsync(_db, _clock, new HlcSource(_clock, "testy"));
 
     [Fact]
     public async Task Zaklada_dziesiec_obszarow()
     {
-        await Zaloz();
+        await Create();
 
         _db.Areas.Should().HaveCount(10);
     }
@@ -41,7 +41,7 @@ public sealed class AreaSeedTests : IDisposable
     [Fact]
     public async Task Progi_odpowiadaja_tabeli_ze_specyfikacji()
     {
-        await Zaloz();
+        await Create();
 
         var urzedowe = _db.Areas.Single(a => a.Name == "Sprawy urzędowe");
         urzedowe.QuietDays.Should().Be(60);
@@ -56,8 +56,8 @@ public sealed class AreaSeedTests : IDisposable
     [Fact]
     public async Task Powtorne_zalozenie_nie_duplikuje()
     {
-        await Zaloz();
-        await Zaloz();
+        await Create();
+        await Create();
 
         _db.Areas.Should().HaveCount(10);
     }
@@ -65,7 +65,7 @@ public sealed class AreaSeedTests : IDisposable
     [Fact]
     public async Task Obszary_maja_rosnaca_kolejnosc()
     {
-        await Zaloz();
+        await Create();
 
         _db.Areas.OrderBy(a => a.SortOrder).Select(a => a.Name).First().Should().Be("Praca");
         _db.Areas.Select(a => a.SortOrder).Distinct().Should().HaveCount(10);

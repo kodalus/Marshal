@@ -14,22 +14,22 @@ namespace Marshal.Tests;
 /// Brama na bazę i znak zapisu — dwie rzeczy, bez których automatyczna synchronizacja
 /// byłaby drugą ręką sięgającą do tego samego kontekstu.
 /// </summary>
-public sealed class KolejkaBazyTests : IDisposable
+public sealed class DbQueueTests : IDisposable
 {
     private sealed class Clock : IClock
     {
         public DateTimeOffset Now => new(2026, 9, 18, 9, 0, 0, TimeSpan.FromHours(2));
     }
 
-    private readonly SqliteConnection _polaczenie = new("Filename=:memory:");
+    private readonly SqliteConnection _connection = new("Filename=:memory:");
     private readonly MarshalDbContext _db;
 
-    public KolejkaBazyTests()
+    public DbQueueTests()
     {
-        _polaczenie.Open();
+        _connection.Open();
         _db = new MarshalDbContext(
             new DbContextOptionsBuilder<MarshalDbContext>()
-                .UseSqlite(_polaczenie)
+                .UseSqlite(_connection)
                 .Options);
         _db.Database.Migrate();
     }
@@ -37,7 +37,7 @@ public sealed class KolejkaBazyTests : IDisposable
     public void Dispose()
     {
         _db.Dispose();
-        _polaczenie.Dispose();
+        _connection.Dispose();
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class KolejkaBazyTests : IDisposable
         var wewnatrz = 0;
         var najwiecejNaraz = 0;
 
-        async Task Praca()
+        async Task Work()
         {
             var now = Interlocked.Increment(ref wewnatrz);
             InterlockedMax(ref najwiecejNaraz, now);
@@ -61,7 +61,7 @@ public sealed class KolejkaBazyTests : IDisposable
             Interlocked.Decrement(ref wewnatrz);
         }
 
-        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => queue.RunAsync(Praca)));
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => queue.RunAsync(Work)));
 
         najwiecejNaraz.Should().Be(1, "brama przepuszcza jedną pracę naraz");
     }
@@ -144,16 +144,16 @@ public sealed class KolejkaBazyTests : IDisposable
 
         // Odpalony po zajęciu bramy, więc jeśli kiedykolwiek się skończy przed
         // zwolnieniem, znaczy, że bramę ominął.
-        var odczyt = Task.Run(() => tasks.InboxCountAsync());
+        var read = Task.Run(() => tasks.InboxCountAsync());
 
-        var ktoPierwszy = await Task.WhenAny(odczyt, Task.Delay(200));
+        var whoFirst = await Task.WhenAny(read, Task.Delay(200));
 
-        ktoPierwszy.Should().NotBe(odczyt, "odczyt ma czekać na swoją kolej tak samo jak zapis");
+        whoFirst.Should().NotBe(read, "odczyt ma czekać na swoją kolej tak samo jak zapis");
 
         puscic.SetResult();
         await trzymana;
 
-        (await odczyt).Should().Be(0, "po zwolnieniu bramy odczyt ma dojść do skutku");
+        (await read).Should().Be(0, "po zwolnieniu bramy odczyt ma dojść do skutku");
     }
 
     [Fact]

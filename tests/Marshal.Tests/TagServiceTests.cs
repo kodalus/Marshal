@@ -19,8 +19,8 @@ public sealed class TagServiceTests : IDisposable
 
     private readonly SqliteConnection _connection;
     private readonly MarshalDbContext _db;
-    private readonly TagService _tagi;
-    private readonly Guid _zadanie = Guid.CreateVersion7();
+    private readonly TagService _tags;
+    private readonly Guid _task = Guid.CreateVersion7();
 
     public TagServiceTests()
     {
@@ -31,24 +31,24 @@ public sealed class TagServiceTests : IDisposable
         _db.Database.Migrate();
 
         var clock = new Clock();
-        _tagi = new TagService(
+        _tags = new TagService(
             new TagRepository(_db), new UnitOfWork(_db), clock, new HlcSource(clock, "testy"));
     }
 
     [Fact]
     public async Task Przypiecie_tworzy_tag_gdy_jeszcze_nie_istnieje()
     {
-        await _tagi.AttachAsync(_zadanie, "dom");
+        await _tags.AttachAsync(_task, "dom");
 
         _db.Tags.Should().HaveCount(1);
-        (await _tagi.ForTaskAsync(_zadanie)).Single().Name.Should().Be("dom");
+        (await _tags.ForTaskAsync(_task)).Single().Name.Should().Be("dom");
     }
 
     [Fact]
     public async Task Ten_sam_tag_dwoma_pisowniami_to_jeden_tag()
     {
-        await _tagi.AttachAsync(_zadanie, "Dom");
-        await _tagi.AttachAsync(Guid.CreateVersion7(), "dom");
+        await _tags.AttachAsync(_task, "Dom");
+        await _tags.AttachAsync(Guid.CreateVersion7(), "dom");
 
         _db.Tags.Should().HaveCount(1);
     }
@@ -56,7 +56,7 @@ public sealed class TagServiceTests : IDisposable
     [Fact]
     public async Task Krzyzyk_przed_nazwa_jest_obcinany()
     {
-        await _tagi.AttachAsync(_zadanie, "#pilne");
+        await _tags.AttachAsync(_task, "#pilne");
 
         _db.Tags.Single().Name.Should().Be("pilne");
     }
@@ -64,8 +64,8 @@ public sealed class TagServiceTests : IDisposable
     [Fact]
     public async Task Powtorne_przypiecie_nie_dubluje_powiazania()
     {
-        await _tagi.AttachAsync(_zadanie, "dom");
-        await _tagi.AttachAsync(_zadanie, "dom");
+        await _tags.AttachAsync(_task, "dom");
+        await _tags.AttachAsync(_task, "dom");
 
         _db.TaskTags.Should().HaveCount(1);
     }
@@ -73,13 +73,13 @@ public sealed class TagServiceTests : IDisposable
     [Fact]
     public async Task Zdjecie_zostawia_nagrobek_zamiast_kasowac_rekord()
     {
-        var tag = await _tagi.AttachAsync(_zadanie, "dom");
+        var tag = await _tags.AttachAsync(_task, "dom");
 
-        await _tagi.DetachAsync(_zadanie, tag);
+        await _tags.DetachAsync(_task, tag);
 
         _db.TaskTags.Should().HaveCount(1);
         _db.TaskTags.Single().Deleted.Should().BeTrue();
-        (await _tagi.ForTaskAsync(_zadanie)).Should().BeEmpty();
+        (await _tags.ForTaskAsync(_task)).Should().BeEmpty();
     }
 
     [Fact]
@@ -87,10 +87,10 @@ public sealed class TagServiceTests : IDisposable
     {
         // Drugi rekord obok nagrobka dałby po scaleniu dwa powiązania tego samego
         // zadania z tym samym tagiem, a wynik zależałby od kolejności odczytu.
-        var tag = await _tagi.AttachAsync(_zadanie, "dom");
-        await _tagi.DetachAsync(_zadanie, tag);
+        var tag = await _tags.AttachAsync(_task, "dom");
+        await _tags.DetachAsync(_task, tag);
 
-        await _tagi.AttachAsync(_zadanie, "dom");
+        await _tags.AttachAsync(_task, "dom");
 
         _db.TaskTags.Should().HaveCount(1);
         _db.TaskTags.Single().Deleted.Should().BeFalse();
@@ -99,9 +99,9 @@ public sealed class TagServiceTests : IDisposable
     [Fact]
     public async Task Zdjecie_nieistniejacego_powiazania_nic_nie_robi()
     {
-        var zdejmij = async () => await _tagi.DetachAsync(_zadanie, Guid.CreateVersion7());
+        var drop = async () => await _tags.DetachAsync(_task, Guid.CreateVersion7());
 
-        await zdejmij.Should().NotThrowAsync();
+        await drop.Should().NotThrowAsync();
     }
 
     public void Dispose()

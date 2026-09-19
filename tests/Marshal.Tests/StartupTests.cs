@@ -21,18 +21,18 @@ namespace Marshal.Tests;
 /// </remarks>
 public sealed class StartupTests : IDisposable
 {
-    private readonly string _katalog = Path.Combine(
+    private readonly string _folder = Path.Combine(
         Path.GetTempPath(), "marshal-start-" + Guid.NewGuid().ToString("N"));
 
-    private string Sciezka => Path.Combine(_katalog, "marshal.db");
+    private string PathOf => Path.Combine(_folder, "marshal.db");
 
     /// <summary>Dokładnie ten sam graf, który składa okno — usługi plus modele widoków.</summary>
-    private ServiceProvider Zloz()
+    private ServiceProvider Build()
     {
-        Directory.CreateDirectory(_katalog);
+        Directory.CreateDirectory(_folder);
 
         return new ServiceCollection()
-            .AddMarshal(Sciezka)
+            .AddMarshal(PathOf)
             .AddMarshalViewModels()
             .BuildServiceProvider();
     }
@@ -52,10 +52,10 @@ public sealed class StartupTests : IDisposable
         // przy tym tabelę, której jeszcze nie ma. Objawem było białe tło i natychmiastowe
         // zamknięcie, na obu platformach.
         var kolekcja = new ServiceCollection();
-        kolekcja.AddMarshal(Sciezka).AddMarshalViewModels();
-        Directory.CreateDirectory(_katalog);
+        kolekcja.AddMarshal(PathOf).AddMarshalViewModels();
+        Directory.CreateDirectory(_folder);
 
-        using var uslugi = kolekcja.BuildServiceProvider();
+        using var services = kolekcja.BuildServiceProvider();
 
         // Po naszych typach, nie po wszystkich: rejestracje wewnętrzne EF Core bywają
         // zakresowe i nie są tym, co ten test pilnuje.
@@ -76,7 +76,7 @@ public sealed class StartupTests : IDisposable
         {
             try
             {
-                uslugi.GetRequiredService(typ);
+                services.GetRequiredService(typ);
             }
             catch (Exception e)
             {
@@ -86,21 +86,21 @@ public sealed class StartupTests : IDisposable
 
         pekniete.Should().BeEmpty();
 
-        File.Exists(Sciezka).Should().BeFalse("składanie zależności nie ma prawa dotknąć bazy");
+        File.Exists(PathOf).Should().BeFalse("składanie zależności nie ma prawa dotknąć bazy");
     }
 
     [Fact]
     public async Task Pelny_start_na_pustym_katalogu_dochodzi_do_konca()
     {
         // Dokładnie to, co robi aplikacja przy pierwszym uruchomieniu.
-        using var uslugi = Zloz();
+        using var services = Build();
 
-        var start = async () => await DependencyInjection.PrepareAsync(uslugi);
+        var start = async () => await DependencyInjection.PrepareAsync(services);
         await start.Should().NotThrowAsync();
 
-        File.Exists(Sciezka).Should().BeTrue();
+        File.Exists(PathOf).Should().BeTrue();
 
-        var db = uslugi.GetRequiredService<MarshalDbContext>();
+        var db = services.GetRequiredService<MarshalDbContext>();
         (await db.Database.GetPendingMigrationsAsync()).Should().BeEmpty();
         db.Areas.Should().NotBeEmpty("obszary początkowe zakłada PrepareAsync");
     }
@@ -111,24 +111,24 @@ public sealed class StartupTests : IDisposable
         // Ostatni krok startu: to, co aplikacja robi po PrepareAsync. Gdyby któryś
         // model widoku miał niezarejestrowaną zależność, objaw byłby ten sam co
         // 17.09 — okno znika, nie mówiąc dlaczego.
-        using var uslugi = Zloz();
-        await DependencyInjection.PrepareAsync(uslugi);
+        using var services = Build();
+        await DependencyInjection.PrepareAsync(services);
 
-        var model = uslugi.GetRequiredService<MainViewModel>();
+        var model = services.GetRequiredService<MainViewModel>();
 
-        var pierwszyEkran = async () => await model.InitializeAsync();
-        await pierwszyEkran.Should().NotThrowAsync();
+        var firstScreen = async () => await model.InitializeAsync();
+        await firstScreen.Should().NotThrowAsync();
     }
 
     [Fact]
     public async Task Drugie_uruchomienie_nie_zakłada_wszystkiego_od_nowa()
     {
-        using (var pierwsze = Zloz())
+        using (var first = Build())
         {
-            await DependencyInjection.PrepareAsync(pierwsze);
+            await DependencyInjection.PrepareAsync(first);
         }
 
-        using var drugie = Zloz();
+        using var drugie = Build();
         var start = async () => await DependencyInjection.PrepareAsync(drugie);
         await start.Should().NotThrowAsync();
 
@@ -143,20 +143,20 @@ public sealed class StartupTests : IDisposable
     [Fact]
     public async Task Zegar_logiczny_wznawia_sie_z_bazy_a_nie_od_zera()
     {
-        using (var pierwsze = Zloz())
+        using (var first = Build())
         {
-            await DependencyInjection.PrepareAsync(pierwsze);
+            await DependencyInjection.PrepareAsync(first);
 
-            var db = pierwsze.GetRequiredService<MarshalDbContext>();
-            var hlc = pierwsze.GetRequiredService<IHlcSource>();
+            var db = first.GetRequiredService<MarshalDbContext>();
+            var hlc = first.GetRequiredService<IHlcSource>();
 
             db.Tasks.Add(Marshal.Domain.Tasks.TaskItem.Capture(
-                "cokolwiek", pierwsze.GetRequiredService<IClock>().Now, hlc.Next()));
+                "cokolwiek", first.GetRequiredService<IClock>().Now, hlc.Next()));
 
             await db.SaveChangesAsync();
         }
 
-        using var drugie = Zloz();
+        using var drugie = Build();
         await DependencyInjection.PrepareAsync(drugie);
 
         drugie.GetRequiredService<IHlcSource>().Last.WallMs.Should().BeGreaterThan(0);
@@ -172,11 +172,11 @@ public sealed class StartupTests : IDisposable
         // okna, strefa przy każdym pobraniu czasu — więc nie przechodzą przez bramę
         // kolejki. Dopóki praca zza bramy wykonywała się po kolei na tym samym wątku,
         // nie miało to jak się zderzyć. Odkąd brama zeszła na wątek z puli, zaczęło.
-        using var uslugi = Zloz();
-        await DependencyInjection.PrepareAsync(uslugi);
+        using var services = Build();
+        await DependencyInjection.PrepareAsync(services);
 
-        var settings = uslugi.GetRequiredService<ISettings>();
-        var tasks = uslugi.GetRequiredService<Marshal.Application.Repositories.ITaskRepository>();
+        var settings = services.GetRequiredService<ISettings>();
+        var tasks = services.GetRequiredService<Marshal.Application.Repositories.ITaskRepository>();
 
         using var end = new CancellationTokenSource();
 
@@ -224,9 +224,9 @@ public sealed class StartupTests : IDisposable
     {
         try
         {
-            if (Directory.Exists(_katalog))
+            if (Directory.Exists(_folder))
             {
-                Directory.Delete(_katalog, recursive: true);
+                Directory.Delete(_folder, recursive: true);
             }
         }
         catch (IOException)

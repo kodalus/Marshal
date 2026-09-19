@@ -16,11 +16,11 @@ namespace Marshal.Tests;
 /// dopiero po powrocie z Google. Ten test opisuje rzecz, której z ekranu nie widać
 /// inaczej niż stoperem — że wołający nie czeka.
 /// </remarks>
-public sealed class OdlozoneOdbicieTests
+public sealed class DeferredMirrorTests
 {
-    private sealed class Odbicie : ITaskMirror
+    private sealed class NewMirror : ITaskMirror
     {
-        public TaskCompletionSource Puszczone { get; } = new();
+        public TaskCompletionSource Released { get; } = new();
 
         public TaskCompletionSource Weszlo { get; } = new();
 
@@ -29,7 +29,7 @@ public sealed class OdlozoneOdbicieTests
         public async Task PushAsync(TaskItem task, CancellationToken ct = default)
         {
             Weszlo.TrySetResult();
-            await Puszczone.Task;
+            await Released.Task;
 
             if (Wywrotka is not null)
             {
@@ -41,9 +41,9 @@ public sealed class OdlozoneOdbicieTests
             PushAsync(task, ct);
     }
 
-    private sealed class Dziennik : IActivityLog
+    private sealed class NewJournal : IActivityLog
     {
-        public List<(string Co, ActivityLevel Poziom)> Wpisy { get; } = [];
+        public List<(string Co, ActivityLevel Level)> Entries { get; } = [];
 
         public TaskCompletionSource Saved { get; } = new();
 
@@ -56,9 +56,9 @@ public sealed class OdlozoneOdbicieTests
             string? detail = null,
             CancellationToken ct = default)
         {
-            lock (Wpisy)
+            lock (Entries)
             {
-                Wpisy.Add((operation, level));
+                Entries.Add((operation, level));
             }
 
             Saved.TrySetResult();
@@ -71,9 +71,9 @@ public sealed class OdlozoneOdbicieTests
 
         public Task ClearAsync(CancellationToken ct = default)
         {
-            lock (Wpisy)
+            lock (Entries)
             {
-                Wpisy.Clear();
+                Entries.Clear();
             }
 
             return Task.CompletedTask;
@@ -104,25 +104,25 @@ public sealed class OdlozoneOdbicieTests
     [Fact]
     public async Task Wolajacy_nie_czeka_na_siec()
     {
-        var mirror = new Odbicie();
-        var odlozone = new DeferredMirror(mirror, new Dziennik());
+        var mirror = new NewMirror();
+        var deferred = new DeferredMirror(mirror, new NewJournal());
 
         // Sedno: odbicie stoi i nie ruszy, dopóki go nie puścimy — a mimo to wołanie
         // wraca. Gdyby czekało, ten await nie skończyłby się nigdy.
-        await odlozone.PushAsync(TaskId());
+        await deferred.PushAsync(TaskId());
 
         await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        mirror.Puszczone.SetResult();
+        mirror.Released.SetResult();
     }
 
     /// <summary>Odbicie zapisujące kolejność i zwlekające z pierwszą pracą.</summary>
-    private sealed class Kolejnosc : ITaskMirror
+    private sealed class Order : ITaskMirror
     {
         public List<string> Wykonane { get; } = [];
 
         /// <summary>Wysłanie stoi, dopóki się go nie puści. Kasowanie idzie od razu.</summary>
-        public TaskCompletionSource Puszczone { get; } = new();
+        public TaskCompletionSource Released { get; } = new();
 
         public TaskCompletionSource Weszlo { get; } = new();
 
@@ -131,7 +131,7 @@ public sealed class OdlozoneOdbicieTests
         public async Task PushAsync(TaskItem task, CancellationToken ct = default)
         {
             Weszlo.TrySetResult();
-            await Puszczone.Task;
+            await Released.Task;
 
             lock (Wykonane)
             {
@@ -161,13 +161,13 @@ public sealed class OdlozoneOdbicieTests
         // decydowało wtedy to, która praca pierwsza po niego sięgnęła, czyli pula
         // wątków. Wysłanie stoi tu na uwięzi właśnie po to, żeby dać kasowaniu
         // wszelką sposobność wyprzedzenia go.
-        var mirror = new Kolejnosc();
-        var odlozone = new DeferredMirror(mirror, new Dziennik());
+        var mirror = new Order();
+        var deferred = new DeferredMirror(mirror, new NewJournal());
 
-        await odlozone.PushAsync(TaskId());
+        await deferred.PushAsync(TaskId());
         await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        await odlozone.RemoveAsync(TaskId());
+        await deferred.RemoveAsync(TaskId());
 
         // Chwila na to, żeby kasowanie zdążyło się wepchnąć, gdyby miało jak.
         await Task.Delay(50);
@@ -177,7 +177,7 @@ public sealed class OdlozoneOdbicieTests
             mirror.Wykonane.Should().BeEmpty("kasowanie ma czekać na swoją poprzedniczkę");
         }
 
-        mirror.Puszczone.SetResult();
+        mirror.Released.SetResult();
         await mirror.Skonczone.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         lock (mirror.Wykonane)
@@ -192,23 +192,23 @@ public sealed class OdlozoneOdbicieTests
         // Jedno nieudane wysłanie nie może zabrać ze sobą wszystkiego, co za nim stoi:
         // odbicia doczepiają się jedno do drugiego, więc wyjątek puszczony dalej
         // unieruchomiłby kolejkę do końca działania aplikacji.
-        var mirror = new Odbicie { Wywrotka = new InvalidOperationException("sieć padła") };
-        var journal = new Dziennik();
-        var odlozone = new DeferredMirror(mirror, journal);
+        var mirror = new NewMirror { Wywrotka = new InvalidOperationException("sieć padła") };
+        var journal = new NewJournal();
+        var deferred = new DeferredMirror(mirror, journal);
 
-        await odlozone.PushAsync(TaskId());
+        await deferred.PushAsync(TaskId());
         await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        await odlozone.RemoveAsync(TaskId());
-        mirror.Puszczone.SetResult();
+        await deferred.RemoveAsync(TaskId());
+        mirror.Released.SetResult();
 
         // Dwa wpisy: obie prace się wywróciły, ale obie doszły do skutku. Czekanie
         // na warunek, a nie na stoper — wolna maszyna nie ma prawa psuć wyniku.
         await Doczekaj(() =>
         {
-            lock (journal.Wpisy)
+            lock (journal.Entries)
             {
-                return journal.Wpisy.Count == 2;
+                return journal.Entries.Count == 2;
             }
         });
     }
@@ -218,21 +218,21 @@ public sealed class OdlozoneOdbicieTests
     {
         // Odbicie robione po fakcie nie ma komu oddać wyjątku: ekran dawno odpowiedział.
         // Bez wpisu nieudane wysłanie byłoby nieodróżnialne od wysłanego.
-        var mirror = new Odbicie { Wywrotka = new InvalidOperationException("sieć padła") };
-        var journal = new Dziennik();
-        var odlozone = new DeferredMirror(mirror, journal);
+        var mirror = new NewMirror { Wywrotka = new InvalidOperationException("sieć padła") };
+        var journal = new NewJournal();
+        var deferred = new DeferredMirror(mirror, journal);
 
-        await odlozone.PushAsync(TaskId());
+        await deferred.PushAsync(TaskId());
 
         await mirror.Weszlo.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        mirror.Puszczone.SetResult();
+        mirror.Released.SetResult();
 
         await journal.Saved.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        lock (journal.Wpisy)
+        lock (journal.Entries)
         {
-            journal.Wpisy.Should().ContainSingle()
-                .Which.Poziom.Should().Be(ActivityLevel.Problem);
+            journal.Entries.Should().ContainSingle()
+                .Which.Level.Should().Be(ActivityLevel.Problem);
         }
     }
 }
