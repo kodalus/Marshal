@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Controls.Platform;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Input.GestureRecognizers;
@@ -1219,6 +1220,11 @@ public partial class MainView : UserControl
             return false;
         }
 
+        if (ZamknijKlawiature())
+        {
+            return true;
+        }
+
         if (model.Detail.IsOpen)
         {
             model.Detail.Close();
@@ -1238,8 +1244,106 @@ public partial class MainView : UserControl
         }
         else
         {
+            // Nic otwartego nad ekranem — więc cofnięcie znaczy „poprzedni ekran".
+            // Pytanie i czynność osobno, bo odpowiedź musi być w tej chwili: Android
+            // nie czeka na wczytanie ekranu, tylko na to, czy zajęliśmy się cofnięciem.
+            if (!model.MaDokadWrocic)
+            {
+                return false;
+            }
+
+            _ = Probuj("Nawigacja: cofnięcie", model.WrocAsync);
+        }
+
+        return true;
+    }
+
+    /// <summary>Korzeń okna. Trzymany, bo klawiatura zabiera mu wysokość od dołu.</summary>
+    private Grid? _korzen;
+
+    /// <summary>Czy nasłuch klawiatury jest już podpięty. Podpięcie idzie raz.</summary>
+    private bool _klawiaturaPodpieta;
+
+    /// <summary>
+    /// Podsunięcie treści nad klawiaturę ekranową.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Klawiatura zakrywała dolną część okna, a w tej dolnej części stoi przycisk
+    /// „Zapisz". Zapisanie wymagało więc najpierw schowania klawiatury — czyli gestu,
+    /// który nie ma nic wspólnego z tym, co się właśnie robi, i którego trzeba się
+    /// domyślić. Karta, do której się pisze, ma zostać widoczna razem z przyciskiem,
+    /// którym się kończy pisanie.
+    /// </para>
+    /// <para>
+    /// Skrócenie okna, nie przesunięcie. Przesunięcie wypchnęłoby jego górę poza ekran
+    /// i nagłówek karty zniknąłby razem z tym, co wpisano wyżej. Zabranie wysokości
+    /// sprawia, że to, co i tak się przewija, przewija się w mniejszym oknie — a
+    /// przewijanie jest tu właściwą odpowiedzią, bo karta bywa dłuższa niż ekran
+    /// także bez klawiatury.
+    /// </para>
+    /// <para>
+    /// Przez <c>InputPane</c>, a nie przez tryb okna Androida: to jest pojęcie Avalonii
+    /// i działa tak samo na każdej platformie, która klawiaturę ekranową w ogóle ma.
+    /// Na pulpicie zdarzenie nie przychodzi nigdy i wyściółka zostaje zerowa.
+    /// </para>
+    /// </remarks>
+    private void PodepnijKlawiature()
+    {
+        if (_klawiaturaPodpieta)
+        {
+            return;
+        }
+
+        _korzen ??= this.FindControl<Grid>("Korzen");
+
+        if (TopLevel.GetTopLevel(this)?.InputPane is not { } klawiatura || _korzen is null)
+        {
+            return;
+        }
+
+        _klawiaturaPodpieta = true;
+
+        // Margines, nie wyściółka: Panel w Avalonii wyściółki nie ma, a korzeniem okna
+        // jest siatka. Skutek jest ten sam — okno kończy się nad klawiaturą.
+        //
+        // Ze stanu, nie z samej wysokości: przy zamykaniu klawiatura potrafi podać
+        // ostatni prostokąt zamiast pustego, a margines zostałby wtedy na zawsze
+        // i pod oknem zostałby pas, którego nikt by nie umiał wytłumaczyć.
+        klawiatura.StateChanged += (_, e) =>
+            _korzen.Margin = new Thickness(
+                0, 0, 0, e.NewState == InputPaneState.Open ? e.EndRect.Height : 0);
+    }
+
+    /// <summary>
+    /// Zamknięcie klawiatury ekranowej, jeśli jest otwarta.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pierwsze znaczenie cofnięcia, przed zamykaniem czegokolwiek. Klawiatura zakrywa
+    /// dolną połowę ekranu i dopóki stoi, nic pod nią nie jest widoczne — więc zamknięcie
+    /// okienka pod nią jest czynnością, której skutku nie widać.
+    /// </para>
+    /// <para>
+    /// Przez odebranie ogniska, a nie przez proszenie systemu: klawiatura na Androidzie
+    /// jest odpowiedzią na to, że pisze się w polu tekstowym, więc jedynym trwałym
+    /// sposobem jej zamknięcia jest przestać w nim pisać. Poproszona o zniknięcie przy
+    /// polu, które nadal ma ognisko, wraca przy pierwszym dotknięciu ekranu.
+    /// </para>
+    /// </remarks>
+    private bool ZamknijKlawiature()
+    {
+        if (TopLevel.GetTopLevel(this) is not { FocusManager: { } ognisko })
+        {
             return false;
         }
+
+        if (ognisko.GetFocusedElement() is not TextBox)
+        {
+            return false;
+        }
+
+        ognisko.Focus(null);
 
         return true;
     }
@@ -2132,6 +2236,7 @@ public partial class MainView : UserControl
 
         WireCalendar(model);
         WireClock(model);
+        PodepnijKlawiature();
 
         model.Settings.SaveRequested = async nazwa =>
         {

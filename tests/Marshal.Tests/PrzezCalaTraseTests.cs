@@ -618,6 +618,57 @@ public sealed class PrzezCalaTraseTests : IDisposable
         zapisany.Query!.Conditions.Should().NotBeEmpty("warunek „przelew” miał przeżyć zapis");
     }
 
+    [Fact]
+    public async Task Wstecz_wraca_na_poprzedni_ekran_zamiast_zamykac_aplikacje()
+    {
+        // Objaw: z widoku „Co się działo" przycisk wstecz zamykał aplikację. Zamknięcie
+        // w odpowiedzi na cofnięcie z ekranu, na który się przed chwilą weszło, wygląda
+        // jak awaria, a nie jak nawigacja.
+        var main = Usluga<MainViewModel>();
+
+        await main.ShowCalendarCommand.ExecuteAsync(null);
+        await main.ShowJournalCommand.ExecuteAsync(null);
+
+        main.MaDokadWrocic.Should().BeTrue();
+        await main.WrocAsync();
+
+        main.IsCalendar.Should().BeTrue("cofnięcie ma wrócić tam, skąd się przyszło");
+    }
+
+    [Fact]
+    public async Task Wstecz_idzie_sladem_wstecz_a_nie_w_kolko_miedzy_dwoma_ekranami()
+    {
+        // Bez znacznika „trwa cofanie" samo cofnięcie dopisywałoby do śladu ekran,
+        // z którego się cofa — i drugie cofnięcie wracałoby tam, skąd się właśnie
+        // przyszło. Przycisk wstecz byłby wtedy przełącznikiem, nie cofnięciem.
+        var main = Usluga<MainViewModel>();
+
+        await main.ShowNotesCommand.ExecuteAsync(null);
+        await main.ShowCalendarCommand.ExecuteAsync(null);
+        await main.ShowJournalCommand.ExecuteAsync(null);
+
+        await main.WrocAsync();
+        main.IsCalendar.Should().BeTrue();
+
+        await main.WrocAsync();
+        main.IsNotes.Should().BeTrue("drugie cofnięcie ma iść o jeden dalej wstecz");
+    }
+
+    [Fact]
+    public async Task Wstecz_z_pustego_sladu_wraca_na_Dzisiaj_i_dopiero_stamtad_oddaje()
+    {
+        // „Dzisiaj" jest ekranem domowym tej aplikacji, więc cofnięcie bez śladu kończy
+        // się tam. Dopiero stojąc na nim oddajemy cofnięcie systemowi — przycisk wstecz,
+        // który nigdy nie wychodzi z aplikacji, przestaje być przyciskiem wstecz.
+        var main = Usluga<MainViewModel>();
+
+        await main.ShowJournalCommand.ExecuteAsync(null);
+        await main.WrocAsync();
+
+        main.IsToday.Should().BeTrue();
+        main.MaDokadWrocic.Should().BeFalse("z ekranu domowego cofnięcie należy do systemu");
+    }
+
     public void Dispose()
     {
         _uslugi.Dispose();

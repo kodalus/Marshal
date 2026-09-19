@@ -12,8 +12,23 @@
              xmlns:dk="using:Marshal.Domain.Contacts"
              xmlns:cal="using:Marshal.Infrastructure.Calendar"
              xmlns:df="using:Marshal.Domain.Filters"
+             xmlns:ti="using:Avalonia.Input.TextInput"
              x:Class="Marshal.UI.Views.MainView"
-             x:DataType="vm:MainViewModel">
+             x:DataType="vm:MainViewModel"
+             ti:TextInputOptions.AutoCapitalization="True">
+
+  <!-- Wielka litera na początku zdania w każdym polu tekstowym: właściwość
+       ti:TextInputOptions.AutoCapitalization na korzeniu, wyżej. Jest dziedziczona,
+       więc stoi raz zamiast przy czterdziestu polach — i nowe pole dostaje to samo
+       bez pamiętania o tym.
+
+       To podpowiedź dla klawiatury telefonu, a nie poprawianie wpisanego tekstu:
+       kto chce małej litery, po prostu ją pisze. Zamienianie pierwszej litery po
+       fakcie zmieniałoby zapisane dane bez pytania.
+
+       Wyłączona tam, gdzie wielka litera jest pomyłką: adresy pocztowe, adresy stron
+       i poświadczenia Google. -->
+
 
 
   <UserControl.Styles>
@@ -253,7 +268,8 @@
     </Style>
   </UserControl.Styles>
 
-  <Grid Background="{DynamicResource Tlo}">
+  <!-- Nazwa, bo klawiatura ekranowa dopisuje mu wyściółkę od dołu. Zob. PodepnijKlawiature. -->
+  <Grid x:Name="Korzen" Background="{DynamicResource Tlo}">
   <DockPanel Margin="12">
 
     <!-- Nawigacja z boku, nie u góry.
@@ -1539,6 +1555,8 @@
 
             <Grid ColumnDefinitions="*,Auto">
               <TextBox Grid.Column="0" Watermark="adres e-mail"
+                       ti:TextInputOptions.AutoCapitalization="False"
+                       ti:TextInputOptions.ContentType="Email"
                        Text="{Binding NowaOsoba}" />
               <Button Grid.Column="1" Classes="nav" Margin="4,0,0,0" Content="Pokaż"
                       Command="{Binding DopiszOsobeCommand}" />
@@ -1903,12 +1921,14 @@
 
         <TextBlock Classes="label" Margin="0,10,0,0" Text="Identyfikator klienta" />
         <TextBox Text="{Binding GoogleClientId}"
+                 ti:TextInputOptions.AutoCapitalization="False"
                  Watermark="…apps.googleusercontent.com" />
 
         <TextBlock Classes="label" Margin="0,6,0,0" Text="Tajemnica klienta" />
         <Grid ColumnDefinitions="*,Auto">
           <TextBox Grid.Column="0" Text="{Binding GoogleClientSecret}"
                    PasswordChar="{Binding SecretChar}"
+                   ti:TextInputOptions.AutoCapitalization="False"
                    Watermark="GOCSPX-…" />
           <!-- Podejrzenie, bo konsola Google pokazuje tajemnicę raz, przy zakładaniu.
                Jeśli nie została wtedy zapisana, to pole bywa jedynym miejscem,
@@ -2074,6 +2094,8 @@
         <TextBlock Classes="label" Margin="0,12,0,0" Text="Dodaj kanał iCal" />
         <Grid ColumnDefinitions="*,*,Auto">
           <TextBox Grid.Column="0" Margin="0,0,6,0" Text="{Binding NewIcalUrl}"
+                   ti:TextInputOptions.AutoCapitalization="False"
+                   ti:TextInputOptions.ContentType="Url"
                    Watermark="https://…/kalendarz.ics" />
           <TextBox Grid.Column="1" Margin="0,0,6,0" Text="{Binding NewIcalName}"
                    Watermark="Nazwa" />

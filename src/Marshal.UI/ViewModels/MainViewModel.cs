@@ -430,6 +430,164 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnInboxCountChanged(int value) => OnPropertyChanged(nameof(HasInbox));
 
+    /// <summary>
+    /// Ślad odwiedzonych ekranów — do cofania.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lista, nie stos, wyłącznie po to, żeby dało się jej uciąć początek. Bez tego
+    /// pół godziny klikania po nawigacji znaczyłoby pół godziny cofania — a nikt nie
+    /// cofa się dwudziesty raz, żeby wyjść z aplikacji.
+    /// </para>
+    /// <para>
+    /// <b>Lokalny, nie zapisywany.</b> Ślad opisuje tę jedną chwilę przy telefonie,
+    /// a nie stan systemu zadań; przeniesiony na drugie urządzenie albo przeżywający
+    /// zamknięcie aplikacji byłby obietnicą powrotu tam, skąd nikt nie wychodził.
+    /// </para>
+    /// </remarks>
+    private readonly List<Screen> _slad = [];
+
+    /// <summary>Najdłuższy zapamiętywany ślad.</summary>
+    private const int DlugoscSladu = 16;
+
+    /// <summary>Czy trwa cofanie. Wtedy zmiana ekranu nie dopisuje się do śladu.</summary>
+    /// <remarks>
+    /// Bez tego cofnięcie dokładałoby do śladu ekran, z którego się cofa — i drugie
+    /// cofnięcie wracałoby tam, skąd się właśnie przyszło. Przycisk wstecz zamieniłby
+    /// się w przełącznik między dwoma ostatnimi ekranami.
+    /// </remarks>
+    private bool _wracam;
+
+    /// <summary>
+    /// Czy ten ekran wolno zapamiętać jako miejsce, do którego da się wrócić.
+    /// </summary>
+    /// <remarks>
+    /// Przetwarzanie skrzynki i przegląd są <b>trybami</b>, nie miejscami: wejście
+    /// w nie ma początek i koniec, a cofnięcie się do środka porzuconego przetwarzania
+    /// stawia człowieka w połowie czynności, której nie zaczynał.
+    /// </remarks>
+    private static bool Zapamietywalny(Screen ekran) =>
+        ekran is not (Screen.Clarify or Screen.Review);
+
+    partial void OnCurrentChanging(Screen value)
+    {
+        // Current trzyma tu jeszcze **stary** ekran — zmiana przypisuje się po tym
+        // wywołaniu. Stąd ślad da się prowadzić w jednym miejscu, zamiast dopisywać
+        // się w każdym z piętnastu poleceń nawigacji; piętnaście dopisań rozjechałoby
+        // się przy pierwszym nowym ekranie, którego ktoś nie dopisze.
+        if (_wracam || value == Current || !Zapamietywalny(Current))
+        {
+            return;
+        }
+
+        _slad.Add(Current);
+
+        if (_slad.Count > DlugoscSladu)
+        {
+            _slad.RemoveAt(0);
+        }
+    }
+
+    /// <summary>
+    /// Cofnięcie o jeden ekran. Fałsz znaczy „nie ma dokąd".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kolejność jest tu całą treścią. Najpierw ślad — czyli to, skąd się przyszło.
+    /// Gdy śladu nie ma, zostaje „Dzisiaj": ekran domowy tej aplikacji, i wracanie
+    /// tam jest lepsze niż zamknięcie, bo zamknięcie z widoku „Co się działo" wygląda
+    /// jak awaria, a nie jak nawigacja.
+    /// </para>
+    /// <para>
+    /// Dopiero stojąc na „Dzisiaj" z pustym śladem oddajemy cofnięcie systemowi —
+    /// czyli aplikacja się zamyka. Tak działa każda inna aplikacja na tym telefonie
+    /// i odebranie tego byłoby zamknięciem człowieka w środku: przycisk wstecz, który
+    /// nigdy nie wychodzi, przestaje być przyciskiem wstecz.
+    /// </para>
+    /// </remarks>
+    public async Task WrocAsync()
+    {
+        if (Zdejmij() is not { } ekran)
+        {
+            return;
+        }
+
+        _wracam = true;
+
+        try
+        {
+            await OtworzAsync(ekran);
+        }
+        finally
+        {
+            // Po pierwszym oczekiwaniu wewnątrz polecenia ekran jest już przypisany,
+            // więc znacznik zdejmujemy dopiero tutaj — wcześniej zdjęty przepuściłby
+            // własne cofnięcie z powrotem do śladu.
+            _wracam = false;
+        }
+    }
+
+    /// <summary>
+    /// Czy cofnięcie ma dokąd pójść. Fałsz znaczy „oddaj je systemowi".
+    /// </summary>
+    /// <remarks>
+    /// Pytanie osobno od czynności, bo okno musi odpowiedzieć <b>od razu</b>, czy zajęło
+    /// się cofnięciem. Android nie czeka na zakończenie wczytywania ekranu: albo
+    /// odpowiedź jest w tej chwili, albo cofnięcie idzie dalej i zamyka aplikację.
+    /// </remarks>
+    public bool MaDokadWrocic => _slad.Any(e => e != Current) || Current != Screen.Today;
+
+    /// <summary>Dokąd cofnąć. Puste, gdy nie ma dokąd i cofnięcie należy do systemu.</summary>
+    private Screen? Zdejmij()
+    {
+        while (_slad.Count > 0)
+        {
+            var ostatni = _slad[^1];
+            _slad.RemoveAt(_slad.Count - 1);
+
+            // Ten sam ekran w śladzie to nie jest miejsce do cofnięcia — najczęściej
+            // bierze się z wejścia w tryb i wyjścia z niego.
+            if (ostatni != Current)
+            {
+                return ostatni;
+            }
+        }
+
+        return Current == Screen.Today ? null : Screen.Today;
+    }
+
+    private Task OtworzAsync(Screen ekran)
+    {
+        switch (ekran)
+        {
+            case Screen.Settings:
+                ShowSettingsCommand.Execute(null);
+                return Task.CompletedTask;
+
+            default:
+                return Polecenie(ekran).ExecuteAsync(null);
+        }
+    }
+
+    private IAsyncRelayCommand Polecenie(Screen ekran) => ekran switch
+    {
+        Screen.Now => ShowNowCommand,
+        Screen.Inbox => ShowInboxCommand,
+        Screen.Next => ShowNextCommand,
+        Screen.Projects => ShowProjectsCommand,
+        Screen.Someday => ShowSomedayCommand,
+        Screen.Waiting => ShowWaitingCommand,
+        Screen.Calendar => ShowCalendarCommand,
+        Screen.Notes => ShowNotesCommand,
+        Screen.Filters => ShowFiltersCommand,
+        Screen.Archive => ShowArchiveCommand,
+        Screen.Journal => ShowJournalCommand,
+
+        // Tryby i wszystko nieznane lądują na „Dzisiaj". Cofnięcie ma skończyć się
+        // ekranem, a nie brakiem odpowiedzi.
+        _ => ShowTodayCommand,
+    };
+
     partial void OnCurrentChanged(Screen value)
     {
         OnPropertyChanged(nameof(IsToday));
