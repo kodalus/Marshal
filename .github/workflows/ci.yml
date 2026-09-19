@@ -88,8 +88,10 @@ jobs:
       #
       # Przebieg tego pliku rusza wyłącznie przy zmianach w „main", więc zapis tutaj
       # nie zapętla CI.
+      # „always", bo najbardziej potrzebna jest wtedy, gdy porównanie wyżej się zapaliło:
+      # wtedy właśnie trzeba mieć skąd wziąć świeży model.
       - name: Model skompilowany — na gałąź
-        if: github.ref == 'refs/heads/main'
+        if: always() && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
