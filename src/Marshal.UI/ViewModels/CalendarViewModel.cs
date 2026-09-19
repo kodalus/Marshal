@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
@@ -987,9 +988,24 @@ public sealed partial class CalendarViewModel(
         //
         // Ceną są dwa dodatkowe odczyty na każde przeliczenie siatki. Drogie by to było,
         // gdyby chodziło o sieć; tu chodzi o bazę na tym samym urządzeniu.
-        await PrzygotujSasiadowAsync();
-
-        OnPropertyChanged(nameof(SasiedziGotowi));
+        //
+        // **Po oddaniu sterowania, nie w tym samym przebiegu.** Sąsiedzi są potrzebni
+        // dopiero wtedy, gdy palec ruszy — a przy pierwszym wczytaniu ekranu nikt nie
+        // przejeżdża. Składane tu wprost znaczyło trzy siatki zamiast jednej, zanim
+        // cokolwiek się pokaże, i całe trzy na wątku okna. Oddanie sterowania przepuszcza
+        // przed nimi rysowanie i dotknięcia, a różnicy nie widać: dwa odczyty z bazy
+        // na tym samym urządzeniu mieszczą się między dwiema klatkami.
+        //
+        // Bez oczekiwania na wynik, bo nikt na niego nie czeka. Znak „sąsiedzi gotowi"
+        // podnosi się sam w środku, a do tego czasu przejechanie palcem przeskakuje —
+        // czyli zachowuje się tak, jak zachowywało się zawsze, gdy sąsiadów nie było.
+        _ = Dispatcher.UIThread.InvokeAsync(
+            async () =>
+            {
+                await PrzygotujSasiadowAsync();
+                OnPropertyChanged(nameof(SasiedziGotowi));
+            },
+            DispatcherPriority.Background);
     }
 
     /// <summary>

@@ -50,7 +50,45 @@ public static class Rozruch
     /// <summary>Czy jest o czym mówić. Na pulpicie nikt tych liczb nie ustawia.</summary>
     public static bool Zmierzony => Okno > 0;
 
+    /// <summary>Najdłuższa przerwa w odpowiadaniu wątku okna i chwila, w której minęła.</summary>
+    /// <remarks>
+    /// <para>
+    /// Liczby faz mówią, ile trwały <b>nazwane</b> kawałki rozruchu. Nie mówią nic
+    /// o tym, czy między nimi wątek okna odpowiadał — a to jest dokładnie to, o co pyta
+    /// Android, gdy pokazuje „aplikacja nie odpowiada". Trzy podejścia rozbiły się o tę
+    /// różnicę: wszystkie fazy wychodziły średnie, a okienko wracało.
+    /// </para>
+    /// <para>
+    /// Bicie serca mierzy to wprost i bez zgadywania, gdzie szukać: minutnik na wątku
+    /// okna w tym samym miejscu kolejki, co obsługa dotknięć. Nie odpowiada na pytanie
+    /// „co blokuje", ale odpowiada na „czy i kiedy" — a mając kiedy, co znajduje się
+    /// już zwykłym czytaniem.
+    /// </para>
+    /// </remarks>
+    public static long NajdluzszaPrzerwa { get; private set; }
+
+    /// <summary>Kiedy skończyła się ta najdłuższa przerwa, licząc od startu.</summary>
+    public static long PrzerwaMinela { get; private set; }
+
+    private static long _ostatnieBicie;
+
+    /// <summary>Jedno uderzenie serca. Wołane z minutnika wątku okna.</summary>
+    public static void Bicie()
+    {
+        var teraz = Teraz();
+        var przerwa = teraz - _ostatnieBicie;
+
+        if (_ostatnieBicie > 0 && przerwa > NajdluzszaPrzerwa)
+        {
+            NajdluzszaPrzerwa = przerwa;
+            PrzerwaMinela = teraz;
+        }
+
+        _ostatnieBicie = teraz;
+    }
+
     public static string Opis =>
         $"postawienie {Platforma} ms, reszta okna {Okno - Platforma} ms, "
-        + $"do wczytywania {Model - Okno} ms";
+        + $"do wczytywania {Model - Okno} ms, "
+        + $"najdłuższa przerwa {NajdluzszaPrzerwa} ms (minęła w {PrzerwaMinela} ms)";
 }

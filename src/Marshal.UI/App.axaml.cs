@@ -120,6 +120,15 @@ public partial class App : Avalonia.Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Bicie serca wątku okna — na tym samym miejscu w kolejce, co obsługa dotknięć,
+        // bo to właśnie ją Android mierzy, pokazując „aplikacja nie odpowiada".
+        // Zatrzymywane po wpisie startowym: dalej mierzy już zwykłą pracę aplikacji,
+        // a pytanie dotyczy rozruchu.
+        var serce = new DispatcherTimer(
+            TimeSpan.FromMilliseconds(100), DispatcherPriority.Input, (_, _) => Rozruch.Bicie());
+
+        serce.Start();
+
         var services = AppServices.Build();
 
         // Okno powstaje **puste**, a model widoku dochodzi dopiero po przygotowaniu
@@ -204,6 +213,10 @@ public partial class App : Avalonia.Application
                 // naraz, a przesunięte wszystko wygląda tak samo jak źle pobrane dane.
                 var ustawienia = services.GetRequiredService<ISettings>();
                 var zegar = services.GetRequiredService<IClock>();
+
+                // Serce zatrzymane przed spisaniem wpisu, żeby wpisana przerwa dotyczyła
+                // rozruchu, a nie tego, co dzieje się po nim.
+                serce.Stop();
 
                 await services.GetRequiredService<IActivityLog>().RecordAsync(
                     "Start",
