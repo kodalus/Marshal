@@ -43,10 +43,19 @@ public static class DependencyInjection
     public static IServiceCollection AddMarshal(
         this IServiceCollection services, string databasePath, string? deviceId = null)
     {
-        // Jeden kontekst na całą aplikację. Przy jednym użytkowniku i pracy
-        // wyłącznie lokalnej to najprostsze rozwiązanie, które działa. Do ponownego
-        // rozważenia w etapie 3: scalanie synchronizacji będzie chciało własnego
-        // kontekstu, żeby nie mieszać śledzenia zmian z tym, co widzi ekran.
+        // Jeden kontekst na całą aplikację **dla wszystkiego, co przechodzi przez bramę
+        // kolejki**. Przy jednym użytkowniku i pracy wyłącznie lokalnej to najprostsze
+        // rozwiązanie, które działa. Do ponownego rozważenia w etapie 3: scalanie
+        // synchronizacji będzie chciało własnego kontekstu, żeby nie mieszać śledzenia
+        // zmian z tym, co widzi ekran.
+        //
+        // Trzy rzeczy stoją poza bramą i dostają własne konteksty niżej: ustawienia,
+        // tożsamość urządzenia i wznowienie zegara logicznego. Wszystkie trzy mają
+        // odczyt **synchroniczny** — bo woła je zegar przy każdym pobraniu czasu
+        // i konstruktor okna — więc nie da się ich przez bramę przepuścić inaczej niż
+        // blokując wątek okna na czas cudzej pracy. Własny kontekst rozwiązuje to samo
+        // bez blokowania: dwie operacje naraz szkodzą tylko wtedy, gdy trafiają w ten
+        // sam kontekst.
         services.AddDbContext<MarshalDbContext>(
             options => options
                 .UseSqlite($"Data Source={databasePath}")
@@ -55,11 +64,24 @@ public static class DependencyInjection
             ServiceLifetime.Singleton);
 
         // Ustawienia przed zegarem: zegar liczy dni w strefie, którą one podają.
-        services.AddSingleton<ISettings, LocalSettings>();
+        //
+        // **Własny kontekst.** Odczyt ustawień jest synchroniczny i idzie z wątku okna
+        // — motyw przy stawianiu okna, strefa przy każdym pobraniu czasu — więc nie
+        // przechodzi przez bramę kolejki. Na wspólnym kontekście znaczyło to zderzenie
+        // z pracą, która akurat biegła w tle: „A second operation was started on this
+        // context instance", i to przy starcie, czyli bez ekranu, na którym dałoby się
+        // to pokazać. Objawiło się dopiero wtedy, gdy praca zza bramy naprawdę zaczęła
+        // iść równolegle; wcześniej wszystko po kolei zajmowało ten jeden wątek.
+        services.AddSingleton<ISettings>(sp => new LocalSettings(
+            new MarshalDbContext(sp.GetRequiredService<DbContextOptions<MarshalDbContext>>())));
         services.AddSingleton<IClock, SystemClock>();
 
+        // Tożsamość urządzenia też poza bramą i też synchronicznie: pyta o nią zegar
+        // logiczny, a ten bywa potrzebny w konstruktorze. Własny kontekst z tego samego
+        // powodu co przy ustawieniach.
         services.AddSingleton<IDeviceIdentity>(sp => deviceId is null
-            ? new DeviceIdentity(sp.GetRequiredService<MarshalDbContext>())
+            ? new DeviceIdentity(
+                new MarshalDbContext(sp.GetRequiredService<DbContextOptions<MarshalDbContext>>()))
             : new FixedDeviceIdentity(deviceId));
 
         // Zegar wznawiany z bazy — ale dopiero przy pierwszym użyciu. Fabryka jest
@@ -68,7 +90,12 @@ public static class DependencyInjection
         // okna: białe tło i natychmiastowe zamknięcie, na obu platformach.
         services.AddSingleton<IHlcSource>(sp =>
         {
-            var db = sp.GetRequiredService<MarshalDbContext>();
+            // Własny kontekst, jak wyżej: wznowienie zegara to jeden synchroniczny
+            // odczyt, wołany przy pierwszym użyciu — czyli w chwili, której nie da się
+            // przewidzieć, a więc i takiej, w której w tle może biec cokolwiek innego.
+            var db = new MarshalDbContext(
+                sp.GetRequiredService<DbContextOptions<MarshalDbContext>>());
+
             var tozsamosc = sp.GetRequiredService<IDeviceIdentity>();
 
             return new HlcSource(

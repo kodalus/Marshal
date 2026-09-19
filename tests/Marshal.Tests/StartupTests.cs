@@ -162,6 +162,64 @@ public sealed class StartupTests : IDisposable
         drugie.GetRequiredService<IHlcSource>().Last.WallMs.Should().BeGreaterThan(0);
     }
 
+    [Fact]
+    public async Task Odczyt_ustawien_znosi_prace_biegnaca_rownolegle_w_tle()
+    {
+        // Objaw: „A second operation was started on this context instance" przy samym
+        // starcie, czyli bez ekranu, na którym dałoby się cokolwiek pokazać.
+        //
+        // Ustawienia czyta się **synchronicznie i z wątku okna** — motyw przy stawianiu
+        // okna, strefa przy każdym pobraniu czasu — więc nie przechodzą przez bramę
+        // kolejki. Dopóki praca zza bramy wykonywała się po kolei na tym samym wątku,
+        // nie miało to jak się zderzyć. Odkąd brama zeszła na wątek z puli, zaczęło.
+        using var uslugi = Zloz();
+        await DependencyInjection.PrepareAsync(uslugi);
+
+        var ustawienia = uslugi.GetRequiredService<ISettings>();
+        var zadania = uslugi.GetRequiredService<Marshal.Application.Repositories.ITaskRepository>();
+
+        using var koniec = new CancellationTokenSource();
+
+        // W tle to, co przechodzi przez bramę: prawdziwe odczyty na wspólnym kontekście.
+        var wTle = Task.Run(
+            async () =>
+            {
+                while (!koniec.IsCancellationRequested)
+                {
+                    await zadania.AllAsync(koniec.Token);
+                }
+            },
+            koniec.Token);
+
+        // A tutaj to, co bramę omija — tak jak robi to okno przy starcie. Z zapisem,
+        // bo odczytane ustawienie zostaje w pamięci: bez zapisu druga i każda następna
+        // pętla nie tknęłaby już bazy i test sprawdzałby samo pole w obiekcie.
+        var proba = () =>
+        {
+            for (var i = 0; i < 30; i++)
+            {
+                ustawienia.SetTheme(i % 2 == 0 ? ThemeChoice.Dark : ThemeChoice.Light);
+
+                _ = ustawienia.Theme;
+                _ = ustawienia.Zone;
+            }
+        };
+
+        proba.Should().NotThrow(
+            "ustawienia mają własny kontekst, więc cudza praca nie ma w co uderzyć");
+
+        await koniec.CancelAsync();
+
+        try
+        {
+            await wTle;
+        }
+        catch (OperationCanceledException)
+        {
+            // Zatrzymanie pracy w tle jest końcem testu, nie jego wynikiem.
+        }
+    }
+
     public void Dispose()
     {
         try
