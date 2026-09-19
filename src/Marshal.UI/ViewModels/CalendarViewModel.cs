@@ -61,63 +61,6 @@ public sealed record SlotBox(
     /// </remarks>
     public bool ShowTimes => Width >= 120 && Height >= 34;
 
-    /// <summary>Czy na bloku mieści się pole do odhaczenia.</summary>
-    /// <remarks>
-    /// Kwadrans ma trzynaście punktów wysokości, a pole razem z oprawą potrzebuje
-    /// dwudziestu — na krótkim bloku wystawało poza jego krawędź i zasłaniało sąsiada.
-    /// Krótkie zadanie odhacza się z listy albo po otwarciu szczegółu.
-    /// </remarks>
-    /// <remarks>
-    /// Próg był ustawiony na dwadzieścia sześć punktów i przez to pole znikało
-    /// z półgodzinnych zadań — czyli z większości. Zostaje tak długo, jak da się je
-    /// wpisać w blok; poniżej dwunastu punktów już się nie da i wtedy odhacza się
-    /// z listy albo z otwartego szczegółu.
-    /// </remarks>
-    /// <remarks>
-    /// Szerokość podniesiona z czterdziestu punktów do pięćdziesięciu sześciu, odkąd
-    /// tydzień mieści się na telefonie. Przy kolumnie czterdziestopunktowej kwadracik
-    /// zabierał połowę bloku i na tytuł zostawały dwa znaki — czyli blok przestawał
-    /// mówić, czego dotyczy, żeby dało się go odhaczyć. Odwrotnie niż powinno:
-    /// odhaczyć da się z listy i z otwartego szczegółu, a przeczytać nie da się nigdzie
-    /// indziej.
-    /// </remarks>
-    public bool ShowCheck => CanComplete && Height >= 12 && Width >= 56;
-
-    /// <summary>
-    /// Czy zostawić z lewej miejsce na znacznik.
-    /// </summary>
-    /// <remarks>
-    /// Odhaczone zadanie pokazuje ptaszek **zawsze**, także na bloku zbyt niskim na
-    /// pole wyboru: ptaszek jest samym napisem i mieści się tam, gdzie kontrolka już
-    /// nie. Inaczej najkrótsze zadania traciły jedyny ślad tego, że są zrobione.
-    /// </remarks>
-    public bool ShowMarkColumn => ShowCheck || IsDone;
-
-    /// <summary>
-    /// Rozmiar pola do odhaczenia — dopasowany do wysokości bloku.
-    /// </summary>
-    /// <remarks>
-    /// Kwadracik rysujemy sami, z ramki i napisu, zamiast używać gotowego pola wyboru.
-    /// Gotowe ma w motywie własną najmniejszą wysokość i własne odstępy, których nie
-    /// da się zejść poniżej: pomniejszanie go skalą kończyło się kontrolką ułożoną
-    /// na trzydzieści dwa punkty, narysowaną na szesnaście i przyciętą krawędzią
-    /// bloku do rogu. Trzy rundy poprawek na coś, co z dwóch prostych elementów
-    /// wychodzi od razu.
-    /// </remarks>
-    public double CheckSize => Math.Clamp(Height - 6, 10, 16);
-
-    /// <summary>
-    /// Pomniejszenie pola wyboru do rozmiaru bloku.
-    /// </summary>
-    /// <remarks>
-    /// Sama szerokość nie wystarcza: kwadrat pola jest w motywie wpisany na stałe,
-    /// więc pole ustawione na dwanaście punktów i tak rysowało się na dwadzieścia
-    /// i wychodziło poza bloczek. Skala zmienia to, co widać, a nie tylko miejsce,
-    /// które pole dostaje.
-    /// </remarks>
-    /// <summary>Wielkość samego ptaszka w kwadraciku.</summary>
-    public double MarkSize => Math.Max(8, CheckSize - 3);
-
     /// <summary>Zadanie półprzezroczyste: umowa z kimś i zamiar wobec siebie to nie to samo.</summary>
     public double Opacity => IsTask ? 0.55 : 1.0;
 

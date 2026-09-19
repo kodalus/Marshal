@@ -99,19 +99,6 @@
       <Setter Property="HorizontalAlignment" Value="Right" />
     </Style>
 
-    <!-- Kwadracik odhaczenia rysowany z ramki i napisu. Gotowe pole wyboru ma
-         w motywie własną najmniejszą wysokość, poniżej której nie schodzi — na bloku
-         kwadransa układało się na trzydzieści dwa punkty, rysowało na szesnaście
-         i przycinało krawędzią bloku do rogu. Ramka pokazuje się przy najechaniu,
-         ptaszek widać zawsze, gdy zadanie jest odhaczone. Na dotyku najechania nie ma,
-         więc tam odhacza się z listy, z menu podręcznego albo ze szczegółu. -->
-    <Style Selector="Border.odhacz">
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="BorderBrush" Value="#00FFFFFF" />
-      <Setter Property="CornerRadius" Value="3" />
-      <Setter Property="Background" Value="#10FFFFFF" />
-      <Setter Property="Padding" Value="0" />
-    </Style>
     <!-- Blok jest przyciskiem, żeby kliknięcie otwierało szczegół. Własna oprawa
          przycisku wyłączona: barwę bloku niesie ramka w środku, a domyślne tło
          motywu zamalowałoby kolor kalendarza przy najechaniu. -->
@@ -1301,32 +1288,23 @@
                                   Background="{Binding Background}" CornerRadius="4" Padding="4,2">
                             <Grid ColumnDefinitions="Auto,*,Auto">
 
-                              <!-- Miejsce na odhaczenie zajęte na stałe, a nie odsłaniane:
-                                   pole pojawiające się pod kursorem przesuwałoby tytuł
-                                   w chwili najechania. Samo pole jest przezroczyste i
-                                   nieklikalne do czasu najechania — niewidoczne, ale
-                                   klikalne byłoby gorsze niż jedno i drugie naraz. -->
-                              <!-- Bez najechania widać sam ptaszek, po najechaniu pole
-                                   wyboru. Odhaczenie mieszka w polu, nie obok nazwy:
-                                   ptaszek dopisany do tytułu był napisem, a nie stanem,
-                                   i nie dawał się kliknąć. -->
-                              <Panel Grid.Column="0" Width="{Binding CheckSize}"
-                                     Margin="0,0,3,0"
-                                     IsVisible="{Binding ShowMarkColumn}">
-                                <Border Classes="odhacz" Tag="{Binding}"
-                                        Width="{Binding CheckSize}"
-                                        Height="{Binding CheckSize}"
-                                        VerticalAlignment="Top" HorizontalAlignment="Left"
-                                        PointerPressed="OdhaczNaSiatce"
-                                        PointerReleased="OdhaczeniePuszczone"
-                                        PointerCaptureLost="OdhaczeniePorzucone">
-                                  <TextBlock Text="✓" IsVisible="{Binding IsDone}"
-                                             FontSize="{Binding MarkSize}"
-                                             LineHeight="{Binding CheckSize}"
-                                             HorizontalAlignment="Center"
-                                             VerticalAlignment="Center" />
-                                </Border>
-                              </Panel>
+                              <!-- Sam ptaszek, bez pola do klikania.
+                                   
+                                   Odhaczało się stąd kwadracikiem i to było o jeden
+                                   sposób za dużo: blok kwadransa ma kilkanaście punktów
+                                   wysokości, więc kwadracik był mniejszy od opuszka
+                                   i leżał na bloku, który równocześnie przeciąga się
+                                   i otwiera. Trafienie obok znaczyło przesunięcie
+                                   wydarzenia albo otwarcie karty, trafienie w środek —
+                                   odhaczenie czegoś, na co się tylko patrzyło.
+
+                                   Odhacza się na karcie: tam pole jest pełnej wielkości,
+                                   stoi obok nazwy i widać przy nim, czego dotyczy.
+                                   Tutaj zostaje ptaszek jako stan — po to, żeby patrząc
+                                   na tydzień widzieć, co już zrobione. -->
+                              <TextBlock Grid.Column="0" Text="✓" Margin="0,0,3,0"
+                                         IsVisible="{Binding IsDone}"
+                                         FontSize="11" VerticalAlignment="Top" />
 
                               <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="11"
                                          TextWrapping="Wrap" TextTrimming="CharacterEllipsis" />
@@ -1467,8 +1445,8 @@
     </DockPanel>
 
     <!-- Kliknięte wydarzenie z podłączonego kalendarza. Własna karta, nie okno szczegółu
-         zadania: należy do czegoś innego i ma inne pola. Odhaczyć i przeciągnąć da się je
-         wprost na siatce. -->
+         zadania: należy do czegoś innego i ma inne pola. Przeciągnąć da się je wprost
+         na siatce; odhaczyć — tutaj, bo na siatce pole było mniejsze od opuszka. -->
     <!-- Kliknięcie obok karty zamyka ją — tak samo jak przy karcie zadania. Dotąd
          miała to tylko tamta, a że obie wyglądają identycznie i otwierają się tym
          samym dotknięciem, wychodziło z tego „raz działa, raz nie". Różnica nie brała
@@ -1483,9 +1461,11 @@
         <StackPanel Spacing="8">
 
           <Grid ColumnDefinitions="Auto,*">
-            <!-- Ptaszek przy nazwie, tak samo jak w oknie zadania. Na siatce odhacza
-                 się kwadracikiem na bloku, ale on jest mały i na dotyku trudno w niego
-                 trafić — a kartę i tak się otwiera, żeby zobaczyć, o co chodzi. -->
+            <!-- Ptaszek przy nazwie, tak samo jak w oknie zadania. **Jedyne** miejsce,
+                 w którym odhacza się wydarzenie wskazane palcem: kwadracik na bloku
+                 siatki był mniejszy od opuszka i leżał na czymś, co równocześnie
+                 przeciąga się i otwiera. Kartę i tak się otwiera, żeby zobaczyć,
+                 o co chodzi. -->
             <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
                       IsVisible="{Binding CanCompleteOpened}"
                       IsChecked="{Binding Opened.IsDone, Mode=OneWay}"
