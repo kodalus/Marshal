@@ -1358,8 +1358,15 @@
                                powiadomienia o przeciąganiu **nigdy do nas nie docierały**
                                i blok nie dawał się ruszyć. Kliknięcie rozpoznajemy sami:
                                puszczenie bez przejechania progu. -->
+                          <!-- Przytrzymanie wyłączone na poziomie kontrolki, a nie dopiero
+                               przy żądaniu menu. Rozpoznawanie przytrzymania samo w sobie
+                               zabiera wskaźnik po około pół sekundy — a odrzucenie menu
+                               dzieje się już po tym, więc blok i tak wypadał z ręki.
+                               Myszy to nie dotyczy: przytrzymanie myszą jest domyślnie
+                               wyłączone, a menu bierze się z prawego przycisku. -->
                           <Border Classes="slot" Width="{Binding Width}" Height="{Binding Height}"
                                   Tag="{Binding}"
+                                  Gestures.IsHoldingEnabled="False"
                                   PointerPressed="BlockPressed"
                                   PointerMoved="BlockMoved"
                                   PointerReleased="BlockReleased"
