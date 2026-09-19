@@ -38,6 +38,10 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     /// </remarks>
     protected override void OnCreate(Bundle? savedInstanceState)
     {
+        // Przed wszystkim: okno składa się już z tą wiedzą, a od niej zależy, czy
+        // w ogóle rysować rzeczy pomyślane pod kursor. Zob. Platforma.
+        Platforma.Dotykowa = true;
+
         // Przed bazowym, bo to ono stawia Avalonię — a awaria przy stawianiu jest
         // dokładnie tą, o której najtrudniej się czegokolwiek dowiedzieć.
         Awaria.Pilnuj(this);

@@ -13,6 +13,7 @@ using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Repositories;
 using Marshal.Infrastructure.Sync;
 using Marshal.Infrastructure.Time;
+using Marshal.UI;
 using Marshal.UI.ViewModels;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -2151,6 +2152,37 @@ public sealed class CalendarStoreTests : IDisposable
 
     private static MonthCell Komorka(CalendarViewModel model, DateOnly dzien) =>
         model.MonthWeeks.SelectMany(t => t.Cells).Single(k => k.Date == dzien);
+
+    [Fact]
+    public void Kwadracik_na_siatce_jest_na_pulpicie_i_nie_ma_go_na_dotyku()
+    {
+        // Progi wysokości i szerokości mówią, czy kwadracik **się zmieści**. Na telefonie
+        // pytanie brzmi inaczej: czy da się w niego trafić. Blok kwadransa ma kilkanaście
+        // punktów, więc kwadracik wychodzi mniejszy od opuszka i leży na czymś, co
+        // równocześnie przeciąga się i otwiera. Na pulpicie odsłania się przy najechaniu
+        // i trafia się w niego kursorem co do punktu.
+        var blok = new SlotBox(
+            "Zadanie", 0, 30, 0, 100, true, null, "09:00", "10:00",
+            Guid.CreateVersion7(), "śr", null, null, false);
+
+        var bylo = Platforma.Dotykowa;
+
+        try
+        {
+            Platforma.Dotykowa = false;
+            blok.ShowCheck.Should().BeTrue("na pulpicie kwadracik zostaje");
+
+            Platforma.Dotykowa = true;
+            blok.ShowCheck.Should().BeFalse("palec nie trafia w kwadracik wielkości dziesięciu punktów");
+
+            // Ptaszek odhaczonego wpisu zostaje wszędzie: to jest stan, nie przycisk.
+            (blok with { IsDone = true }).ShowMarkColumn.Should().BeTrue();
+        }
+        finally
+        {
+            Platforma.Dotykowa = bylo;
+        }
+    }
 
     [Fact]
     public void Wpis_miesiaca_stoi_na_tle_w_barwie_swojego_obszaru()
