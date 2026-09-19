@@ -514,7 +514,7 @@ public partial class MainView : UserControl
         }
 
         Skip(wBok, vertical);
-        Back(from);
+        SlideBack(from);
     }
 
     /// <summary>Sąsiedzi chowani po dojeździe, nie przed nim — inaczej znikliby w ruchu.</summary>
@@ -611,7 +611,7 @@ public partial class MainView : UserControl
 
         if (Math.Abs(from) >= 0.5)
         {
-            Back(from);
+            SlideBack(from);
         }
     }
 
@@ -679,7 +679,7 @@ public partial class MainView : UserControl
     /// tak czy owak — a ozdoba nie ma prawa zamknąć aplikacji.
     /// </para>
     /// </remarks>
-    private void Back(double from) =>
+    private void SlideBack(double from) =>
         _ = Try("Kalendarz: dojazd siatki", () => AfterCoastAsync(BackAsync(from)));
 
     private Task BackAsync(double from)

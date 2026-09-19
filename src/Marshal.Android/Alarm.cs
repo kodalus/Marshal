@@ -149,7 +149,7 @@ internal sealed class AlarmReceiver : BroadcastReceiver
             return;
         }
 
-        var context = context.ApplicationContext ?? context;
+        var app = context.ApplicationContext ?? context;
         var waiting = GoAsync();
 
         _ = Task.Run(async () =>
@@ -160,7 +160,7 @@ internal sealed class AlarmReceiver : BroadcastReceiver
                 // obudzony budzikiem nie ma okna — a samo składanie nadrabia zaległe
                 // przypomnienia. Podpięte po nim znaczyło, że to, po co budzik przyszedł,
                 // zostawało zapisane jako pokazane i nie pokazywało się nigdzie.
-                Notifications.Hook(context);
+                Notifications.Hook(app);
 
                 await AppServices.ReadyAsync();
 
@@ -178,7 +178,7 @@ internal sealed class AlarmReceiver : BroadcastReceiver
                 // Następny budzik liczony na końcu: musi znać bazę, bo najbliższa chwila
                 // bierze się z zadań. Zaglądaniem na Dysk zajmuje się osobno
                 // SynchronizacjaWorker — budzik nie jest narzędziem do pracy okresowej.
-                await Alarm.RescheduleAsync(context);
+                await Alarm.RescheduleAsync(app);
             }
             catch (Exception e)
             {
@@ -221,7 +221,7 @@ internal sealed class BootReceiver : BroadcastReceiver
             return;
         }
 
-        var context = context.ApplicationContext ?? context;
+        var app = context.ApplicationContext ?? context;
         var waiting = GoAsync();
 
         _ = Task.Run(async () =>
@@ -230,11 +230,11 @@ internal sealed class BootReceiver : BroadcastReceiver
             {
                 // Jak wyżej: składanie nadrabia zaległe przypomnienia, więc haczyk
                 // musi już być. Po starcie telefonu zaległych bywa najwięcej.
-                Notifications.Hook(context);
+                Notifications.Hook(app);
 
                 await AppServices.ReadyAsync();
                 await Alarm.Save("Przypomnienia: start telefonu", "budziki nastawione od nowa");
-                AlarmReceiver.OnWake(context);
+                AlarmReceiver.OnWake(app);
             }
             catch (Exception e)
             {

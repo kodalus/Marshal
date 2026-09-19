@@ -1528,9 +1528,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// </remarks>
     public async Task SetDateAsync(TaskItem task, DateOnly? day)
     {
-        if (day is { } day)
+        if (day is { } value)
         {
-            await _edit.RescheduleAsync(task.Id, day, task.DoTime);
+            await _edit.RescheduleAsync(task.Id, value, task.DoTime);
         }
         else
         {

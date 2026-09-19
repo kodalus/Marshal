@@ -185,11 +185,11 @@ internal static class Palette
         // Barwa nie do odczytania wraca do domyślnej **z tym samym kryciem**. Wcześniej
         // wracała krycie pełne i jeden nieudany odczyt dawał jedyny nieprzezroczysty
         // prostokąt na siatce — czyli wpis wyróżniony za to, że coś z nim nie tak.
-        var color = Color.TryParse(source, out var read)
+        var parsed = Color.TryParse(source, out var read)
             ? read
             : Color.Parse(fallback);
 
-        return new SolidColorBrush(Color.FromArgb(opacity, color.R, color.G, color.B));
+        return new SolidColorBrush(Color.FromArgb(opacity, parsed.R, parsed.G, parsed.B));
     }
 }
 
@@ -1458,12 +1458,12 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task CompleteAsync(Guid? id)
     {
-        if (id is not { } id)
+        if (id is not { } taskId)
         {
             return;
         }
 
-        await edit.CompleteAsync(id);
+        await edit.CompleteAsync(taskId);
         await RefreshAsync();
     }
 
@@ -1607,12 +1607,12 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task ReopenAsync(Guid? id)
     {
-        if (id is not { } id)
+        if (id is not { } taskId)
         {
             return;
         }
 
-        await edit.ReopenAsync(id);
+        await edit.ReopenAsync(taskId);
         await RefreshAsync();
     }
 
