@@ -1121,10 +1121,47 @@ public sealed class CalendarStoreTests : IDisposable
         // Po godzinach, niezależnie od tego, skąd wpis pochodzi — dzień ma jedną oś.
         rows.Select(p => p.Title).Should().Equal("Kupić mleko", "Lekarz");
 
-        // Wydarzenie bez identyfikatora zadania: na widgecie nie ma czego odhaczyć
-        // jednym dotknięciem, bo ptaszek idzie do cudzego kalendarza przez sieć.
         rows.Single(p => p.Title == "Lekarz").TaskId.Should().BeNull();
         rows.Single(p => p.Title == "Kupić mleko").TaskId.Should().Be(task.Id);
+
+        // Wydarzenie niesie swoje pochodzenie, bo ptaszek idzie do Google, a nie do bazy —
+        // i da się je odhaczyć z kafelka tak samo jak z siatki w oknie.
+        var doctor = rows.Single(p => p.Title == "Lekarz");
+
+        doctor.SourceId.Should().Be(_source.Id);
+        doctor.ExternalId.Should().Be("s1");
+        doctor.CanComplete.Should().BeTrue("do tego kalendarza umiemy pisać");
+    }
+
+    /// <summary>
+    /// Wydarzenie z kalendarza tylko do odczytu nie dostaje kwadracika na kafelku.
+    /// </summary>
+    /// <remarks>
+    /// Ptaszek wydarzenia to zmiana jego nazwy u źródła. Tam, gdzie nie wolno nam pisać,
+    /// nie miałby gdzie wylądować — a kwadracik, który kończy się wyłącznie odmową,
+    /// jest gorszy od jego braku. Ta sama zasada co w oknie i to jest cały sens:
+    /// kafelek ma mówić o wpisie to samo, co siatka.
+    /// </remarks>
+    [Fact]
+    public async Task Wydarzenie_tylko_do_odczytu_nie_ma_czego_odhaczyc_na_kafelku()
+    {
+        _source.SetReadOnly(true);
+        _db.SaveChanges();
+
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Dzień wolny", Today.ToString("yyyy-MM-dd"), 10, 11)],
+            SyncToken: null, IsFull: true);
+
+        await _service.RefreshAsync(force: true);
+
+        var plan = new DayPlanService(
+            new TaskRepository(_db), new ProjectRepository(_db), new AreaRepository(_db),
+            _clock, _service);
+
+        var row = (await plan.ForDayAsync(Today)).Single(p => p.Title == "Dzień wolny");
+
+        row.SourceId.Should().Be(_source.Id, "wpis wie, skąd pochodzi, nawet gdy nie da się go zmienić");
+        row.CanComplete.Should().BeFalse("do tego kalendarza nie wolno nam pisać");
     }
 
     /// <summary>

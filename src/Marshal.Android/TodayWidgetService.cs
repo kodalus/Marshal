@@ -171,8 +171,14 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// <para>
         /// Własny zapis, nie JSON: wydanie na Androida jest przycinane, a serializacja
         /// przez odbicie typów potrafi się wtedy wywrócić dopiero na urządzeniu.
-        /// Cztery pola rozdzielone znakami, których w tekście nie ma, wywrócić się
+        /// Kilka pól rozdzielonych znakami, których w tekście nie ma, wywrócić się
         /// nie mają jak.
+        /// </para>
+        /// <para>
+        /// Wiersz czytany jest po tyle pól, ile zastał: zapamiętane przed aktualizacją
+        /// mają ich cztery, nowe siedem. Wymaganie siedmiu znaczyłoby pusty kafelek
+        /// przy pierwszym rysowaniu po każdej aktualizacji — czyli dokładnie wtedy,
+        /// gdy proces i tak wstaje najwolniej.
         /// </para>
         /// </remarks>
         private const char Between = '\u001f';
@@ -197,12 +203,15 @@ public sealed class TodayWidgetService : RemoteViewsService
                 return patch
                     .Split(Row, StringSplitOptions.RemoveEmptyEntries)
                     .Select(w => w.Split(Between))
-                    .Where(p => p.Length == 4)
+                    .Where(p => p.Length >= 4)
                     .Select(p => new PlanRow(
-                        Guid.TryParse(p[0], out var task) ? task : null,
+                        Id(p, 0),
                         p[1],
                         p[2],
-                        p[3].Length == 0 ? null : p[3]))
+                        Text(p, 3),
+                        Id(p, 4),
+                        Text(p, 5),
+                        p.Length > 6 && p[6] == Yes))
                     .ToList();
             }
             catch (Exception e) when (e is not OperationCanceledException)
@@ -227,7 +236,10 @@ public sealed class TodayWidgetService : RemoteViewsService
                         w.TaskId?.ToString() ?? string.Empty,
                         Clear(w.Title),
                         Clear(w.Caption),
-                        Clear(w.Color ?? string.Empty))));
+                        Clear(w.Color ?? string.Empty),
+                        w.SourceId?.ToString() ?? string.Empty,
+                        Clear(w.ExternalId ?? string.Empty),
+                        w.CanWrite ? Yes : string.Empty)));
 
                 context.GetSharedPreferences(TodayWidget.Memory, FileCreationMode.Private)
                     ?.Edit()?.PutString(Key(widgetId), patch)?.Apply();
@@ -241,6 +253,16 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// <summary>Bez znaków rozdzielających — tytuł jest cudzym tekstem.</summary>
         private static string Clear(string text) =>
             text.Replace(Between, ' ').Replace(Row, ' ');
+
+        private const string Yes = "1";
+
+        /// <summary>Identyfikator z pola, którego może w ogóle nie być.</summary>
+        private static Guid? Id(string[] parts, int at) =>
+            parts.Length > at && Guid.TryParse(parts[at], out var id) ? id : null;
+
+        /// <summary>Tekst z pola, którego może nie być. Puste znaczy brak, nie pusty napis.</summary>
+        private static string? Text(string[] parts, int at) =>
+            parts.Length > at && parts[at].Length > 0 ? parts[at] : null;
 
         /// <summary>Ponowna prośba o wiersze, gdy baza będzie już gotowa.</summary>
         /// <remarks>
@@ -282,17 +304,35 @@ public sealed class TodayWidgetService : RemoteViewsService
             // osobnego zamiaru oczekującego — system trzyma jeden wzorzec na całą listę
             // i dokłada do niego to, co wiersz tu wpisze.
             //
-            // Wydarzenie z cudzego kalendarza nie ma czego odhaczyć jednym dotknięciem:
-            // ptaszek idzie tam przez sieć, a widget nie ma jak poczekać ani pokazać,
-            // że czeka. Kwadracik zostaje wtedy schowany — niewidoczny, a nie wyłączony,
-            // bo wyłączony wyglądałby na zepsuty. Miejsce po nim zostaje, żeby wiersze
-            // miały wspólną krawędź tekstu.
-            if (item.TaskId is { } task)
+            // Kwadracik tam, gdzie jest przy tym samym wpisie w oknie — czyli także
+            // przy wydarzeniu z kalendarza, do którego umiemy pisać. Wcześniej stał
+            // wyłącznie przy zadaniach i to samo wydarzenie miało kwadracik w szczegółach,
+            // a na kafelku nie: dla ręki znaczy to, że jedno z dwóch jest zepsute.
+            //
+            // Ptaszek wydarzenia idzie do jego nazwy w Google, czyli przez sieć. Widget
+            // nie ma jak pokazać, że czeka — ale ma jak poczekać: rozgłoszenie przedłuża
+            // sobie życie i po zapisie przerysowuje listę. Gdy zapis się nie uda, wiersz
+            // zostaje bez ptaszka, a powód ląduje w dzienniku; udawany ptaszek byłby
+            // gorszy, bo w Google nie stałoby za nim nic.
+            //
+            // Kalendarz tylko do odczytu kwadracika nie dostaje — tak samo jak w oknie.
+            // Schowany, a nie wyłączony: wyłączony wygląda na zepsuty. Miejsce po nim
+            // zostaje, żeby wiersze miały wspólną krawędź tekstu.
+            if (item.CanComplete)
             {
                 view.SetViewVisibility(Resource.Id.done, ViewStates.Visible);
 
                 var completion = new Intent();
-                completion.PutExtra(TodayWidget.TaskIdExtra, task.ToString());
+
+                if (item.TaskId is { } task)
+                {
+                    completion.PutExtra(TodayWidget.TaskIdExtra, task.ToString());
+                }
+                else if (item is { SourceId: { } source, ExternalId: { } external })
+                {
+                    completion.PutExtra(TodayWidget.SourceExtra, source.ToString());
+                    completion.PutExtra(TodayWidget.EventExtra, external);
+                }
 
                 view.SetOnClickFillInIntent(Resource.Id.done, completion);
             }

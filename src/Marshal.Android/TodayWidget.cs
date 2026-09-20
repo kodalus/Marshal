@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.Versioning;
 using Android.App;
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Android.Appwidget;
 using Android.Content;
 using Android.Widget;
@@ -65,6 +66,11 @@ public sealed class TodayWidget : AppWidgetProvider
     public const string CompleteAction = "com.kodalus.marshal.WIDGET";
 
     public const string TaskIdExtra = "zadanie";
+
+    /// <summary>Kalendarz i wpis u źródła — odhaczenie wydarzenia idzie tam, nie do bazy.</summary>
+    public const string SourceExtra = "kalendarz";
+
+    public const string EventExtra = "wydarzenie";
 
     /// <summary>Co widget zgłasza: odhaczenie, otwarcie albo przesunięcie dnia.</summary>
     private const string CoExtra = "co";
@@ -294,9 +300,9 @@ public sealed class TodayWidget : AppWidgetProvider
                 _ = Marshal.Infrastructure.DependencyInjection.RefreshCalendarsAsync(services);
 
                 // Przerysowanie kafelka idzie w odbiorniku rozgłoszenia, czyli z budżetem
-                // czasu, którego nie widać. Kropki w pasku tygodnia liczą siedem planów
-                // dnia na kafelek — a plan dnia sięga do zadań, projektów, obszarów
-                // i kalendarza. Dopisywane tylko wtedy, gdy trwa **długo**: wpis przy
+                // czasu, którego nie widać — a składa się na nie odczyt planu dnia,
+                // kropki całego tygodnia i czekanie na gotową bazę, gdy kafelek jest
+                // pierwszy w procesie. Dopisywane tylko wtedy, gdy trwa **długo**: wpis przy
                 // każdym przerysowaniu byłby szumem, a tu chodzi o jedną liczbę, której
                 // nie da się zmierzyć inaczej niż stąd.
                 if (clock.ElapsedMilliseconds > 1000)
@@ -633,6 +639,8 @@ public sealed class TodayWidget : AppWidgetProvider
         }
 
         var id = intent.GetStringExtra(TaskIdExtra);
+        var source = intent.GetStringExtra(SourceExtra);
+        var external = intent.GetStringExtra(EventExtra);
         var waiting = GoAsync();
 
         _ = Task.Run(async () =>
@@ -644,12 +652,46 @@ public sealed class TodayWidget : AppWidgetProvider
                     var services = await ServicesAsync(window);
                     await services.GetRequiredService<TaskEditService>().CompleteAsync(task);
                 }
+                else if (Guid.TryParse(source, out var calendar) && external is { Length: > 0 })
+                {
+                    // Ptaszek wydarzenia to zmiana jego nazwy w Google, czyli sieć —
+                    // i dlatego jedyna rzecz na tym kafelku, która potrafi się nie udać
+                    // z powodu leżącego poza telefonem. Powód idzie do dziennika:
+                    // wiersz bez ptaszka i bez śladu zostawiałby pytanie „dotknęłam
+                    // za słabo czy to nie działa" bez żadnej odpowiedzi.
+                    // Zawsze w stronę ptaszka: plan pokazuje wyłącznie to, co jeszcze
+                    // przed tobą, więc odhaczonego wiersza na kafelku nie ma i nie ma
+                    // czego zdejmować. Zdjęcie ptaszka idzie przez okno.
+                    var services = await ServicesAsync(window);
+
+                    await services.GetRequiredService<CalendarSyncService>()
+                        .SetEventDoneAsync(calendar, external, done: true);
+                }
 
                 Refresh(window);
             }
             catch (Exception e)
             {
                 global::Android.Util.Log.Warn("Marshal", e.ToString());
+
+                if (external is { Length: > 0 })
+                {
+                    // Zapis wpisu do dziennika też potrafi się wywrócić — i wtedy ma
+                    // przepaść on, a nie zakończenie rozgłoszenia pod spodem.
+                    try
+                    {
+                        await AppServices.Provider.GetRequiredService<IActivityLog>()
+                            .RecordAsync(
+                                "Widget: odhaczenie w Google",
+                                "nie udało się",
+                                ActivityLevel.Problem,
+                                e.Message);
+                    }
+                    catch (Exception second)
+                    {
+                        global::Android.Util.Log.Warn("Marshal", second.ToString());
+                    }
+                }
             }
             finally
             {

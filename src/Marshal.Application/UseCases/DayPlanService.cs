@@ -16,7 +16,41 @@ namespace Marshal.Application.UseCases;
 /// <param name="Tytul">Nazwa zadania albo wydarzenia.</param>
 /// <param name="Podpis">Druga linijka: godziny i przynależność.</param>
 /// <param name="Barwa">Zapis barwy paska albo puste, gdy nic nie ustawiono.</param>
-public sealed record PlanRow(Guid? TaskId, string Title, string Caption, string? Color);
+public sealed record PlanRow(
+    Guid? TaskId,
+    string Title,
+    string Caption,
+    string? Color,
+
+    /// <summary>Kalendarz, z którego wpis pochodzi. Puste przy zadaniach Marshala.</summary>
+    Guid? SourceId = null,
+
+    /// <summary>Identyfikator u źródła — bez niego nie da się tam nic zmienić.</summary>
+    string? ExternalId = null,
+
+    /// <summary>Czy da się zapisać zmianę tam, skąd wpis pochodzi.</summary>
+    bool CanWrite = false)
+{
+    /// <summary>
+    /// Co da się odhaczyć wprost z kafelka: własne zadanie i wydarzenie z kalendarza,
+    /// do którego umiemy pisać.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Ta sama zasada co na siatce w oknie</b> i to jest tu cała rzecz. Kwadracik
+    /// przy wpisie w oknie, a przy tym samym wpisie na kafelku już nie, znaczy dla ręki,
+    /// że jedno z dwóch jest zepsute — i nie ma jak zgadnąć które.
+    /// </para>
+    /// <para>
+    /// Wydarzenie nie ma u nas pola „zrobione": ptaszek idzie do jego nazwy w Google.
+    /// Bez prawa zapisu nie miałby więc gdzie wylądować i kwadracik się nie pokazuje —
+    /// przycisk, który nic nie robi, jest gorszy od jego braku. Kanał iCal jest tylko
+    /// do odczytu i to jest właśnie ten przypadek.
+    /// </para>
+    /// </remarks>
+    public bool CanComplete =>
+        TaskId is not null || (CanWrite && SourceId is not null && ExternalId is not null);
+}
 
 /// <summary>
 /// Plan dzisiejszego dnia: co jest umówione, co zaległe i co wzięte na dziś.
@@ -238,7 +272,8 @@ public sealed class DayPlanService(
 
         var allDay = gridDay.AllDay
             .Where(e => e.Kind == AgendaKind.Event && !e.IsDone)
-            .Select(e => ((TimeOnly?)null, new PlanRow(null, e.Title, "cały dzień", e.Color)));
+            .Select(e => ((TimeOnly?)null, new PlanRow(
+                null, e.Title, "cały dzień", e.Color, e.SourceId, e.ExternalId, e.CanWrite)));
 
         var withHour = gridDay.Timed
             .Select(s => s.Entry)
@@ -250,7 +285,10 @@ public sealed class DayPlanService(
                     e.Title,
                     $"{Hour(TimeOnly.FromTimeSpan(e.Start.TimeOfDay))} – "
                         + $"{Hour(TimeOnly.FromTimeSpan(e.End.TimeOfDay))}",
-                    e.Color)));
+                    e.Color,
+                    e.SourceId,
+                    e.ExternalId,
+                    e.CanWrite)));
 
         return allDay.Concat(withHour);
     }
