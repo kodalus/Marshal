@@ -341,6 +341,32 @@ public partial class MainView : UserControl
     private bool _gestureSpent;
 
     /// <summary>
+    /// Czy bieżący gest jest już rozliczony i dalsze przesunięcia go nie dotyczą.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Gest nie kończy się na podniesieniu palca.</b> Po nim idzie jeszcze rozpęd
+    /// i rozpoznawacz przez sekundę albo dwie sypie kolejnymi przesunięciami — tak
+    /// dojeżdża każda lista, po której się przejedzie. Przejechanie rozlicza się
+    /// na podniesieniu palca, bo wtedy wiadomo, czy dociągnięto dość daleko; te późniejsze
+    /// przesunięcia zbierały się więc w <b>nowy</b> gest i ciągnęły w bok świeżo
+    /// pokazaną siatkę.
+    /// </para>
+    /// <para>
+    /// Rozpęd rzadko wystarcza na drugi zakres, ale na ruszenie siatki wystarcza zawsze:
+    /// próg śledzenia jest niski, a próg przeskoku wysoki. Siatka odsłaniała więc skrawek
+    /// sąsiada i wracała — czyli półtorej sekundy po udanym przejechaniu ekran szarpał
+    /// w bok i z powrotem, bez żadnego dotknięcia.
+    /// </para>
+    /// <para>
+    /// Znak zdejmuje koniec gestu ogłoszony przez rozpoznawacz albo nowe dotknięcie.
+    /// To drugie jest tu zabezpieczeniem: gdyby koniec nie przyszedł, samo czekanie
+    /// na niego wyłączyłoby przejeżdżanie na dobre.
+    /// </para>
+    /// </remarks>
+    private bool _gestureOver;
+
+    /// <summary>
     /// Siatka idzie za palcem.
     /// </summary>
     /// <remarks>
@@ -366,6 +392,12 @@ public partial class MainView : UserControl
     /// </remarks>
     private void AreaGesture(object? sender, ScrollGestureEventArgs e)
     {
+        // Rozpęd po rozliczonym przejechaniu nie należy już do niczego.
+        if (_gestureOver)
+        {
+            return;
+        }
+
         _gesture += e.Delta;
 
         var sideways = -_gesture.X;
@@ -396,8 +428,14 @@ public partial class MainView : UserControl
         Move(sideways);
     }
 
-    private void AreaGestureDone(object? sender, ScrollGestureEndedEventArgs e) =>
+    private void AreaGestureDone(object? sender, ScrollGestureEndedEventArgs e)
+    {
         FinishGesture();
+
+        // Dopiero tutaj gest naprawdę się skończył — rozpęd wygasł i następne
+        // przesunięcie będzie już czyimś nowym ruchem.
+        _gestureOver = false;
+    }
 
     /// <summary>Ustawienie siatki na zadanym przesunięciu — bez animacji, wprost za palcem.</summary>
     private void Move(double sideways)
@@ -507,6 +545,7 @@ public partial class MainView : UserControl
         var vertical = -_gesture.Y;
 
         _gesture = default;
+        _gestureOver = true;
         _watch?.Stop();
 
         if (_gestureSpent)
@@ -561,6 +600,9 @@ public partial class MainView : UserControl
 
     private void AreaPressed(object? sender, PointerPressedEventArgs e)
     {
+        // Nowe dotknięcie zaczyna nowy gest, cokolwiek działo się przedtem.
+        _gestureOver = false;
+
         // Gest palca ma własną drogę; tu zostaje mysz, bo jej nikt nie przejmuje.
         if (sender is not Control area || e.Pointer.Type != PointerType.Mouse)
         {
