@@ -110,6 +110,9 @@ public partial class MainView : UserControl
     {
         _grid ??= this.FindControl<ScrollViewer>("SiatkaKalendarza");
         _headings ??= this.FindControl<ScrollViewer>("NaglowkiDni");
+        _hours ??= this.FindControl<ScrollViewer>("PasGodzin");
+        _gridBefore ??= this.FindControl<ScrollViewer>("SiatkaPrzed");
+        _gridAfter ??= this.FindControl<ScrollViewer>("SiatkaPo");
         _calendar = model.Calendar;
         _detail = model.Detail;
 
@@ -309,6 +312,13 @@ public partial class MainView : UserControl
     /// <summary>Panel z siatkami. Trzymany do przesunięcia przy zmianie zakresu.</summary>
     private Control? _calendarArea;
 
+    /// <summary>Godziny z lewej i obie siatki sąsiadów — ich pion doganiamy ręcznie.</summary>
+    private ScrollViewer? _hours;
+
+    private ScrollViewer? _gridBefore;
+
+    private ScrollViewer? _gridAfter;
+
     /// <summary>Ile trzeba przejechać w bok, żeby to było przejechanie, a nie przewijanie.</summary>
     /// <remarks>
     /// Sześćdziesiąt punktów to około jednej szóstej szerokości telefonu: za dużo, żeby
@@ -412,7 +422,8 @@ public partial class MainView : UserControl
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Stoją w tym samym panelu, co siatka, odsunięte o szerokość okna w lewo i w prawo.
+    /// Stoją w tym samym panelu, co kolumny, odsunięte o szerokość pasa siatki w lewo
+    /// i w prawo — czyli o tyle, ile jedzie za palcem, bez kolumny godzin.
     /// Przesuwa się <b>panel</b>, więc jadą razem z nią — palec odsłania to, co naprawdę
     /// jest obok, a nie puste tło. Wcześniej przejechanie pokazywało pustkę i wyglądało
     /// to jak wysunięcie kalendarza znikąd.
@@ -2230,9 +2241,6 @@ public partial class MainView : UserControl
     private void GridAbandoned(object? sender, PointerCaptureLostEventArgs e) =>
         _touchedDay = null;
 
-    /// <summary>Szerokość kolumny godzin z lewej. Odpowiednik szerokości w XAML-u.</summary>
-    private const double HourColumn = 52;
-
     /// <summary>Zapas na suwak i odstęp między kolumnami.</summary>
     private const double Capacity = 14;
 
@@ -2326,19 +2334,66 @@ public partial class MainView : UserControl
             _ = Try("Synchronizacja po powrocie", model.SyncAfterReturnAsync);
     }
 
+    /// <summary>
+    /// Co jedzie za siatką: nagłówki w poziomie, godziny i sąsiedzi w pionie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nagłówki pionowo <b>stoją</b> — o to właśnie chodzi, bo inaczej uciekały do góry
+    /// przy pierwszym obrocie kółka i po kilku godzinach dnia nie było wiadomo, na którą
+    /// kolumnę się patrzy.
+    /// </para>
+    /// <para>
+    /// Godziny odwrotnie: pionowo jadą, w poziomie stoją. Stoją, bo nie należą do
+    /// tygodnia, tylko do doby, i przejechanie palcem nie ma prawa ich zabierać —
+    /// a stoją przez to, że są poza warstwą, która się rusza. Cena za to jest tutaj:
+    /// ich pion trzeba dowozić ręcznie, bo nie dzielą już z siatką widoku przewijanego.
+    /// </para>
+    /// <para>
+    /// Sąsiedzi tak samo, i to jest teraz <b>konieczne</b>, a nie ozdobne: podpisy godzin
+    /// stoją nieruchomo, więc sąsiad przewinięty na inną porę pokazywałby swoje bloki
+    /// przy cudzych godzinach. Dopóki godziny jechały razem z nim, rozjazd był niewidoczny.
+    /// </para>
+    /// </remarks>
     private void OnGridScroll(object? sender, ScrollChangedEventArgs e)
     {
-        if (_grid is not null && _headings is not null)
+        if (_grid is null)
+        {
+            return;
+        }
+
+        if (_headings is not null)
         {
             _headings.Offset = new Vector(_grid.Offset.X, 0);
         }
+
+        var down = _grid.Offset.Y;
+
+        Follow(_hours, down);
+        Follow(_gridBefore, down);
+        Follow(_gridAfter, down);
+
+        // Bez zmiany, gdy już tam stoi: ustawienie przesunięcia zgłasza kolejną zmianę
+        // przewijania, a ta wraca tutaj.
+        static void Follow(ScrollViewer? view, double down)
+        {
+            if (view is not null && Math.Abs(view.Offset.Y - down) > 0.5)
+            {
+                view.Offset = new Vector(0, down);
+            }
+        }
     }
 
+    /// <remarks>
+    /// Bez odejmowania kolumny godzin: stoi ona poza siatką, więc szerokość, którą
+    /// siatka zgłasza, już jej nie zawiera. Odjęta drugi raz zostawiała po prawej
+    /// pustą kolumnę szeroką dokładnie na godziny.
+    /// </remarks>
     private void SetWidth(double whole)
     {
         if (whole > 0)
         {
-            _calendar?.SetAvailableWidth(whole - HourColumn - Capacity);
+            _calendar?.SetAvailableWidth(whole - Capacity);
         }
     }
 

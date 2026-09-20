@@ -1050,12 +1050,48 @@
            to samo pytanie, pokazywane na przemian. Rozdzielone na dwoje rodzeństwa
            w tym samym panelu, bo miesiąc nie ma godzin, kolumn ani paska całodniowego
            i wciśnięty w tamtą siatkę musiałby udawać jej szczególny przypadek. -->
-      <Panel x:Name="ObszarKalendarza" Loaded="CalendarAreaReady">
+      <DockPanel x:Name="ObszarKalendarza">
+
+      <!-- Godziny **poza** tym, co jedzie za palcem. Wcześniej stały w tej samej
+           przesuwanej warstwie co kolumny i przejechanie zabierało je ze sobą —
+           a godzina nie należy do tygodnia, tylko do doby, więc jej wyjazd wyglądał
+           jak zsunięcie się całego ekranu. Zostają na miejscu; jadą same kolumny dni.
+
+           Przez to są w osobnym widoku przewijanym i ich pion trzeba doganiać ręcznie
+           (patrz „OnGridScroll"). Cena jest świadoma: żeby były nieruchome w poziomie,
+           muszą być poza warstwą, która się rusza — a ta jest tą samą warstwą, która
+           przewija się w pionie.
+
+           Nieczułe na dotyk: przejechanie ma działać na siatkę, nie na pasek podpisów,
+           i bez tego gest zaczęty na godzinach przewijałby wyłącznie je. -->
+      <ScrollViewer x:Name="PasGodzin" x:DataType="vm:CalendarViewModel"
+                    DockPanel.Dock="Left" Width="52" IsHitTestVisible="False"
+                    IsVisible="{Binding !IsMonth}"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Hidden">
+        <ItemsControl ItemsSource="{Binding HourLabels}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <Border Height="48">
+                <TextBlock Classes="hint" Text="{Binding}" VerticalAlignment="Top" />
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <!-- Przycięcie do miejsca, które siatce zostało. Warstwa niżej jeździ w bok,
+           a przycięcie musi stać — gdyby siedziało na niej, jechałoby razem z nią
+           i nie przycinało niczego. -->
+      <Panel ClipToBounds="True">
+
+      <Panel x:Name="PasSiatki" Loaded="CalendarAreaReady">
 
       <!-- Sąsiednie zakresy, widoczne wyłącznie w trakcie przejechania palcem.
-           Stoją w tym samym panelu, co siatka, przesunięte o szerokość okna w lewo
-           i w prawo — panel przesuwa się w całości, więc jadą razem z nią i palec
-           odsłania to, co naprawdę jest obok, zamiast pustego tła.
+           Stoją w tym samym panelu, co kolumny, przesunięte o szerokość pasa siatki
+           w lewo i w prawo — panel przesuwa się w całości, więc jadą razem z nią
+           i palec odsłania to, co naprawdę jest obok, zamiast pustego tła. Godziny
+           są poza tym panelem i zostają na miejscu.
 
            Obrazek, nie druga siatka: nie da się w nich niczego dotknąć. Interaktywna
            jest zawsze ta jedna, na której się stoi — inaczej każde odhaczenie
@@ -1065,21 +1101,9 @@
       <Panel x:Name="PodgladPrzed" IsVisible="False" IsHitTestVisible="False"
              x:DataType="vm:CalendarViewModel">
 
-        <ScrollViewer IsVisible="{Binding !IsMonth}"
+        <ScrollViewer x:Name="SiatkaPrzed" IsVisible="{Binding !IsMonth}"
                       HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden">
           <StackPanel Orientation="Horizontal">
-            <StackPanel Width="52">
-              <ItemsControl ItemsSource="{Binding HourLabels}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="x:String">
-                    <Border Height="48">
-                      <TextBlock Classes="godzina" Text="{Binding}" />
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-
             <ItemsControl ItemsSource="{Binding ColumnsBefore}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -1177,21 +1201,9 @@
       <Panel x:Name="PodgladPo" IsVisible="False" IsHitTestVisible="False"
              x:DataType="vm:CalendarViewModel">
 
-        <ScrollViewer IsVisible="{Binding !IsMonth}"
+        <ScrollViewer x:Name="SiatkaPo" IsVisible="{Binding !IsMonth}"
                       HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden">
           <StackPanel Orientation="Horizontal">
-            <StackPanel Width="52">
-              <ItemsControl ItemsSource="{Binding HourLabels}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="x:String">
-                    <Border Height="48">
-                      <TextBlock Classes="godzina" Text="{Binding}" />
-                    </Border>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </StackPanel>
-
             <ItemsControl ItemsSource="{Binding ColumnsAfter}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
@@ -1290,19 +1302,6 @@
                     IsVisible="{Binding !IsMonth}"
                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
         <StackPanel Orientation="Horizontal">
-
-          <!-- Godziny raz, z lewej, żeby nie powtarzać ich przy każdej kolumnie. -->
-          <StackPanel Width="52">
-            <ItemsControl ItemsSource="{Binding HourLabels}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="x:String">
-                  <Border Height="48">
-                    <TextBlock Classes="hint" Text="{Binding}" VerticalAlignment="Top" />
-                  </Border>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </StackPanel>
 
           <ItemsControl Name="KolumnyDni" ItemsSource="{Binding Columns}">
             <ItemsControl.ItemsPanel>
@@ -1556,6 +1555,8 @@
 
       </Grid>
       </Panel>
+      </Panel>
+      </DockPanel>
     </DockPanel>
 
     <!-- Kliknięte wydarzenie z podłączonego kalendarza. Własna karta, nie okno szczegółu
