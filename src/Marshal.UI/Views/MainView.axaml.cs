@@ -359,9 +359,13 @@ public partial class MainView : UserControl
     /// w bok i z powrotem, bez żadnego dotknięcia.
     /// </para>
     /// <para>
-    /// Znak zdejmuje koniec gestu ogłoszony przez rozpoznawacz albo nowe dotknięcie.
-    /// To drugie jest tu zabezpieczeniem: gdyby koniec nie przyszedł, samo czekanie
-    /// na niego wyłączyłoby przejeżdżanie na dobre.
+    /// <b>Znak zdejmuje wyłącznie nowe dotknięcie</b>, a nie koniec gestu ogłoszony przez
+    /// rozpoznawacz — i to jest tu sedno, bo pierwsze podejście zdejmowało go właśnie
+    /// tam i nie zmieniło niczego. Kiedy rozpoznawacz ogłasza koniec, nie jest
+    /// powiedziane: bywa to podniesienie palca, a nie wygaśnięcie rozpędu. Jeśli
+    /// przychodzi na podniesieniu, to zdejmuje znak <b>przed</b> rozpędem, czyli
+    /// dokładnie przed tym, przed czym miał chronić. Nowe dotknięcie jest jednoznaczne:
+    /// palec na szkle to nowy gest, cokolwiek działo się przedtem.
     /// </para>
     /// </remarks>
     private bool _gestureOver;
@@ -428,14 +432,8 @@ public partial class MainView : UserControl
         Move(sideways);
     }
 
-    private void AreaGestureDone(object? sender, ScrollGestureEndedEventArgs e)
-    {
+    private void AreaGestureDone(object? sender, ScrollGestureEndedEventArgs e) =>
         FinishGesture();
-
-        // Dopiero tutaj gest naprawdę się skończył — rozpęd wygasł i następne
-        // przesunięcie będzie już czyimś nowym ruchem.
-        _gestureOver = false;
-    }
 
     /// <summary>Ustawienie siatki na zadanym przesunięciu — bez animacji, wprost za palcem.</summary>
     private void Move(double sideways)
