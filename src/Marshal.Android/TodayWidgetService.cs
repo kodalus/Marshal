@@ -57,6 +57,9 @@ public sealed class TodayWidgetService : RemoteViewsService
     {
         private IReadOnlyList<PlanRow> _rows = [];
 
+        /// <summary>Czy po ostatnim ograniczniku czeka już ponowienie. Jedno, nie pętla.</summary>
+        private bool _retrying;
+
         public int Count => _rows.Count;
 
         public bool HasStableIds => true;
@@ -124,6 +127,7 @@ public sealed class TodayWidgetService : RemoteViewsService
                     .GetResult();
 
                 Remember(context, widgetId, _rows);
+                _retrying = false;
 
                 // Ta metoda wykonuje się na wątku, którym ekran domowy pyta nasz proces,
                 // więc każda jej sekunda jest sekundą cudzego czekania. Dopisywane tylko
@@ -142,8 +146,27 @@ public sealed class TodayWidgetService : RemoteViewsService
             }
             catch (TimeoutException)
             {
-                // Zostaje to, co było. Następne odświeżenie i tak przyjdzie — po zapisie
-                // albo przy wyjściu z aplikacji.
+                // Zostaje to, co było — ale nie na zawsze. Ogranicznik znaczy „bazę ktoś
+                // akurat trzyma", a nie „nic tu nie ma", więc czekanie na następne
+                // odświeżenie zostawiało kafelek na poprzednim dniu aż do kolejnego
+                // dotknięcia. Stąd brało się „strzałka nic nie robi, a druga przeskakuje
+                // o dwa tygodnie": pierwsza przestawiała dzień i wpadała na ogranicznik,
+                // druga trafiała na wolną bazę i pokazywała obie zmiany naraz.
+                if (!_retrying)
+                {
+                    _retrying = true;
+
+                    // Ślad w dzienniku, bo z zewnątrz ogranicznik wygląda dokładnie tak
+                    // samo jak strzałka, która nie doszła — a to dwie różne przyczyny
+                    // i dwa różne miejsca do szukania.
+                    _ = AppServices.Provider.GetRequiredService<IActivityLog>()
+                        .RecordAsync(
+                            "Widget: wiersze",
+                            "baza zajęta, ponowienie za 2 s",
+                            ActivityLevel.Problem);
+
+                    _ = RetryAsync(context);
+                }
             }
             catch (Exception e)
             {
@@ -277,6 +300,48 @@ public sealed class TodayWidgetService : RemoteViewsService
                 await AppServices.ReadyAsync();
 
                 TodayWidget.Refresh(context);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                global::Android.Util.Log.Warn("Marshal", e.ToString());
+            }
+        }
+
+        /// <summary>
+        /// Jedno ponowienie po ograniczniku — z odstępem i bez pętli.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Sama prośba o wiersze, a <b>nie</b> pełne odświeżenie widgetu. Rama jest już
+        /// narysowana z właściwego dnia — to lista się nie dowiozła. Pełne odświeżenie
+        /// sięgnęłoby przy okazji po świeże wydarzenia, czyli zajęło tę samą kolejkę
+        /// bazy, przez którą to ponowienie w ogóle jest potrzebne.
+        /// </para>
+        /// <para>
+        /// Raz, nie w kółko: gdyby baza była zajęta dłużej, pętla ponowień dokładałaby
+        /// się do tego, co ją zajmuje. Znacznik zdejmuje dopiero udany odczyt.
+        /// </para>
+        /// </remarks>
+        private static async Task RetryAsync(Context context)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+
+                if (AppWidgetManager.GetInstance(context) is not { } manager)
+                {
+                    return;
+                }
+
+                var ids = manager.GetAppWidgetIds(
+                    new ComponentName(context, Java.Lang.Class.FromType(typeof(TodayWidget))));
+
+                if (ids is { Length: > 0 })
+                {
+#pragma warning disable CA1422
+                    manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.list);
+#pragma warning restore CA1422
+                }
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {

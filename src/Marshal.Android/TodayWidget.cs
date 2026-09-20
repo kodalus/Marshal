@@ -198,14 +198,9 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
-        // Dwie różne rzeczy, obie potrzebne. Przerysowanie odświeża nagłówek i samą
-        // ramę widgetu, ale **nie** pyta listy o nowe wiersze — ta trzyma swoje
-        // w fabryce i oddaje je, dopóki nikt jej nie powie, że są nieaktualne.
-        // Bez tego drugiego wywołania odhaczone zadanie zostawało na liście.
-#pragma warning disable CA1422
-        manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.list);
-#pragma warning restore CA1422
-
+        // Lista pytana jest w „Redraw", po narysowaniu ramy — nie tutaj. Pytanie
+        // zadane stąd biegło równolegle z rysowaniem i obie drogi dobijały się do
+        // tej samej bazy; która wygra, rozstrzygał przypadek.
         var intent = new Intent(context, typeof(TodayWidget));
         intent.SetAction(AppWidgetManager.ActionAppwidgetUpdate);
         intent.PutExtra(AppWidgetManager.ExtraAppwidgetIds, ids);
@@ -252,7 +247,13 @@ public sealed class TodayWidget : AppWidgetProvider
     /// </remarks>
     private static readonly TimeSpan BroadcastBudget = TimeSpan.FromSeconds(3);
 
-    private void Redraw(Context context, AppWidgetManager manager, int[] ids)
+    /// <param name="freshEvents">
+    /// Czy przy okazji sięgnąć po świeże wydarzenia. Fałsz przy ruchu strzałką: to jest
+    /// przewracanie kartki, nie moment na sieć — a pobranie zajmuje kolejkę bazy na
+    /// sekundy i lista, która pyta o wiersze w tym samym czasie, wpada na ogranicznik.
+    /// </param>
+    private void Redraw(
+        Context context, AppWidgetManager manager, int[] ids, bool freshEvents = true)
     {
         var window = context;
         var waiting = GoAsync();
@@ -293,11 +294,25 @@ public sealed class TodayWidget : AppWidgetProvider
                     manager.UpdateAppWidget(id, Frame(window, id, today, busy));
                 }
 
+                // **Po ramie, nie przed nią.** Rama niesie nagłówek i pasek tygodnia,
+                // lista — zawartość dnia, i jedno bez drugiego pokazuje „Jutro" nad
+                // planem na dziś. Podanie ramy przestawia listę na nowo z tego, co
+                // system o niej pamięta, więc prośba o świeże wiersze wysłana wcześniej
+                // bywała tym przestawieniem zmieciona: strzałka przestawiała dzień,
+                // ale lista zostawała na poprzednim i dopiero drugie dotknięcie
+                // pokazywało dwa tygodnie różnicy naraz.
+#pragma warning disable CA1422
+                manager.NotifyAppWidgetViewDataChanged(ids, Resource.Id.list);
+#pragma warning restore CA1422
+
                 // Świeże wydarzenia dla procesu bez okna: widget budzony budzikiem jest
                 // wtedy jedynym, który je pokaże. Bez wymuszania, więc gdy okno odświeżyło
                 // swoją drogą, jest to sprawdzenie odstępu, a nie drugie pobranie —
                 // i bez czekania, bo kafelek jest już narysowany z tego, co w bazie.
-                _ = Marshal.Infrastructure.DependencyInjection.RefreshCalendarsAsync(services);
+                if (freshEvents)
+                {
+                    _ = Marshal.Infrastructure.DependencyInjection.RefreshCalendarsAsync(services);
+                }
 
                 // Przerysowanie kafelka idzie w odbiorniku rozgłoszenia, czyli z budżetem
                 // czasu, którego nie widać — a składa się na nie odczyt planu dnia,
@@ -628,13 +643,9 @@ public sealed class TodayWidget : AppWidgetProvider
 
             Move(window, widgetId, intent.GetIntExtra(DeltaExtra, 0));
 
-            // Rama **i** dane listy: rama niesie nazwę dnia, lista jego zawartość.
-            // Jedno bez drugiego pokazałoby nagłówek „Jutro" nad planem na dziś.
-            Redraw(window, manager, [widgetId]);
-
-#pragma warning disable CA1422
-            manager.NotifyAppWidgetViewDataChanged(new[] { widgetId }, Resource.Id.list);
-#pragma warning restore CA1422
+            // Jedna droga: rama, a po niej lista. Kalendarzy stąd nie ruszamy —
+            // przewracanie kartki nie jest momentem na sieć.
+            Redraw(window, manager, [widgetId], freshEvents: false);
             return;
         }
 
