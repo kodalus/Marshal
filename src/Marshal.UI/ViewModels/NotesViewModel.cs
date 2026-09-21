@@ -240,6 +240,39 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
     }
 
     /// <summary>
+    /// Usunięcie notatki wskazanej z listy, bez wchodzenia w nią.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Notatka do wyrzucenia jest zwykle tą, której się nie otwiera — pomyłka przy
+    /// zakładaniu, dwa razy to samo, coś przepisanego gdzie indziej. Droga przez
+    /// otwarcie znaczyła: wejdź w nią, przewiń do przycisków, usuń, wróć na listę.
+    /// </para>
+    /// <para>
+    /// Bez pytania o potwierdzenie, tak samo jak przy wydarzeniu na siatce: pytanie
+    /// przy jednej rzeczy uczy odklikiwać pytania, a wtedy psuje się także to, które
+    /// ma sens. Kafelek pokazuje tytuł i początek tekstu, więc widać, co się usuwa —
+    /// inaczej niż przy pozycji listy, która niosła samą nazwę. Zapis to zresztą
+    /// nagrobek, nie skasowanie: notatka znika z widoku, a nie z bazy.
+    /// </para>
+    /// <para>
+    /// Nie rusza okna edytora. Usunięcie z listy zdarza się wtedy, gdy nic nie jest
+    /// otwarte; zamykanie czegoś, czego nie ma, byłoby skutkiem ubocznym bez powodu.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private async Task DeleteNoteAsync(Note? note)
+    {
+        if (note is null)
+        {
+            return;
+        }
+
+        await notes.DeleteAsync(note.Id);
+        await SearchAsync();
+    }
+
+    /// <summary>
     /// Podgląd przeliczany przy każdej zmianie treści.
     /// </summary>
     /// <remarks>

@@ -1599,6 +1599,25 @@ public partial class MainView : UserControl
             return;
         }
 
+        // Notatka do wyrzucenia jest zwykle tą, której się nie otwiera — pomyłka przy
+        // zakładaniu albo dwa razy to samo. Droga przez otwarcie znaczyła: wejdź, przewiń
+        // do przycisków, usuń, wróć. Menu jest tu jednym ruchem, a kafelek pokazuje tytuł
+        // i początek tekstu, więc widać, co się usuwa.
+        if (NoteAt(source) is { } card)
+        {
+            e.Handled = true;
+
+            new MenuFlyout
+            {
+                ItemsSource = new[]
+                {
+                    Item("Usuń", () => model.Notes.DeleteNoteCommand.ExecuteAsync(card.Note)),
+                },
+            }.ShowAt(source, showAtPointer: true);
+
+            return;
+        }
+
         if (Block(source) is not { } block)
         {
             return;
@@ -1659,6 +1678,14 @@ public partial class MainView : UserControl
 
         new ContextMenu { ItemsSource = rows }.Open(source);
     }
+
+    /// <summary>Kafelek notatki spod wskaźnika.</summary>
+    private static NoteCard? NoteAt(Control source) =>
+        source.GetSelfAndVisualAncestors()
+            .OfType<Control>()
+            .Select(k => k.DataContext)
+            .OfType<NoteCard>()
+            .FirstOrDefault();
 
     /// <summary>Blok siatki spod wskaźnika.</summary>
     private static SlotBox? Block(Control source) =>
