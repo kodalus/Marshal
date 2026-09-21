@@ -1118,7 +1118,14 @@ public sealed partial class MainViewModel : ObservableObject
             Screen.Archive => ShowArchiveAsync(),
             Screen.Projects => ShowProjectsAsync(),
             Screen.Waiting => ShowWaitingAsync(),
-            Screen.Calendar => Calendar.LoadAsync(),
+            // Przeliczenie, a **nie** otwarcie. Otwarcie kalendarza kończy się
+            // przewinięciem na bieżącą godzinę i tak ma być — wchodzi się na niego,
+            // żeby zobaczyć, co teraz. Ale tędy przychodzi też każdy zapis w tle:
+            // odhaczenie zadania podnosiło znak zapisu, ten po sekundzie prosił
+            // o przeliczenie, a przeliczenie wołało otwarcie i odrzucało widok
+            // z oglądanego wieczora na teraz. Przeliczenie ma odświeżyć treść
+            // i niczego nie przewijać.
+            Screen.Calendar => Calendar.RefreshCommand.ExecuteAsync(null),
             Screen.Notes => Notes.LoadAsync(),
             Screen.Journal => Journal.LoadAsync(),
             Screen.Filters => Filters.RunCommand.ExecuteAsync(null),
