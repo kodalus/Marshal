@@ -698,6 +698,10 @@ public sealed partial class MainViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowWideNav));
         OnPropertyChanged(nameof(ShowBottomNav));
+
+        // Karta zadania chowa na pulpicie podpisy pól, które odsłaniają przyciski
+        // z ikonami: tam przycisk ma dymek i wystarcza za podpis.
+        Detail.IsNarrow = value;
     }
 
     [RelayCommand]

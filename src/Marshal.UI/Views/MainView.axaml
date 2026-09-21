@@ -2714,40 +2714,48 @@
 
                Ścieżka rozwiązuje jedno i drugie: rysuje się niezależnie od kroju,
                a pięć kwadracików mieści się w jednym wierszu. Znaczenia nie niesie
-               sam rysunek — niesie je pełne zdanie, które odsłania się **pod** paskiem
-               zaraz po wciśnięciu. Na dotyku, gdzie nie ma czym najechać po podpowiedź,
-               to jest jedyna droga, którą da się przejść raz i zapamiętać. -->
+               sam rysunek — niesie je pełne zdanie.
+
+               Na dotyku to zdanie odsłania się **pod** paskiem zaraz po wciśnięciu:
+               tam nie ma czym najechać po podpowiedź i jest to jedyna droga, którą
+               da się przejść raz i zapamiętać.
+
+               Na pulpicie stoi w dymku, a spod paska znika. Dymek jest o najechanie,
+               a podpis nad polem, do którego przycisk właśnie doprowadził, powtarza
+               to samo drugi raz i wydłuża kartę o pięć wierszy. -->
           <WrapPanel Margin="0,14,0,0">
             <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowDeadline}"
-                          ToolTip.Tip="Termin — fakt zewnętrzny">
+                          ToolTip.Tip="Termin — fakt zewnętrzny, świat się nie przesunie">
               <Path Classes="ikonka" Data="{StaticResource IkonaTerminu}" />
             </ToggleButton>
             <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowReminder}"
-                          ToolTip.Tip="Przypomnienie">
+                          ToolTip.Tip="Przypomnienie — kiedy chcesz o tym usłyszeć">
               <Path Classes="ikonka" Data="{StaticResource IkonaPrzypomnienia}" />
             </ToggleButton>
             <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowPriority}"
-                          ToolTip.Tip="Waga">
+                          ToolTip.Tip="Waga — co jest ważniejsze, gdy wszystkiego nie da się zrobić">
               <Path Classes="ikonka" Data="{StaticResource IkonaWagi}" />
             </ToggleButton>
             <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowEnergy}"
-                          ToolTip.Tip="Ile trzeba mieć w sobie">
+                          ToolTip.Tip="Energia — ile trzeba mieć w sobie, żeby się za to wziąć">
               <Path Classes="ikonka" Data="{StaticResource IkonaSil}" />
             </ToggleButton>
             <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowRepeat}"
-                          ToolTip.Tip="Rytm">
+                          ToolTip.Tip="Rytm — jak często to wraca">
               <Path Classes="ikonka" Data="{StaticResource IkonaRytmu}" />
             </ToggleButton>
           </WrapPanel>
 
           <StackPanel>
           <StackPanel IsVisible="{Binding ShowDeadline}">
-            <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie" />
+            <TextBlock Classes="label" Text="Termin — fakt zewnętrzny, świat się nie przesunie"
+                       IsVisible="{Binding IsNarrow}" />
             <k:DateField Value="{Binding Deadline}" />
           </StackPanel>
 
           <StackPanel IsVisible="{Binding ShowReminder}">
-          <TextBlock Classes="label" Text="Przypomnienie — kiedy chcesz o tym usłyszeć" />
+          <TextBlock Classes="label" Text="Przypomnienie — kiedy chcesz o tym usłyszeć"
+                     IsVisible="{Binding IsNarrow}" />
 
           <!-- Zadanie z godziną dostaje wyprzedzenia liczone od niej, a nie własne
                chwile: tak się o tym myśli („pół godziny przed wizytą"), a przesunięcie
@@ -2796,7 +2804,8 @@
           </StackPanel>
 
           <StackPanel IsVisible="{Binding ShowPriority}">
-            <TextBlock Classes="label" Text="Waga" />
+            <TextBlock Classes="label" Text="Waga"
+                       IsVisible="{Binding IsNarrow}" />
             <ComboBox ItemsSource="{Binding Priorities}" SelectedItem="{Binding SelectedPriority}"
                       HorizontalAlignment="Stretch" />
           </StackPanel>
@@ -2809,7 +2818,8 @@
                          Increment="5" FormatString="0" />
 
           <StackPanel IsVisible="{Binding ShowEnergy}">
-            <TextBlock Classes="label" Text="Ile trzeba mieć w sobie" />
+            <TextBlock Classes="label" Text="Ile trzeba mieć w sobie"
+                       IsVisible="{Binding IsNarrow}" />
             <ComboBox ItemsSource="{Binding Energies}" SelectedItem="{Binding SelectedEnergyLevel}"
                       HorizontalAlignment="Stretch" />
             <TextBlock Classes="hint" Margin="2,4,0,0"
@@ -2821,7 +2831,8 @@
                   IsVisible="{Binding ShowRepeat}">
             <StackPanel>
 
-              <TextBlock Text="Rytm" FontWeight="SemiBold" />
+              <TextBlock Text="Rytm" FontWeight="SemiBold"
+                         IsVisible="{Binding IsNarrow}" />
 
               <TextBlock Classes="label" Text="Jak często" />
               <ComboBox ItemsSource="{Binding Repeats}" SelectedItem="{Binding SelectedRepeat}"

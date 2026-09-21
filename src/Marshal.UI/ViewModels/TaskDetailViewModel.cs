@@ -51,6 +51,18 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     public CalendarViewModel? Calendar { get; set; }
 
+    /// <summary>
+    /// Czy okno jest wąskie — czyli czy patrzymy na to przez telefon.
+    /// </summary>
+    /// <remarks>
+    /// Rozstrzyga o podpisach pól odsłanianych przyciskami u góry karty. Na pulpicie
+    /// przycisk ma dymek i wystarcza za podpis; na dotyku dymka nie ma czym wywołać,
+    /// więc podpis zostaje jedyną drogą, którą da się przejść raz i zapamiętać.
+    /// Podstawiane przez okno, bo szerokość zna okno, a nie karta.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsNarrow { get; set; }
+
     /// <summary>Czy to zadanie da się komuś pokazać — czyli czy jest już w Google.</summary>
     /// <remarks>
     /// Przycisk, który kończy się odmową, jest gorszy od jego braku — ale <b>milczenie
