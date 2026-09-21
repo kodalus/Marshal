@@ -1169,8 +1169,10 @@ public sealed class CalendarSyncService(
         TaskItem rhythm, RecurrenceSchedule.Slot slot, TimeZoneInfo zone, string? color)
     {
         // Pora przełożonego wystąpienia wygrywa nad porą rytmu — dotyczy tego jednego
-        // razu. Gdy przełożono sam dzień, pora zostaje ta, co zawsze.
-        if ((slot.Time ?? rhythm.DoTime) is not { } hour)
+        // razu. Potem pora zapamiętana przez serię, a dopiero na końcu pora wystąpienia
+        // niosącego regułę: ostatni krok jest drogą dla rytmów założonych, zanim seria
+        // umiała pamiętać własną porę.
+        if ((slot.Time ?? rhythm.Recurrence?.Time ?? rhythm.DoTime) is not { } hour)
         {
             var dayStart = InZone(slot.Date.ToDateTime(TimeOnly.MinValue), zone);
 

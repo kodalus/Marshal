@@ -50,7 +50,8 @@ public sealed record RecurrenceRule
         DateOnly? until = null,
         int? count = null,
         IReadOnlyList<RecurrenceChange>? changes = null,
-        int? minutes = null)
+        int? minutes = null,
+        TimeOnly? time = null)
     {
         if (interval < 1)
         {
@@ -82,6 +83,7 @@ public sealed record RecurrenceRule
         Until = until;
         Count = count;
         Minutes = minutes is > 0 ? minutes : null;
+        Time = time;
 
         // Po jednej zmianie na dzień i w kolejności dni. Dwie zmiany tego samego
         // wystąpienia znaczyłyby, że trzeba wiedzieć, która jest nowsza — a to jest
@@ -163,6 +165,18 @@ public sealed record RecurrenceRule
     /// </remarks>
     public int? Minutes { get; }
 
+    /// <summary>
+    /// O której wypada wystąpienie tej serii. Puste znaczy „o tej, co bieżące".
+    /// </summary>
+    /// <remarks>
+    /// Ta sama sprawa, co przy długości, i z tego samego powodu: zadanie niosące rytm
+    /// jest jednocześnie jednym wystąpieniem i wzorcem serii. Przeciągnięcie dzisiejszego
+    /// bloku o godzinę w dół znaczy „dziś zaczynam później", a nie „od teraz zaczynam
+    /// później" — a bez tego pola znaczyło jedno i drugie naraz, bo zapowiedzi sięgały
+    /// po porę właśnie do tamtego zadania.
+    /// </remarks>
+    public TimeOnly? Time { get; }
+
     /// <summary>Zmiana dotycząca wskazanego dnia z reguły, jeśli jest.</summary>
     public RecurrenceChange? ChangeOn(DateOnly date) =>
         Changes.Count == 0 ? null : Changes.FirstOrDefault(z => z.Date == date);
@@ -174,13 +188,13 @@ public sealed record RecurrenceRule
 
         return new RecurrenceRule(
             Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
-            [.. Changes.Where(z => z.Date != change.Date), change], Minutes);
+            [.. Changes.Where(z => z.Date != change.Date), change], Minutes, Time);
     }
 
     /// <summary>Ta sama reguła bez zmiany dotyczącej wskazanego dnia.</summary>
     public RecurrenceRule Without(DateOnly date) =>
         new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
-            [.. Changes.Where(z => z.Date != date)], Minutes);
+            [.. Changes.Where(z => z.Date != date)], Minutes, Time);
 
     /// <summary>
     /// Ta sama reguła z zapamiętaną długością wystąpienia.
@@ -193,7 +207,16 @@ public sealed record RecurrenceRule
     /// </remarks>
     public RecurrenceRule WithLength(int? minutes) =>
         new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
-            Changes, minutes);
+            Changes, minutes, Time);
+
+    /// <summary>Ta sama reguła z zapamiętaną porą wystąpienia.</summary>
+    /// <remarks>
+    /// Wołane przy przełożeniu <b>bieżącego</b> wystąpienia rytmu, który swojej pory
+    /// jeszcze nie pamięta — zob. <see cref="WithLength"/>, to jest ta sama zasada.
+    /// </remarks>
+    public RecurrenceRule WithHour(TimeOnly? time) =>
+        new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
+            Changes, Minutes, time);
 
     /// <summary>
     /// Domyślne zaczepienie **liczone z rodzaju**, nie stałe (spec 5.7).
@@ -235,14 +258,14 @@ public sealed record RecurrenceRule
         return new RecurrenceRule(
             Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until,
             Count is null or <= 1 ? Count : Count - 1,
-            left, Minutes);
+            left, Minutes, Time);
     }
 
     public string ToJson() =>
         JsonSerializer.Serialize(
             new Wire(
                 Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
-                Changes.Count == 0 ? null : Changes, Minutes),
+                Changes.Count == 0 ? null : Changes, Minutes, Time),
             Json);
 
     /// <summary>Zwraca <c>null</c> zamiast rzucać: zapis z nowszej wersji aplikacji nie
@@ -259,7 +282,7 @@ public sealed record RecurrenceRule
             return JsonSerializer.Deserialize<Wire>(json, Json) is { } w
                 ? new RecurrenceRule(
                     w.Kind, w.Interval, w.DaysOfWeek, w.DayOfMonth,
-                    w.Anchor, w.OnMissed, w.Until, w.Count, w.Changes, w.Minutes)
+                    w.Anchor, w.OnMissed, w.Until, w.Count, w.Changes, w.Minutes, w.Time)
                 : null;
         }
         catch (Exception e) when (e is JsonException or ArgumentException or ArgumentOutOfRangeException)
@@ -294,7 +317,8 @@ public sealed record RecurrenceRule
         DateOnly? Until,
         int? Count,
         IReadOnlyList<RecurrenceChange>? Changes = null,
-        int? Minutes = null);
+        int? Minutes = null,
+        TimeOnly? Time = null);
 
     /// <summary>
     /// Porównanie po treści, także listy zmian.
@@ -316,6 +340,7 @@ public sealed record RecurrenceRule
         && Until == other.Until
         && Count == other.Count
         && Minutes == other.Minutes
+        && Time == other.Time
         && Changes.SequenceEqual(other.Changes);
 
     public override int GetHashCode() =>

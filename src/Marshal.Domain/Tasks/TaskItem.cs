@@ -421,9 +421,10 @@ public sealed class TaskItem : Entity
             Energy = Energy,
 
             // Godzina przechodzi: „śmieci w poniedziałek o 19" to ta sama pora
-            // w każdy poniedziałek. Przełożone wystąpienie ma własną i to ona wygrywa —
-            // dotyczy jednego razu, więc nie zmienia rytmu na dalej.
-            DoTime = at ?? DoTime,
+            // w każdy poniedziałek. Kolejność jak przy długości: pora tego jednego razu,
+            // potem pora zapamiętana przez serię, a na końcu pora wystąpienia, które
+            // właśnie schodzi ze sceny.
+            DoTime = at ?? rule.Time ?? DoTime,
         };
 
         // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"

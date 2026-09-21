@@ -917,7 +917,7 @@ public partial class MainView : UserControl
             return;
         }
 
-        var atEdge = slot.TaskId is not null
+        var atEdge = (slot.TaskId is not null || slot.IsAhead)
             && e.GetPosition(block).Y >= block.Bounds.Height - EdgeZone;
 
         block.Cursor = atEdge ? EdgeCursor : HandCursor;
@@ -1006,9 +1006,21 @@ public partial class MainView : UserControl
         _paused.Clear();
     }
 
-    /// <summary>Zadania ruszamy zawsze, wydarzenia tylko takie, które mają dokąd wrócić.</summary>
+    /// <summary>
+    /// Co wolno ruszyć: zadania zawsze, zapowiedzi rytmu, a wydarzenia tylko takie,
+    /// które mają dokąd wrócić.
+    /// </summary>
+    /// <remarks>
+    /// Zapowiedzi brakowało tu przez trzy zapisy. Wszystko powyżej — pozwolenie na
+    /// przeciąganie, chwyt za dolną krawędź, droga zapisu — było na miejscu, a ruch
+    /// kończył się tutaj, bo blok bez identyfikatora zadania i bez wpisu w cudzym
+    /// kalendarzu wyglądał jak coś, czego nie ma dokąd przełożyć. Zapowiedź ma dokąd:
+    /// do zmiany zapisanej przy jej dniu w regule.
+    /// </remarks>
     private static bool CanMove(SlotBox slot) =>
-        slot.TaskId is not null || (slot.SourceId is not null && slot.ExternalId is not null);
+        slot.TaskId is not null
+        || slot.IsAhead
+        || (slot.SourceId is not null && slot.ExternalId is not null);
 
     private void LongPressElapsed()
     {

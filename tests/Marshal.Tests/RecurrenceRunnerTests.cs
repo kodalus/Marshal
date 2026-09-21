@@ -418,6 +418,22 @@ public sealed class RecurrenceRunnerTests
     }
 
     [Fact]
+    public void Nastepnik_bierze_pore_z_rytmu_a_nie_z_wystapienia_ktore_odchodzi()
+    {
+        // Dzisiejsze wystąpienie przeciągnięte na siatce na dziesiątą, a rytm pamięta
+        // dziewiątą. Gdyby pora przechodziła z wystąpienia, jedno spóźnione popołudnie
+        // przestawiałoby rytm na zawsze.
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(RecurrenceKind.Daily, time: new TimeOnly(9, 0)));
+
+        task.SetDoTime(new TimeOnly(10, 0), Stempel());
+
+        RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel)!
+            .DoTime.Should().Be(new TimeOnly(9, 0));
+    }
+
+    [Fact]
     public void Dlugosc_zapisana_przy_wystapieniu_wygrywa_nad_dlugoscia_rytmu()
     {
         var task = Zaplanowane(

@@ -974,11 +974,12 @@ public sealed partial class TaskDetailViewModel(
                 count,
                 _changes,
 
-                // Długość wpisana w karcie jest decyzją o **całej serii**: tu odpowiada
-                // się na pytanie, czym rzecz jest. Rozciągnięcie bloku na siatce dotyczy
-                // jednego dnia i reguły nie rusza — to są dwie różne czynności i dlatego
-                // mają dwie różne drogi.
-                EstimatedMinutes is { } length ? (int)length : null);
+                // Długość i pora wpisane w karcie są decyzją o **całej serii**: tu
+                // odpowiada się na pytanie, czym rzecz jest. Przeciągnięcie bloku po
+                // siatce dotyczy jednego dnia i reguły nie rusza — to są dwie różne
+                // czynności i dlatego mają dwie różne drogi.
+                EstimatedMinutes is { } length ? (int)length : null,
+                DoTime is { } hour ? TimeOnly.FromTimeSpan(hour) : null);
         }
         catch (ArgumentException)
         {

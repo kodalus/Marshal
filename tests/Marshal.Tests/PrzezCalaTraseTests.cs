@@ -552,6 +552,32 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Przelozenie_biezacego_bloku_nie_zmienia_pory_serii()
+    {
+        // To samo, co przy długości: zadanie niosące rytm jest jednocześnie wystąpieniem
+        // i wzorcem serii, więc przeciągnięcie dzisiejszego bloku o godzinę w dół
+        // przestawiało wszystkie zapowiedzi naraz.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var clock = NewService<IClock>();
+
+        task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Workdays), hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        // Siatka: dziś zaczynam o dziesiątej.
+        await NewService<TaskEditService>()
+            .RescheduleAsync(task.Id, clock.Today, new TimeOnly(10, 0));
+
+        var after = await NewService<ITaskRepository>().FindAsync(task.Id);
+
+        after!.DoTime.Should().Be(new TimeOnly(10, 0), "to wystąpienie zaczyna się później");
+        after.Recurrence!.Time.Should().Be(new TimeOnly(9, 0), "rytm zostaje przy swojej porze");
+    }
+
+    [Fact]
     public async Task Dlugosc_jednej_zapowiedzi_zapisuje_sie_przy_jej_dniu()
     {
         var task = await ZaplanowaneAsync("Praca");

@@ -285,6 +285,14 @@ public sealed class TaskEditService(
             return null;
         }
 
+        // Seria zapamiętuje swoją porę, zanim to jedno wystąpienie zacznie się kiedy
+        // indziej. Bez tego kroku przeciągnięcie dzisiejszego bloku o godzinę w dół
+        // przestawiało wszystkie zapowiedzi — porę brały właśnie stąd.
+        if (task.Recurrence is { Time: null } rhythm && task.DoTime is { } was && time != was)
+        {
+            task.SetRecurrence(rhythm.WithHour(was), hlc.Next());
+        }
+
         await ApplyDoDateAsync(task, day, task.AreaId, ct);
         task.SetDoTime(time, hlc.Next());
 
