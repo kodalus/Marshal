@@ -225,7 +225,15 @@ internal static class Notifications
 [BroadcastReceiver(Enabled = true, Exported = false)]
 internal sealed class ReminderDone : BroadcastReceiver
 {
-    internal const string DoneAction = "com.kodalus.marshal.PRZYPOMNIENIE";
+    /// <summary>
+    /// Własny napis, nie ten od budzika przypomnień.
+    /// </summary>
+    /// <remarks>
+    /// Oba zamiary wskazują swoją klasę wprost, więc wspólny napis działał — i był
+    /// pułapką: dwie różne rzeczy pod jedną nazwą rozchodzą się dopiero wtedy, gdy
+    /// ktoś doda trzecią i zacznie rozróżniać po akcji.
+    /// </remarks>
+    internal const string DoneAction = "com.kodalus.marshal.ZAKONCZENIE";
 
     internal const string TaskExtra = "zadanie";
 

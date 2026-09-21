@@ -259,6 +259,12 @@ public sealed class TodayWidget : AppWidgetProvider
         Context context, AppWidgetManager manager, int[] ids, bool freshEvents = true)
     {
         var window = context;
+
+        // Kafelek liczy dzisiejszy dzień przy rysowaniu, więc o północy musi go ktoś
+        // obudzić. Nastawiane tutaj, bo przez to miejsce przechodzi każde rysowanie —
+        // także pierwsze, po postawieniu kafelka na ekranie. Bez bazy i bez czekania.
+        Alarm.ScheduleMidnight(window.ApplicationContext ?? window);
+
         var waiting = GoAsync();
 
         _ = Task.Run(async () =>

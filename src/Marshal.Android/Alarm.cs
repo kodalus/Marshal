@@ -35,7 +35,12 @@ internal static class Alarm
 {
     public const string Action = "com.kodalus.marshal.PRZYPOMNIENIE";
 
+    /// <summary>Budzik na północ. Osobny, bo odpowiada na inne pytanie niż przypomnienia.</summary>
+    public const string MidnightAction = "com.kodalus.marshal.POLNOC";
+
     private const int Number = 7101;
+
+    private const int MidnightNumber = 7102;
 
     /// <summary>Przestawienie budzika na najbliższą chwilę. Wołane po każdej zmianie.</summary>
     public static async Task RescheduleAsync(Context context)
@@ -117,6 +122,65 @@ internal static class Alarm
     private static bool Exact(AlarmManager clock) =>
         !OperatingSystem.IsAndroidVersionAtLeast(31) || clock.CanScheduleExactAlarms();
 
+    /// <summary>
+    /// Budzik na najbliższą północ — po to, żeby kafelek przestawił datę.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kafelek liczy dzisiejszy dzień przy rysowaniu i nie rysuje się sam z siebie.
+    /// Bez tego budzika stał z wczorajszą datą i wczorajszym planem aż do pierwszego
+    /// zdarzenia, które go obudzi — czyli do rana, gdy ktoś otworzy aplikację. Ekran
+    /// domowy pokazywał więc wczoraj, i to dokładnie wtedy, gdy się na niego patrzy
+    /// po przebudzeniu.
+    /// </para>
+    /// <para>
+    /// Odstęp policzony przez strefę, a nie przez dodanie doby. Noc zmiany czasu ma
+    /// dwadzieścia trzy albo dwadzieścia pięć godzin, więc doba dodana na ślepo mija
+    /// się z północą o godzinę — raz za wcześnie, a to gorsze: kafelek przestawiłby
+    /// datę na jutro, będąc jeszcze dziś.
+    /// </para>
+    /// <para>
+    /// Dziesięć sekund po północy, nie w nią. Budzik potrafi odezwać się chwilę przed
+    /// zadaną chwilą, a rysowanie przed północą liczy „dzisiaj" wciąż po staremu —
+    /// czyli przerysowuje kafelek na to samo i data zostaje wczorajsza aż do rana.
+    /// </para>
+    /// </remarks>
+    public static void ScheduleMidnight(Context context)
+    {
+        try
+        {
+            if (context.GetSystemService(Context.AlarmService) is not AlarmManager clock)
+            {
+                return;
+            }
+
+            var local = DateTime.Today.AddDays(1).AddSeconds(10);
+            var when = new DateTimeOffset(local, TimeZoneInfo.Local.GetUtcOffset(local))
+                .ToUnixTimeMilliseconds();
+
+            var intent = PendingIntent.GetBroadcast(
+                context,
+                MidnightNumber,
+                new Intent(context, typeof(AlarmReceiver)).SetAction(MidnightAction),
+                PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable)!;
+
+            if (Exact(clock))
+            {
+                clock.SetExactAndAllowWhileIdle(AlarmType.RtcWakeup, when, intent);
+            }
+            else
+            {
+                clock.SetAndAllowWhileIdle(AlarmType.RtcWakeup, when, intent);
+            }
+        }
+        catch (Exception e)
+        {
+            // Bez tego budzika kafelek przestawia datę przy najbliższej okazji,
+            // a nie o północy. Gorzej, ale nie na tyle, żeby coś wywracać.
+            global::Android.Util.Log.Warn("Marshal", e.ToString());
+        }
+    }
+
     private static PendingIntent Intent(Context context)
     {
         var intent = new Intent(context, typeof(AlarmReceiver)).SetAction(Action);
@@ -164,6 +228,16 @@ internal sealed class AlarmReceiver : BroadcastReceiver
 
                 await AppServices.ReadyAsync();
 
+                if (intent?.Action == Alarm.MidnightAction)
+                {
+                    // Sam dzień się zmienił: kafelek ma inną datę, inny plan i inny
+                    // pasek tygodnia. Baza się nie zmieniła, więc nie ma czego liczyć
+                    // poza przerysowaniem.
+                    TodayWidget.Refresh(app);
+
+                    await Alarm.Save("Kafelek: północ", "data przestawiona");
+                }
+
                 if (intent?.Action == Alarm.Action)
                 {
                     var count = await AppServices.Provider
@@ -179,6 +253,11 @@ internal sealed class AlarmReceiver : BroadcastReceiver
                 // bierze się z zadań. Zaglądaniem na Dysk zajmuje się osobno
                 // SynchronizacjaWorker — budzik nie jest narzędziem do pracy okresowej.
                 await Alarm.RescheduleAsync(app);
+
+                // Północ nastawiana po każdym budziku, nie tylko po sobie: to jedyne
+                // miejsce, przez które ta aplikacja przechodzi bez okna, a budzik
+                // nienastawiony nie zgłasza się sam.
+                Alarm.ScheduleMidnight(app);
             }
             catch (Exception e)
             {
@@ -195,6 +274,7 @@ internal sealed class AlarmReceiver : BroadcastReceiver
     internal static void OnWake(Context context)
     {
         _ = Alarm.RescheduleAsync(context);
+        Alarm.ScheduleMidnight(context);
         SyncWorker.Schedule(context);
     }
 }
