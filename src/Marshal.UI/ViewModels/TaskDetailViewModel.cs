@@ -53,10 +53,30 @@ public sealed partial class TaskDetailViewModel(
 
     /// <summary>Czy to zadanie da się komuś pokazać — czyli czy jest już w Google.</summary>
     /// <remarks>
-    /// Zadanie bez godziny ani odbicia nie istnieje po tamtej stronie, więc nie ma czego
-    /// pokazywać. Przycisk, który kończy się odmową, jest gorszy od jego braku.
+    /// Przycisk, który kończy się odmową, jest gorszy od jego braku — ale <b>milczenie
+    /// jest gorsze od obu</b>. Zadanie z dniem trafia do Google samo i wtedy da się je
+    /// pokazać; zanim tam trafi, nie ma czego pokazywać. Te dwie chwile wyglądały
+    /// z ekranu identycznie: sekcji nie było i nic nie mówiło, dlaczego.
     /// </remarks>
     public bool CanShowToPerson => SharedCalendarId is not null && SharedEventId is { Length: > 0 };
+
+    /// <summary>
+    /// Czy w ogóle mówić o pokazywaniu osobie przy tym zadaniu.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie z dniem ma swoje odbicie w Google — albo będzie je miało za chwilę,
+    /// bo wysyłka idzie po zapisie. Zadanie bez dnia nie ma i mieć nie będzie:
+    /// kalendarz nie umie pokazać „kiedyś w tym tygodniu", więc sekcja przy nim
+    /// byłaby obietnicą bez pokrycia.
+    /// </remarks>
+    public bool MentionShowToPerson => IsExisting && (DoDate is not null || Deadline is not null);
+
+    /// <summary>Czemu pokazać się jeszcze nie da. Puste, gdy da się.</summary>
+    public string? ShowToPersonProblem => CanShowToPerson
+        ? null
+        : "To zadanie nie ma jeszcze swojego wydarzenia w Google. Trafia tam po zapisie — "
+            + "jeśli nie trafia, w Ustawieniach nie jest wskazany kalendarz główny, "
+            + "a w dzienniku stoi wtedy wpis o pominiętej wysyłce.";
 
     /// <summary>Ile trwa zadanie z godziną, ale bez podanego końca (spec 11).</summary>
     private const int DefaultMinutes = 30;
@@ -448,7 +468,6 @@ public sealed partial class TaskDetailViewModel(
         _id = task.Id;
         SharedCalendarId = task.SharedCalendarId;
         SharedEventId = task.SharedEventId;
-        OnPropertyChanged(nameof(CanShowToPerson));
         Title = task.Title;
         Note = task.Note ?? string.Empty;
         DoDate = ToOffset(task.DoDate);
@@ -481,6 +500,13 @@ public sealed partial class TaskDetailViewModel(
 
         _loading = false;
         OnPropertyChanged(nameof(IsExisting));
+
+        // Po wczytaniu pól, nie przy podstawianiu odbicia: „czy w ogóle o tym mówić"
+        // pyta o dzień wykonania i termin, a te wpisywane są niżej. Zgłoszone wcześniej
+        // odpowiadałyby o poprzednio otwartym zadaniu.
+        OnPropertyChanged(nameof(CanShowToPerson));
+        OnPropertyChanged(nameof(MentionShowToPerson));
+        OnPropertyChanged(nameof(ShowToPersonProblem));
         ShowMore = Deadline is not null
             || ReminderDay is not null
             || Leads.Any(w => w.IsChecked)

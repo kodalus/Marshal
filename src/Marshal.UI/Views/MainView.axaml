@@ -2880,11 +2880,19 @@
                Widoczne dopiero wtedy, gdy odbicie istnieje. Zadanie bez godziny nie ma
                po tamtej stronie czego pokazać, a przycisk kończący się odmową jest gorszy
                od jego braku. -->
-          <StackPanel IsVisible="{Binding CanShowToPerson}" Margin="0,14,0,0" Spacing="4">
+          <StackPanel IsVisible="{Binding MentionShowToPerson}" Margin="0,14,0,0" Spacing="4">
             <TextBlock Classes="label" Text="Pokaż osobie" />
 
+            <!-- Powód zamiast pustego miejsca. Zadanie z dniem trafia do Google samo
+                 i dopiero wtedy da się je komuś pokazać; zanim tam trafi, nie ma czego.
+                 Te dwie chwile wyglądały z ekranu identycznie — sekcji nie było i nic
+                 nie mówiło dlaczego, więc „nie widzę tego przy swoich zadaniach"
+                 nie miało żadnej odpowiedzi. -->
+            <TextBlock Classes="hint" TextWrapping="Wrap" Text="{Binding ShowToPersonProblem}"
+                       IsVisible="{Binding !CanShowToPerson}" />
+
             <ItemsControl ItemsSource="{Binding Calendar.People}"
-                          IsVisible="{Binding Calendar.HasPeople}">
+                          IsVisible="{Binding CanShowToPerson}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                   <WrapPanel />
@@ -2899,7 +2907,7 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Grid ColumnDefinitions="*,Auto">
+            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding CanShowToPerson}">
               <TextBox Grid.Column="0" Watermark="adres e-mail"
                        ti:TextInputOptions.AutoCapitalization="False"
                        ti:TextInputOptions.ContentType="Email"
