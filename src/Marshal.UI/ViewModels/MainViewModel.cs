@@ -192,6 +192,30 @@ public sealed partial class MainViewModel : ObservableObject
         // wykonania potrafi przenieść zadanie na inną listę niż ta, z której je otwarto.
         Detail.Saved += (_, _) => Safely("Ekran: odświeżenie po zapisie", ReloadAsync);
 
+        // „Pokaż osobie" działa na wydarzeniu w Google, a zadanie z godziną ma tam swoje
+        // odbicie — czyli dokładnie takie wydarzenie. Kalendarz zna jedyną drogę do Google
+        // i nie ma jej dublować, a nakładka szczegółu nie zna jej wcale; kto jest otwarty,
+        // wie tylko okno, więc podstawia je tutaj.
+        Detail.Calendar = Calendar;
+
+        Detail.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is not (nameof(Detail.IsOpen) or nameof(Detail.CanShowToPerson)))
+            {
+                return;
+            }
+
+            Calendar.OpenedTaskEvent = Detail is
+            {
+                IsOpen: true,
+                CanShowToPerson: true,
+                SharedCalendarId: { } source,
+                SharedEventId: { } entry,
+            }
+                ? (source, entry, Detail.Title)
+                : null;
+        };
+
         // Przegląd zmienia stan zadań i projektów, więc ekran pod spodem musi się
         // przeliczyć — także liczniki niezmienników w „Dzisiaj".
         Review.Changed += (_, _) => Safely("Ekran: odświeżenie po przeglądzie", ReloadAsync);

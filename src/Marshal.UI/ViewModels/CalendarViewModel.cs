@@ -1849,6 +1849,26 @@ public sealed partial class CalendarViewModel(
     public partial string NewPerson { get; set; } = string.Empty;
 
     /// <summary>
+    /// Odbicie otwartego zadania w Google. Puste, gdy okno szczegółu jest zamknięte
+    /// albo gdy zadanie nie ma jeszcze swojego wydarzenia.
+    /// </summary>
+    /// <remarks>
+    /// Wydarzenie założone w Marshalu <b>nie jest</b> blokiem wydarzenia na siatce:
+    /// jest zadaniem, które ma w Google swoje odbicie. Otwiera się więc nakładką
+    /// szczegółu zadania, a nie kartą wydarzenia — i przez to „Pokaż osobie" nie miało
+    /// się do czego odnieść, choć po stronie Google było dokładnie to samo wydarzenie,
+    /// któremu da się dopisać gościa. Podstawiane przez okno, bo to ono wie, co jest
+    /// otwarte; kalendarz ma tu tylko jedną drogę do Google i nie ma jej dublować.
+    /// </remarks>
+    public (Guid Source, string Entry, string Title)? OpenedTaskEvent { get; set; }
+
+    /// <summary>Wydarzenie, któremu można kogoś pokazać: z siatki albo z otwartego zadania.</summary>
+    private (Guid Source, string Entry, string Title)? Shown =>
+        Opened is { SourceId: { } source, ExternalId: { } entry } block
+            ? (source, entry, block.Title)
+            : OpenedTaskEvent;
+
+    /// <summary>
     /// Pokazanie otwartego wydarzenia jednej osobie.
     /// </summary>
     /// <remarks>
@@ -1859,7 +1879,7 @@ public sealed partial class CalendarViewModel(
     [RelayCommand]
     private async Task ShowPersonAsync(Contact? person)
     {
-        if (person is null || Opened is not { SourceId: { } source, ExternalId: { } entry } block)
+        if (person is null || Shown is not var (source, entry, title))
         {
             return;
         }
@@ -1870,7 +1890,7 @@ public sealed partial class CalendarViewModel(
 
             await log.RecordAsync(
                 "Kalendarz: pokazanie osobie",
-                $"{block.Title} → {person.Name}",
+                $"{title} → {person.Name}",
                 ActivityLevel.Ok,
                 added ? null : "ta osoba już była na liście gości");
 
@@ -1886,7 +1906,7 @@ public sealed partial class CalendarViewModel(
             OnPropertyChanged(nameof(HasOpenedProblem));
 
             await log.RecordAsync(
-                "Kalendarz: pokazanie osobie", block.Title, ActivityLevel.Problem, e.Message);
+                "Kalendarz: pokazanie osobie", title, ActivityLevel.Problem, e.Message);
         }
     }
 

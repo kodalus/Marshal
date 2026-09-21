@@ -26,6 +26,38 @@ public sealed partial class TaskDetailViewModel(
     private Guid _id;
     private bool _loading;
 
+    /// <summary>
+    /// Odbicie tego zadania w Google, gdy je ma.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie z godziną dostaje w Google swoje wydarzenie i to jest to samo wydarzenie,
+    /// któremu da się dopisać gościa — tylko otwiera się nakładką szczegółu, a nie kartą
+    /// wydarzenia. Trzymane tutaj, żeby okno miało co podstawić kalendarzowi; sama
+    /// nakładka nie zna drogi do Google i nie ma jej poznawać.
+    /// </remarks>
+    public Guid? SharedCalendarId { get; private set; }
+
+    public string? SharedEventId { get; private set; }
+
+    /// <summary>
+    /// Kalendarz — wyłącznie po to, żeby karta zadania miała skąd wziąć listę osób
+    /// i drogę do Google.
+    /// </summary>
+    /// <remarks>
+    /// Jeden model widoku sięgający po drugi jest kosztem i jest świadomy. Lista osób
+    /// i zapraszanie należą do kalendarza i mają tam zostać: przepisanie ich tutaj dałoby
+    /// dwie listy tych samych osób i dwie drogi do Google, a te rozjeżdżają się przy
+    /// pierwszej zmianie w jednej z nich. Podstawiane przez okno, które i tak trzyma oba.
+    /// </remarks>
+    public CalendarViewModel? Calendar { get; set; }
+
+    /// <summary>Czy to zadanie da się komuś pokazać — czyli czy jest już w Google.</summary>
+    /// <remarks>
+    /// Zadanie bez godziny ani odbicia nie istnieje po tamtej stronie, więc nie ma czego
+    /// pokazywać. Przycisk, który kończy się odmową, jest gorszy od jego braku.
+    /// </remarks>
+    public bool CanShowToPerson => SharedCalendarId is not null && SharedEventId is { Length: > 0 };
+
     /// <summary>Ile trwa zadanie z godziną, ale bez podanego końca (spec 11).</summary>
     private const int DefaultMinutes = 30;
 
@@ -414,6 +446,9 @@ public sealed partial class TaskDetailViewModel(
         Problem = null;
         OnPropertyChanged(nameof(HasProblem));
         _id = task.Id;
+        SharedCalendarId = task.SharedCalendarId;
+        SharedEventId = task.SharedEventId;
+        OnPropertyChanged(nameof(CanShowToPerson));
         Title = task.Title;
         Note = task.Note ?? string.Empty;
         DoDate = ToOffset(task.DoDate);

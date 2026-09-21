@@ -2830,6 +2830,47 @@
             </StackPanel>
           </Border>
 
+          <!-- Pokazanie jednej osobie — to samo, co na karcie wydarzenia, bo po stronie
+               Google jest to dokładnie to samo wydarzenie. Zadanie z godziną ma tam swoje
+               odbicie; różnica jest wyłącznie u nas, w tym, którą kartą się otwiera.
+
+               Widoczne dopiero wtedy, gdy odbicie istnieje. Zadanie bez godziny nie ma
+               po tamtej stronie czego pokazać, a przycisk kończący się odmową jest gorszy
+               od jego braku. -->
+          <StackPanel IsVisible="{Binding CanShowToPerson}" Margin="0,14,0,0" Spacing="4">
+            <TextBlock Classes="label" Text="Pokaż osobie" />
+
+            <ItemsControl ItemsSource="{Binding Calendar.People}"
+                          IsVisible="{Binding Calendar.HasPeople}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="dk:Contact">
+                  <Button Classes="nav" Margin="0,0,4,4" Content="{Binding Name}"
+                          Command="{Binding $parent[ItemsControl].((vm:TaskDetailViewModel)DataContext).Calendar.ShowPersonCommand}"
+                          CommandParameter="{Binding}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox Grid.Column="0" Watermark="adres e-mail"
+                       ti:TextInputOptions.AutoCapitalization="False"
+                       ti:TextInputOptions.ContentType="Email"
+                       Text="{Binding Calendar.NewPerson}" />
+              <Button Grid.Column="1" Classes="nav" Margin="4,0,0,0" Content="Pokaż"
+                      Command="{Binding Calendar.AddPersonCommand}" />
+            </Grid>
+
+            <TextBlock Classes="hint" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Ostrzezenie}"
+                       Text="{Binding Calendar.OpenedProblem}"
+                       IsVisible="{Binding Calendar.HasOpenedProblem}" />
+          </StackPanel>
+
         </StackPanel>
       </ScrollViewer>
       </DockPanel>
