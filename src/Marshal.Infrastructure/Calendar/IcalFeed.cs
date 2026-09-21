@@ -34,10 +34,19 @@ public sealed class IcalFeed(HttpClient http) : ICalendarFeed
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        var content = await http.GetStringAsync(source.ExternalId, ct);
+        // Powód awarii idzie na ekran pod kalendarzem, więc musi być zdaniem. Bez tego
+        // kanał z literówką w adresie mówił tyle samo, co kanał odcięty przez sieć.
+        try
+        {
+            var content = await http.GetStringAsync(source.ExternalId, ct);
 
-        return new FeedResult(
-            Parse(content, DateTime.UtcNow), SyncToken: null, IsFull: true, ParseColor(content));
+            return new FeedResult(
+                Parse(content, DateTime.UtcNow), SyncToken: null, IsFull: true, ParseColor(content));
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            throw new InvalidOperationException(FeedTrouble.Say(e), e);
+        }
     }
 
     /// <summary>

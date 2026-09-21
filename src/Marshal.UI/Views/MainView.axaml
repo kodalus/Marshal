@@ -974,6 +974,12 @@
               <Button Classes="nav" Command="{Binding ShowThreeDaysCommand}" Content="3 dni" />
               <Button Classes="nav" Command="{Binding ShowWeekCommand}" Content="tydzień" />
               <Button Classes="nav" Command="{Binding ShowMonthCommand}" Content="miesiąc" />
+              <!-- Data w tej samej linii, co przyciski zakresu. Stała pod nimi we własnym
+                   wierszu i odpowiadała na to samo pytanie, co one — „na co patrzę" —
+                   tyle że o wiersz niżej. Obok nich czyta się to jednym spojrzeniem:
+                   zakres i jego daty są jedną wiadomością, nie dwiema. -->
+              <TextBlock Classes="hint" Margin="12,0,0,0" VerticalAlignment="Center"
+                         Text="{Binding Range}" />
             </StackPanel>
 
             <ComboBox MinWidth="0" HorizontalAlignment="Stretch"
@@ -983,12 +989,11 @@
           </Panel>
           <Button Grid.Column="4" Classes="nav" Command="{Binding FetchCommand}" Content="Pobierz" />
         </Grid>
-        <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}" />
-        <!-- Pusta siatka ma trzy przyczyny wyglądające tak samo. Ta linijka je rozdziela.
-             Na telefonie schowana: to linijka do diagnozy, a tam zabiera dwa wiersze nad
-             kalendarzem i odpowiada na pytanie, którego się przy telefonie nie zadaje. -->
-        <TextBlock Classes="hint" Margin="2,2,0,0" Text="{Binding Summary}"
-                   IsVisible="{Binding ShowSummary}" />
+        <!-- Osobny wiersz na daty **tylko na telefonie**: tam w linii zakresu stoi pole
+             wyboru rozciągnięte na całą szerokość i nie ma obok czego dopisać. Na
+             pulpicie daty stoją przy przyciskach zakresu i tu nie ma ich po co powtarzać. -->
+        <TextBlock Classes="hint" Margin="2,6,0,0" Text="{Binding Range}"
+                   IsVisible="{Binding ShowRangePicker}" />
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                    Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
 
@@ -2327,7 +2332,10 @@
                 Command="{Binding AddAreaCommand}" Content="Dodaj obszar" />
       </Grid>
 
-      <ListBox ItemsSource="{Binding ProjectRows}">
+      <!-- Dwuklik na wierszu schodzi na jego zadania. Pojedyncze kliknięcie zostaje
+           zaznaczeniem, bo to od niego zaczyna się i barwa, i menu podręczne; drugie
+           kliknięcie jest gestem „wejdź w to", tym samym, co wszędzie indziej. -->
+      <ListBox ItemsSource="{Binding ProjectRows}" DoubleTapped="OnProjectRow">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:ProjectTreeRow">
             <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,5">

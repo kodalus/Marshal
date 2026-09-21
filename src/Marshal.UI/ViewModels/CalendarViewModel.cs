@@ -357,17 +357,6 @@ public sealed partial class CalendarViewModel(
     [ObservableProperty]
     public partial string? Problem { get; set; }
 
-    /// <summary>
-    /// Co jest w bazie, a co w tym zakresie.
-    /// </summary>
-    /// <remarks>
-    /// Pusta siatka ma trzy różne przyczyny — nic nie pobrano, pobrano nie na te dni,
-    /// albo pobrano i nie narysowano — a wyglądają identycznie. Ta jedna linijka
-    /// rozdziela je bez zgadywania i bez kabla.
-    /// </remarks>
-    [ObservableProperty]
-    public partial string Summary { get; set; } = string.Empty;
-
     public ObservableCollection<CalendarColumn> Columns { get; } = [];
 
     /// <summary>
@@ -470,18 +459,6 @@ public sealed partial class CalendarViewModel(
     /// przy pierwszym rysowaniu lepiej pokazać za dużo niż schować coś na stałe.
     /// </remarks>
     private bool Narrow => _available > 0 && _available < 720;
-
-    /// <summary>
-    /// Czy pokazywać linijkę „w bazie tyle, na tych dniach tyle".
-    /// </summary>
-    /// <remarks>
-    /// Na telefonie nie. Jest to linijka do diagnozy — rozdziela trzy przyczyny pustej
-    /// siatki, które wyglądają tak samo — a na wąskim ekranie zajmuje dwa wiersze nad
-    /// kalendarzem i odpowiada na pytanie, którego się przy telefonie nie zadaje.
-    /// Na komputerze zostaje, bo tam wysokość nie jest towarem deficytowym i bo to
-    /// tam się siada, gdy coś naprawdę nie gra.
-    /// </remarks>
-    public bool ShowSummary => !Narrow;
 
     /// <summary>
     /// Czy zakres wybiera się przyciskami, czy polem wyboru.
@@ -681,7 +658,6 @@ public sealed partial class CalendarViewModel(
         }
 
         OnPropertyChanged(nameof(ColumnWidth));
-        OnPropertyChanged(nameof(ShowSummary));
         OnPropertyChanged(nameof(ShowRangeButtons));
         OnPropertyChanged(nameof(ShowRangePicker));
 
@@ -968,9 +944,6 @@ public sealed partial class CalendarViewModel(
         var inDb = await calendar.StoredEventCountAsync();
         var onGrid = _days.Sum(d => d.AllDay.Count + d.Timed.Count);
 
-        Summary = $"W bazie {inDb}, na tych dniach {onGrid}. "
-            + $"Godziny w strefie {calendar.ZoneName}.";
-
         // Zła strefa przesuwa wszystko naraz i wygląda przez to jak źle pobrane dane.
         // Nie nadpisujemy kłopotu z pobierania — ten jest świeższy i bardziej konkretny.
         if (Problem is null && calendar.ZoneProblem is { } trouble)
@@ -1038,12 +1011,59 @@ public sealed partial class CalendarViewModel(
     {
         var report = await calendar.RefreshAsync();
 
-        Problem = report.Failed > 0
-            ? $"Nie udało się odświeżyć {report.Failed} z {report.Failed + report.Sources} kalendarzy."
-            : null;
+        Tell(report);
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Wynik pobierania powiedziany na ekranie — <b>z powodami</b>, nie samą liczbą.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// „Nie udało się odświeżyć 4 z 16 kalendarzy" nie mówi ani które, ani dlaczego,
+    /// ani co z tym zrobić — a to jedyne trzy pytania, jakie się przy tym napisie
+    /// zadaje. Przy szesnastu podłączeniach nie da się nawet zgadnąć: cztery nazwy
+    /// spośród szesnastu to za dużo, żeby sprawdzać je po kolei.
+    /// </para>
+    /// <para>
+    /// Powody niosły się dotąd wyłącznie do dziennika — czyli tam, gdzie trzeba było
+    /// wiedzieć, że się je znajdzie. Raport ma je od początku; brakowało jednego
+    /// miejsca, które składa z nich napis, zamiast dwóch miejsc liczących to samo.
+    /// </para>
+    /// <para>
+    /// Powtórzone odpada: jedna odpowiedź Google potrafi dotyczyć kilku kalendarzy
+    /// z tego samego konta, a cztery identyczne linijki wyglądają jak cztery różne
+    /// kłopoty. Nazwa kalendarza stoi na początku każdego powodu, więc naprawdę
+    /// identyczne są tylko te, które mówią o tym samym.
+    /// </para>
+    /// <para>
+    /// Milczy, gdy nic nie próbowano: przebieg bez wymuszania pomija kalendarze świeższe
+    /// niż odstęp odświeżania i wraca z zerem porażek na zerze prób. Zdanie „udało się"
+    /// zdjęłoby wtedy ostrzeżenie sprzed minuty, którego nikt nie odwołał.
+    /// </para>
+    /// </remarks>
+    public void Tell(CalendarRefreshReport report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        if (report.Sources + report.Failed == 0)
+        {
+            return;
+        }
+
+        var reasons = report.Problems
+            .Distinct(StringComparer.Ordinal)
+            .Select(reason => $"• {reason}");
+
+        Problem = report.Failed == 0
+            ? null
+            : string.Join(
+                Environment.NewLine,
+                reasons.Prepend(
+                    $"Nie udało się odświeżyć {report.Failed} "
+                        + $"z {report.Failed + report.Sources} kalendarzy:"));
 
         OnPropertyChanged(nameof(HasProblem));
-        await RefreshAsync();
     }
 
     /// <summary>
@@ -1055,9 +1075,7 @@ public sealed partial class CalendarViewModel(
     {
         var report = await calendar.RefreshAsync(force: true);
 
-        Problem = report.Failed > 0
-            ? $"Nie udało się odświeżyć {report.Failed} z {report.Failed + report.Sources} kalendarzy."
-            : null;
+        Tell(report);
 
         await log.RecordAsync(
             "Kalendarz: pobranie",
@@ -1066,7 +1084,6 @@ public sealed partial class CalendarViewModel(
             report.Failed > 0 ? ActivityLevel.Problem : ActivityLevel.Ok,
             string.Join(Environment.NewLine, report.Problems.Distinct()));
 
-        OnPropertyChanged(nameof(HasProblem));
         await RefreshAsync();
     }
 

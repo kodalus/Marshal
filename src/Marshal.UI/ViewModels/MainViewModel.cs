@@ -788,6 +788,11 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var report = await _calendars.RefreshAsync();
 
+        // Ten sam napis, co po naciśnięciu „Pobierz". Bez tego nieudane podłączenie
+        // milczało dopóki się go ręcznie nie pobrało — a to jest właśnie ten przebieg,
+        // który chodzi sam i wie o kłopocie pierwszy.
+        Calendar.Tell(report);
+
         if (report.Events > 0 || report.Folded > 0)
         {
             await ReloadAsync();
@@ -1415,6 +1420,23 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Filters;
         await Filters.LoadAsync();
+    }
+
+    /// <summary>
+    /// Zadania wskazanego obszaru albo projektu — dwuklik w drzewie.
+    /// </summary>
+    /// <remarks>
+    /// Drzewo odpowiada na pytanie „jak to jest poukładane", a nie „co w tym jest".
+    /// Druga odpowiedź mieszka na filtrach i do dziś trzeba było ją tam ustawić ręką,
+    /// mimo że wiersz, w który się właśnie kliknęło, wiedział wszystko, czego do niej
+    /// potrzeba.
+    /// </remarks>
+    public async Task ShowScopeTasksAsync(ProjectTreeRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        Current = Screen.Filters;
+        await Filters.ShowScopeAsync(row.Id, row.IsArea);
     }
 
     /// <summary>Kalendarz godzinowy — wydarzenia i zadania na jednej siatce.</summary>

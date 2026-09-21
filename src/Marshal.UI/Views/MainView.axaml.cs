@@ -1775,6 +1775,31 @@ public partial class MainView : UserControl
             .FirstOrDefault();
 
     /// <summary>
+    /// Dwuklik na obszarze albo projekcie — jego zadania na liście.
+    /// </summary>
+    /// <remarks>
+    /// Na liście, a nie na samym wierszu: wiersz jest szablonem powtórzonym kilkanaście
+    /// razy, a podpięcie zdarzenia w szablonie znaczy tyle samo podpięć. Wiersz spod
+    /// wskaźnika bierze się z tego, co zdarzenie niesie ze sobą — tak samo, jak przy
+    /// menu podręcznym.
+    ///
+    /// Kwadracik barwy zatrzymuje swoje kliknięcia wcześniej, więc dwuklik w niego
+    /// otwiera paletę i nie schodzi przy okazji na zadania.
+    /// </remarks>
+    private void OnProjectRow(object? sender, TappedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || e.Source is not Control source
+            || Row(source) is not { } row)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _ = Try("Projekty: zadania wiersza", () => model.ShowScopeTasksAsync(row));
+    }
+
+    /// <summary>
     /// Kliknięcie w kwadracik barwy — paleta od razu, bez prawego przycisku.
     /// </summary>
     /// <remarks>

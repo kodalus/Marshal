@@ -173,6 +173,51 @@ public sealed partial class FiltersViewModel : ObservableObject
         await RunAsync();
     }
 
+    /// <summary>
+    /// Zadania jednego obszaru albo projektu — wejście z drzewa projektów.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Drzewo pokazuje strukturę, a nie treść: widać z niego, że obszar „Dom" ma cztery
+    /// projekty, ale nie widać ani jednego zadania. Żeby je zobaczyć, trzeba było wejść
+    /// na filtry i ustawić ręką to samo, co się przed chwilą kliknęło.
+    /// </para>
+    /// <para>
+    /// Filtr, a nie osobny ekran z listą: to samo pytanie, na które filtry już
+    /// odpowiadają, a przy okazji wszystko, co ekran filtrów umie — dołożenie stanu,
+    /// wagi czy terminu do tego, co się właśnie otworzyło, i zapisanie tego jako widoku,
+    /// jeżeli się do niego wraca.
+    /// </para>
+    /// <para>
+    /// Warunki czyszczone do jednego. Dołożenie obszaru do tego, co akurat zostało po
+    /// poprzednim szukaniu, dawałoby pustą listę przy pełnym obszarze — i wyglądałoby
+    /// na to, że w obszarze nic nie ma. Stany zostają puste, więc lista pokazuje
+    /// wszystko poza zrobionym i wyrzuconym: to jest pytanie „co tu jest do zrobienia".
+    /// </para>
+    /// </remarks>
+    /// <param name="area">Czy wskazano obszar; w przeciwnym razie projekt.</param>
+    public async Task ShowScopeAsync(Guid id, bool area)
+    {
+        // Najpierw wczytanie, bo wybór bierze się z tych właśnie list: obszar założony
+        // przed chwilą nie byłby jeszcze w żadnej z nich.
+        await LoadAsync();
+
+        _loading = true;
+        Clear();
+
+        if (area)
+        {
+            Area = Areas.FirstOrDefault(scope => scope.Id == id) ?? ScopeChoice.Any;
+        }
+        else
+        {
+            Project = Projects.FirstOrDefault(scope => scope.Id == id) ?? ScopeChoice.Any;
+        }
+
+        _loading = false;
+        await RunAsync();
+    }
+
     /// <summary>Warunki złożone z tego, co w tej chwili włączone.</summary>
     public FilterQuery Build()
     {

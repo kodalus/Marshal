@@ -37,15 +37,25 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     {
         ArgumentNullException.ThrowIfNull(source);
 
+        // Dwa opakowania, bo to dwie różne rzeczy. Wewnętrzne rozpoznaje przeterminowany
+        // żeton i czyta od nowa; zewnętrzne tłumaczy **każdą** pozostałą awarię na zdanie,
+        // bo ten tekst idzie na ekran pod kalendarzem, a nie tylko do dziennika.
         try
         {
-            return await ReadAsync(source, syncToken, ct);
+            try
+            {
+                return await ReadAsync(source, syncToken, ct);
+            }
+            catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Gone)
+            {
+                // Żeton przeterminowany. Czytamy od nowa — i to jest jedyna droga, bo Google
+                // nie umie powiedzieć, co się zmieniło od chwili, której już nie pamięta.
+                return await ReadAsync(source, syncToken: null, ct);
+            }
         }
-        catch (GoogleApiException e) when (e.HttpStatusCode == HttpStatusCode.Gone)
+        catch (Exception e) when (e is not OperationCanceledException)
         {
-            // Żeton przeterminowany. Czytamy od nowa — i to jest jedyna droga, bo Google
-            // nie umie powiedzieć, co się zmieniło od chwili, której już nie pamięta.
-            return await ReadAsync(source, syncToken: null, ct);
+            throw new InvalidOperationException(FeedTrouble.Say(e), e);
         }
     }
 
