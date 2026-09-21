@@ -628,11 +628,11 @@ public sealed class TodayWidget : AppWidgetProvider
             {
                 toWindow.PutExtra(MainActivity.TaskExtra, task);
             }
-            else if (intent.GetStringExtra(SourceExtra) is { Length: > 0 } source
-                && intent.GetStringExtra(EventExtra) is { Length: > 0 } external)
+            else if (intent.GetStringExtra(SourceExtra) is { Length: > 0 } calendar
+                && intent.GetStringExtra(EventExtra) is { Length: > 0 } entry)
             {
-                toWindow.PutExtra(MainActivity.SourceExtra, source);
-                toWindow.PutExtra(MainActivity.EventExtra, external);
+                toWindow.PutExtra(MainActivity.SourceExtra, calendar);
+                toWindow.PutExtra(MainActivity.EventExtra, entry);
 
                 // Dzień niesie wiersz, a nie liczymy go tutaj. Wydarzenie nie ma swojej
                 // daty po naszej stronie, a kafelek pokazuje dowolny dzień — ten, pod
