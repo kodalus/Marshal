@@ -2341,8 +2341,57 @@ public partial class MainView : UserControl
     /// <summary>Zapas na suwak i odstęp między kolumnami.</summary>
     private const double Capacity = 14;
 
-    private void OnWidthChange(object? sender, SizeChangedEventArgs e) =>
+    private void OnWidthChange(object? sender, SizeChangedEventArgs e)
+    {
         SetWidth(e.NewSize.Width);
+        Remeasure();
+    }
+
+    /// <summary>
+    /// Przeliczenie pasków przewijanych w bok po zmianie szerokości okna.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Objaw: po zmaksymalizowaniu okna nazwy dni i pasek całodniowy urywały się
+    /// w połowie czwartej kolumny, a siatka pod nimi miała komplet siedmiu. Kolumny
+    /// nagłówków miały przy tym **nową**, szeroką miarę — urywały się dokładnie tam,
+    /// gdzie kończyła się szerokość okna sprzed zmaksymalizowania.
+    /// </para>
+    /// <para>
+    /// Czyli: zawartość paska przemierzyła się na nowo, ale jej miejsce zostało stare.
+    /// Siedem wąskich kolumn zajmowało tyle, co trzy szerokie — i do tylu właśnie była
+    /// przycięta. Siatka tego nie miała, bo jej pasek przewijania jest wyliczany
+    /// („Auto"), a paski nagłówków i podglądów mają go schowanego na stałe; to dwie
+    /// różne drogi przez układanie i tylko jedna z nich dostawała nową szerokość.
+    /// </para>
+    /// <para>
+    /// Unieważnienie zawartości, a nie samego paska: to zawartość ma złe miejsce.
+    /// Miara idzie w górę sama, więc jedno wywołanie pociąga za sobą oba przebiegi —
+    /// i dzieje się to wyłącznie przy zmianie rozmiaru okna, czyli kilka razy na dzień.
+    /// </para>
+    /// <para>
+    /// Podglądy sąsiednich zakresów tą samą drogą. Są niewidoczne poza przejechaniem
+    /// palcem, więc ich przycięcia nie widać, dopóki nie przejedzie się po
+    /// zmaksymalizowaniu okna — a wtedy sąsiedni tydzień pokazałby się obcięty.
+    /// </para>
+    /// </remarks>
+    private void Remeasure()
+    {
+        Afresh(_headings);
+        Afresh(_gridBefore);
+        Afresh(_gridAfter);
+
+        static void Afresh(ScrollViewer? strip)
+        {
+            if (strip?.Content is not Control inside)
+            {
+                return;
+            }
+
+            inside.InvalidateMeasure();
+            inside.InvalidateArrange();
+        }
+    }
 
     /// <summary>
     /// Przesuwanie kreski bieżącej godziny.
