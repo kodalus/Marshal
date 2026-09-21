@@ -34,6 +34,9 @@ jobs:
       - name: Aliasy przestrzeni nazw w XAML-u
         run: ./tools/check-aliases.sh
 
+      - name: Ikony zgodne ze swoim źródłem
+        run: ./tools/check-icons.sh
+
       - name: Odtworzenie pakietów
         run: |
           dotnet restore src/Marshal.Desktop/Marshal.Desktop.csproj

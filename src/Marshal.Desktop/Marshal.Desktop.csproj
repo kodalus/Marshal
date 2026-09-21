@@ -24,8 +24,15 @@
     <RootNamespace>Marshal.Desktop</RootNamespace>
 
     <!-- Ikona pliku wykonywalnego. Osobno od ikony okna: pierwszą pokazuje pulpit
-         i pasek zadań, zanim aplikacja w ogóle wstanie, drugą rysuje sama aplikacja. -->
-    <ApplicationIcon>marshal.ico</ApplicationIcon>
+         i pasek zadań, zanim aplikacja w ogóle wstanie, drugą rysuje sama aplikacja.
+
+         **Ten sam plik**, co ikona okna, a nie kopia obok. Kopia leżała tutaj i została
+         w tyle: znak przerysowano, ikona okna i ikona Androida pojechały za nim,
+         bo rysuje je „tools/ikona.py", a ta jedna nie — bo skrypt o niej nie wiedział.
+         Na pulpicie i w pasku zadań siedział przez to stary znak, i to w miejscu,
+         w które patrzy się najczęściej. Dwa pliki na jeden znak nie mają jak zostać
+         zgodne; jeden nie ma jak się rozejść. -->
+    <ApplicationIcon>..\Marshal.UI\Assets\marshal.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
