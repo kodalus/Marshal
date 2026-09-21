@@ -228,6 +228,7 @@ public sealed class RecurrenceScheduleTests
             RecurrenceKind.Weekly, daysOfWeek: Weekdays.Wednesday | Weekdays.Friday);
 
         RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Select(s => s.Date)
             .Should().Equal(
                 D("2026-09-18"), D("2026-09-23"), D("2026-09-25"), D("2026-09-30"));
     }
@@ -239,6 +240,7 @@ public sealed class RecurrenceScheduleTests
         var rule = new RecurrenceRule(RecurrenceKind.Daily, count: 3);
 
         RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Select(s => s.Date)
             .Should().Equal(D("2026-09-17"), D("2026-09-18"));
     }
 
@@ -248,6 +250,7 @@ public sealed class RecurrenceScheduleTests
         var rule = new RecurrenceRule(RecurrenceKind.Daily, until: D("2026-09-18"));
 
         RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Select(s => s.Date)
             .Should().Equal(D("2026-09-17"), D("2026-09-18"));
     }
 
@@ -270,6 +273,7 @@ public sealed class RecurrenceScheduleTests
         var rule = new RecurrenceRule(RecurrenceKind.Monthly, dayOfMonth: 31);
 
         RecurrenceSchedule.Following(rule, D("2026-01-31"), D("2026-04-30"))
+            .Select(s => s.Date)
             .Should().Equal(D("2026-02-28"), D("2026-03-31"), D("2026-04-30"));
     }
 

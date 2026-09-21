@@ -391,9 +391,10 @@ public sealed class RecurrenceRunnerTests
 
         var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel);
 
+        // Zastosowana zmiana odpada razem ze swoim dniem; zostaje ta, która jeszcze przed.
         next!.Recurrence!.Changes
             .Select(z => z.Date)
-            .Should().Equal(D("2026-09-20"), "zastosowana zmiana odpada razem z jej dniem");
+            .Should().Equal(D("2026-09-20"));
     }
 
     [Fact]
