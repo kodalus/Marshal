@@ -578,6 +578,70 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Zapis_karty_nie_przepisuje_na_rytm_wyjatku_z_siatki()
+    {
+        // Karta pokazuje porę i długość **tego wystąpienia**, a po przeciągnięciu po
+        // siatce bywają one inne niż w serii. Zapis karty — choćby po poprawieniu samego
+        // tytułu — przepisywał je na cały rytm, czyli cofał to, co siatka właśnie zrobiła.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var clock = NewService<IClock>();
+
+        task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
+        task.SetEstimate(480, task.Energy, hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Workdays), hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        // Siatka: dziś zaczynam o dziesiątej.
+        await NewService<TaskEditService>()
+            .RescheduleAsync(task.Id, clock.Today, new TimeOnly(10, 0));
+
+        var tasks = NewService<ITaskRepository>();
+        var detail = NewService<TaskDetailViewModel>();
+
+        await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
+        detail.Title = "Praca zdalna";
+
+        await detail.SaveAsync();
+
+        var saved = await tasks.FindAsync(task.Id);
+
+        saved!.Title.Should().Be("Praca zdalna");
+        saved.DoTime.Should().Be(new TimeOnly(10, 0), "to wystąpienie zostaje o dziesiątej");
+        saved.Recurrence!.Time.Should().Be(new TimeOnly(9, 0), "rytm zostaje przy dziewiątej");
+    }
+
+    [Fact]
+    public async Task Pora_ruszona_w_karcie_jest_decyzja_o_calej_serii()
+    {
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+
+        task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(
+                RecurrenceKind.Weekly, daysOfWeek: Weekdays.Workdays, time: new TimeOnly(9, 0)),
+            hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var tasks = NewService<ITaskRepository>();
+        var detail = NewService<TaskDetailViewModel>();
+
+        await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
+        detail.DoTime = new TimeSpan(11, 0, 0);
+
+        await detail.SaveAsync();
+
+        var saved = await tasks.FindAsync(task.Id);
+
+        saved!.DoTime.Should().Be(new TimeOnly(11, 0));
+        saved.Recurrence!.Time.Should().Be(new TimeOnly(11, 0), "w karcie mówi się o serii");
+    }
+
+    [Fact]
     public async Task Dlugosc_jednej_zapowiedzi_zapisuje_sie_przy_jej_dniu()
     {
         var task = await ZaplanowaneAsync("Praca");

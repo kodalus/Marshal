@@ -391,6 +391,24 @@ public sealed partial class TaskDetailViewModel(
     /// <summary>Zmiany pojedynczych wystąpień wczytanego rytmu. Karta ich nie rusza.</summary>
     private IReadOnlyList<RecurrenceChange> _changes = [];
 
+    /// <summary>
+    /// Pora i długość <b>serii</b>, tak jak stały w regule przy otwarciu karty.
+    /// </summary>
+    /// <remarks>
+    /// Karta pokazuje porę i długość <b>tego wystąpienia</b>, a od przeciągnięcia po
+    /// siatce bywają one inne niż w serii. Bez zapamiętania tych dwóch wartości każdy
+    /// zapis karty — także poprawienie samego tytułu — przepisywałby wyjątek jednego dnia
+    /// na cały rytm. Do reguły idą stąd tylko wtedy, gdy pola w karcie zostały ruszone.
+    /// </remarks>
+    private TimeOnly? _rhythmTime;
+
+    private int? _rhythmMinutes;
+
+    /// <summary>Pora i długość wystąpienia przy otwarciu karty — do rozpoznania zmiany.</summary>
+    private TimeSpan? _openedTime;
+
+    private decimal? _openedMinutes;
+
     private RecurrenceKind? Rhythm => SelectedRepeat?.Kind;
 
     private Priority Weight => SelectedPriority?.Value ?? Priority.None;
@@ -520,6 +538,8 @@ public sealed partial class TaskDetailViewModel(
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
         EstimatedMinutes = task.EstimatedMinutes;
         DoTime = task.DoTime?.ToTimeSpan();
+        _openedTime = DoTime;
+        _openedMinutes = EstimatedMinutes;
         // Projekt ma pierwszeństwo przed samym obszarem: gdy zadanie należy do projektu,
         // wskazanie na obszar mówiłoby mniej, niż aplikacja wie — i zapis odpiąłby projekt.
         SelectedPlacement =
@@ -589,6 +609,8 @@ public sealed partial class TaskDetailViewModel(
         // a nie „co się stanie z tą jedną środą"; złożenie reguły od nowa bez nich
         // kasowałoby je przy każdym zapisie czegokolwiek innego.
         _changes = rule?.Changes ?? [];
+        _rhythmTime = rule?.Time;
+        _rhythmMinutes = rule?.Minutes;
 
         var days = rule?.DaysOfWeek ?? Weekdays.None;
         Monday = days.Includes(DayOfWeek.Monday);
@@ -974,12 +996,16 @@ public sealed partial class TaskDetailViewModel(
                 count,
                 _changes,
 
-                // Długość i pora wpisane w karcie są decyzją o **całej serii**: tu
-                // odpowiada się na pytanie, czym rzecz jest. Przeciągnięcie bloku po
-                // siatce dotyczy jednego dnia i reguły nie rusza — to są dwie różne
-                // czynności i dlatego mają dwie różne drogi.
-                EstimatedMinutes is { } length ? (int)length : null,
-                DoTime is { } hour ? TimeOnly.FromTimeSpan(hour) : null);
+                // Długość i pora **ruszone w karcie** są decyzją o całej serii: tu
+                // odpowiada się na pytanie, czym rzecz jest. Nietknięte zostawiają serię
+                // przy swoim — inaczej poprawienie samego tytułu przepisywałoby na rytm
+                // wyjątek jednego dnia, zrobiony przeciągnięciem po siatce.
+                EstimatedMinutes == _openedMinutes
+                    ? _rhythmMinutes ?? (EstimatedMinutes is { } was ? (int)was : null)
+                    : EstimatedMinutes is { } length ? (int)length : null,
+                DoTime == _openedTime
+                    ? _rhythmTime ?? (DoTime is { } stood ? TimeOnly.FromTimeSpan(stood) : null)
+                    : DoTime is { } hour ? TimeOnly.FromTimeSpan(hour) : null);
         }
         catch (ArgumentException)
         {
