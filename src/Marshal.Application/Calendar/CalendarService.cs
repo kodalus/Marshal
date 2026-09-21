@@ -955,9 +955,35 @@ public sealed class CalendarSyncService(
         // — wpis nie znika więc po cichu, tylko czeka na skutek.
         var mirrors = (await tasks.MirroredEventIdsAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
-        foreach (var ev in await store.EventsAsync(start, end, ct))
+        // Ten sam wpis potrafi dojść dwiema drogami: kalendarz widziany z dwóch kont
+        // albo raz podłączony wprost, a raz jako udostępniony. Podłączenia są wtedy
+        // naprawdę różne — inne konto, inny wiersz — więc składanie powtórzonych
+        // podłączeń ich nie łączy i słusznie. Wpis jest jednak jeden i narysowany dwa
+        // razy wygląda na dwa spotkania o tej samej porze; przy zadaniu udostępnionym
+        // jedna kopia nosiła barwę obszaru, a druga nie, więc wyglądało to na dwie
+        // różne rzeczy o tej samej nazwie.
+        //
+        // Klucz to identyfikator u źródła. Google nadaje go raz na wydarzenie i ten sam
+        // wraca w każdym kalendarzu, w którym ono stoi; kolejne wystąpienia rytmu mają
+        // własne identyfikatory, więc powtórzeń tygodniowych to nie dotyczy.
+        //
+        // Zostaje kopia z kalendarza, który ma przypisany obszar: niesie barwę i miejsce,
+        // czyli mówi więcej niż ta sama rzecz bez przypisania.
+        var drawn = new HashSet<string>(StringComparer.Ordinal);
+
+        var reachable = (await store.EventsAsync(start, end, ct))
+            .OrderByDescending(e => calendarAreas.ContainsKey(e.SourceId));
+
+        foreach (var ev in reachable)
         {
             if (mirrors.Contains(ev.ExternalId))
+            {
+                continue;
+            }
+
+            // Pusty identyfikator nie jest tożsamością: zbity w jeden klucz złożyłby
+            // wszystkie takie wpisy w jeden, a to już nie jest odsiewanie powtórzeń.
+            if (ev.ExternalId.Length > 0 && !drawn.Add(ev.ExternalId))
             {
                 continue;
             }

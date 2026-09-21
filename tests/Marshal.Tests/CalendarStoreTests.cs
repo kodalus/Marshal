@@ -1181,6 +1181,52 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Ten sam wpis widziany przez dwa podłączenia rysuje się raz.
+    /// </summary>
+    /// <remarks>
+    /// Kalendarz udostępniony bywa podłączony dwa razy — raz z jednego konta, raz
+    /// z drugiego. To są naprawdę dwa różne podłączenia, więc składanie powtórzonych
+    /// ich nie łączy; wpis jest jednak jeden. Narysowany dwa razy wygląda na dwa
+    /// spotkania o tej samej porze, a gdy jedno z podłączeń ma przypisany obszar,
+    /// a drugie nie — na dwie różne rzeczy o tej samej nazwie.
+    /// </remarks>
+    [Fact]
+    public async Task Ten_sam_wpis_z_dwoch_podlaczen_rysuje_sie_raz()
+    {
+        // Z **innego konta**, bo inaczej składanie powtórzonych podłączeń odrzuciłoby
+        // to drugie jako duplikat — i słusznie: ten sam kalendarz na tym samym koncie
+        // podłączony dwa razy to jedno podłączenie za dużo. Tu chodzi o przypadek,
+        // w którym oba podłączenia są prawdziwe, a powtórzony jest sam wpis.
+        var drugie = new CalendarSource(
+            Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
+            CalendarKind.Ical, "https://example.test/kanal.ics", "Przedszkole (drugie konto)",
+            account: "sylw@example.test");
+
+        _db.CalendarSources.Add(drugie);
+
+        // Obszar wskazuje **drugie** podłączenie, żeby było widać, że zostaje to
+        // z obszarem, a nie po prostu pierwsze z brzegu.
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        area.SetCalendar(drugie.Id, _hlc.Next());
+        _db.Areas.Add(area);
+        _db.SaveChanges();
+
+        _feed.Next = new FeedResult(
+            [NewEvent("s1", "Wywiadówka", Today.ToString("yyyy-MM-dd"), 17, 18)],
+            SyncToken: null, IsFull: true);
+
+        await _service.RefreshAsync(force: true);
+
+        var timed = (await _service.AgendaAsync(Today, 1))[0].Timed
+            .Select(s => s.Entry)
+            .Where(e => e.Title == "Wywiadówka")
+            .ToList();
+
+        timed.Should().ContainSingle("wpis jest jeden, choć doszedł dwiema drogami");
+        timed[0].SourceId.Should().Be(drugie.Id, "zostaje kopia z kalendarza, który ma obszar");
+    }
+
+    /// <summary>
     /// Wydarzenie z kalendarza tylko do odczytu nie dostaje kwadracika na kafelku.
     /// </summary>
     /// <remarks>
