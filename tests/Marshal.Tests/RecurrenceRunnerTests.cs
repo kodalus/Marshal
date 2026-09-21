@@ -450,6 +450,22 @@ public sealed class RecurrenceRunnerTests
     }
 
     [Fact]
+    public void Wyprzedzenia_bierze_sie_z_rytmu_a_nie_z_wystapienia()
+    {
+        // Przypomnienie jest cechą rytmu: seria mówi „pół godziny wcześniej" i to ona
+        // rozstrzyga, a nie to, co akurat niesie wystąpienie schodzące ze sceny.
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(RecurrenceKind.Daily, leads: [30]));
+
+        task.SetDoTime(new TimeOnly(19, 0), Stempel());
+        task.SetReminderLeads([5], Stempel());
+
+        RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel)!
+            .ReminderLeads.Should().Equal(30);
+    }
+
+    [Fact]
     public void Nastepnik_niesie_przypomnienia_poprzednika()
     {
         // Przypomnienie z własną chwilą przesuwa się o tyle dni, ile dzieli wystąpienia:

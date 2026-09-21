@@ -426,12 +426,13 @@ public sealed class TaskItem : Entity
             // właśnie schodzi ze sceny.
             DoTime = at ?? rule.Time ?? DoTime,
 
-            // Wyprzedzenia przechodzą **bez przeliczania**: liczą się od godziny samego
-            // wystąpienia, więc „dziesięć minut przed" znaczy to samo w każdym kolejnym.
-            // Do dziś nie przechodziły wcale i był to błąd widoczny dopiero za tydzień:
-            // pierwsze wystąpienie odzywało się, a następne już nie — bo powstawało
-            // z pustą listą wyprzedzeń i nie miało z czego policzyć żadnej chwili.
-            ReminderLeadsCsv = ReminderLeadsCsv,
+            // Wyprzedzenia z rytmu, a gdy ich tam nie ma — z wystąpienia, które właśnie
+            // schodzi ze sceny. Kolejność jak przy porze i długości: seria mówi pierwsza,
+            // a droga przez poprzednika zostaje dla rytmów założonych, zanim reguła
+            // umiała nieść przypomnienie.
+            ReminderLeadsCsv = rule.Leads.Count > 0
+                ? string.Join(',', rule.Leads)
+                : ReminderLeadsCsv,
         };
 
         // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"

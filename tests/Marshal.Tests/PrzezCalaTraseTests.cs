@@ -720,6 +720,36 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Przypomnienie_wpisane_w_karcie_jest_cecha_rytmu()
+    {
+        // Trasa: pola wyprzedzeń w karcie → reguła → JSON → odczyt → kolejne wystąpienie.
+        // Bez reguły przypomnienie szło łańcuchem kopii z wystąpienia na wystąpienie,
+        // a łańcuch kopii gubi się bezpowrotnie na pierwszym pękniętym ogniwie.
+        var task = await ZaplanowaneAsync("Praca");
+
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
+        detail.DoTime = new TimeSpan(9, 0, 0);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
+
+        foreach (var lead in detail.Leads.Where(w => w.Minutes is 30))
+        {
+            lead.IsChecked = true;
+        }
+
+        await detail.SaveAsync();
+
+        var tasks = NewService<ITaskRepository>();
+        var saved = await tasks.FindAsync(task.Id);
+
+        saved!.Recurrence!.Leads.Should().Contain(30, "rytm niesie przypomnienie");
+
+        var next = await NewService<TaskEditService>().CompleteAsync(task.Id);
+
+        next!.ReminderLeads.Should().Contain(30, "i oddaje je kolejnemu wystąpieniu");
+    }
+
+    [Fact]
     public async Task Dlugosc_jednej_zapowiedzi_zapisuje_sie_przy_jej_dniu()
     {
         var task = await ZaplanowaneAsync("Praca");

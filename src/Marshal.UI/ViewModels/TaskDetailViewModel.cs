@@ -1005,7 +1005,13 @@ public sealed partial class TaskDetailViewModel(
                     : EstimatedMinutes is { } length ? (int)length : null,
                 DoTime == _openedTime
                     ? _rhythmTime ?? (DoTime is { } stood ? TimeOnly.FromTimeSpan(stood) : null)
-                    : DoTime is { } hour ? TimeOnly.FromTimeSpan(hour) : null);
+                    : DoTime is { } hour ? TimeOnly.FromTimeSpan(hour) : null,
+
+                // Przypomnienie jest cechą rytmu i innej drogi do niego nie ma — zmienia
+                // się je wyłącznie tutaj, więc to, co stoi w karcie, jest odpowiedzią
+                // całej serii. Bez zapamiętywania, jak przy porze i długości: tamte
+                // zmienia także siatka, wyprzedzeń nie zmienia nic poza tym polem.
+                SelectedLeads());
         }
         catch (ArgumentException)
         {
