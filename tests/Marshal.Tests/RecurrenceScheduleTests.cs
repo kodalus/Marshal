@@ -272,4 +272,123 @@ public sealed class RecurrenceScheduleTests
         RecurrenceSchedule.Following(rule, D("2026-01-31"), D("2026-04-30"))
             .Should().Equal(D("2026-02-28"), D("2026-03-31"), D("2026-04-30"));
     }
+
+    // --- zmiany pojedynczych wystąpień ---------------------------------------
+
+    [Fact]
+    public void Odwolane_wystapienie_nie_wychodzi_z_rozwiniecia()
+    {
+        // „W tę jedną środę nie". Rytm zostaje bez zmian — kolejna środa jest na miejscu.
+        var rule = new RecurrenceRule(
+            RecurrenceKind.Weekly,
+            daysOfWeek: Weekdays.Wednesday,
+            changes: [new RecurrenceChange(D("2026-09-23"))]);
+
+        RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-10-07"))
+            .Select(s => s.Date)
+            .Should().Equal(D("2026-09-30"), D("2026-10-07"));
+    }
+
+    [Fact]
+    public void Przelozone_wystapienie_wychodzi_w_nowym_dniu_i_o_nowej_porze()
+    {
+        var rule = new RecurrenceRule(
+            RecurrenceKind.Weekly,
+            daysOfWeek: Weekdays.Wednesday,
+            changes: [new RecurrenceChange(D("2026-09-23"), D("2026-09-24"), new TimeOnly(17, 0))]);
+
+        var drawn = RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30")).ToList();
+
+        drawn.Select(s => s.Date).Should().Equal(D("2026-09-24"), D("2026-09-30"));
+        drawn[0].Time.Should().Be(new TimeOnly(17, 0));
+        drawn[0].Base.Should().Be(D("2026-09-23"), "tożsamość w serii zostaje przy dniu z reguły");
+
+        // Rytm biegnie dalej po swojemu: przełożenie dotyczy jednego razu, więc kolejne
+        // wystąpienie wypada w środę, a nie w czwartek.
+        drawn[1].Time.Should().BeNull();
+    }
+
+    [Fact]
+    public void Odwolane_wystapienie_zuzywa_swoj_numer_w_serii()
+    {
+        // Seria „trzy razy" z odwołanym drugim kończy się po trzecim dniu z reguły,
+        // a nie dokłada czwartego. Odwołanie znaczy „to się nie odbędzie", a nie
+        // „to się odbędzie kiedy indziej".
+        var rule = new RecurrenceRule(
+            RecurrenceKind.Daily,
+            count: 3,
+            changes: [new RecurrenceChange(D("2026-09-17"))]);
+
+        RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Select(s => s.Date)
+            .Should().Equal(D("2026-09-18"));
+    }
+
+    [Fact]
+    public void Wystapienie_przelozone_wstecz_rysuje_sie_w_swoim_zakresie()
+    {
+        // Dzień z reguły wypada za końcem zakresu, a wystąpienie stoi w środku. Bez
+        // zapasu za końcem nie byłoby czego narysować.
+        var rule = new RecurrenceRule(
+            RecurrenceKind.Weekly,
+            daysOfWeek: Weekdays.Wednesday,
+            changes: [new RecurrenceChange(D("2026-10-07"), D("2026-09-29"))]);
+
+        // Bez kolejności: rozwinięcie idzie po dniach z reguły, a przełożone wystąpienie
+        // wypada wcześniej, niż mówi jego dzień. Siatka i tak rozkłada wpisy po dniach.
+        RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Select(s => s.Date)
+            .Should().BeEquivalentTo(new[] { D("2026-09-23"), D("2026-09-29"), D("2026-09-30") });
+    }
+
+    [Fact]
+    public void Przejscie_na_kolejne_wystapienie_odcina_zmiany_z_dni_minionych()
+    {
+        // Lista, z której nic nie znika, po roku rytmu codziennego byłaby dłuższa
+        // od samej reguły.
+        var rule = new RecurrenceRule(
+            RecurrenceKind.Daily,
+            changes:
+            [
+                new RecurrenceChange(D("2026-09-17")),
+                new RecurrenceChange(D("2026-09-20"), D("2026-09-21")),
+            ]);
+
+        rule.Advance(D("2026-09-18")).Changes
+            .Select(z => z.Date)
+            .Should().Equal(D("2026-09-20"));
+    }
+
+    [Fact]
+    public void Regula_ze_zmianami_przechodzi_przez_zapis_i_odczyt_bez_zmian()
+    {
+        var rule = new RecurrenceRule(
+            RecurrenceKind.Weekly,
+            daysOfWeek: Weekdays.Wednesday,
+            changes:
+            [
+                new RecurrenceChange(D("2026-09-23")),
+                new RecurrenceChange(D("2026-09-30"), D("2026-10-01"), new TimeOnly(17, 30)),
+            ]);
+
+        var read = RecurrenceRule.FromJson(rule.ToJson());
+
+        read.Should().Be(rule);
+        read!.Changes.Should().HaveCount(2);
+        read.ChangeOn(D("2026-09-23"))!.Dropped.Should().BeTrue();
+        read.ChangeOn(D("2026-09-30"))!.Time.Should().Be(new TimeOnly(17, 30));
+    }
+
+    [Fact]
+    public void Druga_zmiana_tego_samego_wystapienia_zastepuje_pierwsza()
+    {
+        // Przełożenie, a potem odwołanie tego samego dnia. Dwa wpisy na jedno wystąpienie
+        // znaczyłyby, że trzeba wiedzieć, który jest nowszy — a tego zapis nie niesie.
+        var rule = new RecurrenceRule(RecurrenceKind.Daily)
+            .With(new RecurrenceChange(D("2026-09-17"), D("2026-09-18")))
+            .With(new RecurrenceChange(D("2026-09-17")));
+
+        rule.Changes.Should().ContainSingle();
+        rule.ChangeOn(D("2026-09-17"))!.Dropped.Should().BeTrue();
+    }
 }

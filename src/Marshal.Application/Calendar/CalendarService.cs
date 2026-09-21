@@ -1148,14 +1148,14 @@ public sealed class CalendarSyncService(
 
         var last = from.AddDays(days - 1);
 
-        foreach (var date in RecurrenceSchedule.Following(rule, basis, last))
+        foreach (var slot in RecurrenceSchedule.Following(rule, basis, last))
         {
-            if (date < from)
+            if (slot.Date < from)
             {
                 continue;
             }
 
-            yield return Ghost(rhythm, date, zone, color);
+            yield return Ghost(rhythm, slot, zone, color);
         }
     }
 
@@ -1166,26 +1166,28 @@ public sealed class CalendarSyncService(
     /// wskazanie serii zamiast własnego identyfikatora — czyli to, czego nie ma.
     /// </remarks>
     private static AgendaEntry Ghost(
-        TaskItem rhythm, DateOnly date, TimeZoneInfo zone, string? color)
+        TaskItem rhythm, RecurrenceSchedule.Slot slot, TimeZoneInfo zone, string? color)
     {
-        if (rhythm.DoTime is not { } hour)
+        // Pora przełożonego wystąpienia wygrywa nad porą rytmu — dotyczy tego jednego
+        // razu. Gdy przełożono sam dzień, pora zostaje ta, co zawsze.
+        if ((slot.Time ?? rhythm.DoTime) is not { } hour)
         {
-            var dayStart = InZone(date.ToDateTime(TimeOnly.MinValue), zone);
+            var dayStart = InZone(slot.Date.ToDateTime(TimeOnly.MinValue), zone);
 
             return new AgendaEntry(
                 rhythm.Title, dayStart, dayStart.AddDays(1),
                 IsAllDay: true, AgendaKind.Task, color, TaskId: null,
                 SourceId: null, ExternalId: null, IsDone: false, CanWrite: false,
-                RhythmId: rhythm.Id);
+                RhythmId: rhythm.Id, RhythmDate: slot.Base);
         }
 
-        var start = InZone(date.ToDateTime(hour), zone);
+        var start = InZone(slot.Date.ToDateTime(hour), zone);
         var length = TimeSpan.FromMinutes(rhythm.EstimatedMinutes ?? 30);
 
         return new AgendaEntry(
             rhythm.Title, start, start + length, IsAllDay: false, AgendaKind.Task,
             color, TaskId: null, SourceId: null, ExternalId: null,
-            IsDone: false, CanWrite: false, RhythmId: rhythm.Id);
+            IsDone: false, CanWrite: false, RhythmId: rhythm.Id, RhythmDate: slot.Base);
     }
 
     private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone, string? color)

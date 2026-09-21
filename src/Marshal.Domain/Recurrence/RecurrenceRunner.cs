@@ -43,6 +43,35 @@ public static class RecurrenceRunner
     }
 
     /// <summary>
+    /// Pominięcie bieżącego wystąpienia: to jedno przepada, a rytm idzie dalej.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bez tego jedyną drogą na „tej środy nie będzie" było wyrzucenie zadania — a razem
+    /// z nim przepadał cały rytm, bo regułę niesie właśnie to wystąpienie. Jedna czynność
+    /// kasowała więc dwie różne rzeczy, z czego drugiej nikt nie chciał.
+    /// </para>
+    /// <para>
+    /// Wyrzucone, a nie odhaczone: pominięte wystąpienie nie zostało zrobione i nie ma
+    /// prawa wchodzić do liczb o tym, co zrobione. Rytm liczony jest od dnia, na który
+    /// było umówione — pominięcie nie jest wykonaniem, więc nie przesuwa serii także
+    /// wtedy, gdy rytm chodzi od wykonania.
+    /// </para>
+    /// </remarks>
+    public static TaskItem? Skip(TaskItem task, DateTimeOffset now, Func<Hlc> stamp)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(stamp);
+
+        var rule = task.Recurrence;
+        var basis = task.DoDate ?? Today(now);
+
+        task.Trash(stamp());
+
+        return rule is null ? null : Spawn(task, rule, basis, now, stamp);
+    }
+
+    /// <summary>
     /// Przejście dnia dla jednego niewykonanego zadania z <see cref="TaskItem.DoDate"/>
     /// w przeszłości. Zwraca kolejne wystąpienie, jeśli powstało.
     /// </summary>
@@ -115,12 +144,12 @@ public static class RecurrenceRunner
     {
         task.SetRecurrence(null, stamp());
 
-        if (RecurrenceSchedule.Next(rule, basis) is not { } next)
+        if (RecurrenceSchedule.NextSlot(rule, basis) is not { } slot)
         {
             return null;
         }
 
-        return task.SpawnNextOccurrence(next, rule.Advance(), now, stamp());
+        return task.SpawnNextOccurrence(slot.Date, slot.Rule, now, stamp(), slot.Time);
     }
 
     private static TaskItem? SpawnFrom(
@@ -133,12 +162,12 @@ public static class RecurrenceRunner
     {
         task.SetRecurrence(null, stamp());
 
-        if (RecurrenceSchedule.NextFrom(rule, basis, floor) is not { } occurrence)
+        if (RecurrenceSchedule.NextFrom(rule, basis, floor) is not { } slot)
         {
             return null;
         }
 
-        return task.SpawnNextOccurrence(occurrence.Date, occurrence.Rule, now, stamp());
+        return task.SpawnNextOccurrence(slot.Date, slot.Rule, now, stamp(), slot.Time);
     }
 
     /// <summary>

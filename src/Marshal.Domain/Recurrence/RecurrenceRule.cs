@@ -48,7 +48,8 @@ public sealed record RecurrenceRule
         RecurrenceAnchor? anchor = null,
         OnMissed onMissed = OnMissed.Carry,
         DateOnly? until = null,
-        int? count = null)
+        int? count = null,
+        IReadOnlyList<RecurrenceChange>? changes = null)
     {
         if (interval < 1)
         {
@@ -79,6 +80,14 @@ public sealed record RecurrenceRule
         OnMissed = onMissed;
         Until = until;
         Count = count;
+
+        // Po jednej zmianie na dzień i w kolejności dni. Dwie zmiany tego samego
+        // wystąpienia znaczyłyby, że trzeba wiedzieć, która jest nowsza — a to jest
+        // wiedza, której zapis nie niesie. Wygrywa ostatnia, tak samo jak przy warunkach
+        // filtra: zapis z nowszej wersji aplikacji ma się otworzyć, a nie wywrócić.
+        Changes = changes is null or { Count: 0 }
+            ? []
+            : [.. changes.GroupBy(z => z.Date).Select(g => g.Last()).OrderBy(z => z.Date)];
     }
 
     public RecurrenceKind Kind { get; }
@@ -109,6 +118,49 @@ public sealed record RecurrenceRule
     public int? Count { get; }
 
     /// <summary>
+    /// Wystąpienia odwołane i przełożone — po jednym wpisie na dzień z reguły.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// W regule, a nie w osobnej tabeli. Trzy powody. Reguła jedzie z wystąpienia na
+    /// wystąpienie razem z serią, więc zmiany jadą z nią i nie trzeba ich z niczym
+    /// wiązać. Siedzi w jednej kolumnie JSON, więc dopisanie ich nie zmienia kształtu
+    /// bazy. I nie wymaga tożsamości serii — a ta w modelu, w którym żyje naraz jedno
+    /// wystąpienie, musiałaby dopiero powstać.
+    /// </para>
+    /// <para>
+    /// Cena jest jedna i świadoma: reguła wygrywa albo przegrywa w całości, więc zmiana
+    /// jednego wystąpienia zrobiona na telefonie przepada, jeżeli w tej samej chwili
+    /// zmieni się rytm na komputerze. Przy dwóch urządzeniach jednej osoby to zbieg
+    /// rzadki, a rozdzielenie kosztowałoby osobny byt do scalania.
+    /// </para>
+    /// <para>
+    /// Lista nie rośnie bez końca: przy każdym przejściu na kolejne wystąpienie odpada
+    /// wszystko, co dotyczyło dni już minionych — zob. <see cref="Advance"/>.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<RecurrenceChange> Changes { get; }
+
+    /// <summary>Zmiana dotycząca wskazanego dnia z reguły, jeśli jest.</summary>
+    public RecurrenceChange? ChangeOn(DateOnly date) =>
+        Changes.Count == 0 ? null : Changes.FirstOrDefault(z => z.Date == date);
+
+    /// <summary>Ta sama reguła z dopisaną albo zastąpioną zmianą jednego wystąpienia.</summary>
+    public RecurrenceRule With(RecurrenceChange change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+
+        return new RecurrenceRule(
+            Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
+            [.. Changes.Where(z => z.Date != change.Date), change]);
+    }
+
+    /// <summary>Ta sama reguła bez zmiany dotyczącej wskazanego dnia.</summary>
+    public RecurrenceRule Without(DateOnly date) =>
+        new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
+            [.. Changes.Where(z => z.Date != date)]);
+
+    /// <summary>
     /// Domyślne zaczepienie **liczone z rodzaju**, nie stałe (spec 5.7).
     /// </summary>
     /// <remarks>
@@ -128,15 +180,35 @@ public sealed record RecurrenceRule
     /// sprawdzenia przechodzą także tutaj. Przy wyczerpanej serii zwraca siebie —
     /// kolejne wystąpienie i tak nie powstanie.
     /// </remarks>
-    public RecurrenceRule Advance() =>
-        Count is null or <= 1
-            ? this
-            : new RecurrenceRule(
-                Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count - 1);
+    /// <param name="after">
+    /// Dzień właśnie zużytego wystąpienia. Zmiany dotyczące jego i wcześniejszych dni
+    /// odpadają: zostały już zastosowane albo minęły, a lista, z której nic nie znika,
+    /// po roku rytmu codziennego byłaby dłuższa od samej reguły.
+    /// </param>
+    public RecurrenceRule Advance(DateOnly? after = null)
+    {
+        var left = after is { } used
+            ? Changes.Where(z => z.Date > used).ToList()
+            : Changes;
+
+        // Bez zmian do odcięcia i bez licznika do pomniejszenia nie ma czego przepisywać.
+        if (Count is null or <= 1 && left.Count == Changes.Count)
+        {
+            return this;
+        }
+
+        return new RecurrenceRule(
+            Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until,
+            Count is null or <= 1 ? Count : Count - 1,
+            left);
+    }
 
     public string ToJson() =>
         JsonSerializer.Serialize(
-            new Wire(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count), Json);
+            new Wire(
+                Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
+                Changes.Count == 0 ? null : Changes),
+            Json);
 
     /// <summary>Zwraca <c>null</c> zamiast rzucać: zapis z nowszej wersji aplikacji nie
     /// może wywrócić scalania (spec 9.4).</summary>
@@ -152,7 +224,7 @@ public sealed record RecurrenceRule
             return JsonSerializer.Deserialize<Wire>(json, Json) is { } w
                 ? new RecurrenceRule(
                     w.Kind, w.Interval, w.DaysOfWeek, w.DayOfMonth,
-                    w.Anchor, w.OnMissed, w.Until, w.Count)
+                    w.Anchor, w.OnMissed, w.Until, w.Count, w.Changes)
                 : null;
         }
         catch (Exception e) when (e is JsonException or ArgumentException or ArgumentOutOfRangeException)
@@ -185,5 +257,30 @@ public sealed record RecurrenceRule
         RecurrenceAnchor Anchor,
         OnMissed OnMissed,
         DateOnly? Until,
-        int? Count);
+        int? Count,
+        IReadOnlyList<RecurrenceChange>? Changes = null);
+
+    /// <summary>
+    /// Porównanie po treści, także listy zmian.
+    /// </summary>
+    /// <remarks>
+    /// Rekord porównuje listę przez odwołanie, więc reguła zapisana i odczytana z powrotem
+    /// nie byłaby sobie równa — a na tym stoi sprawdzenie zapisu i odczytu. Skrót pomija
+    /// zmiany celowo: równe reguły mają wtedy równe skróty, a to jedyne, czego skrót
+    /// musi dotrzymać.
+    /// </remarks>
+    public bool Equals(RecurrenceRule? other) =>
+        other is not null
+        && Kind == other.Kind
+        && Interval == other.Interval
+        && DaysOfWeek == other.DaysOfWeek
+        && DayOfMonth == other.DayOfMonth
+        && Anchor == other.Anchor
+        && OnMissed == other.OnMissed
+        && Until == other.Until
+        && Count == other.Count
+        && Changes.SequenceEqual(other.Changes);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count);
 }

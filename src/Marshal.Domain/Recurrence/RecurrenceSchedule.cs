@@ -23,10 +23,76 @@ public static class RecurrenceSchedule
     /// Pierwsza data **ściśle późniejsza** od <paramref name="from"/> zgodna z regułą,
     /// albo <c>null</c>, gdy seria jest wyczerpana przez <c>Count</c> lub <c>Until</c>.
     /// </summary>
-    public static DateOnly? Next(RecurrenceRule rule, DateOnly from)
+    /// <remarks>
+    /// Data po zastosowaniu zmian pojedynczych wystąpień: odwołane są przeskakiwane,
+    /// przełożone oddają dzień, na który je przełożono. Pora zmienionego wystąpienia
+    /// nie mieści się w dacie — kto jej potrzebuje, woła <see cref="NextSlot"/>.
+    /// </remarks>
+    public static DateOnly? Next(RecurrenceRule rule, DateOnly from) => NextSlot(rule, from)?.Date;
+
+    /// <summary>
+    /// Kolejne wystąpienie po zastosowaniu zmian: kiedy wypada, o której i z jaką regułą.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Jedno przejście dla wszystkich trzech dróg, którymi rytm idzie dalej: rysowania
+    /// do przodu, odhaczenia i przejścia dnia. Gdyby zmiany stosowała tylko jedna z nich,
+    /// narysowana zapowiedź kłamałaby wobec tego, co przy odhaczeniu naprawdę powstanie.
+    /// </para>
+    /// <para>
+    /// Wystąpienie odwołane **zużywa swój numer w serii**: seria „pięć razy" z jednym
+    /// odwołanym kończy się po piątym dniu z reguły, a nie dokłada szóstego. Odwołanie
+    /// znaczy „to się nie odbędzie", a nie „to się odbędzie kiedy indziej".
+    /// </para>
+    /// </remarks>
+    public static Slot? NextSlot(RecurrenceRule rule, DateOnly from)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
+        var current = rule;
+        var basis = from;
+
+        // Ogranicznik na wypadek reguły z nowszej wersji aplikacji, która nie posuwa
+        // daty do przodu. Przy zdrowej regule pętla kręci się tyle razy, ile z rzędu
+        // odwołano wystąpień — czyli raz.
+        for (var i = 0; i < 10_000; i++)
+        {
+            if (Step(current, basis) is not { } date)
+            {
+                return null;
+            }
+
+            var after = current.Advance(date);
+            var change = current.ChangeOn(date);
+
+            basis = date;
+            current = after;
+
+            if (change is { Dropped: true })
+            {
+                continue;
+            }
+
+            return new Slot(date, change?.Day ?? date, change?.Time, after);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Wystąpienie: dzień z reguły, dzień faktyczny, pora i reguła na dalej.
+    /// </summary>
+    /// <remarks>
+    /// Dzień z reguły jest tożsamością wystąpienia w serii — po nim rozpoznaje się
+    /// zmiany — a dzień faktyczny tym, gdzie się je rysuje i zakłada. Bez rozdzielenia
+    /// przełożone wystąpienie traciłoby ślad, po którym wiadomo, czym było.
+    /// </remarks>
+    public readonly record struct Slot(
+        DateOnly Base, DateOnly Date, TimeOnly? Time, RecurrenceRule Rule);
+
+    /// <summary>Krok samej reguły, bez zmian pojedynczych wystąpień.</summary>
+    private static DateOnly? Step(RecurrenceRule rule, DateOnly from)
+    {
         // Count na regule bieżącego wystąpienia liczy je samo, więc jedynka znaczy
         // „to było ostatnie".
         if (rule.Count is <= 1)
@@ -71,37 +137,49 @@ public static class RecurrenceSchedule
     /// pięć razy i ani razu więcej.
     /// </para>
     /// </remarks>
-    public static IEnumerable<DateOnly> Following(RecurrenceRule rule, DateOnly from, DateOnly until)
+    public static IEnumerable<Slot> Following(RecurrenceRule rule, DateOnly from, DateOnly until)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
         return until < from ? [] : Walk(rule, from, until);
     }
 
-    private static IEnumerable<DateOnly> Walk(RecurrenceRule rule, DateOnly from, DateOnly until)
+    /// <summary>
+    /// Ile dni za końcem zakresu jeszcze liczyć.
+    /// </summary>
+    /// <remarks>
+    /// Wystąpienie przełożone wstecz ma dzień z reguły **po** końcu zakresu, a wypada
+    /// w środku — bez tego zapasu nie dałoby się go narysować. Miesiąc, bo o tyle mniej
+    /// więcej przekłada się rzeczy; dalej przełożone wystąpienie i tak zobaczy się
+    /// przewijając kalendarz.
+    /// </remarks>
+    private const int Grace = 31;
+
+    private static IEnumerable<Slot> Walk(RecurrenceRule rule, DateOnly from, DateOnly until)
     {
         var current = rule;
         var basis = from;
+        var horizon = until.AddDays(Grace);
 
         // Ogranicznik ten sam, co przy przeskakiwaniu zaległych. Sięga dalej, niż
         // ktokolwiek przewinie kalendarz: przy rytmie codziennym to dwadzieścia siedem
         // lat od daty wystąpienia, które regułę niesie.
         for (var i = 0; i < 10_000; i++)
         {
-            if (Next(current, basis) is not { } date || date > until)
+            if (NextSlot(current, basis) is not { } slot || slot.Base > horizon)
             {
                 yield break;
             }
 
-            yield return date;
+            current = slot.Rule;
+            basis = slot.Base;
 
-            current = current.Advance();
-            basis = date;
+            if (slot.Date >= from && slot.Date <= until)
+            {
+                yield return slot;
+            }
         }
     }
-
-    /// <summary>Wystąpienie razem z regułą, która ma pójść na nie dalej.</summary>
-    public readonly record struct Occurrence(DateOnly Date, RecurrenceRule Rule);
 
     /// <summary>
     /// Pierwsze wystąpienie późniejsze od <paramref name="from"/> i **nie wcześniejsze**
@@ -113,7 +191,7 @@ public static class RecurrenceSchedule
     /// Nagrobek każdego przeskoczonego dnia nie jest niczyją informacją, a rozjechałby
     /// się po wszystkich urządzeniach.
     /// </remarks>
-    public static Occurrence? NextFrom(RecurrenceRule rule, DateOnly from, DateOnly floor)
+    public static Slot? NextFrom(RecurrenceRule rule, DateOnly from, DateOnly floor)
     {
         ArgumentNullException.ThrowIfNull(rule);
 
@@ -124,19 +202,18 @@ public static class RecurrenceSchedule
         // jest na wypadek reguły z nowszej wersji aplikacji, która tej własności nie ma.
         for (var i = 0; i < 10_000; i++)
         {
-            if (Next(current, basis) is not { } date)
+            if (NextSlot(current, basis) is not { } slot)
             {
                 return null;
             }
 
-            current = current.Advance();
+            current = slot.Rule;
+            basis = slot.Base;
 
-            if (date >= floor)
+            if (slot.Date >= floor)
             {
-                return new Occurrence(date, current);
+                return slot;
             }
-
-            basis = date;
         }
 
         return null;

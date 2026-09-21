@@ -53,7 +53,17 @@ public sealed record AgendaEntry(
     /// obejrzeć i zmienić. Flaga mówiłaby „tego nie dotykaj" i kończyła rozmowę.
     /// </para>
     /// </remarks>
-    Guid? RhythmId = null)
+    Guid? RhythmId = null,
+
+    /// <summary>
+    /// Dzień, w którym wystąpienie wypada z reguły — jego tożsamość w serii.
+    /// </summary>
+    /// <remarks>
+    /// Nie zawsze ten sam, co dzień narysowania: wystąpienie przełożone stoi gdzie
+    /// indziej, a rozpoznaje się je nadal po dniu z rytmu. Po tym kluczu zapisuje się
+    /// odwołanie i przełożenie, więc bez niego dałoby się je tylko obejrzeć.
+    /// </remarks>
+    DateOnly? RhythmDate = null)
 {
     /// <summary>Czy wpis jest wystąpieniem narysowanym do przodu, a nie zadaniem.</summary>
     public bool IsAhead => RhythmId is not null;

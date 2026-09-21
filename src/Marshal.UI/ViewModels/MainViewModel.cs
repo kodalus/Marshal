@@ -1872,6 +1872,24 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Zadanie po identyfikatorze — dla bloków siatki, które niosą sam identyfikator.</summary>
     public Task<TaskItem?> FindTaskAsync(Guid id) => _tasks.FindAsync(id);
 
+    /// <summary>
+    /// Pominięcie bieżącego wystąpienia rytmu: to jedno przepada, rytm idzie dalej.
+    /// </summary>
+    /// <remarks>
+    /// „Usuń" na zadaniu z rytmem kasuje całą serię, bo regułę niesie właśnie to
+    /// wystąpienie — i nie ma jak tego rozpoznać z samej nazwy czynności. Stąd osobna
+    /// pozycja: kasowanie serii zostaje kasowaniem serii, a „tej środy nie będzie"
+    /// dostaje własną drogę.
+    /// </remarks>
+    public async Task SkipOccurrenceAsync(TaskItem? task)
+    {
+        if (task is not null)
+        {
+            await _edit.SkipOccurrenceAsync(task.Id);
+            await ReloadAsync();
+        }
+    }
+
     /// <summary>Odhaczenie zadania podanego wprost — piątka „Na dziś" niesie same zadania.</summary>
     [RelayCommand]
     public async Task CompleteTaskAsync(TaskItem? task)

@@ -311,6 +311,90 @@ public sealed class TaskEditService(
     }
 
     /// <summary>
+    /// Pominięcie bieżącego wystąpienia rytmu: to jedno przepada, rytm idzie dalej.
+    /// </summary>
+    /// <remarks>
+    /// Wyrzucenie zadania z rytmem kasowało dotąd całą serię, bo regułę niesie właśnie
+    /// to wystąpienie — jedna czynność na dwie różne rzeczy, z czego drugiej nikt nie
+    /// chciał. Tędy przepada wyłącznie ten jeden raz.
+    /// </remarks>
+    public async Task<TaskItem?> SkipOccurrenceAsync(Guid id, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } task)
+        {
+            return null;
+        }
+
+        var next = RecurrenceRunner.Skip(task, clock.Now, hlc.Next);
+
+        if (next is not null)
+        {
+            tasks.Add(next);
+        }
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        // Odbicie w kalendarzu idzie za zadaniem: wyrzuconego wystąpienia nie ma już
+        // po co pokazywać osobie, której było udostępnione.
+        await MirrorAsync(task, ct);
+
+        return next;
+    }
+
+    /// <summary>
+    /// Odwołanie jednego z wystąpień narysowanych do przodu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zmiana zapisuje się w regule, przy dniu, w którym wystąpienie wypadało. Rytm
+    /// biegnie dalej po swojemu: odwołana środa nie przesuwa kolejnej ani nie dokłada
+    /// niczego na koniec serii liczonej na wystąpienia.
+    /// </para>
+    /// <para>
+    /// Dotyczy wyłącznie wystąpień, których jeszcze nie ma. To niosące regułę jest
+    /// zwykłym zadaniem — od jego pominięcia jest <see cref="SkipOccurrenceAsync"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="id">Zadanie niosące rytm.</param>
+    /// <param name="occurrence">Dzień, w którym wystąpienie wypada z reguły.</param>
+    public async Task<TaskItem?> DropOccurrenceAsync(
+        Guid id, DateOnly occurrence, CancellationToken ct = default) =>
+        await ChangeOccurrenceAsync(id, new RecurrenceChange(occurrence), ct);
+
+    /// <summary>
+    /// Przełożenie jednego z wystąpień narysowanych do przodu na inny dzień albo porę.
+    /// </summary>
+    /// <remarks>
+    /// Pora zapisana przy zmianie dotyczy tego jednego razu. Rytm zostaje ze swoją —
+    /// „w tę środę wyjątkowo o siedemnastej" nie znaczy „od teraz o siedemnastej",
+    /// a gdyby znaczyło, nie dałoby się powiedzieć tego pierwszego.
+    /// </remarks>
+    public async Task<TaskItem?> MoveOccurrenceAsync(
+        Guid id, DateOnly occurrence, DateOnly day, TimeOnly? time, CancellationToken ct = default) =>
+        await ChangeOccurrenceAsync(id, new RecurrenceChange(occurrence, day, time), ct);
+
+    private async Task<TaskItem?> ChangeOccurrenceAsync(
+        Guid id, RecurrenceChange change, CancellationToken ct)
+    {
+        if (await tasks.FindAsync(id, ct) is not { Recurrence: { } rule } task)
+        {
+            return null;
+        }
+
+        // Zmiana wystąpienia minionego albo tego, które regułę niesie, nie ma czego
+        // dotyczyć: tamte są już zadaniami albo nie powstaną nigdy.
+        if (task.DoDate is { } current && change.Date <= current)
+        {
+            return null;
+        }
+
+        task.SetRecurrence(rule.With(change), hlc.Next());
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return task;
+    }
+
+    /// <summary>
     /// Zdjęcie ptaszka — zadanie znowu jest do zrobienia.
     /// </summary>
     /// <remarks>

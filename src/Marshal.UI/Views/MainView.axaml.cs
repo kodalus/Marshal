@@ -865,19 +865,18 @@ public partial class MainView : UserControl
         _last = _from;
         _dragging = false;
 
-        // Wystąpienie rytmu narysowane do przodu nie jest jeszcze zadaniem, więc nie ma
-        // czego przenieść: przeciągnięcie musiałoby je najpierw utworzyć, a wtedy rytm
-        // miałby wystąpienie zapisane w środku serii i drugie, które i tak z niej wyjdzie.
-        // Dotknięcie dalej prowadzi do zadania niosącego rytm.
-        var movable = slot.RhythmId is null;
-
         // Myszą przeciąga się od razu; palcem dopiero po przytrzymaniu. Na dotyku
         // ruch palca po bloku znaczy najczęściej „przewiń widok", a nie „przenieś to
         // zadanie" — a blok, który przejmuje wskaźnik po sześciu punktach, odbiera
         // przewijanie wszędzie tam, gdzie coś stoi. Czyli w zajęty dzień prawie wszędzie.
-        _dragAllowed = movable && e.Pointer.Type != PointerType.Touch;
+        //
+        // Wystąpienie rytmu narysowane do przodu przeciąga się tak samo, choć nie jest
+        // jeszcze zadaniem: pod spodem zapisuje się nie jego nowy dzień, tylko zmiana
+        // przy tym jednym wystąpieniu rytmu. Z punktu widzenia ręki to ta sama czynność
+        // i ma być tym samym gestem.
+        _dragAllowed = e.Pointer.Type != PointerType.Touch;
 
-        if (movable && !_dragAllowed)
+        if (!_dragAllowed)
         {
             _longPress?.Stop();
             _longPress = new DispatcherTimer(
@@ -1272,6 +1271,16 @@ public partial class MainView : UserControl
             return;
         }
 
+        // Wystąpienie rytmu przekłada się przez regułę, bo zadania jeszcze nie ma.
+        if (slot is { RhythmId: { } rhythm, RhythmDate: { } occurrence })
+        {
+            _ = Try(
+                "Kalendarz: przełożenie wystąpienia",
+                () => _calendar.MoveOccurrenceAsync(rhythm, occurrence, day, height));
+
+            return;
+        }
+
         // Zadanie idzie naszą drogą, wydarzenie — prosto do kalendarza, z którego
         // pochodzi. To druga rzecz, nie ta sama z innym zapisem.
         _ = slot.TaskId is { } task
@@ -1624,6 +1633,32 @@ public partial class MainView : UserControl
             return;
         }
 
+        // Pasek całodniowy: rytm bez godziny stoi właśnie tam, a nie na siatce.
+        // Bez tej gałęzi odwołać dałoby się wyłącznie wystąpienia z godziną — czyli
+        // czynność istniałaby zależnie od tego, czy rytm ma porę, a to nie jest różnica,
+        // którą ktokolwiek nosi w głowie.
+        if (AllDayAt(source) is { RhythmId: { } series, RhythmDate: { } day } entry)
+        {
+            e.Handled = true;
+
+            new MenuFlyout
+            {
+                ItemsSource = new[]
+                {
+                    Item("Pokaż rytm", () =>
+                    {
+                        model.Calendar.OpenAllDay(entry);
+                        return Task.CompletedTask;
+                    }),
+                    Item(
+                        "Odwołaj to wystąpienie",
+                        () => model.Calendar.DropOccurrenceAsync(series, day)),
+                },
+            }.ShowAt(source, showAtPointer: true);
+
+            return;
+        }
+
         if (Block(source) is not { } block)
         {
             return;
@@ -1666,14 +1701,31 @@ public partial class MainView : UserControl
     /// Reszta pól też jest na karcie i to ona jest tu prawdziwą odpowiedzią.
     /// </para>
     /// </remarks>
-    private static void ShowEventMenu(MainViewModel model, Control source, SlotBox block)
+    private void ShowEventMenu(MainViewModel model, Control source, SlotBox block)
     {
         var calendarId = model.Calendar;
         var rows = new List<MenuItem>();
 
-        var open = new MenuItem { Header = "Otwórz" };
+        var open = new MenuItem
+        {
+            Header = block.IsAhead ? "Pokaż rytm" : "Otwórz",
+        };
+
         open.Click += (_, _) => calendarId.OpenTaskCommand.Execute(block);
         rows.Add(open);
+
+        // Odwołanie jednego wystąpienia, którego jeszcze nie ma. Rytm zostaje bez zmian
+        // — to jest cała różnica wobec „Usuń" na zadaniu, które skasowałoby całą serię.
+        if (block is { RhythmId: { } rhythm, RhythmDate: { } occurrence })
+        {
+            var drop = new MenuItem { Header = "Odwołaj to wystąpienie" };
+
+            drop.Click += (_, _) => _ = Try(
+                "Kalendarz: odwołanie wystąpienia",
+                () => calendarId.DropOccurrenceAsync(rhythm, occurrence));
+
+            rows.Add(drop);
+        }
 
         if (block.CanComplete)
         {
@@ -1691,6 +1743,14 @@ public partial class MainView : UserControl
             .OfType<Control>()
             .Select(k => k.DataContext)
             .OfType<NoteCard>()
+            .FirstOrDefault();
+
+    /// <summary>Wpis paska całodniowego spod wskaźnika.</summary>
+    private static AllDayBox? AllDayAt(Control source) =>
+        source.GetSelfAndVisualAncestors()
+            .OfType<Control>()
+            .Select(k => k.DataContext)
+            .OfType<AllDayBox>()
             .FirstOrDefault();
 
     /// <summary>Blok siatki spod wskaźnika.</summary>
@@ -1766,7 +1826,15 @@ public partial class MainView : UserControl
             Item("Pokaż w kalendarzu", () => model.ShowInCalendarAsync(task)),
             Item("Zamień na notatkę", () => model.ToNoteAsync(task)),
             new Separator(),
-            Item("Usuń", () => model.TrashTaskAsync(task)),
+
+            // Zadanie z rytmem niesie całą serię: regułę ma najnowsze wystąpienie,
+            // więc „Usuń" kasuje rytm, a nie ten jeden raz. Z nazwy czynności nie da
+            // się tego poznać, stąd osobna pozycja — i nazwa mówiąca wprost, czego
+            // dotyczy tamta.
+            .. Skipping(model, task),
+
+            Item(task.Recurrence is null ? "Usuń" : "Usuń cały rytm",
+                () => model.TrashTaskAsync(task)),
         ];
 
         new MenuFlyout { ItemsSource = rows }.ShowAt(source, showAtPointer: true);
@@ -2127,6 +2195,15 @@ public partial class MainView : UserControl
     /// wyniesione poza główny dostaje dodatkowo powrót — bo to jest jedyny sposób,
     /// żeby zniknęło z cudzego widoku, nie znikając ze swojego.
     /// </remarks>
+    /// <summary>Pominięcie bieżącego wystąpienia — tylko przy zadaniu z rytmem.</summary>
+    /// <remarks>
+    /// Pusto tam, gdzie rytmu nie ma: pozycja bez skutku uczy nieufności do całego menu.
+    /// </remarks>
+    private IReadOnlyList<object> Skipping(MainViewModel model, TaskItem task) =>
+        task.Recurrence is null
+            ? []
+            : [Item("Pomiń to wystąpienie", () => model.SkipOccurrenceAsync(task))];
+
     private IReadOnlyList<object> Sharing(
         MainViewModel model, TaskItem task, IReadOnlyList<CalendarSource> calendars)
     {

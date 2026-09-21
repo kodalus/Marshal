@@ -382,8 +382,12 @@ public sealed class TaskItem : Entity
     /// zostać odhaczone: historia „robiłam to w każdy poniedziałek prócz jednego" jest
     /// całą wartością powtarzalności, a zadanie wędrujące w przyszłość jej nie niesie.
     /// </remarks>
+    /// <param name="at">
+    /// Pora przełożonego wystąpienia. Pusta znaczy „ta sama, co w rytmie" — pora
+    /// przechodzi wtedy z wystąpienia poprzedniego.
+    /// </param>
     internal TaskItem SpawnNextOccurrence(
-        DateOnly doDate, RecurrenceRule rule, DateTimeOffset now, Hlc stamp)
+        DateOnly doDate, RecurrenceRule rule, DateTimeOffset now, Hlc stamp, TimeOnly? at = null)
     {
         var next = new TaskItem(Guid.CreateVersion7(), now, stamp, Title)
         {
@@ -403,8 +407,9 @@ public sealed class TaskItem : Entity
             Energy = Energy,
 
             // Godzina przechodzi: „śmieci w poniedziałek o 19" to ta sama pora
-            // w każdy poniedziałek.
-            DoTime = DoTime,
+            // w każdy poniedziałek. Przełożone wystąpienie ma własną i to ona wygrywa —
+            // dotyczy jednego razu, więc nie zmienia rytmu na dalej.
+            DoTime = at ?? DoTime,
         };
 
         // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"

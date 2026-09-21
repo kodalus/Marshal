@@ -338,4 +338,87 @@ public sealed class RecurrenceRunnerTests
         RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().NotBeNull();
         RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().BeNull();
     }
+
+    // --- zmiany pojedynczych wystąpień ---------------------------------------
+
+    [Fact]
+    public void Odhaczenie_zaklada_nastepne_tam_gdzie_je_przelozono()
+    {
+        // Wystąpienie przełożone na siatce, zanim powstało. Odhaczenie poprzedniego ma
+        // uszanować tamtą decyzję — inaczej narysowana zapowiedź kłamałaby wobec tego,
+        // co naprawdę powstaje.
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(
+                RecurrenceKind.Weekly,
+                daysOfWeek: Weekdays.Wednesday,
+                changes: [new RecurrenceChange(D("2026-09-23"), D("2026-09-24"), new TimeOnly(17, 0))]));
+
+        task.SetDoTime(new TimeOnly(19, 0), Stempel());
+
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel);
+
+        next!.DoDate.Should().Be(D("2026-09-24"));
+        next.DoTime.Should().Be(new TimeOnly(17, 0), "pora zmiany dotyczy tego jednego razu");
+    }
+
+    [Fact]
+    public void Odhaczenie_przeskakuje_odwolane_wystapienie()
+    {
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(
+                RecurrenceKind.Weekly,
+                daysOfWeek: Weekdays.Wednesday,
+                changes: [new RecurrenceChange(D("2026-09-23"))]));
+
+        RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel)!
+            .DoDate.Should().Be(D("2026-09-30"));
+    }
+
+    [Fact]
+    public void Nastepnik_nie_niesie_zmian_z_dni_minionych()
+    {
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(
+                RecurrenceKind.Daily,
+                changes:
+                [
+                    new RecurrenceChange(D("2026-09-17"), D("2026-09-18")),
+                    new RecurrenceChange(D("2026-09-20")),
+                ]));
+
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel);
+
+        next!.Recurrence!.Changes
+            .Select(z => z.Date)
+            .Should().Equal(D("2026-09-20"), "zastosowana zmiana odpada razem z jej dniem");
+    }
+
+    [Fact]
+    public void Pominiecie_wyrzuca_biezace_wystapienie_i_zostawia_rytm()
+    {
+        // „Tej środy nie będzie". Do dziś jedyną drogą było wyrzucenie zadania — a razem
+        // z nim przepadał rytm, bo regułę niesie właśnie to wystąpienie.
+        var task = Zaplanowane(
+            "2026-09-16", new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Wednesday));
+
+        var next = RecurrenceRunner.Skip(task, Moment("2026-09-16"), Stempel);
+
+        task.State.Should().Be(TaskState.Trashed, "pominięte nie jest zrobione");
+        task.Recurrence.Should().BeNull("regułę niesie zawsze najnowsze wystąpienie");
+
+        next!.DoDate.Should().Be(D("2026-09-23"));
+        next.Recurrence.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Pominiecie_zadania_bez_rytmu_niczego_nie_zaklada()
+    {
+        var task = Zaplanowane("2026-09-16");
+
+        RecurrenceRunner.Skip(task, Moment("2026-09-16"), Stempel).Should().BeNull();
+        task.State.Should().Be(TaskState.Trashed);
+    }
 }

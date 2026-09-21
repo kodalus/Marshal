@@ -50,7 +50,10 @@ public sealed record SlotBox(
     /// poprzedniego. Rysunek rytmu, nie rzecz — nie ma czego odhaczyć ani przenieść,
     /// a dotknięcie prowadzi do zadania, które regułę niesie.
     /// </remarks>
-    Guid? RhythmId = null)
+    Guid? RhythmId = null,
+
+    /// <summary>Dzień, w którym wystąpienie wypada z reguły — jego tożsamość w serii.</summary>
+    DateOnly? RhythmDate = null)
 {
     /// <summary>Czy blok jest wystąpieniem narysowanym do przodu.</summary>
     public bool IsAhead => RhythmId is not null;
@@ -225,7 +228,10 @@ public sealed record AllDayBox(
     bool CanWrite = false,
 
     /// <summary>Zadanie niosące rytm — gdy wpis jest wystąpieniem narysowanym do przodu.</summary>
-    Guid? RhythmId = null)
+    Guid? RhythmId = null,
+
+    /// <summary>Dzień, w którym wystąpienie wypada z reguły — jego tożsamość w serii.</summary>
+    DateOnly? RhythmDate = null)
 {
     /// <summary>Czy wpis jest wystąpieniem narysowanym do przodu.</summary>
     public bool IsAhead => RhythmId is not null;
@@ -755,6 +761,74 @@ public sealed partial class CalendarViewModel(
             StartText: "—", EndText: "—", TaskId: null,
             DayText: Anchor.ToString("dd.MM.yyyy"), entry.SourceId, entry.ExternalId,
             entry.IsDone, entry.CanWrite));
+    }
+
+    /// <summary>
+    /// Odwołanie jednego wystąpienia rytmu — tego narysowanego do przodu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bez pytania o potwierdzenie, tak samo jak przy usuwaniu notatki i wydarzenia:
+    /// pytanie przy jednej rzeczy uczy odklikiwać pytania, a wtedy psuje się także to,
+    /// które ma sens. Odwołanie dotyczy jednego dnia i nie rusza ani rytmu, ani żadnego
+    /// innego wystąpienia.
+    /// </para>
+    /// <para>
+    /// <b>Cofnąć się tego nie da inaczej niż ręką</b> — trzeba założyć zadanie na ten
+    /// dzień z osobna. Zapisanie odwołania jest jedną linijką w regule, a przywrócenie
+    /// wymagałoby pokazywania odwołanych wystąpień na siatce, czyli rysowania rzeczy,
+    /// których nie ma. Wpis w dzienniku zostaje, więc widać przynajmniej, co się stało.
+    /// </para>
+    /// </remarks>
+    public async Task DropOccurrenceAsync(Guid rhythm, DateOnly occurrence)
+    {
+        try
+        {
+            await edit.DropOccurrenceAsync(rhythm, occurrence);
+            await log.RecordAsync("Kalendarz: odwołanie wystąpienia", $"{occurrence:yyyy-MM-dd}");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: odwołanie wystąpienia", "nie udało się", ActivityLevel.Problem, e.Message);
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>
+    /// Przełożenie jednego wystąpienia rytmu przeciągnięciem po siatce.
+    /// </summary>
+    /// <remarks>
+    /// Ten sam gest, co przy zadaniu — bo z punktu widzenia ręki to ta sama czynność.
+    /// Pod spodem idzie co innego: zadania nie ma jeszcze na świecie, więc zapisuje się
+    /// nie jego nowy dzień, tylko zmiana przy tym jednym wystąpieniu rytmu.
+    /// </remarks>
+    public async Task MoveOccurrenceAsync(Guid rhythm, DateOnly occurrence, DateOnly day, double y)
+    {
+        var time = Time(y);
+
+        try
+        {
+            await edit.MoveOccurrenceAsync(rhythm, occurrence, day, time);
+            await log.RecordAsync(
+                "Kalendarz: przełożenie wystąpienia",
+                $"{occurrence:yyyy-MM-dd} → {day:yyyy-MM-dd} {time:HH}:{time:mm}");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: przełożenie wystąpienia", "nie udało się",
+                ActivityLevel.Problem, e.Message);
+        }
+
+        await RefreshAsync();
     }
 
     /// <summary>
@@ -1617,7 +1691,7 @@ public sealed partial class CalendarViewModel(
             DayNames[((int)day.Date.DayOfWeek + 6) % 7],
             day.AllDay.Select(e => new AllDayBox(
                 e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone, e.CanWrite,
-                e.RhythmId)).ToList(),
+                e.RhythmId, e.RhythmDate)).ToList(),
             day.Timed.Select(Box).ToList(),
             day.Date == today,
             now)).ToList();
@@ -2277,6 +2351,7 @@ public sealed partial class CalendarViewModel(
             slot.Entry.ExternalId,
             slot.Entry.IsDone,
             slot.Entry.CanWrite,
-            slot.Entry.RhythmId);
+            slot.Entry.RhythmId,
+            slot.Entry.RhythmDate);
     }
 }

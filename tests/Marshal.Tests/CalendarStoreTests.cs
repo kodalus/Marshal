@@ -673,6 +673,85 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Odwołane wystąpienie znika z siatki, a rytm zostaje.
+    /// </summary>
+    /// <remarks>
+    /// „W tę jedną środę nie" nie miało dotąd jak się wydarzyć: albo zmieniało się regułę
+    /// (czyli wszystkie pozostałe środy), albo nie robiło nic. Zmiana zapisuje się przy
+    /// dniu z reguły i nie rusza ani rytmu, ani żadnego innego wystąpienia.
+    /// </remarks>
+    [Fact]
+    public async Task Odwolane_wystapienie_znika_z_siatki()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        var task = TaskItem.Capture("Śmieci", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(19, 0), _hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(
+                RecurrenceKind.Weekly,
+                daysOfWeek: Weekdays.Wednesday,
+                changes: [new RecurrenceChange(new DateOnly(2026, 9, 23))]),
+            _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 21))
+            .SelectMany(d => d.Timed)
+            .Select(s => s.Entry)
+            .Where(e => e.Title == "Śmieci")
+            .Select(e => e.Start.Date)
+            .Should().Equal(new DateTime(2026, 9, 16), new DateTime(2026, 9, 30));
+    }
+
+    /// <summary>
+    /// Przełożone wystąpienie stoi tam, dokąd je przełożono — z własną porą.
+    /// </summary>
+    /// <remarks>
+    /// Tożsamość zostaje przy dniu z reguły, bo po nim rozpoznaje się zmianę. Bez tego
+    /// przełożenie dwa razy z rzędu gubiłoby ślad, po którym wiadomo, czego dotyczy.
+    /// </remarks>
+    [Fact]
+    public async Task Przelozone_wystapienie_stoi_w_nowym_dniu_i_o_nowej_porze()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        var task = TaskItem.Capture("Śmieci", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(19, 0), _hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(
+                RecurrenceKind.Weekly,
+                daysOfWeek: Weekdays.Wednesday,
+                changes:
+                [
+                    new RecurrenceChange(
+                        new DateOnly(2026, 9, 23), new DateOnly(2026, 9, 24), new TimeOnly(17, 0)),
+                ]),
+            _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        var drawn = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 14))
+            .SelectMany(d => d.Timed)
+            .Select(s => s.Entry)
+            .Where(e => e.Title == "Śmieci")
+            .ToList();
+
+        drawn.Select(e => e.Start.Date).Should().Equal(
+            new DateTime(2026, 9, 16), new DateTime(2026, 9, 24));
+
+        drawn[1].Start.Hour.Should().Be(17);
+        drawn[1].RhythmDate.Should().Be(new DateOnly(2026, 9, 23));
+        drawn[1].RhythmId.Should().Be(task.Id);
+    }
+
+    /// <summary>
     /// Zadanie bez rytmu nie dorabia sobie przyszłych wystąpień.
     /// </summary>
     [Fact]
