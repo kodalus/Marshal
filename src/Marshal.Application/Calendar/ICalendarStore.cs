@@ -41,6 +41,17 @@ public interface ICalendarStore
         Guid sourceId, IReadOnlyList<string> seen, CancellationToken ct = default);
 
     /// <summary>
+    /// Porzuca niezapisane zmiany kalendarza — po podłączeniu, które się nie udało.
+    /// </summary>
+    /// <remarks>
+    /// Bez tego jedno nieudane pobranie zabierało ze sobą wszystkie następne: zostawiało
+    /// wpisy dołożone do połowy, a każde kolejne podłączenie zapisywało je razem ze
+    /// swoimi i przewracało się na cudzym kłopocie. Piętnaście nieudanych kalendarzy
+    /// z jednego powodu to piętnaście razy ta sama nieprawda.
+    /// </remarks>
+    void Forget();
+
+    /// <summary>
     /// Ile wydarzeń leży w bazie w ogóle, bez zakresu i bez odwołanych.
     /// </summary>
     /// <remarks>

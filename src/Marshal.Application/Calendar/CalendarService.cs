@@ -632,8 +632,42 @@ public sealed class CalendarSyncService(
     /// Kalendarz jest dodatkiem do zadań; niedostępny kanał ma znaczyć „brak świeżych
     /// wydarzeń", a nie „aplikacja się nie otwiera".
     /// </remarks>
+    /// <summary>Jedno odświeżanie naraz — reszta odchodzi z kwitkiem, nie czeka w kolejce.</summary>
+    /// <remarks>
+    /// <para>
+    /// Odświeżenie ruszają trzy rzeczy: start aplikacji, wejście na kalendarz i minutnik.
+    /// Potrafią zajść na siebie, a wtedy oba przebiegi czytają z bazy ten sam brak wpisu,
+    /// oba go dokładają i drugi dostaje odmowę śledzenia — <b>dwa obiekty o tym samym
+    /// kluczu</b>. Brama na bazę tego nie łapie: każdy odczyt i zapis z osobna przechodzi
+    /// przez nią prawidłowo, a rozjeżdża się to, co pomiędzy nimi.
+    /// </para>
+    /// <para>
+    /// Odejście z kwitkiem, nie czekanie: przebieg, który właśnie trwa, przyniesie
+    /// dokładnie to samo, po co przyszedł ten drugi. Pusty raport nie podnosi żadnego
+    /// napisu — zero prób znaczy „nie ma czego opowiadać".
+    /// </para>
+    /// </remarks>
+    private readonly SemaphoreSlim _alone = new(1, 1);
+
     public async Task<CalendarRefreshReport> RefreshAsync(
         bool force = false, CancellationToken ct = default)
+    {
+        if (!await _alone.WaitAsync(0, ct))
+        {
+            return new CalendarRefreshReport(0, 0, 0, []);
+        }
+
+        try
+        {
+            return await FetchAllAsync(force, ct);
+        }
+        finally
+        {
+            _alone.Release();
+        }
+    }
+
+    private async Task<CalendarRefreshReport> FetchAllAsync(bool force, CancellationToken ct)
     {
         var now = clock.Now;
         var refreshed = 0;
@@ -753,6 +787,10 @@ public sealed class CalendarSyncService(
             {
                 failed++;
                 reasons.Add($"{source.Name}: {e.Message}");
+
+                // Kłopot jednego podłączenia zostaje przy nim. Niezapisane wpisy odpadają,
+                // bo inaczej zapisze je następne podłączenie i przewróci się na cudzym.
+                store.Forget();
             }
         }
 

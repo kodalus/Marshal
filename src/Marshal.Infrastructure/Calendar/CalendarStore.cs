@@ -74,14 +74,34 @@ public sealed class CalendarStore(MarshalDbContext db, IDbQueue? queue = null)
             return;
         }
 
+        // **Po jednym wpisie na identyfikator.** Google potrafi oddać ten sam wpis dwa
+        // razy w jednym pobraniu — przy odczycie przyrostowym, gdy wydarzenie zmieniło
+        // się w trakcie, i na styku stron przy odczycie pełnym. Druga kopia szła tą samą
+        // drogą i dokładała do kontekstu **drugi obiekt o tym samym kluczu**, co kończy
+        // się odmową śledzenia. Zostaje ostatnia: jest najświeższa.
+        var fresh = events
+            .GroupBy(e => e.ExternalId, StringComparer.Ordinal)
+            .Select(g => g.Last())
+            .ToList();
+
         // Jedno zapytanie na całą porcję, nie jedno na wydarzenie. Kalendarz po pełnym
         // odczycie potrafi mieć kilkaset pozycji, a każda osobno to kilkaset zapytań.
-        var keys = events.Select(e => e.ExternalId).ToList();
+        var keys = fresh.Select(e => e.ExternalId).ToList();
         var existing = await _queue.RunAsync(() => db.CalendarEvents
             .Where(e => e.SourceId == sourceId && keys.Contains(e.ExternalId))
             .ToDictionaryAsync(e => e.ExternalId, ct), ct);
 
-        foreach (var ev in events)
+        // Wpisy dołożone, a jeszcze niezapisane, też liczą się jako istniejące. Bez tego
+        // dwa odświeżenia zachodzące na siebie dokładały ten sam wpis dwa razy: pierwsze
+        // jeszcze nie zapisało, więc zapytanie do bazy go nie widziało.
+        foreach (var added in db.ChangeTracker.Entries<CalendarEvent>()
+            .Where(e => e.State == EntityState.Added && e.Entity.SourceId == sourceId)
+            .Select(e => e.Entity))
+        {
+            existing.TryAdd(added.ExternalId, added);
+        }
+
+        foreach (var ev in fresh)
         {
             if (existing.TryGetValue(ev.ExternalId, out var saved))
             {
@@ -96,6 +116,33 @@ public sealed class CalendarStore(MarshalDbContext db, IDbQueue? queue = null)
                     ev.StartsAt, ev.EndsAt, ev.IsAllDay,
                     ev.Location, ev.Cancelled));
             }
+        }
+    }
+
+    /// <summary>
+    /// Porzucenie niezapisanych zmian kalendarza po nieudanym pobraniu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Objaw, który to wymusił: jedno podłączenie odmówiło zapisu, a w dzienniku stanęło
+    /// „nie udało się odświeżyć 15 z 16 kalendarzy". Czternaście z tych piętnastu nie
+    /// miało własnego kłopotu — dziedziczyły cudzy. Nieudane pobranie zostawiało
+    /// w kontekście wpisy dołożone do połowy, a każde następne podłączenie zapisywało
+    /// je razem ze swoimi i przewracało się na tym samym.
+    /// </para>
+    /// <para>
+    /// Odczepiane są wyłącznie rzeczy kalendarza. Wyczyszczenie całego kontekstu
+    /// zabrałoby ze sobą zadanie otwarte w oknie — zapis z karty nie miałby potem czego
+    /// zapisać i nie powiedziałby dlaczego.
+    /// </para>
+    /// </remarks>
+    public void Forget()
+    {
+        foreach (var entry in db.ChangeTracker.Entries()
+            .Where(e => e.Entity is CalendarEvent or CalendarCursor)
+            .ToList())
+        {
+            entry.State = EntityState.Detached;
         }
     }
 

@@ -271,6 +271,45 @@ public sealed class CalendarStoreTests : IDisposable
             new DateTimeOffset(DateOnly.Parse(day).ToDateTime(new TimeOnly(toHour, 0)), TimeSpan.FromHours(2)),
             false, null, false);
 
+    /// <summary>
+    /// Ten sam wpis oddany dwa razy w jednym pobraniu nie wywraca całego odświeżania.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Google oddaje wpis dwa razy przy odczycie przyrostowym, gdy zmienił się w trakcie
+    /// pobierania, i na styku stron przy odczycie pełnym. Druga kopia dokładała do
+    /// kontekstu drugi obiekt o tym samym kluczu, a to kończy się odmową śledzenia.
+    /// </para>
+    /// <para>
+    /// Objaw był nieproporcjonalny do przyczyny: jedno podłączenie odmawiało zapisu,
+    /// a napis mówił „nie udało się odświeżyć 15 z 16 kalendarzy" — bo niezapisane wpisy
+    /// zostawały w kontekście i przewracały każde następne podłączenie.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Powtorzony_wpis_w_jednym_pobraniu_nie_psuje_odswiezenia()
+    {
+        _feed.Next = new FeedResult(
+            [
+                NewEvent("a", "Zebranie", "2026-09-17", 17, 18),
+                NewEvent("a", "Zebranie przełożone", "2026-09-17", 18, 19),
+                NewEvent("b", "Przedszkole", "2026-09-17", 8, 9),
+            ],
+            SyncToken: null,
+            IsFull: true);
+
+        var report = await _service.RefreshAsync();
+
+        report.Failed.Should().Be(0);
+
+        var drawn = (await _service.AgendaAsync(new DateOnly(2026, 9, 17), 1))[0].Timed
+            .Select(s => s.Entry.Title)
+            .ToList();
+
+        drawn.Should().BeEquivalentTo(new[] { "Zebranie przełożone", "Przedszkole" },
+            "zostaje ostatnia kopia, bo jest najświeższa");
+    }
+
     [Fact]
     public async Task Pierwsze_pobranie_zapisuje_wydarzenia()
     {
