@@ -228,13 +228,23 @@ public sealed partial class MainViewModel : ObservableObject
     /// zamknięciu zostawałby ten ekran, nie kalendarz. Z widgetu przychodzi się
     /// **na kalendarz**, nawet gdy zadania już nie ma.
     /// </remarks>
-    public void ShowCalendar(Guid? task)
+    public void ShowCalendar(CalendarRequest? what)
     {
         Safely("Kalendarz: wejście z widgetu", async () =>
         {
             await ShowCalendarAsync();
 
-            if (task is not { } id)
+            // Wydarzenie z podłączonego kalendarza nie ma u nas identyfikatora zadania
+            // i dlatego dotąd kończyło tę drogę na samym kalendarzu: kafelek nie miał
+            // czego przekazać, więc wchodziło się „gdzieś w okolice" i dalej trzeba
+            // było szukać wzrokiem. Ma własną kartę i własną drogę do niej.
+            if (what is { IsEvent: true, Source: { } source, Event: { } external, Day: { } shown })
+            {
+                await Calendar.ShowEventAsync(source, external, shown);
+                return;
+            }
+
+            if (what?.Task is not { } id)
             {
                 return;
             }

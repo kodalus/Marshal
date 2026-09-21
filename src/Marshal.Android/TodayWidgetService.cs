@@ -1,3 +1,4 @@
+using System.Globalization;
 using Android.App;
 using Android.Appwidget;
 using Android.Content;
@@ -60,6 +61,17 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// <summary>Czy po ostatnim ograniczniku czeka już ponowienie. Jedno, nie pętla.</summary>
         private bool _retrying;
 
+        /// <summary>
+        /// Dzień, z którego są wczytane wiersze.
+        /// </summary>
+        /// <remarks>
+        /// Wydarzenie z podłączonego kalendarza nie ma u nas identyfikatora, po którym
+        /// dałoby się je odnaleźć — rozpoznaje się je po kalendarzu, po identyfikatorze
+        /// u źródła i po dniu. Dwa pierwsze niesie wiersz, trzeci wie tylko fabryka:
+        /// to ona wczytywała plan i wie, którego dnia dotyczy.
+        /// </remarks>
+        private DateOnly _day;
+
         public int Count => _rows.Count;
 
         public bool HasStableIds => true;
@@ -108,6 +120,13 @@ public sealed class TodayWidgetService : RemoteViewsService
                 // to naprawdę boli: zamknięcie aplikacji zabija proces razem z tą
                 // fabryką, więc nowa nie ma **nic**. Kafelek gasł wtedy na dwie sekundy
                 // i wracał — czyli przez dwie sekundy mówił „nic dziś nie masz".
+                // Dzień liczony także tutaj, bo wiersze bez niego nie wiedzą, do czego
+                // należą — a strzałka dnia potrafi go przestawić wtedy, gdy baza jest
+                // jeszcze zajęta. Z zegara urządzenia, nie z naszego: po zegar aplikacji
+                // trzeba by sięgnąć do składu zależności, na który właśnie nie czekamy.
+                _day = DateOnly.FromDateTime(DateTime.Today)
+                    .AddDays(TodayWidget.Offset(context, widgetId));
+
                 if (_rows.Count == 0)
                 {
                     _rows = Remembered(context, widgetId);
@@ -121,7 +140,7 @@ public sealed class TodayWidgetService : RemoteViewsService
 
             try
             {
-                _rows = LoadAsync(context, widgetId)
+                (_day, _rows) = LoadAsync(context, widgetId)
                     .WaitAsync(TimeSpan.FromSeconds(2))
                     .GetAwaiter()
                     .GetResult();
@@ -421,6 +440,18 @@ public sealed class TodayWidgetService : RemoteViewsService
             {
                 opening.PutExtra(TodayWidget.TaskIdExtra, opened.ToString());
             }
+            else if (item is { SourceId: { } from, ExternalId: { } what })
+            {
+                // Wydarzenie z podłączonego kalendarza nie ma identyfikatora zadania,
+                // więc dotąd niosło **nic** i okno otwierało sam kalendarz. Rozpoznaje
+                // się je po kalendarzu i po identyfikatorze u źródła — dokładnie tak
+                // samo jak przy odhaczaniu, o jeden wiersz niżej.
+                opening.PutExtra(TodayWidget.SourceExtra, from.ToString());
+                opening.PutExtra(TodayWidget.EventExtra, what);
+                opening.PutExtra(
+                    TodayWidget.DayExtra,
+                    _day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            }
 
             view.SetOnClickFillInIntent(Resource.Id.content, opening);
 
@@ -440,7 +471,7 @@ public sealed class TodayWidgetService : RemoteViewsService
         /// zawsze dzisiaj. Wyglądało to na nieodświeżoną listę, a było listą, która
         /// nigdy nie wiedziała, o który dzień pytać.
         /// </remarks>
-        private static async Task<IReadOnlyList<PlanRow>> LoadAsync(
+        private static async Task<(DateOnly Day, IReadOnlyList<PlanRow> Rows)> LoadAsync(
             Context context, int widgetId)
         {
             await AppServices.ReadyAsync();
@@ -449,7 +480,7 @@ public sealed class TodayWidgetService : RemoteViewsService
             var day = services.GetRequiredService<IClock>().Today
                 .AddDays(TodayWidget.Offset(context, widgetId));
 
-            return await services.GetRequiredService<DayPlanService>().ForDayAsync(day);
+            return (day, await services.GetRequiredService<DayPlanService>().ForDayAsync(day));
         }
 
         /// <summary>

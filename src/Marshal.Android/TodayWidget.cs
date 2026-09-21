@@ -72,6 +72,9 @@ public sealed class TodayWidget : AppWidgetProvider
 
     public const string EventExtra = "wydarzenie";
 
+    /// <summary>Dzień, pod którym stał dotknięty wiersz. Zapis „rrrr-MM-dd".</summary>
+    public const string DayExtra = "dzien-wiersza";
+
     /// <summary>Co widget zgłasza: odhaczenie, otwarcie albo przesunięcie dnia.</summary>
     private const string CoExtra = "co";
 
@@ -624,6 +627,21 @@ public sealed class TodayWidget : AppWidgetProvider
             if (intent.GetStringExtra(TaskIdExtra) is { Length: > 0 } task)
             {
                 toWindow.PutExtra(MainActivity.TaskExtra, task);
+            }
+            else if (intent.GetStringExtra(SourceExtra) is { Length: > 0 } source
+                && intent.GetStringExtra(EventExtra) is { Length: > 0 } external)
+            {
+                toWindow.PutExtra(MainActivity.SourceExtra, source);
+                toWindow.PutExtra(MainActivity.EventExtra, external);
+
+                // Dzień niesie wiersz, a nie liczymy go tutaj. Wydarzenie nie ma swojej
+                // daty po naszej stronie, a kafelek pokazuje dowolny dzień — ten, pod
+                // którym wiersz stał. Bez tej odpowiedzi okno nie wiedziałoby, dokąd
+                // przesunąć kalendarz, żeby wydarzenie w ogóle było na siatce.
+                if (intent.GetStringExtra(DayExtra) is { Length: > 0 } day)
+                {
+                    toWindow.PutExtra(MainActivity.DayExtra, day);
+                }
             }
 
             window.StartActivity(toWindow);

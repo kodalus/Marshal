@@ -1287,6 +1287,45 @@ public sealed partial class CalendarViewModel(
         ScrollToNow();
     }
 
+    /// <summary>
+    /// Wejście z kafelka w wydarzenie z podłączonego kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dzień podany z zewnątrz, a nie odczytany z wydarzenia: wydarzenie nie ma u nas
+    /// identyfikatora, po którym dałoby się je znaleźć bez siatki, a siatki nie da się
+    /// złożyć, nie wiedząc, którego dnia szukać. Kafelek wie to za darmo — wiersz stał
+    /// pod konkretnym dniem — więc niesie tę odpowiedź ze sobą.
+    /// </para>
+    /// <para>
+    /// Najpierw bloki z godziną, potem pasmo całodniowe: to dwa różne miejsca na siatce
+    /// i dwie różne drogi otwarcia, a wydarzenie stoi w jednym albo w drugim. Wydarzenia,
+    /// którego nie ma na siatce, nie udajemy — kalendarz i tak stoi już na właściwym dniu,
+    /// czyli tam, gdzie było, zanim zniknęło.
+    /// </para>
+    /// </remarks>
+    public async Task ShowEventAsync(Guid source, string external, DateOnly day)
+    {
+        await ShowAsync(day);
+
+        if (Columns.SelectMany(k => k.Slots)
+            .FirstOrDefault(b => b.SourceId == source && b.ExternalId == external) is { } timed)
+        {
+            OpenTaskCommand.Execute(timed);
+
+            // Na godzinę wydarzenia, a nie na bieżącą: przewinięcie ustawione przez
+            // „ShowAsync" mówiło o teraz, a tu przychodzi się po coś konkretnego.
+            ScrollRequested?.Invoke(Math.Max(0, timed.Top - HourHeight));
+            return;
+        }
+
+        if (Columns.SelectMany(k => k.AllDay)
+            .FirstOrDefault(e => e.SourceId == source && e.ExternalId == external) is { } whole)
+        {
+            OpenAllDay(whole);
+        }
+    }
+
     /// <summary>Poniedziałek, od którego zaczyna się siatka miesiąca.</summary>
     /// <remarks>
     /// Tydzień na przełomie jest tygodniem: wycięcie z niego dni należących do sąsiada

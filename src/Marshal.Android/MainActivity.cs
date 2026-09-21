@@ -1,3 +1,4 @@
+using System.Globalization;
 using Android.App;
 using Android.Content;
 using Android.Content.PM;
@@ -24,6 +25,22 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 
     /// <summary>Zadanie do otwarcia razem z kalendarzem. Puste, gdy dotknięto samego kafelka.</summary>
     public const string TaskExtra = "zadanie-kalendarza";
+
+    /// <summary>
+    /// Wydarzenie z podłączonego kalendarza: skąd pochodzi, czym jest u źródła
+    /// i pod którym dniem stało.
+    /// </summary>
+    /// <remarks>
+    /// Trzy wartości zamiast jednej, bo wydarzenie nie ma u nas identyfikatora —
+    /// istnieje w cudzym kalendarzu, a my mamy jego kopię. Dzień dokładany dlatego,
+    /// że kopia sama nie mówi, którego dnia szukać jej na siatce, a kafelek pokazuje
+    /// dowolny dzień.
+    /// </remarks>
+    public const string SourceExtra = "kalendarz-wydarzenia";
+
+    public const string EventExtra = "wydarzenie-kalendarza";
+
+    public const string DayExtra = "dzien-wydarzenia";
 
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder).WithInterFont();
@@ -121,11 +138,28 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
         }
 
         // Nieczytelny identyfikator traktowany jak jego brak: wejście na kalendarz jest
-        // wtedy nadal sensowną odpowiedzią, a odmowa całego wejścia — nie.
-        App.AskForCalendar(
-            Guid.TryParse(intent.GetStringExtra(TaskExtra), out var task)
-                ? task
-                : null);
+        // wtedy nadal sensowną odpowiedzią, a odmowa całego wejścia — nie. Tak samo
+        // niepełny opis wydarzenia: bez któregokolwiek z trzech nie ma czego otwierać.
+        if (Guid.TryParse(intent.GetStringExtra(TaskExtra), out var task))
+        {
+            App.AskForCalendar(new CalendarRequest(Task: task));
+            return;
+        }
+
+        if (Guid.TryParse(intent.GetStringExtra(SourceExtra), out var source)
+            && intent.GetStringExtra(EventExtra) is { Length: > 0 } external
+            && DateOnly.TryParseExact(
+                intent.GetStringExtra(DayExtra),
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var day))
+        {
+            App.AskForCalendar(new CalendarRequest(Source: source, Event: external, Day: day));
+            return;
+        }
+
+        App.AskForCalendar();
     }
 
     protected override void OnDestroy()
