@@ -425,6 +425,13 @@ public sealed class TaskItem : Entity
             // potem pora zapamiętana przez serię, a na końcu pora wystąpienia, które
             // właśnie schodzi ze sceny.
             DoTime = at ?? rule.Time ?? DoTime,
+
+            // Wyprzedzenia przechodzą **bez przeliczania**: liczą się od godziny samego
+            // wystąpienia, więc „dziesięć minut przed" znaczy to samo w każdym kolejnym.
+            // Do dziś nie przechodziły wcale i był to błąd widoczny dopiero za tydzień:
+            // pierwsze wystąpienie odzywało się, a następne już nie — bo powstawało
+            // z pustą listą wyprzedzeń i nie miało z czego policzyć żadnej chwili.
+            ReminderLeadsCsv = ReminderLeadsCsv,
         };
 
         // Termin przenosi się z zachowaniem odstępu od daty wykonania: „zapłacić do 10-go"

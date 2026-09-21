@@ -450,6 +450,26 @@ public sealed class RecurrenceRunnerTests
     }
 
     [Fact]
+    public void Nastepnik_niesie_przypomnienia_poprzednika()
+    {
+        // Przypomnienie z własną chwilą przesuwa się o tyle dni, ile dzieli wystąpienia:
+        // „w przeddzień o dwudziestej" ma zostać przeddniem, a nie odezwać się natychmiast.
+        // Wyprzedzenia przechodzą bez przeliczania — liczą się od godziny wystąpienia.
+        var task = Zaplanowane(
+            "2026-09-16", new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Wednesday));
+
+        task.SetDoTime(new TimeOnly(19, 0), Stempel());
+        task.SetReminderLeads([30, 1440], Stempel());
+        task.SetReminder(Moment("2026-09-15", 20), Stempel());
+
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel);
+
+        next!.DoDate.Should().Be(D("2026-09-23"));
+        next.ReminderAt.Should().Be(Moment("2026-09-22", 20), "przeddzień zostaje przeddniem");
+        next.ReminderLeads.Should().Equal(30, 1440);
+    }
+
+    [Fact]
     public void Pominiecie_wyrzuca_biezace_wystapienie_i_zostawia_rytm()
     {
         // „Tej środy nie będzie". Do dziś jedyną drogą było wyrzucenie zadania — a razem
