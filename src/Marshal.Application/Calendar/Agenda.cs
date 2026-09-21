@@ -36,8 +36,28 @@ public sealed record AgendaEntry(
     /// aplikacji, a okno musiałoby po nią sięgać osobno przy każdym rysowaniu siatki.
     /// Przy zadaniach Marshala zawsze prawda — własne zadania zapisujemy u siebie.
     /// </remarks>
-    bool CanWrite = false)
+    bool CanWrite = false,
+
+    /// <summary>
+    /// Zadanie niosące rytm — gdy wpis jest jego wystąpieniem narysowanym do przodu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Takie wystąpienie **nie istnieje jeszcze jako zadanie**: powstaje dopiero wtedy,
+    /// gdy poprzednie zostanie odhaczone. Rysunek rytmu, nie rzecz — dlatego nie ma
+    /// własnego identyfikatora i nie da się go ani odhaczyć, ani przenieść.
+    /// </para>
+    /// <para>
+    /// Identyfikator serii zamiast samej flagi, bo dotknięcie takiego wystąpienia ma
+    /// dokąd prowadzić: do zadania, które niesie regułę — czyli tam, gdzie rytm da się
+    /// obejrzeć i zmienić. Flaga mówiłaby „tego nie dotykaj" i kończyła rozmowę.
+    /// </para>
+    /// </remarks>
+    Guid? RhythmId = null)
 {
+    /// <summary>Czy wpis jest wystąpieniem narysowanym do przodu, a nie zadaniem.</summary>
+    public bool IsAhead => RhythmId is not null;
+
     public double StartHour => Start.TimeOfDay.TotalHours;
 
     public double EndHour => End.TimeOfDay.TotalHours is var h && h <= StartHour ? 24 : h;

@@ -865,13 +865,19 @@ public partial class MainView : UserControl
         _last = _from;
         _dragging = false;
 
+        // Wystąpienie rytmu narysowane do przodu nie jest jeszcze zadaniem, więc nie ma
+        // czego przenieść: przeciągnięcie musiałoby je najpierw utworzyć, a wtedy rytm
+        // miałby wystąpienie zapisane w środku serii i drugie, które i tak z niej wyjdzie.
+        // Dotknięcie dalej prowadzi do zadania niosącego rytm.
+        var movable = slot.RhythmId is null;
+
         // Myszą przeciąga się od razu; palcem dopiero po przytrzymaniu. Na dotyku
         // ruch palca po bloku znaczy najczęściej „przewiń widok", a nie „przenieś to
         // zadanie" — a blok, który przejmuje wskaźnik po sześciu punktach, odbiera
         // przewijanie wszędzie tam, gdzie coś stoi. Czyli w zajęty dzień prawie wszędzie.
-        _dragAllowed = e.Pointer.Type != PointerType.Touch;
+        _dragAllowed = movable && e.Pointer.Type != PointerType.Touch;
 
-        if (!_dragAllowed)
+        if (movable && !_dragAllowed)
         {
             _longPress?.Stop();
             _longPress = new DispatcherTimer(

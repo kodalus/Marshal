@@ -40,8 +40,21 @@ public sealed record SlotBox(
     bool IsDone,
 
     /// <summary>Czy do kalendarza, z którego pochodzi wpis, da się pisać.</summary>
-    bool CanWrite = false)
+    bool CanWrite = false,
+
+    /// <summary>
+    /// Zadanie niosące rytm — gdy blok jest wystąpieniem narysowanym do przodu.
+    /// </summary>
+    /// <remarks>
+    /// Takie wystąpienie jeszcze nie istnieje: powstanie dopiero przy odhaczeniu
+    /// poprzedniego. Rysunek rytmu, nie rzecz — nie ma czego odhaczyć ani przenieść,
+    /// a dotknięcie prowadzi do zadania, które regułę niesie.
+    /// </remarks>
+    Guid? RhythmId = null)
 {
+    /// <summary>Czy blok jest wystąpieniem narysowanym do przodu.</summary>
+    public bool IsAhead => RhythmId is not null;
+
     /// <summary>
     /// Co da się odhaczyć: własne zadanie i wydarzenie z kalendarza, do którego umiemy pisać.
     /// </summary>
@@ -132,7 +145,13 @@ public sealed record SlotBox(
     public double MarkSize => Math.Max(8, CheckSize - 3);
 
     /// <summary>Zadanie półprzezroczyste: umowa z kimś i zamiar wobec siebie to nie to samo.</summary>
-    public double Opacity => IsTask ? 0.55 : 1.0;
+    /// <remarks>
+    /// Wystąpienie narysowane do przodu jeszcze słabiej. Jest zapowiedzią, nie rzeczą:
+    /// nie da się go odhaczyć ani przenieść, a narysowane z tą samą siłą obiecywałoby
+    /// dokładnie to, czego nie robi. Na tyle mocno, żeby dało się przeczytać nazwę —
+    /// bo po to jest na siatce.
+    /// </remarks>
+    public double Opacity => IsAhead ? 0.32 : IsTask ? 0.55 : 1.0;
 
     /// <summary>Barwa kalendarza albo zadania, przyciemniona przezroczystością.</summary>
     public IBrush Background => Palette.Background(Color, IsTask, Palette.OnGrid);
@@ -203,8 +222,14 @@ public sealed record AllDayBox(
     string Title, Guid? TaskId, Guid? SourceId, string? ExternalId, bool IsDone = false,
 
     /// <summary>Czy do kalendarza, z którego wpis pochodzi, da się pisać.</summary>
-    bool CanWrite = false)
+    bool CanWrite = false,
+
+    /// <summary>Zadanie niosące rytm — gdy wpis jest wystąpieniem narysowanym do przodu.</summary>
+    Guid? RhythmId = null)
 {
+    /// <summary>Czy wpis jest wystąpieniem narysowanym do przodu.</summary>
+    public bool IsAhead => RhythmId is not null;
+
     /// <summary>
     /// Napis na pasku — z ptaszkiem, gdy wpis jest odhaczony.
     /// </summary>
@@ -247,8 +272,14 @@ public sealed record CalendarColumn(
 /// w jeden napis zlewałaby się z nią przy trzydziestu komórkach naraz.
 /// </remarks>
 public sealed record MonthEntry(
-    string Time, string Title, Guid? TaskId, bool IsDone, string? Color)
+    string Time, string Title, Guid? TaskId, bool IsDone, string? Color,
+
+    /// <summary>Zadanie niosące rytm — gdy wpis jest wystąpieniem narysowanym do przodu.</summary>
+    Guid? RhythmId = null)
 {
+    /// <summary>Co otworzyć po dotknięciu: własne zadanie albo rytm, z którego wpis wyszedł.</summary>
+    public Guid? Opens => TaskId ?? RhythmId;
+
     public string Label => IsDone ? $"✓ {Title}" : Title;
 
     public bool HasTime => Time.Length > 0;
@@ -271,7 +302,7 @@ public sealed record MonthEntry(
     /// niesie już domyślna barwa i brak godziny.
     /// </para>
     /// </remarks>
-    public IBrush Background => Palette.Background(Color, TaskId is not null, Palette.InCell);
+    public IBrush Background => Palette.Background(Color, Opens is not null, Palette.InCell);
 }
 
 /// <summary>Jedna komórka siatki miesiąca.</summary>
@@ -710,6 +741,12 @@ public sealed partial class CalendarViewModel(
         if (entry.TaskId is { } id)
         {
             TaskRequested?.Invoke(id);
+            return;
+        }
+
+        if (entry.RhythmId is { } rhythm)
+        {
+            TaskRequested?.Invoke(rhythm);
             return;
         }
 
@@ -1232,7 +1269,9 @@ public sealed partial class CalendarViewModel(
     /// </remarks>
     public void OpenMonthEntry(MonthEntry? entry)
     {
-        if (entry?.TaskId is { } id)
+        // Wystąpienie narysowane do przodu prowadzi do zadania niosącego rytm: własnego
+        // jeszcze nie ma, a reguła jest tym, co o nim mówi.
+        if (entry?.Opens is { } id)
         {
             TaskRequested?.Invoke(id);
         }
@@ -1412,7 +1451,8 @@ public sealed partial class CalendarViewModel(
             // co na siatce tygodnia — inaczej ta sama doba miałaby dwie kolejności
             // zależnie od tego, którym przyciskiem się na nią patrzy.
             var entries = day.AllDay
-                .Select(e => new MonthEntry(string.Empty, e.Title, e.TaskId, e.IsDone, e.Color))
+                .Select(e => new MonthEntry(
+                    string.Empty, e.Title, e.TaskId, e.IsDone, e.Color, e.RhythmId))
                 .Concat(day.Timed
                     .OrderBy(s => s.Entry.Start)
                     .Select(s => new MonthEntry(
@@ -1424,7 +1464,8 @@ public sealed partial class CalendarViewModel(
                         s.Entry.Title,
                         s.Entry.TaskId,
                         s.Entry.IsDone,
-                        s.Entry.Color)))
+                        s.Entry.Color,
+                        s.Entry.RhythmId)))
                 .ToList();
 
             var visible = entries.Count > slots ? entries.Take(slots).ToList() : entries;
@@ -1575,7 +1616,8 @@ public sealed partial class CalendarViewModel(
             day.Date,
             DayNames[((int)day.Date.DayOfWeek + 6) % 7],
             day.AllDay.Select(e => new AllDayBox(
-                e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone, e.CanWrite)).ToList(),
+                e.Title, e.TaskId, e.SourceId, e.ExternalId, e.IsDone, e.CanWrite,
+                e.RhythmId)).ToList(),
             day.Timed.Select(Box).ToList(),
             day.Date == today,
             now)).ToList();
@@ -1767,6 +1809,15 @@ public sealed partial class CalendarViewModel(
         if (block.TaskId is { } id)
         {
             TaskRequested?.Invoke(id);
+            return;
+        }
+
+        // Wystąpienie narysowane do przodu nie ma własnej karty, bo nie ma jeszcze czego
+        // pokazywać. Prowadzi do zadania niosącego rytm — tam widać regułę i tam się ją
+        // zmienia, a zmiana dotyczy wszystkich wystąpień naraz, bo jest jedna.
+        if (block.RhythmId is { } rhythm)
+        {
+            TaskRequested?.Invoke(rhythm);
             return;
         }
 
@@ -2225,6 +2276,7 @@ public sealed partial class CalendarViewModel(
             slot.Entry.SourceId,
             slot.Entry.ExternalId,
             slot.Entry.IsDone,
-            slot.Entry.CanWrite);
+            slot.Entry.CanWrite,
+            slot.Entry.RhythmId);
     }
 }

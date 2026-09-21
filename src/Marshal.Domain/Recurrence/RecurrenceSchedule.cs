@@ -47,6 +47,59 @@ public static class RecurrenceSchedule
         return rule.Until is { } end && next > end ? null : next;
     }
 
+    /// <summary>
+    /// Wszystkie wystąpienia po <paramref name="from"/>, nie później niż
+    /// <paramref name="until"/>. Rytm rozwinięty do przodu, bez zapisywania czegokolwiek.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Kalendarz pokazywał rytm raz, bo w modelu żyje naraz jedno wystąpienie: regułę
+    /// nosi najnowsze, a kolejne powstaje dopiero przy odhaczeniu. „Co poniedziałek
+    /// śmieci" było więc widać w najbliższy poniedziałek i w żaden następny — inaczej
+    /// niż wydarzenie z Google, które rozwija u siebie sam Google.
+    /// </para>
+    /// <para>
+    /// <b>Rozwinięcie przy rysowaniu, nie zapis.</b> Sześćdziesiąt zapisanych kopii
+    /// znaczyłoby sześćdziesiąt rzeczy do przepisania przy każdej zmianie rytmu, tyleż
+    /// wierszy w dzienniku synchronizacji na każdą serię, i dwa zadania na jeden dzień
+    /// wszędzie tam, gdzie zaległe wystąpienie przenosi się na dziś obok wystąpienia
+    /// umówionego na dziś. Wyliczenie kosztuje kilkadziesiąt dodawań dni.
+    /// </para>
+    /// <para>
+    /// Licznik pozostałych i data końca obowiązują tak samo, jak przy wyliczaniu
+    /// następnego — bo to ta sama funkcja wołana w pętli. Seria na pięć razy rysuje się
+    /// pięć razy i ani razu więcej.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<DateOnly> Following(RecurrenceRule rule, DateOnly from, DateOnly until)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+
+        return until < from ? [] : Walk(rule, from, until);
+    }
+
+    private static IEnumerable<DateOnly> Walk(RecurrenceRule rule, DateOnly from, DateOnly until)
+    {
+        var current = rule;
+        var basis = from;
+
+        // Ogranicznik ten sam, co przy przeskakiwaniu zaległych. Sięga dalej, niż
+        // ktokolwiek przewinie kalendarz: przy rytmie codziennym to dwadzieścia siedem
+        // lat od daty wystąpienia, które regułę niesie.
+        for (var i = 0; i < 10_000; i++)
+        {
+            if (Next(current, basis) is not { } date || date > until)
+            {
+                yield break;
+            }
+
+            yield return date;
+
+            current = current.Advance();
+            basis = date;
+        }
+    }
+
     /// <summary>Wystąpienie razem z regułą, która ma pójść na nie dalej.</summary>
     public readonly record struct Occurrence(DateOnly Date, RecurrenceRule Rule);
 

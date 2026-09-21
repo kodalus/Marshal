@@ -174,6 +174,22 @@ public sealed class TaskRepository(MarshalDbContext db, IDbQueue? queue = null)
             .OrderBy(t => t.CreatedAt)
             .ToListAsync(ct), ct);
 
+    /// <remarks>
+    /// Żywe i otwarte: rytm wyrzucony do kosza albo odhaczony nie ma się z czego
+    /// rozwijać. Stan odhaczonego wystąpienia i tak nie niesie reguły — przy odhaczeniu
+    /// przechodzi ona na następnik — ale warunek zostaje, bo zapis z innego urządzenia
+    /// potrafi dojść w innej kolejności, niż powstał.
+    /// </remarks>
+    public async Task<IReadOnlyList<TaskItem>> RecurringAsync(CancellationToken ct = default) =>
+        await _queue.RunAsync(() => db.Tasks
+            .Where(t => !t.Deleted
+                     && t.RecurrenceJson != null
+                     && t.DoDate != null
+                     && (t.State == TaskState.Next
+                      || t.State == TaskState.Scheduled
+                      || t.State == TaskState.Waiting))
+            .ToListAsync(ct), ct);
+
     public async Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default) =>
         await _queue.RunAsync(() => db.Tasks
             .Where(t => t.SharedEventId != null)

@@ -4,6 +4,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Projects;
+using Marshal.Domain.Recurrence;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Tasks;
@@ -556,6 +557,141 @@ public sealed class CalendarStoreTests : IDisposable
         await _service.RefreshAsync();
 
         (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 1))[0].Timed.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Rytm rysuje się do przodu na całym oglądanym zakresie.
+    /// </summary>
+    /// <remarks>
+    /// W modelu żyje naraz jedno wystąpienie serii — regułę nosi najnowsze — więc siatka
+    /// pokazywała rytm raz, inaczej niż wydarzenie cykliczne z Google, które rozwija
+    /// u siebie Google. Przyszłe wystąpienia są wyliczane przy rysowaniu i niczego nie
+    /// zapisują: nie mają własnego identyfikatora, tylko wskazanie zadania z regułą.
+    /// </remarks>
+    [Fact]
+    public async Task Rytm_rysuje_sie_na_przyszlych_dniach()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        // Szesnasty września 2026 to środa.
+        var task = TaskItem.Capture("Śmieci", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(19, 0), _hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Wednesday),
+            _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        var drawn = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 21))
+            .SelectMany(d => d.Timed)
+            .Select(s => s.Entry)
+            .Where(e => e.Title == "Śmieci")
+            .ToList();
+
+        drawn.Select(e => e.Start.Date).Should().Equal(
+            new DateTime(2026, 9, 16), new DateTime(2026, 9, 23), new DateTime(2026, 9, 30));
+
+        drawn[0].TaskId.Should().Be(task.Id, "pierwsze wystąpienie jest prawdziwym zadaniem");
+        drawn[0].IsAhead.Should().BeFalse();
+
+        drawn.Skip(1).Should().OnlyContain(
+            e => e.TaskId == null && e.RhythmId == task.Id && e.IsAhead);
+
+        drawn.Should().OnlyContain(e => e.Start.Hour == 19, "pora rytmu jest ta sama");
+    }
+
+    /// <summary>
+    /// Rytm widać także wtedy, gdy zadanie niosące regułę jest poza oglądanym zakresem.
+    /// </summary>
+    /// <remarks>
+    /// To jest cały powód, dla którego rytmy wczytują się osobnym pytaniem, a nie
+    /// przesiewem tego, co i tak wczytane na te dni. Rytm zaczepiony na dzisiaj ma się
+    /// rysować również wtedy, gdy przewinie się kalendarz o miesiąc do przodu.
+    /// </remarks>
+    [Fact]
+    public async Task Rytm_widac_gdy_jego_zadanie_jest_poza_zakresem()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        var task = TaskItem.Capture("Śmieci", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(19, 0), _hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Wednesday),
+            _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        var drawn = (await _service.AgendaAsync(new DateOnly(2026, 10, 5), 7))
+            .SelectMany(d => d.Timed)
+            .Select(s => s.Entry)
+            .Where(e => e.Title == "Śmieci")
+            .ToList();
+
+        drawn.Should().ContainSingle();
+        drawn[0].Start.Date.Should().Be(new DateTime(2026, 10, 7));
+        drawn[0].RhythmId.Should().Be(task.Id);
+    }
+
+    /// <summary>
+    /// Seria policzona na wystąpienia nie rysuje się dłużej, niż trwa.
+    /// </summary>
+    /// <remarks>
+    /// Licznik liczy z bieżącym wystąpieniem, więc dwójka znaczy „to i jeszcze jedno".
+    /// Narysowana zapowiedź musi kończyć się tam, gdzie skończy się seria — inaczej
+    /// obiecywałaby coś, co przy odhaczaniu nigdy nie powstanie.
+    /// </remarks>
+    [Fact]
+    public async Task Rytm_policzony_na_wystapienia_konczy_rysowanie_razem_z_seria()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        var task = TaskItem.Capture("Kurs", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(18, 0), _hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Wednesday, count: 2),
+            _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        var drawn = (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 28))
+            .SelectMany(d => d.Timed)
+            .Select(s => s.Entry)
+            .Where(e => e.Title == "Kurs")
+            .ToList();
+
+        drawn.Select(e => e.Start.Date).Should().Equal(
+            new DateTime(2026, 9, 16), new DateTime(2026, 9, 23));
+    }
+
+    /// <summary>
+    /// Zadanie bez rytmu nie dorabia sobie przyszłych wystąpień.
+    /// </summary>
+    [Fact]
+    public async Task Zadanie_bez_rytmu_rysuje_sie_raz()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        var task = TaskItem.Capture("Wywiadówka", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(17, 0), _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        (await _service.AgendaAsync(new DateOnly(2026, 9, 16), 21))
+            .SelectMany(d => d.Timed)
+            .Count(s => s.Entry.Title == "Wywiadówka")
+            .Should().Be(1);
     }
 
     [Fact]

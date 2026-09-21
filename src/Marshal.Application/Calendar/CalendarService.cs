@@ -3,6 +3,7 @@ using Marshal.Application.Repositories;
 using Marshal.Domain.Areas;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Projects;
+using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.Calendar;
@@ -1028,6 +1029,18 @@ public sealed class CalendarSyncService(
             }
         }
 
+        // Rytm rozwinięty do przodu. Reguły nie niesie każde wystąpienie, tylko najnowsze
+        // — i bywa ono poza oglądanym zakresem — więc pytamy o nie osobno, a nie przez
+        // przesiew tego, co już wczytane.
+        foreach (var rhythm in await tasks.RecurringAsync(ct))
+        {
+            foreach (var entry in Ahead(rhythm, from, days, zone,
+                Color(rhythm, projectColors, areaColors)))
+            {
+                entries.Add(entry);
+            }
+        }
+
         return Agenda.Build(entries, from, days);
     }
 
@@ -1102,6 +1115,77 @@ public sealed class CalendarSyncService(
         return task.AreaId is { } area && areas.TryGetValue(area, out var fromArea)
             ? fromArea
             : null;
+    }
+
+    /// <summary>
+    /// Wystąpienia rytmu narysowane do przodu — te, których jeszcze nie ma.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// W modelu żyje naraz jedno wystąpienie serii: regułę nosi najnowsze, a kolejne
+    /// powstaje przy odhaczeniu poprzedniego. Na siatce znaczyło to rytm widoczny raz —
+    /// inaczej niż wydarzenie cykliczne z Google, które rozwija u siebie Google.
+    /// </para>
+    /// <para>
+    /// Wyliczane, nie zapisywane. Zapisanych sześćdziesiąt kopii trzeba by przepisywać
+    /// przy każdej zmianie rytmu, wysyłać w dzienniku synchronizacji i odsiewać
+    /// w licznikach otwartych zadań — a zaległe wystąpienie przeniesione na dziś
+    /// stawałoby obok wystąpienia umówionego na dziś, czyli dokładnie w stertę,
+    /// przed którą broni zasada 1.2.
+    /// </para>
+    /// <para>
+    /// Wystąpienie niosące regułę rysuje się zwykłą drogą — jest prawdziwym zadaniem —
+    /// a rozwijanie zaczyna się ściśle po nim, więc nic nie wychodzi dwa razy.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<AgendaEntry> Ahead(
+        TaskItem rhythm, DateOnly from, int days, TimeZoneInfo zone, string? color)
+    {
+        if (rhythm.Recurrence is not { } rule || rhythm.DoDate is not { } basis)
+        {
+            yield break;
+        }
+
+        var last = from.AddDays(days - 1);
+
+        foreach (var date in RecurrenceSchedule.Following(rule, basis, last))
+        {
+            if (date < from)
+            {
+                continue;
+            }
+
+            yield return Ghost(rhythm, date, zone, color);
+        }
+    }
+
+    /// <summary>Jedno wystąpienie rytmu w wybranym dniu, złożone jak zadanie.</summary>
+    /// <remarks>
+    /// Przez tę samą drogę, co zadanie prawdziwe: godzina, długość i pasek całodniowy
+    /// mają wyglądać tak samo, bo to ta sama rzecz o tydzień później. Różnicą jest
+    /// wskazanie serii zamiast własnego identyfikatora — czyli to, czego nie ma.
+    /// </remarks>
+    private static AgendaEntry Ghost(
+        TaskItem rhythm, DateOnly date, TimeZoneInfo zone, string? color)
+    {
+        if (rhythm.DoTime is not { } hour)
+        {
+            var dayStart = InZone(date.ToDateTime(TimeOnly.MinValue), zone);
+
+            return new AgendaEntry(
+                rhythm.Title, dayStart, dayStart.AddDays(1),
+                IsAllDay: true, AgendaKind.Task, color, TaskId: null,
+                SourceId: null, ExternalId: null, IsDone: false, CanWrite: false,
+                RhythmId: rhythm.Id);
+        }
+
+        var start = InZone(date.ToDateTime(hour), zone);
+        var length = TimeSpan.FromMinutes(rhythm.EstimatedMinutes ?? 30);
+
+        return new AgendaEntry(
+            rhythm.Title, start, start + length, IsAllDay: false, AgendaKind.Task,
+            color, TaskId: null, SourceId: null, ExternalId: null,
+            IsDone: false, CanWrite: false, RhythmId: rhythm.Id);
     }
 
     private static AgendaEntry? Entry(TaskItem task, TimeZoneInfo zone, string? color)

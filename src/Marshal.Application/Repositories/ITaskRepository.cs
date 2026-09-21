@@ -95,6 +95,17 @@ public interface ITaskRepository
     /// gdy zdjęcie odbicia doszło do skutku. Siatka rysuje po tym, żeby cień nie stał
     /// się na chwilę osobnym wpisem, kiedy zadanie przestaje być widoczne.
     /// </remarks>
+    /// <summary>
+    /// Zadania niosące rytm — po jednym na serię.
+    /// </summary>
+    /// <remarks>
+    /// Regułę nosi zawsze najnowsze wystąpienie serii, więc takich zadań jest tyle, ile
+    /// rytmów, a nie tyle, ile powtórzeń. Osobno od „co jest umówione na te dni", bo
+    /// wystąpienie niosące regułę bywa **poza** oglądanym zakresem: rytm zaczepiony na
+    /// dzisiaj ma się rysować także wtedy, gdy patrzy się na przyszły miesiąc.
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> RecurringAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default);
 
     void Add(TaskItem task);

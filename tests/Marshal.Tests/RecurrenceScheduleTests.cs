@@ -210,4 +210,66 @@ public sealed class RecurrenceScheduleTests
         // Wpis z nowszej wersji aplikacji nie może wywrócić scalania (spec 9.4).
         RecurrenceRule.FromJson(json).Should().BeNull();
     }
+
+    /// <summary>
+    /// Rytm rozwinięty do przodu — to, z czego kalendarz rysuje przyszłe wystąpienia.
+    /// </summary>
+    /// <remarks>
+    /// W modelu żyje naraz jedno wystąpienie, więc bez tego siatka pokazywała rytm raz.
+    /// Rozwinięcie jest wyliczane przy rysowaniu i nic nie zapisuje — ale musi być
+    /// dokładnie tym samym rytmem, który wyjdzie z odhaczania, bo inaczej narysowana
+    /// zapowiedź kłamie.
+    /// </remarks>
+    [Fact]
+    public void Rozwiniecie_daje_kolejne_wystapienia_az_do_konca_zakresu()
+    {
+        // Środa i piątek. Data bazowa jest środą, więc pierwsze wyjście to piątek.
+        var rule = new RecurrenceRule(
+            RecurrenceKind.Weekly, daysOfWeek: Weekdays.Wednesday | Weekdays.Friday);
+
+        RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Should().Equal(
+                D("2026-09-18"), D("2026-09-23"), D("2026-09-25"), D("2026-09-30"));
+    }
+
+    [Fact]
+    public void Rozwiniecie_konczy_sie_na_liczbie_pozostalych_wystapien()
+    {
+        // Licznik liczy **z bieżącym**, więc trójka znaczy: to i jeszcze dwa.
+        var rule = new RecurrenceRule(RecurrenceKind.Daily, count: 3);
+
+        RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Should().Equal(D("2026-09-17"), D("2026-09-18"));
+    }
+
+    [Fact]
+    public void Rozwiniecie_konczy_sie_na_dacie_konca_serii()
+    {
+        var rule = new RecurrenceRule(RecurrenceKind.Daily, until: D("2026-09-18"));
+
+        RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
+            .Should().Equal(D("2026-09-17"), D("2026-09-18"));
+    }
+
+    [Fact]
+    public void Rozwiniecie_wstecz_nie_daje_niczego()
+    {
+        // Kalendarz oglądany przed datą wystąpienia niosącego rytm. Rytm nie ma historii:
+        // wystąpienia sprzed tego, które niesie regułę, albo już były zadaniami, albo
+        // nigdy nie powstały — dorysowanie ich byłoby wymyślaniem przeszłości.
+        RecurrenceSchedule.Following(
+                new RecurrenceRule(RecurrenceKind.Daily), D("2026-09-16"), D("2026-09-10"))
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Rozwiniecie_miesieczne_przycina_dzien_do_dlugosci_miesiaca()
+    {
+        // „Ostatniego każdego miesiąca" to dzień trzydziesty pierwszy — w kwietniu
+        // trzydziesty, w lutym dwudziesty ósmy albo dziewiąty.
+        var rule = new RecurrenceRule(RecurrenceKind.Monthly, dayOfMonth: 31);
+
+        RecurrenceSchedule.Following(rule, D("2026-01-31"), D("2026-04-30"))
+            .Should().Equal(D("2026-02-28"), D("2026-03-31"), D("2026-04-30"));
+    }
 }
