@@ -77,10 +77,33 @@
       <Setter Property="MinHeight" Value="96" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="VerticalContentAlignment" Value="Top" />
+      <Setter Property="CornerRadius" Value="10" />
+    </Style>
+
+    <!-- Barwy na prezenterze treści, nie na samym przycisku. Ustawione na przycisku
+         nie mają żadnego skutku: szablon Fluenta nadpisuje tło prezentera własnym
+         i to ono jest widoczne. Kafelki dostawały przez to barwę zwykłego przycisku
+         zamiast barwy karty — a na pulpicie każdy zapalał się pod kursorem na akcent,
+         bo taki jest stan najechania zwykłego przycisku. Na dotyku nie było tego widać
+         w ogóle, więc ta sama karta wyglądała na obu urządzeniach inaczej.
+
+         Pod kursorem zmienia się sama krawędź. Kafelek ma wyglądać jak kartka, którą
+         da się wziąć, a nie jak przycisk, który zmienia kolor. -->
+    <Style Selector="Button.kafelek /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource Karta}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="10" />
+    </Style>
+
+    <Style Selector="Button.kafelek:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Karta}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+    </Style>
+
+    <Style Selector="Button.kafelek:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Karta}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
     </Style>
 
     <!-- Pozycja bocznego paska: cała szerokość i napis od lewej. Przycisk szerokości
