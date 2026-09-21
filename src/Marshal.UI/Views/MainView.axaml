@@ -1635,10 +1635,10 @@
 
           <Grid ColumnDefinitions="*,Auto,*">
             <k:TimeField Grid.Column="0" Value="{Binding OpenedStart}"
-                            IsEnabled="{Binding CanEditOpened}" />
+                            IsEnabled="{Binding CanEditOpenedTimes}" />
             <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
             <k:TimeField Grid.Column="2" Value="{Binding OpenedEnd}"
-                            IsEnabled="{Binding CanEditOpened}" />
+                            IsEnabled="{Binding CanEditOpenedTimes}" />
           </Grid>
 
           <!-- Obszar, czyli to samo pytanie co przy zadaniu: do kogo to należy. Przy
@@ -1714,14 +1714,28 @@
                        Text="Skasowanego wydarzenia nie da się odzyskać — ani w Marshalu, ani w Google." />
           </StackPanel>
 
-          <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !CanEditOpened}"
+          <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !CanEditOpenedTimes}"
                      Text="Ten kalendarz jest tylko do odczytu — zmiany rób tam, gdzie wydarzenie powstało." />
 
+          <!-- Karta wystąpienia rytmu mówi o **jednym dniu**. Nazwa, projekt i sam rytm
+               należą do serii i zmienia się je w karcie zadania — stąd osobne przejście
+               zamiast wpuszczania tamtych pól tutaj. -->
+          <StackPanel IsVisible="{Binding IsOpenedAhead}">
+            <TextBlock Classes="hint" TextWrapping="Wrap"
+                       Text="To jedno wystąpienie rytmu. Godziny zapisują się przy tym dniu i nie ruszają pozostałych." />
+            <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap"
+                       Text="Nazwa i sam rytm należą do całej serii — zmienia się je w karcie zadania." />
+          </StackPanel>
+
           <WrapPanel Margin="0,8,0,0" HorizontalAlignment="Right">
-            <Button Classes="nav glowny" IsVisible="{Binding CanEditOpened}"
+            <Button Classes="nav glowny" IsVisible="{Binding CanEditOpenedTimes}"
                     Command="{Binding SaveOpenedCommand}" Content="Zapisz" />
             <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
                     Command="{Binding DeleteOpenedCommand}" Content="Skasuj" />
+            <Button Classes="nav" IsVisible="{Binding IsOpenedAhead}"
+                    Command="{Binding DropOpenedCommand}" Content="Odwołaj" />
+            <Button Classes="nav" IsVisible="{Binding IsOpenedAhead}"
+                    Command="{Binding ShowRhythmCommand}" Content="Pokaż rytm" />
             <Button Classes="nav" Command="{Binding CloseOpenedCommand}" Content="Zamknij" />
           </WrapPanel>
 

@@ -430,6 +430,27 @@ public sealed class TaskEditService(
     /// więc przełożenie i długość muszą umieć dotyczyć tego samego wystąpienia — inaczej
     /// rozciągnięcie przełożonej środy cofałoby ją tam, skąd się ją zabrało.
     /// </param>
+    /// <summary>
+    /// Dzień, pora i długość jednego z wystąpień narysowanych do przodu — naraz.
+    /// </summary>
+    /// <remarks>
+    /// Droga z karty wystąpienia, gdzie wszystkie trzy rzeczy zmienia się jednym zapisem.
+    /// Osobno od przełożenia i rozciągnięcia, bo tamte przychodzą z siatki i każde mówi
+    /// o czymś jednym — a zapis karty jest jedną decyzją o całym wystąpieniu.
+    /// </remarks>
+    public async Task<TaskItem?> SetOccurrenceAsync(
+        Guid id,
+        DateOnly occurrence,
+        DateOnly day,
+        TimeOnly? time,
+        int? minutes,
+        CancellationToken ct = default) =>
+        await ChangeOccurrenceAsync(
+            id,
+            occurrence,
+            _ => new RecurrenceChange(occurrence, Day: day, Time: time, Minutes: minutes),
+            ct);
+
     private async Task<TaskItem?> ChangeOccurrenceAsync(
         Guid id,
         DateOnly occurrence,

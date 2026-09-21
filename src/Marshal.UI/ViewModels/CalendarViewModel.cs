@@ -1927,12 +1927,22 @@ public sealed partial class CalendarViewModel(
             return;
         }
 
-        // Wystąpienie narysowane do przodu nie ma własnej karty, bo nie ma jeszcze czego
-        // pokazywać. Prowadzi do zadania niosącego rytm — tam widać regułę i tam się ją
-        // zmienia, a zmiana dotyczy wszystkich wystąpień naraz, bo jest jedna.
-        if (block.RhythmId is { } rhythm)
+        // Wystąpienie narysowane do przodu dostaje **własną** kartę, a nie kartę zadania
+        // niosącego rytm. Tamta pokazywała porę i długość serii, więc po przeciągnięciu
+        // jednego dnia mówiła co innego niż blok, z którego się ją otwierało — a karta
+        // ma opisywać to, w co się kliknęło. Do rytmu prowadzi stąd osobny przycisk.
+        if (block.IsAhead)
         {
-            TaskRequested?.Invoke(rhythm);
+            Opened = block;
+
+            OpenedTitle = block.Title;
+            OpenedStart = Time(block.StartText);
+            OpenedEnd = Time(block.EndText);
+            OpenedProblem = null;
+            CanEditOpened = false;
+
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
             return;
         }
 
@@ -1954,6 +1964,7 @@ public sealed partial class CalendarViewModel(
             && block.ExternalId is not null
             && block.CanWrite;
 
+        OnPropertyChanged(nameof(CanEditOpenedTimes));
         OnPropertyChanged(nameof(HasOpenedProblem));
 
         _ = LoadAreasAsync(block);
@@ -2225,6 +2236,20 @@ public sealed partial class CalendarViewModel(
     [ObservableProperty]
     public partial bool CanEditOpened { get; set; }
 
+    /// <summary>Czy otwarta karta opisuje wystąpienie rytmu, którego jeszcze nie ma.</summary>
+    public bool IsOpenedAhead => Opened is { IsAhead: true };
+
+    /// <summary>
+    /// Czy godziny w karcie da się zmienić.
+    /// </summary>
+    /// <remarks>
+    /// Przy wydarzeniu z cudzego kalendarza rozstrzyga o tym prawo zapisu, przy
+    /// wystąpieniu rytmu — nic: zmiana zapisuje się u nas, przy dniu z reguły. Nazwa
+    /// zostaje w obu przypadkach nietknięta z różnych powodów: tam nie chcemy jej ruszać,
+    /// tutaj należy do całej serii i zmienia się ją w karcie zadania.
+    /// </remarks>
+    public bool CanEditOpenedTimes => CanEditOpened || IsOpenedAhead;
+
     [ObservableProperty]
     public partial string? OpenedProblem { get; set; }
 
@@ -2239,8 +2264,97 @@ public sealed partial class CalendarViewModel(
     /// „zmienione" a „wydaje ci się, że zmienione".
     /// </remarks>
     [RelayCommand]
+    /// <summary>
+    /// Zapis karty wystąpienia rytmu: dzień, pora i długość tego jednego razu.
+    /// </summary>
+    /// <remarks>
+    /// Wszystko idzie do zmiany zapisanej przy dniu z reguły, więc rytm zostaje przy
+    /// swoim. Dzień bierze się z karty niezmieniony — kartę otwiera się z bloku, który
+    /// już na tym dniu stoi, a przekładanie na inny dzień jest ruchem ręki po siatce.
+    /// </remarks>
+    private async Task SaveAheadAsync(SlotBox block, Guid rhythm, DateOnly occurrence)
+    {
+        if (OpenedStart is not { } from || OpenedEnd is not { } until)
+        {
+            OpenedProblem = "Bez godzin nie ma czego zapisać.";
+            OnPropertyChanged(nameof(HasOpenedProblem));
+            return;
+        }
+
+        var minutes = (int)(until - from).TotalMinutes;
+
+        if (minutes < Step)
+        {
+            OpenedProblem = "Koniec musi wypaść po początku.";
+            OnPropertyChanged(nameof(HasOpenedProblem));
+            return;
+        }
+
+        try
+        {
+            var day = DateOnly.ParseExact(block.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+            await edit.SetOccurrenceAsync(
+                rhythm, occurrence, day, TimeOnly.FromTimeSpan(from), minutes);
+
+            await log.RecordAsync(
+                "Kalendarz: zapis wystąpienia",
+                $"{occurrence:yyyy-MM-dd}, {from:hh\\:mm}–{until:hh\\:mm}");
+
+            Opened = null;
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            OpenedProblem = e.Message;
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: zapis wystąpienia", OpenedTitle, ActivityLevel.Problem, e.Message);
+
+            return;
+        }
+
+        await RefreshAsync();
+    }
+
+    /// <summary>Odwołanie wystąpienia z jego karty.</summary>
+    [RelayCommand]
+    private async Task DropOpenedAsync()
+    {
+        if (Opened is not { RhythmId: { } rhythm, RhythmDate: { } occurrence })
+        {
+            return;
+        }
+
+        Opened = null;
+        await DropOccurrenceAsync(rhythm, occurrence);
+    }
+
+    /// <summary>Przejście z karty wystąpienia do zadania niosącego rytm.</summary>
+    /// <remarks>
+    /// Nazwa, projekt i sam rytm należą do serii, a nie do jednego dnia — zmienia się je
+    /// tam, gdzie mieszkają. Karta wystąpienia odpowiada wyłącznie za ten jeden raz.
+    /// </remarks>
+    [RelayCommand]
+    private void ShowRhythm()
+    {
+        if (Opened is not { RhythmId: { } rhythm })
+        {
+            return;
+        }
+
+        Opened = null;
+        TaskRequested?.Invoke(rhythm);
+    }
+
     private async Task SaveOpenedAsync()
     {
+        if (Opened is { RhythmId: { } rhythm, RhythmDate: { } occurrence } ahead)
+        {
+            await SaveAheadAsync(ahead, rhythm, occurrence);
+            return;
+        }
+
         if (Opened is not { SourceId: { } source, ExternalId: { } id } block)
         {
             return;
@@ -2343,6 +2457,8 @@ public sealed partial class CalendarViewModel(
     {
         OnPropertyChanged(nameof(HasOpened));
         OnPropertyChanged(nameof(CanCompleteOpened));
+        OnPropertyChanged(nameof(IsOpenedAhead));
+        OnPropertyChanged(nameof(CanEditOpenedTimes));
     }
 
     [RelayCommand]

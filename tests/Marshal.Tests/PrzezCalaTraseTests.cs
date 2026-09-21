@@ -642,6 +642,80 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Karta_zapowiedzi_pokazuje_jej_wlasne_godziny_i_zapisuje_je_przy_dniu()
+    {
+        // Objaw: kliknięcie w zapowiedź otwierało kartę **zadania niosącego rytm**, więc
+        // po przeciągnięciu jednego dnia karta mówiła co innego niż blok, z którego się
+        // ją otwierało — pokazywała godziny całej serii.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var today = NewService<IClock>().Today;
+
+        task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
+        task.SetEstimate(480, task.Energy, hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(
+                RecurrenceKind.Daily, time: new TimeOnly(9, 0), minutes: 480),
+            hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var when = today.AddDays(3);
+        var calendarId = NewService<CalendarViewModel>();
+
+        // Blok taki, jaki siatka rysuje dla wystąpienia przełożonego na dziesiątą.
+        var box = new SlotBox(
+            "Praca", 0, 0, 0, 0, IsTask: true, Color: null,
+            StartText: "10:00", EndText: "12:00", TaskId: null,
+            DayText: when.ToString("dd.MM.yyyy"), SourceId: null, ExternalId: null,
+            IsDone: false, CanWrite: false, RhythmId: task.Id, RhythmDate: when);
+
+        calendarId.OpenTaskCommand.Execute(box);
+
+        calendarId.IsOpenedAhead.Should().BeTrue("to jest karta jednego wystąpienia");
+        calendarId.OpenedStart.Should().Be(new TimeSpan(10, 0, 0), "godziny z bloku, nie z serii");
+        calendarId.OpenedEnd.Should().Be(new TimeSpan(12, 0, 0));
+
+        calendarId.OpenedStart = new TimeSpan(11, 0, 0);
+        calendarId.OpenedEnd = new TimeSpan(13, 30, 0);
+
+        await calendarId.SaveOpenedCommand.ExecuteAsync(null);
+
+        var change = (await NewService<ITaskRepository>().FindAsync(task.Id))!
+            .Recurrence!.ChangeOn(when);
+
+        change!.Time.Should().Be(new TimeOnly(11, 0));
+        change.Minutes.Should().Be(150);
+        change.Day.Should().Be(when);
+    }
+
+    [Fact]
+    public async Task Zapis_karty_zapowiedzi_nie_rusza_rytmu()
+    {
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var today = NewService<IClock>().Today;
+
+        task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Daily, time: new TimeOnly(9, 0), minutes: 480),
+            hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var when = today.AddDays(2);
+
+        await NewService<TaskEditService>()
+            .SetOccurrenceAsync(task.Id, when, when, new TimeOnly(11, 0), 150);
+
+        var saved = (await NewService<ITaskRepository>().FindAsync(task.Id))!;
+
+        saved.Recurrence!.Time.Should().Be(new TimeOnly(9, 0), "rytm zostaje przy swojej porze");
+        saved.Recurrence.Minutes.Should().Be(480, "i przy swojej długości");
+        saved.DoTime.Should().Be(new TimeOnly(9, 0), "bieżące wystąpienie też nietknięte");
+    }
+
+    [Fact]
     public async Task Dlugosc_jednej_zapowiedzi_zapisuje_sie_przy_jej_dniu()
     {
         var task = await ZaplanowaneAsync("Praca");
