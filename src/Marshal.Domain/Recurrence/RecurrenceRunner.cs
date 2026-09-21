@@ -43,6 +43,61 @@ public static class RecurrenceRunner
     }
 
     /// <summary>
+    /// Wyjęcie przyszłego wystąpienia z serii na osobne zadanie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zapowiedź rysowana do przodu nie jest zadaniem, więc nie ma przypomnienia, nie da
+    /// się jej nikomu pokazać ani dopisać do niej notatki. Tędy staje się zwykłym
+    /// zadaniem na swój dzień — z porą i długością, które miała na siatce — a seria
+    /// przestaje ten dzień produkować.
+    /// </para>
+    /// <para>
+    /// Odwołanie w regule zamiast nowego rodzaju wpisu: „ta seria tego dnia nie
+    /// produkuje" znaczy dokładnie to, co trzeba, i jest już w modelu. Wystąpienie zużywa
+    /// przy tym swój numer w serii liczonej na wystąpienia — bo się odbędzie, tyle że
+    /// osobno.
+    /// </para>
+    /// <para>
+    /// Wystąpienie minione i to, które niesie regułę, nie mają czego wyjmować: tamte
+    /// są już zadaniami.
+    /// </para>
+    /// </remarks>
+    public static TaskItem? Detach(
+        TaskItem task, DateOnly occurrence, DateTimeOffset now, Func<Hlc> stamp)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        ArgumentNullException.ThrowIfNull(stamp);
+
+        if (task.Recurrence is not { } rule)
+        {
+            return null;
+        }
+
+        if (task.DoDate is { } current && occurrence <= current)
+        {
+            return null;
+        }
+
+        // Ta sama kolejność, co przy rysowaniu: zmiana tego jednego dnia, potem to,
+        // co pamięta seria, a na końcu to, co niesie wystąpienie z regułą. Inaczej
+        // zadanie stanęłoby gdzie indziej, niż stała zapowiedź, z której wyszło.
+        var change = rule.ChangeOn(occurrence);
+
+        var alone = task.DetachOccurrence(
+            change?.Day ?? occurrence,
+            rule,
+            now,
+            stamp(),
+            change?.Time ?? rule.Time ?? task.DoTime,
+            change?.Minutes ?? rule.Minutes ?? task.EstimatedMinutes);
+
+        task.SetRecurrence(rule.With(new RecurrenceChange(occurrence, Dropped: true)), stamp());
+
+        return alone;
+    }
+
+    /// <summary>
     /// Pominięcie bieżącego wystąpienia: to jedno przepada, a rytm idzie dalej.
     /// </summary>
     /// <remarks>

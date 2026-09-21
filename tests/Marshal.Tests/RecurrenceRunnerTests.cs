@@ -503,6 +503,39 @@ public sealed class RecurrenceRunnerTests
     }
 
     [Fact]
+    public void Wyjete_wystapienie_nie_niesie_rytmu_a_seria_przestaje_je_produkowac()
+    {
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(RecurrenceKind.Daily, time: new TimeOnly(9, 0), minutes: 480));
+
+        var alone = RecurrenceRunner.Detach(task, D("2026-09-19"), Moment("2026-09-16"), Stempel);
+
+        alone!.DoDate.Should().Be(D("2026-09-19"));
+        alone.DoTime.Should().Be(new TimeOnly(9, 0));
+        alone.EstimatedMinutes.Should().Be(480);
+        alone.Recurrence.Should().BeNull("wyjęte zadanie nie niesie rytmu");
+
+        task.Recurrence!.ChangeOn(D("2026-09-19"))!.Dropped
+            .Should().BeTrue("seria przestaje produkować ten dzień");
+    }
+
+    [Fact]
+    public void Wyjecie_wystapienia_minionego_albo_biezacego_niczego_nie_zaklada()
+    {
+        // Tamte są już zadaniami — nie ma czego wyjmować.
+        var task = Zaplanowane("2026-09-16", new RecurrenceRule(RecurrenceKind.Daily));
+
+        RecurrenceRunner.Detach(task, D("2026-09-16"), Moment("2026-09-16"), Stempel)
+            .Should().BeNull();
+
+        RecurrenceRunner.Detach(task, D("2026-09-10"), Moment("2026-09-16"), Stempel)
+            .Should().BeNull();
+
+        task.Recurrence!.Changes.Should().BeEmpty("nic się nie zapisało");
+    }
+
+    [Fact]
     public void Pominiecie_zadania_bez_rytmu_niczego_nie_zaklada()
     {
         var task = Zaplanowane("2026-09-16");

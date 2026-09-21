@@ -449,33 +449,17 @@ public sealed class TaskEditService(
     public async Task<TaskItem?> DetachOccurrenceAsync(
         Guid id, DateOnly occurrence, CancellationToken ct = default)
     {
-        if (await tasks.FindAsync(id, ct) is not { Recurrence: { } rule } rhythm)
+        if (await tasks.FindAsync(id, ct) is not { } rhythm)
         {
             return null;
         }
 
-        if (rhythm.DoDate is { } current && occurrence <= current)
+        if (RecurrenceRunner.Detach(rhythm, occurrence, clock.Now, hlc.Next) is not { } alone)
         {
             return null;
         }
-
-        // Ta sama kolejność, co przy rysowaniu: zmiana tego jednego dnia, potem to,
-        // co pamięta seria, a na końcu to, co niesie wystąpienie z regułą. Inaczej
-        // zadanie stanęłoby gdzie indziej, niż stała zapowiedź, z której wyszło.
-        var change = rule.ChangeOn(occurrence);
-
-        var alone = rhythm.DetachOccurrence(
-            change?.Day ?? occurrence,
-            rule,
-            clock.Now,
-            hlc.Next(),
-            change?.Time ?? rule.Time ?? rhythm.DoTime,
-            change?.Minutes ?? rule.Minutes ?? rhythm.EstimatedMinutes);
 
         tasks.Add(alone);
-
-        rhythm.SetRecurrence(
-            rule.With(new RecurrenceChange(occurrence, Dropped: true)), hlc.Next());
 
         await unitOfWork.SaveChangesAsync(ct);
         await MirrorAsync(alone, ct);
