@@ -1,7 +1,10 @@
 using System.Runtime.Versioning;
 using Android.App;
 using Android.Content;
+using Marshal.Application.UseCases;
 using Marshal.Infrastructure.Notifications;
+using Marshal.UI;
+using Microsoft.Extensions.DependencyInjection;
 
 // Nazwa własna, bo „Notification" znaczy tu dwie różne rzeczy: naszą i androidową.
 // „Application" też jest zajęte przez Android.App.Application, więc pełna ścieżka
@@ -122,6 +125,26 @@ internal static class Notifications
         }
     }
 
+    /// <summary>
+    /// Numer powiadomienia z zadania, nie kolejny z licznika.
+    /// </summary>
+    /// <remarks>
+    /// To samo zadanie ma podmieniać swoje powiadomienie, a nie układać ich stos —
+    /// i po tym samym numerze trzeba je potem zgasić. Zgaszony bit znaku, a nie wartość
+    /// bezwzględna: ta na najmniejszej liczbie całkowitej rzuca wyjątkiem, a skrót
+    /// może ją zwrócić.
+    /// </remarks>
+    internal static int Number(Guid task) => task.GetHashCode() & 0x7FFFFFFF;
+
+    /// <summary>Zgaszenie powiadomienia zadania, gdy nie ma już o czym przypominać.</summary>
+    internal static void Dismiss(Context context, Guid task)
+    {
+        if (context.GetSystemService(Context.NotificationService) is NotificationManager manager)
+        {
+            manager.Cancel(Number(task));
+        }
+    }
+
     private static void Show(
         Context context,
         NotificationManager manager,
@@ -141,13 +164,121 @@ internal static class Notifications
             .SetContentText(reminder.Body ?? string.Empty)
             .SetSmallIcon(Resource.Drawable.notification_mark)
             .SetContentIntent(intent)
+            .AddAction(Done(context, reminder.TaskId))
             .SetAutoCancel(true)
             .Build();
 
-        // Identyfikator z zadania, nie kolejny numer: to samo zadanie ma podmieniać
-        // swoje powiadomienie, a nie układać ich stos. Zgaszony bit znaku, a nie
-        // wartość bezwzględna — ta na najmniejszej liczbie całkowitej rzuca wyjątkiem,
-        // a skrót może ją zwrócić.
-        manager.Notify(reminder.TaskId.GetHashCode() & 0x7FFFFFFF, notification);
+        manager.Notify(Number(reminder.TaskId), notification);
+    }
+
+    /// <summary>
+    /// Przycisk „Zakończ" pod treścią powiadomienia.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przypomnienie odzywa się w chwili, w której coś się zaczyna — a odpowiedź na nie
+    /// bywa taka, że rzecz jest już zrobiona. Bez tego przycisku jedyną drogą jest
+    /// otwarcie aplikacji, odnalezienie zadania i odhaczenie go tam: trzy czynności
+    /// na odpowiedź, która brzmi „zrobione".
+    /// </para>
+    /// <para>
+    /// Rozgłoszenie, nie okno: odhaczenie ma się wydarzyć <b>bez</b> otwierania
+    /// aplikacji. Numer zgłoszenia z zadania, bo dwa przypomnienia naraz muszą nieść
+    /// dwa różne zadania — wspólny numer znaczyłby, że drugie nadpisuje pierwszemu
+    /// jego dodatki i oba odhaczają to samo.
+    /// </para>
+    /// </remarks>
+    private static Notification.Action Done(Context context, Guid task)
+    {
+        var intent = new Intent(context, typeof(ReminderDone));
+        intent.SetAction(ReminderDone.DoneAction);
+        intent.PutExtra(ReminderDone.TaskExtra, task.ToString());
+
+        var doing = PendingIntent.GetBroadcast(
+            context, Number(task), intent,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+
+        return new Notification.Action.Builder(
+            global::Android.Graphics.Drawables.Icon.CreateWithResource(
+                context, Resource.Drawable.notification_mark),
+            "Zakończ",
+            doing).Build();
+    }
+}
+
+/// <summary>
+/// „Zakończ" dotknięte w powiadomieniu.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Niewystawiony: zamiar oczekujący składamy sami i sami wskazujemy w nim tę klasę,
+/// więc nie ma powodu, żeby dało się ją zawołać z zewnątrz. Odhaczenie cudzego zadania
+/// przez rozgłoszenie byłoby cichym zapisem do bazy z dowolnej aplikacji na telefonie.
+/// </para>
+/// <para>
+/// <b>Najpierw zapis, potem zgaszenie powiadomienia.</b> Odwrotna kolejność wygląda
+/// żwawiej i kłamie: nieudany zapis zostawiałby zadanie nieodhaczone i bez przypomnienia,
+/// czyli bez jedynego śladu, że w ogóle było. Dopóki zapis się nie uda, powiadomienie
+/// zostaje na ekranie i da się spróbować drugi raz.
+/// </para>
+/// </remarks>
+[BroadcastReceiver(Enabled = true, Exported = false)]
+internal sealed class ReminderDone : BroadcastReceiver
+{
+    internal const string DoneAction = "com.kodalus.marshal.PRZYPOMNIENIE";
+
+    internal const string TaskExtra = "zadanie";
+
+    public override void OnReceive(Context? context, Intent? intent)
+    {
+        if (context is null || intent?.Action != DoneAction)
+        {
+            return;
+        }
+
+        var app = context.ApplicationContext ?? context;
+        var id = intent.GetStringExtra(TaskExtra);
+        var waiting = GoAsync();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                if (!Guid.TryParse(id, out var task))
+                {
+                    return;
+                }
+
+                // Haczyk na dymki przed składaniem, tak samo jak w widgecie: składanie
+                // nadrabia zaległe przypomnienia, a ten odbiornik potrafi być pierwszy
+                // w procesie i jedyny.
+                Notifications.Hook(app);
+
+                await AppServices.ReadyAsync();
+
+                var done = await AppServices.Provider
+                    .GetRequiredService<TaskEditService>()
+                    .CompleteAsync(task);
+
+                Notifications.Dismiss(app, task);
+
+                // Kafelek pokazuje ten sam plan dnia, z którego zadanie właśnie zeszło.
+                TodayWidget.Refresh(app);
+
+                await Alarm.Save(
+                    "Przypomnienie: zakończone z powiadomienia",
+                    done?.Title ?? "zadania już nie ma");
+            }
+            catch (Exception e)
+            {
+                global::Android.Util.Log.Warn("Marshal", e.ToString());
+
+                await Alarm.Save("Przypomnienie: zakończenie z powiadomienia", "nie udało się", e);
+            }
+            finally
+            {
+                waiting?.Finish();
+            }
+        });
     }
 }
