@@ -9,6 +9,7 @@
              xmlns:dc="using:Marshal.Domain.Calendar"
              xmlns:da="using:Marshal.Domain.Areas"
              xmlns:dk="using:Marshal.Domain.Contacts"
+             xmlns:dn="using:Marshal.Domain.Notes"
              xmlns:cal="using:Marshal.Infrastructure.Calendar"
              xmlns:df="using:Marshal.Domain.Filters"
              xmlns:ti="using:Avalonia.Input.TextInput"
