@@ -750,6 +750,47 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Zapowiedz_wyjeta_z_serii_staje_sie_zwyklym_zadaniem()
+    {
+        // Zapowiedź nie jest zadaniem, więc nie ma przypomnienia, nie da się jej pokazać
+        // osobie ani dopisać do niej notatki. Wyjęcie zamienia ten jeden dzień w zwykłe
+        // zadanie — z porą i długością, które miało na siatce — a seria przestaje je
+        // produkować.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var today = NewService<IClock>().Today;
+
+        task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(
+                RecurrenceKind.Daily, time: new TimeOnly(9, 0), minutes: 480, leads: [30]),
+            hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var when = today.AddDays(3);
+        var edit = NewService<TaskEditService>();
+
+        // Wystąpienie przełożone przed wyjęciem: zadanie ma stanąć tam, gdzie stała
+        // zapowiedź, a nie tam, gdzie każe reguła.
+        await edit.MoveOccurrenceAsync(task.Id, when, when, new TimeOnly(11, 0));
+
+        var alone = await edit.DetachOccurrenceAsync(task.Id, when);
+
+        alone!.Title.Should().Be("Praca");
+        alone.DoDate.Should().Be(when);
+        alone.DoTime.Should().Be(new TimeOnly(11, 0), "pora z zapowiedzi, nie z reguły");
+        alone.EstimatedMinutes.Should().Be(480, "długość seria pamięta");
+        alone.ReminderLeads.Should().Equal(30, "przypomnienie też jest cechą rytmu");
+        alone.Recurrence.Should().BeNull("wyjęte zadanie nie niesie rytmu");
+
+        var rhythm = await NewService<ITaskRepository>().FindAsync(task.Id);
+
+        rhythm!.Recurrence!.ChangeOn(when)!.Dropped
+            .Should().BeTrue("seria przestaje produkować ten dzień");
+    }
+
+    [Fact]
     public async Task Dlugosc_jednej_zapowiedzi_zapisuje_sie_przy_jej_dniu()
     {
         var task = await ZaplanowaneAsync("Praca");

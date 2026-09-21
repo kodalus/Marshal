@@ -2321,6 +2321,54 @@ public sealed partial class CalendarViewModel(
         await DropOccurrenceAsync(rhythm, occurrence);
     }
 
+    /// <summary>
+    /// Wyjęcie wystąpienia z serii na osobne zadanie — z jego karty.
+    /// </summary>
+    /// <remarks>
+    /// Otwiera od razu to, co powstało. Wyjmuje się po to, żeby coś przy tym jednym dniu
+    /// dopisać — przypomnienie, notatkę, udostępnienie — więc zatrzymanie się na siatce
+    /// kazałoby szukać go wzrokiem i kliknąć drugi raz.
+    /// </remarks>
+    [RelayCommand]
+    private async Task DetachOpenedAsync()
+    {
+        if (Opened is not { RhythmId: { } rhythm, RhythmDate: { } occurrence })
+        {
+            return;
+        }
+
+        Opened = null;
+        await DetachOccurrenceAsync(rhythm, occurrence);
+    }
+
+    /// <summary>Wyjęcie wystąpienia z serii — z karty albo z menu podręcznego.</summary>
+    public async Task DetachOccurrenceAsync(Guid rhythm, DateOnly occurrence)
+    {
+        try
+        {
+            if (await edit.DetachOccurrenceAsync(rhythm, occurrence) is { } alone)
+            {
+                await log.RecordAsync(
+                    "Kalendarz: wyjęcie wystąpienia", $"{occurrence:yyyy-MM-dd}");
+
+                await RefreshAsync();
+                TaskRequested?.Invoke(alone.Id);
+
+                return;
+            }
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: wyjęcie wystąpienia", "nie udało się", ActivityLevel.Problem, e.Message);
+        }
+
+        await RefreshAsync();
+    }
+
     /// <summary>Przejście z karty wystąpienia do zadania niosącego rytm.</summary>
     /// <remarks>
     /// Nazwa, projekt i sam rytm należą do serii, a nie do jednego dnia — zmienia się je

@@ -1739,6 +1739,14 @@ public partial class MainView : UserControl
         // — to jest cała różnica wobec „Usuń" na zadaniu, które skasowałoby całą serię.
         if (block is { RhythmId: { } rhythm, RhythmDate: { } occurrence })
         {
+            var detach = new MenuItem { Header = "Zamień w zadanie" };
+
+            detach.Click += (_, _) => _ = Try(
+                "Kalendarz: wyjęcie wystąpienia",
+                () => calendarId.DetachOccurrenceAsync(rhythm, occurrence));
+
+            rows.Add(detach);
+
             var drop = new MenuItem { Header = "Odwołaj to wystąpienie" };
 
             drop.Click += (_, _) => _ = Try(

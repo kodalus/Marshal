@@ -1725,6 +1725,8 @@
                        Text="To jedno wystąpienie rytmu. Godziny zapisują się przy tym dniu i nie ruszają pozostałych." />
             <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap"
                        Text="Nazwa i sam rytm należą do całej serii — zmienia się je w karcie zadania." />
+            <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap"
+                       Text="Zamiana w zadanie wyjmuje ten jeden dzień z serii: dostaje wtedy przypomnienie, notatkę i udostępnianie, a rytm przestaje go produkować." />
           </StackPanel>
 
           <WrapPanel Margin="0,8,0,0" HorizontalAlignment="Right">
@@ -1732,6 +1734,8 @@
                     Command="{Binding SaveOpenedCommand}" Content="Zapisz" />
             <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
                     Command="{Binding DeleteOpenedCommand}" Content="Skasuj" />
+            <Button Classes="nav" IsVisible="{Binding IsOpenedAhead}"
+                    Command="{Binding DetachOpenedCommand}" Content="Zamień w zadanie" />
             <Button Classes="nav" IsVisible="{Binding IsOpenedAhead}"
                     Command="{Binding DropOpenedCommand}" Content="Odwołaj" />
             <Button Classes="nav" IsVisible="{Binding IsOpenedAhead}"

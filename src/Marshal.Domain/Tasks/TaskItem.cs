@@ -455,6 +455,37 @@ public sealed class TaskItem : Entity
     }
 
     /// <summary>
+    /// Wystąpienie serii wyjęte z niej jako osobne zadanie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zapowiedź rysowana do przodu nie jest zadaniem i dlatego nie ma przypomnień,
+    /// nie da się jej nikomu pokazać ani dopisać do niej notatki. Wyjęcie zamienia
+    /// ten jeden dzień w zwykłe zadanie — z tym wszystkim, co zadanie umie — a seria
+    /// przestaje go produkować.
+    /// </para>
+    /// <para>
+    /// Powstaje tą samą drogą, co kolejne wystąpienie przy odhaczeniu: to ta sama rzecz
+    /// o inny dzień dalej, więc termin, przypomnienie i pora mają przejść tak samo.
+    /// Różnica jest jedna i cała w ostatniej linijce — <b>nie niesie reguły</b>, bo rytm
+    /// zostaje tam, gdzie był.
+    /// </para>
+    /// </remarks>
+    internal TaskItem DetachOccurrence(
+        DateOnly doDate,
+        RecurrenceRule rule,
+        DateTimeOffset now,
+        Hlc stamp,
+        TimeOnly? at = null,
+        int? length = null)
+    {
+        var alone = SpawnNextOccurrence(doDate, rule, now, stamp, at, length);
+        alone.SetRecurrence(null, stamp);
+
+        return alone;
+    }
+
+    /// <summary>
     /// Pominięte wystąpienie serii <see cref="OnMissed.Accumulate"/> przestaje być
     /// zaplanowane na dzień, a staje się zwykłą zaległością.
     /// </summary>

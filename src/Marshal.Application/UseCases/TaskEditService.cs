@@ -431,6 +431,59 @@ public sealed class TaskEditService(
     /// rozciągnięcie przełożonej środy cofałoby ją tam, skąd się ją zabrało.
     /// </param>
     /// <summary>
+    /// Wyjęcie jednego z wystąpień narysowanych do przodu na osobne zadanie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zapowiedź nie jest zadaniem, więc nie ma przypomnienia, nie da się jej pokazać
+    /// osobie ani dopisać do niej notatki. Tędy staje się zwykłym zadaniem na swój dzień,
+    /// z porą i długością, które miała na siatce — a seria przestaje je produkować.
+    /// </para>
+    /// <para>
+    /// Odwołanie w regule, a nie osobny rodzaj wpisu: „ta seria tego dnia nie produkuje"
+    /// znaczy dokładnie to, co trzeba, i jest już w modelu. Wystąpienie zużywa przy tym
+    /// swój numer w serii liczonej na wystąpienia — bo się odbędzie, tyle że osobno.
+    /// </para>
+    /// </remarks>
+    /// <returns>Nowe zadanie albo <c>null</c>, gdy nie było czego wyjąć.</returns>
+    public async Task<TaskItem?> DetachOccurrenceAsync(
+        Guid id, DateOnly occurrence, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { Recurrence: { } rule } rhythm)
+        {
+            return null;
+        }
+
+        if (rhythm.DoDate is { } current && occurrence <= current)
+        {
+            return null;
+        }
+
+        // Ta sama kolejność, co przy rysowaniu: zmiana tego jednego dnia, potem to,
+        // co pamięta seria, a na końcu to, co niesie wystąpienie z regułą. Inaczej
+        // zadanie stanęłoby gdzie indziej, niż stała zapowiedź, z której wyszło.
+        var change = rule.ChangeOn(occurrence);
+
+        var alone = rhythm.DetachOccurrence(
+            change?.Day ?? occurrence,
+            rule,
+            clock.Now,
+            hlc.Next(),
+            change?.Time ?? rule.Time ?? rhythm.DoTime,
+            change?.Minutes ?? rule.Minutes ?? rhythm.EstimatedMinutes);
+
+        tasks.Add(alone);
+
+        rhythm.SetRecurrence(
+            rule.With(new RecurrenceChange(occurrence, Dropped: true)), hlc.Next());
+
+        await unitOfWork.SaveChangesAsync(ct);
+        await MirrorAsync(alone, ct);
+
+        return alone;
+    }
+
+    /// <summary>
     /// Dzień, pora i długość jednego z wystąpień narysowanych do przodu — naraz.
     /// </summary>
     /// <remarks>

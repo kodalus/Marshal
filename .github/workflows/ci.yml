@@ -34,6 +34,9 @@ jobs:
       - name: Aliasy przestrzeni nazw w XAML-u
         run: ./tools/check-aliases.sh
 
+      - name: XAML jest poprawnym XML-em
+        run: ./tools/check-xaml.sh
+
       - name: Ikony zgodne ze swoim źródłem
         run: ./tools/check-icons.sh
 

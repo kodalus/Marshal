@@ -712,6 +712,52 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Wyjęte wystąpienie stoi na siatce raz — jako zadanie, nie jako zapowiedź.
+    /// </summary>
+    /// <remarks>
+    /// Dwie rzeczy naraz: zadanie powstaje na ten dzień, a seria przestaje ten dzień
+    /// produkować. Bez drugiej połowy blok stałby podwójnie i nie dałoby się poznać,
+    /// który z nich jest tym prawdziwym.
+    /// </remarks>
+    [Fact]
+    public async Task Wyjete_wystapienie_rysuje_sie_raz()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        var task = TaskItem.Capture("Praca", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, new DateOnly(2026, 9, 16), _hlc.Next());
+        task.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+        task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        var when = new DateOnly(2026, 9, 18);
+
+        // Stan po wyjęciu, złożony wprost: zadanie na ten dzień i seria, która tego dnia
+        // już nie produkuje. Samo wyjmowanie ma swój test na pełnej trasie.
+        var alone = TaskItem.Capture("Praca", _clock.Now, _hlc.Next());
+        alone.Schedule(area.Id, when, _hlc.Next());
+        alone.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+
+        task.SetRecurrence(
+            task.Recurrence!.With(new RecurrenceChange(when, Dropped: true)), _hlc.Next());
+
+        _db.Tasks.Add(alone);
+        _db.SaveChanges();
+
+        var drawn = (await _service.AgendaAsync(when, 1))[0].Timed
+            .Select(s => s.Entry)
+            .Where(e => e.Title == "Praca")
+            .ToList();
+
+        drawn.Should().ContainSingle();
+        drawn[0].TaskId.Should().Be(alone.Id, "to jest zwykłe zadanie");
+        drawn[0].IsAhead.Should().BeFalse();
+    }
+
+    /// <summary>
     /// Odwołane wystąpienie znika z siatki, a rytm zostaje.
     /// </summary>
     /// <remarks>
