@@ -329,11 +329,33 @@ public sealed partial class TaskDetailViewModel(
     [ObservableProperty]
     public partial MissedChoice? SelectedMissed { get; set; } = MissedChoice.All[0];
 
+    [ObservableProperty]
+    public partial EndChoice? SelectedEnd { get; set; } = EndChoice.All[0];
+
+    /// <summary>
+    /// Ile wystąpień **jeszcze** zostało, licząc to bieżące.
+    /// </summary>
+    /// <remarks>
+    /// Licznik pozostałych, nie łączna liczba od początku: reguła mieszka na wystąpieniu
+    /// i każde kolejne dostaje ją pomniejszoną o jeden. Stan serii siedzi więc w samym
+    /// wystąpieniu i nie wymaga liczenia historii — co przy synchronizacji, gdzie
+    /// historia bywa niekompletna, byłoby zawodne. Skutek widoczny w oknie: po każdym
+    /// odhaczeniu liczba jest o jeden mniejsza i tak ma być.
+    /// </remarks>
+    [ObservableProperty]
+    public partial decimal? Occurrences { get; set; }
+
+    /// <summary>Ostatni dzień, w którym wolno wypaść wystąpieniu.</summary>
+    [ObservableProperty]
+    public partial DateTimeOffset? RhythmEnd { get; set; }
+
     public IReadOnlyList<RepeatChoice> Repeats => RepeatChoice.All;
 
     public IReadOnlyList<AnchorChoice> Anchors => AnchorChoice.All;
 
     public IReadOnlyList<MissedChoice> Missed => MissedChoice.All;
+
+    public IReadOnlyList<EndChoice> Ends => EndChoice.All;
 
     public IReadOnlyList<PriorityChoice> Priorities => PriorityChoice.All;
 
@@ -381,6 +403,10 @@ public sealed partial class TaskDetailViewModel(
     public bool NeedsWeekdays => Rhythm == RecurrenceKind.Weekly;
 
     public bool NeedsDayOfMonth => Rhythm == RecurrenceKind.Monthly;
+
+    public bool NeedsOccurrences => IsRepeating && SelectedEnd?.Value == RepeatEnd.AfterCount;
+
+    public bool NeedsEndDate => IsRepeating && SelectedEnd?.Value == RepeatEnd.OnDate;
 
     public event EventHandler? Saved;
 
@@ -541,6 +567,19 @@ public sealed partial class TaskDetailViewModel(
         // szczegółu zmieni je na Carry — i to jest zamierzone, bo tak brzmi to,
         // co widać na ekranie.
         SelectedMissed = Missed.FirstOrDefault(m => m.Value == rule?.OnMissed) ?? Missed[0];
+
+        // Koniec serii: jedno pytanie w oknie, dwa pola w modelu. Data wygrywa nad liczbą,
+        // gdyby zapis z innej wersji aplikacji niósł oba — bo jest odpowiedzią mocniejszą:
+        // mówi dzień, a nie „tyle razy, ile zostało".
+        SelectedEnd = Ends.First(k => k.Value == (rule switch
+        {
+            { Until: not null } => RepeatEnd.OnDate,
+            { Count: not null } => RepeatEnd.AfterCount,
+            _ => RepeatEnd.Never,
+        }));
+
+        Occurrences = rule?.Count;
+        RhythmEnd = ToOffset(rule?.Until);
 
         var days = rule?.DaysOfWeek ?? Weekdays.None;
         Monday = days.Includes(DayOfWeek.Monday);
@@ -880,6 +919,39 @@ public sealed partial class TaskDetailViewModel(
         if (Saturday) { days |= Weekdays.Saturday; }
         if (Sunday) { days |= Weekdays.Sunday; }
 
+        // Koniec serii: albo dzień, albo liczba pozostałych wystąpień. Nigdy oba naraz —
+        // w oknie to jedno pytanie z trzema odpowiedziami, więc pole niewidoczne nie ma
+        // prawa dokładać warunku, o którym nikt nie wie.
+        // Wybrany koniec bez wpisanej wartości znaczyłby po cichu „bez końca" — czyli
+        // coś innego, niż mówi lista nad polem. Puste pole jest brakiem odpowiedzi,
+        // a nie odpowiedzią „nieważne".
+        if (NeedsOccurrences && Occurrences is null)
+        {
+            problem = "koniec po tylu wystąpieniach — ale po ilu?";
+            return null;
+        }
+
+        if (NeedsEndDate && RhythmEnd is null)
+        {
+            problem = "koniec do dnia — ale do którego?";
+            return null;
+        }
+
+        // Albo dzień, albo liczba pozostałych wystąpień. Nigdy oba naraz: w oknie to
+        // jedno pytanie z trzema odpowiedziami, więc pole niewidoczne nie ma prawa
+        // dokładać warunku, o którym nikt nie wie.
+        var until = NeedsEndDate ? ToDate(RhythmEnd) : null;
+        int? count = NeedsOccurrences && Occurrences is { } left ? (int)Math.Max(1, left) : null;
+
+        // Koniec przed pierwszym wystąpieniem daje rytm, który nie powtórzy się ani razu:
+        // reguła zapisze się, a kolejne wystąpienie nie powstanie nigdy i nie będzie
+        // wiadomo dlaczego. Lepiej powiedzieć to przy wpisywaniu.
+        if (until is { } last && ToDate(DoDate) is { } first && last < first)
+        {
+            problem = "koniec rytmu wypada przed pierwszym wystąpieniem";
+            return null;
+        }
+
         try
         {
             return new RecurrenceRule(
@@ -888,7 +960,9 @@ public sealed partial class TaskDetailViewModel(
                 days,
                 kind == RecurrenceKind.Monthly && DayOfMonth is { } day ? (int)day : null,
                 SelectedAnchor?.Value ?? RecurrenceRule.DefaultAnchorFor(kind),
-                SelectedMissed?.Value ?? OnMissed.Carry);
+                SelectedMissed?.Value ?? OnMissed.Carry,
+                until,
+                count);
         }
         catch (ArgumentException)
         {
@@ -973,6 +1047,8 @@ public sealed partial class TaskDetailViewModel(
         OnPropertyChanged(nameof(NeedsInterval));
         OnPropertyChanged(nameof(NeedsWeekdays));
         OnPropertyChanged(nameof(NeedsDayOfMonth));
+        OnPropertyChanged(nameof(NeedsOccurrences));
+        OnPropertyChanged(nameof(NeedsEndDate));
     }
 
     partial void OnSelectedRepeatChanged(RepeatChoice? value)
@@ -1000,6 +1076,30 @@ public sealed partial class TaskDetailViewModel(
     partial void OnSelectedAnchorChanged(AnchorChoice? value) => Refresh();
 
     partial void OnSelectedMissedChanged(MissedChoice? value) => Refresh();
+
+    /// <summary>Zaznaczenie pięciu dni roboczych jednym ruchem.</summary>
+    /// <remarks>
+    /// Najczęstszy zestaw w całym tym polu — „od poniedziałku do piątku" — kosztował
+    /// pięć dotknięć małych kwadracików, z których każde da się chybić. Weekend
+    /// odznaczany przy okazji, bo „dni robocze" znaczy właśnie tyle: te pięć i nie te dwa.
+    /// </remarks>
+    [RelayCommand]
+    private void Workdays()
+    {
+        Monday = true;
+        Tuesday = true;
+        Wednesday = true;
+        Thursday = true;
+        Friday = true;
+        Saturday = false;
+        Sunday = false;
+    }
+
+    partial void OnSelectedEndChanged(EndChoice? value) => Refresh();
+
+    partial void OnOccurrencesChanged(decimal? value) => Refresh();
+
+    partial void OnRhythmEndChanged(DateTimeOffset? value) => Refresh();
 
     partial void OnMondayChanged(bool value) => Refresh();
 

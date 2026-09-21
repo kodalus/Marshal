@@ -2886,6 +2886,12 @@
                   <ToggleButton Classes="day" IsChecked="{Binding Saturday}" Content="sb" />
                   <ToggleButton Classes="day" IsChecked="{Binding Sunday}" Content="nd" />
                 </WrapPanel>
+
+                <!-- Najczęstszy zestaw jednym dotknięciem. Pięć małych kwadracików
+                     to pięć okazji do chybienia, a „od poniedziałku do piątku" jest
+                     tym, co wpisuje się najczęściej. -->
+                <Button Classes="nav" Margin="0,4,0,0" HorizontalAlignment="Left"
+                        Command="{Binding WorkdaysCommand}" Content="dni robocze" />
               </StackPanel>
 
               <StackPanel IsVisible="{Binding NeedsDayOfMonth}">
@@ -2904,6 +2910,28 @@
                 <TextBlock Classes="label" Text="Gdy dzień minie niewykonany" />
                 <ComboBox ItemsSource="{Binding Missed}" SelectedItem="{Binding SelectedMissed}"
                           HorizontalAlignment="Stretch" />
+
+                <!-- Koniec serii jednym pytaniem, choć model niesie to dwoma polami.
+                     Dwa pola obok siebie pozwalałyby wpisać obie odpowiedzi naraz,
+                     a wtedy nie dałoby się powiedzieć, która obowiązuje. -->
+                <TextBlock Classes="label" Text="Koniec" />
+                <ComboBox ItemsSource="{Binding Ends}" SelectedItem="{Binding SelectedEnd}"
+                          HorizontalAlignment="Stretch" />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding NeedsOccurrences}">
+                <TextBlock Classes="label" Text="Ile jeszcze wystąpień" />
+                <NumericUpDown Value="{Binding Occurrences}" Minimum="1" Maximum="999"
+                               Increment="1" FormatString="0" />
+                <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                           Text="Licząc to, które jest teraz. Po każdym odhaczeniu liczba jest o jeden mniejsza — stan serii siedzi w samym wystąpieniu, nie w historii." />
+              </StackPanel>
+
+              <StackPanel IsVisible="{Binding NeedsEndDate}">
+                <TextBlock Classes="label" Text="Do dnia" />
+                <k:DateField Value="{Binding RhythmEnd}" />
+                <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                           Text="Ostatni dzień, w którym wolno wypaść wystąpieniu." />
               </StackPanel>
 
               <!-- Rytm zdaniem, nie formularzem. Sześć pól da się wypełnić źle i nie

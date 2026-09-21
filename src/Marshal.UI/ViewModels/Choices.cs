@@ -24,6 +24,32 @@ public sealed record RepeatChoice(RecurrenceKind? Kind, string Label)
     public override string ToString() => Label;
 }
 
+/// <summary>Kiedy rytm się kończy — postać z okna, nie z modelu.</summary>
+/// <remarks>
+/// Model niesie to dwoma polami, z których każde może być puste: dzień ostatniego
+/// wystąpienia i liczba pozostałych. Okno pyta o to raz, bo to jedno pytanie, a dwa
+/// pola obok siebie pozwalałyby wpisać obie odpowiedzi naraz — i nie dałoby się
+/// powiedzieć, która obowiązuje.
+/// </remarks>
+public enum RepeatEnd
+{
+    Never,
+    AfterCount,
+    OnDate,
+}
+
+public sealed record EndChoice(RepeatEnd Value, string Label)
+{
+    public static readonly IReadOnlyList<EndChoice> All =
+    [
+        new(RepeatEnd.Never, "bez końca"),
+        new(RepeatEnd.AfterCount, "po tylu wystąpieniach"),
+        new(RepeatEnd.OnDate, "do dnia"),
+    ];
+
+    public override string ToString() => Label;
+}
+
 public sealed record AnchorChoice(RecurrenceAnchor Value, string Label)
 {
     public static readonly IReadOnlyList<AnchorChoice> All =

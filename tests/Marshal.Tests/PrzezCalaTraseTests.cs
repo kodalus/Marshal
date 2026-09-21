@@ -480,6 +480,80 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Praca_od_poniedzialku_do_piatku_dojezdza_do_bazy()
+    {
+        // Trasa: przycisk „dni robocze" → pięć przełączników → zbiór dni → JSON → odczyt.
+        var task = await ZaplanowaneAsync("Praca");
+
+        var detail = NewService<TaskDetailViewModel>();
+        detail.Load(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Weekly);
+        detail.WorkdaysCommand.Execute(null);
+
+        await detail.SaveAsync();
+
+        var saved = await NewService<ITaskRepository>().FindAsync(task.Id);
+
+        saved!.Recurrence!.DaysOfWeek.Should().Be(Weekdays.Workdays);
+        saved.Recurrence.Until.Should().BeNull();
+        saved.Recurrence.Count.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Koniec_rytmu_po_wystapieniach_i_po_dacie_dojezdza_do_bazy()
+    {
+        var task = await ZaplanowaneAsync("Kurs");
+
+        var detail = NewService<TaskDetailViewModel>();
+        detail.Load(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Weekly);
+        detail.Monday = true;
+        detail.SelectedEnd = EndChoice.All.Single(k => k.Value == RepeatEnd.AfterCount);
+        detail.Occurrences = 5;
+
+        await detail.SaveAsync();
+
+        var tasks = NewService<ITaskRepository>();
+        var afterCount = await tasks.FindAsync(task.Id);
+
+        afterCount!.Recurrence!.Count.Should().Be(5);
+        afterCount.Recurrence.Until.Should().BeNull("odpowiedź jest jedna, nie dwie");
+
+        // Ta sama karta, druga odpowiedź: data zastępuje liczbę, a nie dokłada się do niej.
+        detail.Load(afterCount);
+        detail.SelectedEnd = EndChoice.All.Single(k => k.Value == RepeatEnd.OnDate);
+        detail.RhythmEnd = new DateTimeOffset(new DateTime(2027, 1, 31), TimeSpan.Zero);
+
+        await detail.SaveAsync();
+
+        var afterDate = await tasks.FindAsync(task.Id);
+
+        afterDate!.Recurrence!.Until.Should().Be(new DateOnly(2027, 1, 31));
+        afterDate.Recurrence.Count.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Wybrany_koniec_bez_wartosci_nie_zapisuje_sie_po_cichu()
+    {
+        // Puste pole jest brakiem odpowiedzi, a nie odpowiedzią „nieważne". Zapisane
+        // jako „bez końca" znaczyłoby coś innego, niż mówi lista nad polem.
+        var task = await ZaplanowaneAsync("Kurs");
+
+        var detail = NewService<TaskDetailViewModel>();
+        detail.Load(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Weekly);
+        detail.Monday = true;
+        detail.SelectedEnd = EndChoice.All.Single(k => k.Value == RepeatEnd.AfterCount);
+
+        detail.Summary.Should().Contain("po ilu");
+
+        await detail.SaveAsync();
+
+        (await NewService<ITaskRepository>().FindAsync(task.Id))!
+            .Recurrence.Should().BeNull("zapis z brakującą odpowiedzią nie doszedł do skutku");
+    }
+
+    [Fact]
     public async Task Przypomnienie_z_dnia_i_pory_dojezdza_do_bazy()
     {
         // Dzień i pora są w oknie osobno, a w bazie są jedną chwilą. Składanie dzieje
