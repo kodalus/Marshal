@@ -693,7 +693,7 @@ public sealed class CalendarStoreTests : IDisposable
             new RecurrenceRule(
                 RecurrenceKind.Weekly,
                 daysOfWeek: Weekdays.Wednesday,
-                changes: [new RecurrenceChange(new DateOnly(2026, 9, 23))]),
+                changes: [new RecurrenceChange(new DateOnly(2026, 9, 23), Dropped: true)]),
             _hlc.Next());
 
         _db.Tasks.Add(task);
@@ -730,7 +730,9 @@ public sealed class CalendarStoreTests : IDisposable
                 changes:
                 [
                     new RecurrenceChange(
-                        new DateOnly(2026, 9, 23), new DateOnly(2026, 9, 24), new TimeOnly(17, 0)),
+                        new DateOnly(2026, 9, 23),
+                        Day: new DateOnly(2026, 9, 24),
+                        Time: new TimeOnly(17, 0)),
                 ]),
             _hlc.Next());
 

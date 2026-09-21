@@ -22,12 +22,19 @@ namespace Marshal.Domain.Recurrence;
 /// </para>
 /// </remarks>
 /// <param name="Date">Dzień z reguły. Tożsamość wystąpienia w serii.</param>
-/// <param name="Day">Dokąd przełożone. Puste znaczy „odwołane".</param>
+/// <param name="Dropped">Czy wystąpienie odwołano. Wtedy reszta pól nic nie znaczy.</param>
+/// <param name="Day">Dokąd przełożone. Puste znaczy „w swoim dniu".</param>
 /// <param name="Time">Nowa pora. Pusta znaczy „ta sama, co w rytmie".</param>
 /// <param name="Minutes">Długość tego jednego razu. Pusta znaczy „taka, jak w rytmie".</param>
+/// <remarks>
+/// Odwołanie osobnym polem, a nie brakiem dnia docelowego. Tak było do pierwszego
+/// wystąpienia, któremu zmieniono samą długość: zmiana bez przełożenia wyglądała wtedy
+/// jak odwołanie i wystąpienie znikało z siatki zamiast stać się dłuższe. Pytanie
+/// „czy to się odbędzie" jest innym pytaniem niż „gdzie i jak długo", więc ma własne pole.
+/// </remarks>
 public sealed record RecurrenceChange(
-    DateOnly Date, DateOnly? Day = null, TimeOnly? Time = null, int? Minutes = null)
-{
-    /// <summary>Czy wystąpienie zostało odwołane, a nie przełożone.</summary>
-    public bool Dropped => Day is null;
-}
+    DateOnly Date,
+    bool Dropped = false,
+    DateOnly? Day = null,
+    TimeOnly? Time = null,
+    int? Minutes = null);

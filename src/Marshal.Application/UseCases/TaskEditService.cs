@@ -376,7 +376,8 @@ public sealed class TaskEditService(
     /// <param name="occurrence">Dzień, w którym wystąpienie wypada z reguły.</param>
     public async Task<TaskItem?> DropOccurrenceAsync(
         Guid id, DateOnly occurrence, CancellationToken ct = default) =>
-        await ChangeOccurrenceAsync(id, occurrence, _ => new RecurrenceChange(occurrence), ct);
+        await ChangeOccurrenceAsync(
+            id, occurrence, _ => new RecurrenceChange(occurrence, Dropped: true), ct);
 
     /// <summary>
     /// Przełożenie jednego z wystąpień narysowanych do przodu na inny dzień albo porę.
@@ -389,7 +390,11 @@ public sealed class TaskEditService(
     public async Task<TaskItem?> MoveOccurrenceAsync(
         Guid id, DateOnly occurrence, DateOnly day, TimeOnly? time, CancellationToken ct = default) =>
         await ChangeOccurrenceAsync(
-            id, occurrence, before => new RecurrenceChange(occurrence, day, time, before?.Minutes), ct);
+            id,
+            occurrence,
+            before => new RecurrenceChange(
+                occurrence, Day: day, Time: time, Minutes: before?.Minutes),
+            ct);
 
     /// <summary>
     /// Zmiana długości jednego z wystąpień narysowanych do przodu.
@@ -404,7 +409,12 @@ public sealed class TaskEditService(
         await ChangeOccurrenceAsync(
             id,
             occurrence,
-            before => new RecurrenceChange(occurrence, before?.Day, before?.Time, minutes),
+            before => new RecurrenceChange(
+                occurrence,
+                Dropped: before?.Dropped ?? false,
+                Day: before?.Day,
+                Time: before?.Time,
+                Minutes: minutes),
             ct);
 
     /// <param name="patch">

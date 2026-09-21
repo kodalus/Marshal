@@ -286,7 +286,7 @@ public sealed class RecurrenceScheduleTests
         var rule = new RecurrenceRule(
             RecurrenceKind.Weekly,
             daysOfWeek: Weekdays.Wednesday,
-            changes: [new RecurrenceChange(D("2026-09-23"))]);
+            changes: [new RecurrenceChange(D("2026-09-23"), Dropped: true)]);
 
         RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-10-07"))
             .Select(s => s.Date)
@@ -299,7 +299,11 @@ public sealed class RecurrenceScheduleTests
         var rule = new RecurrenceRule(
             RecurrenceKind.Weekly,
             daysOfWeek: Weekdays.Wednesday,
-            changes: [new RecurrenceChange(D("2026-09-23"), D("2026-09-24"), new TimeOnly(17, 0))]);
+            changes:
+            [
+                new RecurrenceChange(
+                    D("2026-09-23"), Day: D("2026-09-24"), Time: new TimeOnly(17, 0)),
+            ]);
 
         var drawn = RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30")).ToList();
 
@@ -321,7 +325,7 @@ public sealed class RecurrenceScheduleTests
         var rule = new RecurrenceRule(
             RecurrenceKind.Daily,
             count: 3,
-            changes: [new RecurrenceChange(D("2026-09-17"))]);
+            changes: [new RecurrenceChange(D("2026-09-17"), Dropped: true)]);
 
         RecurrenceSchedule.Following(rule, D("2026-09-16"), D("2026-09-30"))
             .Select(s => s.Date)
@@ -336,7 +340,7 @@ public sealed class RecurrenceScheduleTests
         var rule = new RecurrenceRule(
             RecurrenceKind.Weekly,
             daysOfWeek: Weekdays.Wednesday,
-            changes: [new RecurrenceChange(D("2026-10-07"), D("2026-09-29"))]);
+            changes: [new RecurrenceChange(D("2026-10-07"), Day: D("2026-09-29"))]);
 
         // Bez kolejności: rozwinięcie idzie po dniach z reguły, a przełożone wystąpienie
         // wypada wcześniej, niż mówi jego dzień. Siatka i tak rozkłada wpisy po dniach.
@@ -354,8 +358,8 @@ public sealed class RecurrenceScheduleTests
             RecurrenceKind.Daily,
             changes:
             [
-                new RecurrenceChange(D("2026-09-17")),
-                new RecurrenceChange(D("2026-09-20"), D("2026-09-21")),
+                new RecurrenceChange(D("2026-09-17"), Dropped: true),
+                new RecurrenceChange(D("2026-09-20"), Day: D("2026-09-21")),
             ]);
 
         rule.Advance(D("2026-09-18")).Changes
@@ -371,8 +375,9 @@ public sealed class RecurrenceScheduleTests
             daysOfWeek: Weekdays.Wednesday,
             changes:
             [
-                new RecurrenceChange(D("2026-09-23")),
-                new RecurrenceChange(D("2026-09-30"), D("2026-10-01"), new TimeOnly(17, 30)),
+                new RecurrenceChange(D("2026-09-23"), Dropped: true),
+                new RecurrenceChange(
+                    D("2026-09-30"), Day: D("2026-10-01"), Time: new TimeOnly(17, 30)),
             ]);
 
         var read = RecurrenceRule.FromJson(rule.ToJson());
@@ -389,8 +394,8 @@ public sealed class RecurrenceScheduleTests
         // Przełożenie, a potem odwołanie tego samego dnia. Dwa wpisy na jedno wystąpienie
         // znaczyłyby, że trzeba wiedzieć, który jest nowszy — a tego zapis nie niesie.
         var rule = new RecurrenceRule(RecurrenceKind.Daily)
-            .With(new RecurrenceChange(D("2026-09-17"), D("2026-09-18")))
-            .With(new RecurrenceChange(D("2026-09-17")));
+            .With(new RecurrenceChange(D("2026-09-17"), Day: D("2026-09-18")))
+            .With(new RecurrenceChange(D("2026-09-17"), Dropped: true));
 
         rule.Changes.Should().ContainSingle();
         rule.ChangeOn(D("2026-09-17"))!.Dropped.Should().BeTrue();

@@ -352,7 +352,11 @@ public sealed class RecurrenceRunnerTests
             new RecurrenceRule(
                 RecurrenceKind.Weekly,
                 daysOfWeek: Weekdays.Wednesday,
-                changes: [new RecurrenceChange(D("2026-09-23"), D("2026-09-24"), new TimeOnly(17, 0))]));
+                changes:
+                [
+                    new RecurrenceChange(
+                        D("2026-09-23"), Day: D("2026-09-24"), Time: new TimeOnly(17, 0)),
+                ]));
 
         task.SetDoTime(new TimeOnly(19, 0), Stempel());
 
@@ -370,7 +374,7 @@ public sealed class RecurrenceRunnerTests
             new RecurrenceRule(
                 RecurrenceKind.Weekly,
                 daysOfWeek: Weekdays.Wednesday,
-                changes: [new RecurrenceChange(D("2026-09-23"))]));
+                changes: [new RecurrenceChange(D("2026-09-23"), Dropped: true)]));
 
         RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel)!
             .DoDate.Should().Be(D("2026-09-30"));
@@ -385,8 +389,8 @@ public sealed class RecurrenceRunnerTests
                 RecurrenceKind.Daily,
                 changes:
                 [
-                    new RecurrenceChange(D("2026-09-17"), D("2026-09-18")),
-                    new RecurrenceChange(D("2026-09-20")),
+                    new RecurrenceChange(D("2026-09-17"), Day: D("2026-09-18")),
+                    new RecurrenceChange(D("2026-09-20"), Dropped: true),
                 ]));
 
         var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel);
