@@ -370,23 +370,6 @@ public partial class MainView : UserControl
     /// </remarks>
     private bool _gestureOver;
 
-    /// <summary>Czy ruch po rozliczeniu gestu został już odnotowany w tym gescie.</summary>
-    private bool _traced;
-
-    /// <summary>
-    /// Ślad w dzienniku na czas szukania szarpnięcia po przejechaniu.
-    /// </summary>
-    /// <remarks>
-    /// Dwa podejścia po kolei nie trafiły, a rozstrzygnięcie „co właściwie rusza siatką"
-    /// zapada na urządzeniu, którego tu nie ma: CI składa aplikację i nigdy jej nie
-    /// uruchamia. Wpisy są więc po to, żeby następna runda była odczytem, a nie trzecim
-    /// zgadywaniem. Do usunięcia, gdy przyczyna będzie znana.
-    /// </remarks>
-    private void Trace(string what, string detail) =>
-        _ = Try(what, () => DataContext is MainViewModel model
-            ? model.Journal.RecordAsync(what, detail)
-            : Task.CompletedTask);
-
     /// <summary>
     /// Siatka idzie za palcem.
     /// </summary>
@@ -416,17 +399,6 @@ public partial class MainView : UserControl
         // Rozpęd po rozliczonym przejechaniu nie należy już do niczego.
         if (_gestureOver)
         {
-            // Raz na gest: rozpęd potrafi wysłać kilkadziesiąt przesunięć i wpis
-            // przy każdym zalałby dziennik tym samym zdaniem.
-            if (!_traced)
-            {
-                _traced = true;
-
-                Trace(
-                    "Kalendarz: ruch po rozliczeniu",
-                    $"przyrost {e.Delta.X:0.#} w bok, {e.Delta.Y:0.#} w pion");
-            }
-
             return;
         }
 
@@ -570,17 +542,6 @@ public partial class MainView : UserControl
         var sideways = -_gesture.X;
         var vertical = -_gesture.Y;
 
-        // Tylko wtedy, gdy jest o czym pisać: koniec gestu przychodzi także po każdym
-        // przewinięciu dnia w pionie i po każdym dotknięciu siatki, a wpis przy każdym
-        // z nich utopiłby w dzienniku te dwa, o które chodzi.
-        if (Math.Abs(_gridOffset?.X ?? 0) >= 0.5 || _gestureOver)
-        {
-            Trace(
-                "Kalendarz: koniec gestu",
-                $"w bok {sideways:0}, w pion {vertical:0}, "
-                    + $"siatka na {_gridOffset?.X ?? 0:0}, rozliczony {_gestureOver}");
-        }
-
         _gesture = default;
         _gestureOver = true;
         _watch?.Stop();
@@ -638,13 +599,7 @@ public partial class MainView : UserControl
     private void AreaPressed(object? sender, PointerPressedEventArgs e)
     {
         // Nowe dotknięcie zaczyna nowy gest, cokolwiek działo się przedtem.
-        if (_gestureOver)
-        {
-            Trace("Kalendarz: dotknięcie po rozliczeniu", $"wskaźnik {e.Pointer.Type}");
-        }
-
         _gestureOver = false;
-        _traced = false;
 
         // Gest palca ma własną drogę; tu zostaje mysz, bo jej nikt nie przejmuje.
         if (sender is not Control area || e.Pointer.Type != PointerType.Mouse)
