@@ -895,9 +895,10 @@ public partial class MainView : UserControl
         _grip = e.GetPosition(block);
         _blockOnScreen = block.TranslatePoint(new Point(0, 0), this);
 
-        // Za dolną krawędź ciągnie się koniec, nie cały blok. Tylko przy zadaniach:
-        // długość wydarzenia z cudzego kalendarza zmienia się świadomą drogą.
-        _stretching = slot.TaskId is not null
+        // Za dolną krawędź ciągnie się koniec, nie cały blok. Przy zadaniach i przy
+        // zapowiedziach rytmu — te drugie zapisują długość przy swoim jednym dniu.
+        // Wydarzenie z cudzego kalendarza zmienia długość świadomą drogą, w karcie.
+        _stretching = (slot.TaskId is not null || slot.IsAhead)
             && e.Pointer.Type != PointerType.Touch
             && e.GetPosition(block).Y >= block.Bounds.Height - EdgeZone;
     }
@@ -1267,7 +1268,15 @@ public partial class MainView : UserControl
 
         if (stretched)
         {
-            _ = Try("Kalendarz: rozciągnięcie", () => _calendar.ResizeAsync(slot, height));
+            // Zapowiedź rytmu zapisuje długość przy swoim dniu, zadanie — u siebie.
+            // Z punktu widzenia ręki to ten sam ruch; pod spodem dwie różne rzeczy,
+            // bo jednej z nich jeszcze nie ma.
+            _ = slot is { RhythmId: { } series, RhythmDate: { } which }
+                ? Try(
+                    "Kalendarz: długość wystąpienia",
+                    () => _calendar.ResizeOccurrenceAsync(series, which, slot.Top, height))
+                : Try("Kalendarz: rozciągnięcie", () => _calendar.ResizeAsync(slot, height));
+
             return;
         }
 

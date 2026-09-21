@@ -1182,7 +1182,12 @@ public sealed class CalendarSyncService(
         }
 
         var start = InZone(slot.Date.ToDateTime(hour), zone);
-        var length = TimeSpan.FromMinutes(rhythm.EstimatedMinutes ?? 30);
+
+        // Długość tego jednego razu, a gdy jej nie ma — długość zapamiętana przez serię,
+        // a dopiero na końcu długość wystąpienia niosącego regułę. Ostatni krok jest
+        // drogą dla rytmów założonych, zanim seria umiała pamiętać własną długość.
+        var length = TimeSpan.FromMinutes(
+            slot.Minutes ?? rhythm.Recurrence?.Minutes ?? rhythm.EstimatedMinutes ?? 30);
 
         return new AgendaEntry(
             rhythm.Title, start, start + length, IsAllDay: false, AgendaKind.Task,

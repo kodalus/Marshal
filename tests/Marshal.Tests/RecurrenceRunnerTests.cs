@@ -398,6 +398,38 @@ public sealed class RecurrenceRunnerTests
     }
 
     [Fact]
+    public void Nastepnik_bierze_dlugosc_z_rytmu_a_nie_z_wystapienia_ktore_odchodzi()
+    {
+        // Dzisiejsze wystąpienie rozciągnięte na siatce do sześciu godzin, a rytm pamięta
+        // osiem. Gdyby długość przechodziła z wystąpienia, jedno dłuższe popołudnie
+        // zmieniałoby rytm na zawsze.
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(RecurrenceKind.Daily, minutes: 480));
+
+        task.SetEstimate(360, task.Energy, Stempel());
+
+        RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel)!
+            .EstimatedMinutes.Should().Be(480);
+    }
+
+    [Fact]
+    public void Dlugosc_zapisana_przy_wystapieniu_wygrywa_nad_dlugoscia_rytmu()
+    {
+        var task = Zaplanowane(
+            "2026-09-16",
+            new RecurrenceRule(
+                RecurrenceKind.Daily,
+                changes: [new RecurrenceChange(D("2026-09-17"), Minutes: 120)],
+                minutes: 480));
+
+        var next = RecurrenceRunner.Complete(task, Moment("2026-09-16"), Stempel);
+
+        next!.DoDate.Should().Be(D("2026-09-17"));
+        next.EstimatedMinutes.Should().Be(120, "zmiana dotyczy tego jednego razu");
+    }
+
+    [Fact]
     public void Pominiecie_wyrzuca_biezace_wystapienie_i_zostawia_rytm()
     {
         // „Tej środy nie będzie". Do dziś jedyną drogą było wyrzucenie zadania — a razem

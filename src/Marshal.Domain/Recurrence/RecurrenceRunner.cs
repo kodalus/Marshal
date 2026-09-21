@@ -149,7 +149,8 @@ public static class RecurrenceRunner
             return null;
         }
 
-        return task.SpawnNextOccurrence(slot.Date, slot.Rule, now, stamp(), slot.Time);
+        return task.SpawnNextOccurrence(
+            slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes);
     }
 
     private static TaskItem? SpawnFrom(
@@ -167,7 +168,8 @@ public static class RecurrenceRunner
             return null;
         }
 
-        return task.SpawnNextOccurrence(slot.Date, slot.Rule, now, stamp(), slot.Time);
+        return task.SpawnNextOccurrence(
+            slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes);
     }
 
     /// <summary>

@@ -49,7 +49,8 @@ public sealed record RecurrenceRule
         OnMissed onMissed = OnMissed.Carry,
         DateOnly? until = null,
         int? count = null,
-        IReadOnlyList<RecurrenceChange>? changes = null)
+        IReadOnlyList<RecurrenceChange>? changes = null,
+        int? minutes = null)
     {
         if (interval < 1)
         {
@@ -80,6 +81,7 @@ public sealed record RecurrenceRule
         OnMissed = onMissed;
         Until = until;
         Count = count;
+        Minutes = minutes is > 0 ? minutes : null;
 
         // Po jednej zmianie na dzień i w kolejności dni. Dwie zmiany tego samego
         // wystąpienia znaczyłyby, że trzeba wiedzieć, która jest nowsza — a to jest
@@ -141,6 +143,26 @@ public sealed record RecurrenceRule
     /// </remarks>
     public IReadOnlyList<RecurrenceChange> Changes { get; }
 
+    /// <summary>
+    /// Ile trwa wystąpienie tej serii, w minutach. Puste znaczy „tyle, co bieżące".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zadanie niosące rytm jest jednocześnie <b>jednym wystąpieniem</b> i <b>wzorcem
+    /// serii</b>, a to są dwie różne rzeczy o tej samej długości tylko z pozoru.
+    /// Przeciągnięcie dolnej krawędzi dzisiejszego bloku znaczy „dziś siedzę dłużej",
+    /// a nie „od zawsze to trwa dłużej" — a bez tego pola znaczyło jedno i drugie naraz,
+    /// bo rysowanie zapowiedzi sięgało po długość właśnie do tamtego zadania.
+    /// </para>
+    /// <para>
+    /// Zapisywana przy zmianie z karty zadania: tam wpisuje się, czym rzecz <b>jest</b>,
+    /// i to jest decyzja o całej serii. Siatka służy do jednego dnia i zostawia serię
+    /// w spokoju. Puste pole u rytmów założonych wcześniej znaczy tyle, co dawniej —
+    /// długość bierze się wtedy z wystąpienia niosącego regułę.
+    /// </para>
+    /// </remarks>
+    public int? Minutes { get; }
+
     /// <summary>Zmiana dotycząca wskazanego dnia z reguły, jeśli jest.</summary>
     public RecurrenceChange? ChangeOn(DateOnly date) =>
         Changes.Count == 0 ? null : Changes.FirstOrDefault(z => z.Date == date);
@@ -152,13 +174,26 @@ public sealed record RecurrenceRule
 
         return new RecurrenceRule(
             Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
-            [.. Changes.Where(z => z.Date != change.Date), change]);
+            [.. Changes.Where(z => z.Date != change.Date), change], Minutes);
     }
 
     /// <summary>Ta sama reguła bez zmiany dotyczącej wskazanego dnia.</summary>
     public RecurrenceRule Without(DateOnly date) =>
         new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
-            [.. Changes.Where(z => z.Date != date)]);
+            [.. Changes.Where(z => z.Date != date)], Minutes);
+
+    /// <summary>
+    /// Ta sama reguła z zapamiętaną długością wystąpienia.
+    /// </summary>
+    /// <remarks>
+    /// Wołane wtedy, gdy zmienia się długość <b>bieżącego</b> wystąpienia rytmu, który
+    /// swojej długości jeszcze nie pamięta: seria zapamiętuje to, czym była do tej pory,
+    /// zanim jedno wystąpienie zrobi się inne. Bez tego kroku zapowiedzi poszłyby za
+    /// zmianą, bo długość brałyby z tego właśnie zadania.
+    /// </remarks>
+    public RecurrenceRule WithLength(int? minutes) =>
+        new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
+            Changes, minutes);
 
     /// <summary>
     /// Domyślne zaczepienie **liczone z rodzaju**, nie stałe (spec 5.7).
@@ -200,14 +235,14 @@ public sealed record RecurrenceRule
         return new RecurrenceRule(
             Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until,
             Count is null or <= 1 ? Count : Count - 1,
-            left);
+            left, Minutes);
     }
 
     public string ToJson() =>
         JsonSerializer.Serialize(
             new Wire(
                 Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
-                Changes.Count == 0 ? null : Changes),
+                Changes.Count == 0 ? null : Changes, Minutes),
             Json);
 
     /// <summary>Zwraca <c>null</c> zamiast rzucać: zapis z nowszej wersji aplikacji nie
@@ -224,7 +259,7 @@ public sealed record RecurrenceRule
             return JsonSerializer.Deserialize<Wire>(json, Json) is { } w
                 ? new RecurrenceRule(
                     w.Kind, w.Interval, w.DaysOfWeek, w.DayOfMonth,
-                    w.Anchor, w.OnMissed, w.Until, w.Count, w.Changes)
+                    w.Anchor, w.OnMissed, w.Until, w.Count, w.Changes, w.Minutes)
                 : null;
         }
         catch (Exception e) when (e is JsonException or ArgumentException or ArgumentOutOfRangeException)
@@ -258,7 +293,8 @@ public sealed record RecurrenceRule
         OnMissed OnMissed,
         DateOnly? Until,
         int? Count,
-        IReadOnlyList<RecurrenceChange>? Changes = null);
+        IReadOnlyList<RecurrenceChange>? Changes = null,
+        int? Minutes = null);
 
     /// <summary>
     /// Porównanie po treści, także listy zmian.
@@ -279,6 +315,7 @@ public sealed record RecurrenceRule
         && OnMissed == other.OnMissed
         && Until == other.Until
         && Count == other.Count
+        && Minutes == other.Minutes
         && Changes.SequenceEqual(other.Changes);
 
     public override int GetHashCode() =>

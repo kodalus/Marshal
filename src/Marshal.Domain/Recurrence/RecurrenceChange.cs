@@ -24,7 +24,9 @@ namespace Marshal.Domain.Recurrence;
 /// <param name="Date">Dzień z reguły. Tożsamość wystąpienia w serii.</param>
 /// <param name="Day">Dokąd przełożone. Puste znaczy „odwołane".</param>
 /// <param name="Time">Nowa pora. Pusta znaczy „ta sama, co w rytmie".</param>
-public sealed record RecurrenceChange(DateOnly Date, DateOnly? Day = null, TimeOnly? Time = null)
+/// <param name="Minutes">Długość tego jednego razu. Pusta znaczy „taka, jak w rytmie".</param>
+public sealed record RecurrenceChange(
+    DateOnly Date, DateOnly? Day = null, TimeOnly? Time = null, int? Minutes = null)
 {
     /// <summary>Czy wystąpienie zostało odwołane, a nie przełożone.</summary>
     public bool Dropped => Day is null;

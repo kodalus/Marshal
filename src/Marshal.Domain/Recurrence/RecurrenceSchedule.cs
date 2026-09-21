@@ -73,7 +73,7 @@ public static class RecurrenceSchedule
                 continue;
             }
 
-            return new Slot(date, change?.Day ?? date, change?.Time, after);
+            return new Slot(date, change?.Day ?? date, change?.Time, after, change?.Minutes);
         }
 
         return null;
@@ -88,7 +88,7 @@ public static class RecurrenceSchedule
     /// przełożone wystąpienie traciłoby ślad, po którym wiadomo, czym było.
     /// </remarks>
     public readonly record struct Slot(
-        DateOnly Base, DateOnly Date, TimeOnly? Time, RecurrenceRule Rule);
+        DateOnly Base, DateOnly Date, TimeOnly? Time, RecurrenceRule Rule, int? Minutes = null);
 
     /// <summary>Krok samej reguły, bez zmian pojedynczych wystąpień.</summary>
     private static DateOnly? Step(RecurrenceRule rule, DateOnly from)

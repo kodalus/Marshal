@@ -500,6 +500,117 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Rozciagniecie_biezacego_bloku_nie_zmienia_dlugosci_serii()
+    {
+        // Objaw: zadanie niosące rytm jest jednocześnie **wystąpieniem** i **wzorcem
+        // serii**, a zapowiedzi rysowane do przodu brały długość właśnie z niego.
+        // Przeciągnięcie dolnej krawędzi dzisiejszego bloku zmieniało więc wszystkie.
+        var task = await ZaplanowaneAsync("Praca");
+
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Weekly);
+        detail.WorkdaysCommand.Execute(null);
+        detail.EstimatedMinutes = 480;
+
+        await detail.SaveAsync();
+
+        var tasks = NewService<ITaskRepository>();
+        (await tasks.FindAsync(task.Id))!.Recurrence!.Minutes
+            .Should().Be(480, "długość wpisana w karcie jest decyzją o całej serii");
+
+        // Siatka: dziś siedzę sześć godzin, a nie osiem.
+        await NewService<TaskEditService>().SetMinutesAsync(task.Id, 360);
+
+        var after = await tasks.FindAsync(task.Id);
+
+        after!.EstimatedMinutes.Should().Be(360, "to wystąpienie jest krótsze");
+        after.Recurrence!.Minutes.Should().Be(480, "seria zostaje przy swojej długości");
+    }
+
+    [Fact]
+    public async Task Rytm_bez_zapamietanej_dlugosci_zapamietuje_ja_przy_pierwszym_rozciagnieciu()
+    {
+        // Rytmy założone, zanim seria umiała pamiętać własną długość, mają to pole puste
+        // i długość bierze się wtedy z wystąpienia niosącego regułę. Pierwsze rozciągnięcie
+        // musi więc najpierw zapisać to, czym seria była do tej pory.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+
+        task.SetEstimate(480, task.Energy, hlc.Next());
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday), hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        await NewService<TaskEditService>().SetMinutesAsync(task.Id, 360);
+
+        var after = await NewService<ITaskRepository>().FindAsync(task.Id);
+
+        after!.EstimatedMinutes.Should().Be(360);
+        after.Recurrence!.Minutes.Should().Be(480);
+    }
+
+    [Fact]
+    public async Task Dlugosc_jednej_zapowiedzi_zapisuje_sie_przy_jej_dniu()
+    {
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var today = NewService<IClock>().Today;
+
+        task.SetRecurrence(
+            new RecurrenceRule(RecurrenceKind.Daily, minutes: 480), hlc.Next());
+
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var edit = NewService<TaskEditService>();
+        var when = today.AddDays(3);
+
+        // Najpierw przełożenie, potem długość: wpis jest jeden na dzień, więc drugie
+        // nie ma prawa cofnąć pierwszego.
+        await edit.MoveOccurrenceAsync(task.Id, when, when.AddDays(1), new TimeOnly(10, 0));
+        await edit.ResizeOccurrenceAsync(task.Id, when, 120);
+
+        var change = (await NewService<ITaskRepository>().FindAsync(task.Id))!
+            .Recurrence!.ChangeOn(when);
+
+        change!.Minutes.Should().Be(120);
+        change.Day.Should().Be(when.AddDays(1), "przełożenie przetrwało dopisanie długości");
+        change.Time.Should().Be(new TimeOnly(10, 0));
+    }
+
+    [Fact]
+    public async Task Zapis_karty_nie_kasuje_zmian_pojedynczych_wystapien()
+    {
+        // Karta odpowiada na pytanie „czym ta rzecz jest", a nie „co się stanie z tą
+        // jedną środą". Składanie reguły od nowa gubiło zmiany przy każdym zapisie
+        // czegokolwiek innego — także zmianie samego tytułu.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var today = NewService<IClock>().Today;
+
+        task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), hlc.Next());
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var when = today.AddDays(2);
+        await NewService<TaskEditService>().DropOccurrenceAsync(task.Id, when);
+
+        var tasks = NewService<ITaskRepository>();
+        var detail = NewService<TaskDetailViewModel>();
+
+        await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
+        detail.Title = "Praca zdalna";
+
+        await detail.SaveAsync();
+
+        var saved = await tasks.FindAsync(task.Id);
+
+        saved!.Title.Should().Be("Praca zdalna");
+        saved.Recurrence!.ChangeOn(when).Should().NotBeNull("odwołanie przetrwało zapis karty");
+        saved.Recurrence.ChangeOn(when)!.Dropped.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task Koniec_rytmu_po_wystapieniach_i_po_dacie_dojezdza_do_bazy()
     {
         var task = await ZaplanowaneAsync("Kurs");

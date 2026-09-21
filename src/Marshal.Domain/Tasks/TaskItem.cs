@@ -386,8 +386,16 @@ public sealed class TaskItem : Entity
     /// Pora przełożonego wystąpienia. Pusta znaczy „ta sama, co w rytmie" — pora
     /// przechodzi wtedy z wystąpienia poprzedniego.
     /// </param>
+    /// <param name="length">
+    /// Długość przełożonego wystąpienia w minutach. Pusta znaczy „taka, jak w rytmie".
+    /// </param>
     internal TaskItem SpawnNextOccurrence(
-        DateOnly doDate, RecurrenceRule rule, DateTimeOffset now, Hlc stamp, TimeOnly? at = null)
+        DateOnly doDate,
+        RecurrenceRule rule,
+        DateTimeOffset now,
+        Hlc stamp,
+        TimeOnly? at = null,
+        int? length = null)
     {
         var next = new TaskItem(Guid.CreateVersion7(), now, stamp, Title)
         {
@@ -403,7 +411,13 @@ public sealed class TaskItem : Entity
 
             // Oszacowanie przechodzi — to ta sama robota. Wybór na dziś i licznik
             // pominięć nie: dotyczą konkretnego dnia i konkretnego wystąpienia.
-            EstimatedMinutes = EstimatedMinutes,
+            //
+            // Kolejność ma znaczenie: najpierw długość tego jednego razu, potem długość
+            // zapamiętana przez serię, a dopiero na końcu długość wystąpienia, które
+            // właśnie schodzi ze sceny. Bez środkowego kroku rozciągnięcie dzisiejszego
+            // bloku przechodziłoby na każde następne — czyli zmiana jednego dnia
+            // zmieniałaby rytm.
+            EstimatedMinutes = length ?? rule.Minutes ?? EstimatedMinutes,
             Energy = Energy,
 
             // Godzina przechodzi: „śmieci w poniedziałek o 19" to ta sama pora

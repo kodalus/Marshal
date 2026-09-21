@@ -192,6 +192,16 @@ public sealed class TaskEditService(
 
         if (task.EstimatedMinutes != minutes)
         {
+            // Seria zapamiętuje swoją długość, zanim to jedno wystąpienie zrobi się
+            // inne. Zadanie niosące rytm jest jednocześnie wystąpieniem i wzorcem serii,
+            // więc bez tego kroku rozciągnięcie dzisiejszego bloku przerysowywałoby
+            // wszystkie zapowiedzi — długość brały właśnie stąd.
+            if (task.Recurrence is { Minutes: null } rhythm)
+            {
+                task.SetRecurrence(
+                    rhythm.WithLength(task.EstimatedMinutes ?? DefaultLength), hlc.Next());
+            }
+
             task.SetEstimate(minutes, task.Energy, hlc.Next());
             await unitOfWork.SaveChangesAsync(ct);
             await MirrorAsync(task, ct);
@@ -199,6 +209,13 @@ public sealed class TaskEditService(
 
         return task;
     }
+
+    /// <summary>
+    /// Domyślna długość bloku na siatce. Ta sama, którą rysuje kalendarz przy zadaniu
+    /// bez oszacowania — inaczej zapamiętana długość serii przeskakiwałaby przy pierwszym
+    /// rozciągnięciu na wartość, której nigdzie nie było widać.
+    /// </summary>
+    private const int DefaultLength = 30;
 
     /// <summary>Waga — jedno pole, jedna zmiana (menu podręczne).</summary>
     public Task<TaskItem?> SetPriorityAsync(
@@ -359,7 +376,7 @@ public sealed class TaskEditService(
     /// <param name="occurrence">Dzień, w którym wystąpienie wypada z reguły.</param>
     public async Task<TaskItem?> DropOccurrenceAsync(
         Guid id, DateOnly occurrence, CancellationToken ct = default) =>
-        await ChangeOccurrenceAsync(id, new RecurrenceChange(occurrence), ct);
+        await ChangeOccurrenceAsync(id, occurrence, _ => new RecurrenceChange(occurrence), ct);
 
     /// <summary>
     /// Przełożenie jednego z wystąpień narysowanych do przodu na inny dzień albo porę.
@@ -371,10 +388,35 @@ public sealed class TaskEditService(
     /// </remarks>
     public async Task<TaskItem?> MoveOccurrenceAsync(
         Guid id, DateOnly occurrence, DateOnly day, TimeOnly? time, CancellationToken ct = default) =>
-        await ChangeOccurrenceAsync(id, new RecurrenceChange(occurrence, day, time), ct);
+        await ChangeOccurrenceAsync(
+            id, occurrence, before => new RecurrenceChange(occurrence, day, time, before?.Minutes), ct);
 
+    /// <summary>
+    /// Zmiana długości jednego z wystąpień narysowanych do przodu.
+    /// </summary>
+    /// <remarks>
+    /// Rozciągnięcie dolnej krawędzi zapowiedzi. Rytm zostaje ze swoją długością —
+    /// „w tę środę wyjątkowo dłużej" nie znaczy „od teraz to trwa dłużej", a gdyby
+    /// znaczyło, nie dałoby się powiedzieć tego pierwszego.
+    /// </remarks>
+    public async Task<TaskItem?> ResizeOccurrenceAsync(
+        Guid id, DateOnly occurrence, int minutes, CancellationToken ct = default) =>
+        await ChangeOccurrenceAsync(
+            id,
+            occurrence,
+            before => new RecurrenceChange(occurrence, before?.Day, before?.Time, minutes),
+            ct);
+
+    /// <param name="patch">
+    /// Nowa zmiana złożona z tej, która już przy tym dniu stała. Wpis jest jeden na dzień,
+    /// więc przełożenie i długość muszą umieć dotyczyć tego samego wystąpienia — inaczej
+    /// rozciągnięcie przełożonej środy cofałoby ją tam, skąd się ją zabrało.
+    /// </param>
     private async Task<TaskItem?> ChangeOccurrenceAsync(
-        Guid id, RecurrenceChange change, CancellationToken ct)
+        Guid id,
+        DateOnly occurrence,
+        Func<RecurrenceChange?, RecurrenceChange> patch,
+        CancellationToken ct)
     {
         if (await tasks.FindAsync(id, ct) is not { Recurrence: { } rule } task)
         {
@@ -383,12 +425,12 @@ public sealed class TaskEditService(
 
         // Zmiana wystąpienia minionego albo tego, które regułę niesie, nie ma czego
         // dotyczyć: tamte są już zadaniami albo nie powstaną nigdy.
-        if (task.DoDate is { } current && change.Date <= current)
+        if (task.DoDate is { } current && occurrence <= current)
         {
             return null;
         }
 
-        task.SetRecurrence(rule.With(change), hlc.Next());
+        task.SetRecurrence(rule.With(patch(rule.ChangeOn(occurrence))), hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
 
         return task;

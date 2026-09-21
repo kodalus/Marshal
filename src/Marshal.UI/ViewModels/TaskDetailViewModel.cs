@@ -388,6 +388,9 @@ public sealed partial class TaskDetailViewModel(
     /// zapisuje: polecenie zapisu kończyło się **niczym**. Bez zapisu, bez komunikatu,
     /// bez wpisu w dzienniku, z otwartym oknem wyglądającym jak przed kliknięciem.
     /// </remarks>
+    /// <summary>Zmiany pojedynczych wystąpień wczytanego rytmu. Karta ich nie rusza.</summary>
+    private IReadOnlyList<RecurrenceChange> _changes = [];
+
     private RecurrenceKind? Rhythm => SelectedRepeat?.Kind;
 
     private Priority Weight => SelectedPriority?.Value ?? Priority.None;
@@ -580,6 +583,12 @@ public sealed partial class TaskDetailViewModel(
 
         Occurrences = rule?.Count;
         RhythmEnd = ToOffset(rule?.Until);
+
+        // Zmiany pojedynczych wystąpień — odwołane, przełożone, dłuższe — przechodzą
+        // przez kartę nietknięte. Karta odpowiada na pytanie „czym ta rzecz jest",
+        // a nie „co się stanie z tą jedną środą"; złożenie reguły od nowa bez nich
+        // kasowałoby je przy każdym zapisie czegokolwiek innego.
+        _changes = rule?.Changes ?? [];
 
         var days = rule?.DaysOfWeek ?? Weekdays.None;
         Monday = days.Includes(DayOfWeek.Monday);
@@ -962,7 +971,14 @@ public sealed partial class TaskDetailViewModel(
                 SelectedAnchor?.Value ?? RecurrenceRule.DefaultAnchorFor(kind),
                 SelectedMissed?.Value ?? OnMissed.Carry,
                 until,
-                count);
+                count,
+                _changes,
+
+                // Długość wpisana w karcie jest decyzją o **całej serii**: tu odpowiada
+                // się na pytanie, czym rzecz jest. Rozciągnięcie bloku na siatce dotyczy
+                // jednego dnia i reguły nie rusza — to są dwie różne czynności i dlatego
+                // mają dwie różne drogi.
+                EstimatedMinutes is { } length ? (int)length : null);
         }
         catch (ArgumentException)
         {

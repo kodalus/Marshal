@@ -1848,6 +1848,47 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
+    /// <summary>
+    /// Długość jednego wystąpienia rytmu — tego narysowanego do przodu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zadanie niosące rytm jest jednocześnie wystąpieniem i wzorcem serii, więc
+    /// rozciągnięcie dzisiejszego bloku zmieniało do tej pory wszystkie zapowiedzi naraz.
+    /// Zapowiedź zapisuje swoją długość przy swoim dniu i nie rusza ani rytmu, ani
+    /// żadnego innego wystąpienia.
+    /// </para>
+    /// <para>
+    /// Początek bloku liczony z jego położenia na siatce, a nie z pory rytmu: wystąpienie
+    /// bywa przełożone na inną godzinę i wtedy tamta pora nie mówi nic o tym, gdzie
+    /// ten blok stoi.
+    /// </para>
+    /// </remarks>
+    public async Task ResizeOccurrenceAsync(Guid rhythm, DateOnly occurrence, double top, double y)
+    {
+        var start = Time(top);
+        var end = Time(y);
+        var minutes = Math.Max(Step, (int)(end.ToTimeSpan() - start.ToTimeSpan()).TotalMinutes);
+
+        try
+        {
+            await edit.ResizeOccurrenceAsync(rhythm, occurrence, minutes);
+            await log.RecordAsync(
+                "Kalendarz: długość wystąpienia", $"{occurrence:yyyy-MM-dd}, {minutes} min");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Problem = e.Message;
+            OnPropertyChanged(nameof(HasProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: długość wystąpienia", "nie udało się",
+                ActivityLevel.Problem, e.Message);
+        }
+
+        await RefreshAsync();
+    }
+
     /// <summary>Zdjęcie ptaszka wprost z siatki — ten sam kwadracik, w drugą stronę.</summary>
     /// <remarks>
     /// Kwadracik był dotąd jednokierunkowy: zaznaczał i przestawał reagować. Wyglądało
