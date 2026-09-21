@@ -2256,15 +2256,6 @@ public sealed partial class CalendarViewModel(
     public bool HasOpenedProblem => !string.IsNullOrEmpty(OpenedProblem);
 
     /// <summary>
-    /// Zapis zmienionego wydarzenia do kalendarza, z którego pochodzi.
-    /// </summary>
-    /// <remarks>
-    /// Nieudany zapis **zostawia kartę otwartą**. Zamknięcie jej wyglądałoby identycznie
-    /// jak zapis udany, a przy pisaniu do cudzego kalendarza to jest różnica między
-    /// „zmienione" a „wydaje ci się, że zmienione".
-    /// </remarks>
-    [RelayCommand]
-    /// <summary>
     /// Zapis karty wystąpienia rytmu: dzień, pora i długość tego jednego razu.
     /// </summary>
     /// <remarks>
@@ -2347,6 +2338,15 @@ public sealed partial class CalendarViewModel(
         TaskRequested?.Invoke(rhythm);
     }
 
+    /// <summary>
+    /// Zapis zmienionego wydarzenia do kalendarza, z którego pochodzi.
+    /// </summary>
+    /// <remarks>
+    /// Nieudany zapis **zostawia kartę otwartą**. Zamknięcie jej wyglądałoby identycznie
+    /// jak zapis udany, a przy pisaniu do cudzego kalendarza to jest różnica między
+    /// „zmienione" a „wydaje ci się, że zmienione".
+    /// </remarks>
+    [RelayCommand]
     private async Task SaveOpenedAsync()
     {
         if (Opened is { RhythmId: { } rhythm, RhythmDate: { } occurrence } ahead)
