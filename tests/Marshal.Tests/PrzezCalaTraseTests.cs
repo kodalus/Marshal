@@ -781,7 +781,8 @@ public sealed class PrzezCalaTraseTests : IDisposable
         alone.DoDate.Should().Be(when);
         alone.DoTime.Should().Be(new TimeOnly(11, 0), "pora z zapowiedzi, nie z reguły");
         alone.EstimatedMinutes.Should().Be(480, "długość seria pamięta");
-        alone.ReminderLeads.Should().Equal(30, "przypomnienie też jest cechą rytmu");
+        // Przypomnienie też jest cechą rytmu, więc idzie z serii, a nie z poprzednika.
+        alone.ReminderLeads.Should().Equal(30);
         alone.Recurrence.Should().BeNull("wyjęte zadanie nie niesie rytmu");
 
         var rhythm = await NewService<ITaskRepository>().FindAsync(task.Id);
