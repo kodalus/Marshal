@@ -16,7 +16,6 @@ using Avalonia.Threading;
 using Marshal.Application.Review;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Calendar;
-using Marshal.Domain.Notes;
 using Marshal.Domain.Tasks;
 using Marshal.UI.ViewModels;
 
@@ -2164,13 +2163,19 @@ public partial class MainView : UserControl
     }
 
     /// <summary>Dwuklik na notatce otwiera ją do czytania i poprawiania.</summary>
-    private void OpenNote(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// Ile miejsca dostały kafelki notatek.
+    /// </summary>
+    /// <remarks>
+    /// Szerokość kafelka liczy model ekranu, bo to on wie, ile ich ma — okno zna tylko
+    /// prostokąt. Ta sama droga co przy kolumnach kalendarza i z tego samego powodu:
+    /// wyliczona w XAML-u byłaby stała, a stała wygląda dobrze na jednej szerokości okna.
+    /// </remarks>
+    private void OnNotesWidth(object? sender, SizeChangedEventArgs e)
     {
-        if (DataContext is MainViewModel model
-            && sender is ListBox list
-            && list.SelectedItem is Note note)
+        if (DataContext is MainViewModel model)
         {
-            model.Notes.OpenCommand.Execute(note);
+            model.Notes.SetAvailableWidth(e.NewSize.Width);
         }
     }
 

@@ -16,4 +16,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Marshal.Infrastructure\Marshal.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Testy sięgają po składanie początku tekstu notatki: to logika, nie ozdoba. -->
+    <InternalsVisibleTo Include="Marshal.Tests" />
+  </ItemGroup>
 </Project>

@@ -6,7 +6,6 @@
              xmlns:uc="using:Marshal.Application.UseCases"
              xmlns:rev="using:Marshal.Application.Review"
              xmlns:sys="using:System"
-             xmlns:dn="using:Marshal.Domain.Notes"
              xmlns:dc="using:Marshal.Domain.Calendar"
              xmlns:da="using:Marshal.Domain.Areas"
              xmlns:dk="using:Marshal.Domain.Contacts"
@@ -67,6 +66,20 @@
     <Style Selector="Button.nav">
       <Setter Property="Margin" Value="0,0,8,0" />
       <Setter Property="Padding" Value="14,8" />
+    </Style>
+
+    <!-- Kafelek notatki: prostokąt, w którym treść stoi od lewej i od góry, a nie
+         na środku jak napis na przycisku. Wysokość z treści, ale nie mniejsza niż
+         tyle, żeby rząd krótkich notatek nie wyglądał jak pasek guzików. -->
+    <Style Selector="Button.kafelek">
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="MinHeight" Value="96" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Top" />
+      <Setter Property="Background" Value="{DynamicResource Karta}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
     </Style>
 
     <!-- Pozycja bocznego paska: cała szerokość i napis od lewej. Przycisk szerokości
@@ -1714,25 +1727,54 @@
           <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
                      TextWrapping="Wrap" Text="{Binding Empty}"
                      IsVisible="{Binding !HasItems}" />
-          <ListBox ItemsSource="{Binding Items}" DoubleTapped="OpenNote">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="dn:Note">
-                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
-                  <!-- Przypięcie znakiem, nie kolorem: wizja i zasady mają się
-                       wyróżniać, a nie krzyczeć. Gwiazdka, nie pinezka: krój, którym
-                       pisze aplikacja, nie ma znaków emoji i na Androidzie zostawał
-                       po niej pusty kwadracik. -->
-                  <TextBlock Grid.Column="0" Text="★" Margin="0,0,8,0"
-                             IsVisible="{Binding IsPinned}" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding Title}" TextWrapping="Wrap"
-                             VerticalAlignment="Center" />
-                  <Button Grid.Column="2" Content="Otwórz" Padding="10,4"
-                          Command="{Binding $parent[ListBox].((vm:NotesViewModel)DataContext).OpenCommand}"
-                          CommandParameter="{Binding}" />
-                </Grid>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+          <!-- Kafelki, nie lista jednolinijkowa. Lista pokazywała sam tytuł, a tytuł
+               notatki bywa słowem — „Zakupy", „Pomysły" — i nie mówi, co w środku.
+               Trzeba było otwierać po kolei, żeby sobie przypomnieć, którą to się
+               szukało. Kafelek pokazuje początek tekstu, czyli tę samą odpowiedź
+               bez otwierania.
+
+               Szerokość liczy model ekranu z tego, co dostała lista: na telefonie
+               wychodzi jedna kolumna na całą szerokość, na szerokim oknie kilka.
+               Stała szerokość znaczyłaby na telefonie kafelek i pas pustego miejsca
+               obok, a na pulpicie przerwy jak po zębach. -->
+          <ScrollViewer Name="KafelkiNotatek" SizeChanged="OnNotesWidth">
+            <ItemsControl ItemsSource="{Binding Items}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:NoteCard">
+                  <!-- Cały kafelek jest przyciskiem: na dotyku osobne „Otwórz" znaczy
+                       cel wielkości paznokcia na prostokącie wielkości dłoni, a podwójne
+                       dotknięcie nie jest gestem, którego ktokolwiek szuka na kafelku. -->
+                  <Button Classes="kafelek" Margin="0,0,10,10"
+                          Width="{Binding $parent[ItemsControl].((vm:NotesViewModel)DataContext).CardWidth}"
+                          Command="{Binding $parent[ItemsControl].((vm:NotesViewModel)DataContext).OpenCommand}"
+                          CommandParameter="{Binding Note}">
+                    <StackPanel>
+                      <Grid ColumnDefinitions="*,Auto">
+                        <!-- Przypięcie znakiem, nie kolorem: wizja i zasady mają się
+                             wyróżniać, a nie krzyczeć. Gwiazdka, nie pinezka: krój,
+                             którym pisze aplikacja, nie ma znaków emoji i na Androidzie
+                             zostawał po niej pusty kwadracik. -->
+                        <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="★" Margin="6,0,0,0"
+                                   VerticalAlignment="Top" IsVisible="{Binding IsPinned}" />
+                      </Grid>
+
+                      <TextBlock Classes="hint" Margin="0,6,0,0" Text="{Binding Beginning}"
+                                 TextWrapping="Wrap" MaxLines="5"
+                                 TextTrimming="CharacterEllipsis"
+                                 IsVisible="{Binding HasBeginning}" />
+                    </StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
         </DockPanel>
 
         <!-- Edytor na całą szerokość, podgląd dopiero wtedy, gdy jest co podglądać.
