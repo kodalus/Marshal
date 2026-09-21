@@ -234,8 +234,23 @@ public sealed partial class MainViewModel : ObservableObject
         {
             await ShowCalendarAsync();
 
-            if (task is not { } id || await _tasks.FindAsync(id) is not { } found)
+            if (task is not { } id)
             {
+                return;
+            }
+
+            if (await _tasks.FindAsync(id) is not { } found)
+            {
+                // Dotknięto wpisu, którego już nie ma — kafelek pokazywał zapamiętany
+                // obrazek sprzed zmiany. Kalendarz zostaje, bo to nadal sensowna
+                // odpowiedź, ale cisza w tym miejscu wyglądałaby identycznie jak
+                // zgubiony identyfikator, a to zupełnie inna usterka.
+                await _activity.RecordAsync(
+                    "Kalendarz: wejście z widgetu",
+                    "zadania już nie ma",
+                    ActivityLevel.Problem,
+                    $"Identyfikator {id}.");
+
                 return;
             }
 
@@ -245,9 +260,13 @@ public sealed partial class MainViewModel : ObservableObject
             // jej zamknięciu zostawał widok, który z dotkniętym zadaniem nie miał nic
             // wspólnego. Dzień wykonania, a gdy go nie ma — termin: blok zadania stoi
             // na siatce w jednym i drugim.
+            //
+            // Osobno od karty i pod własnym zabezpieczeniem: przesunięcie kalendarza
+            // jest wygodą, karta jest tym, po co się tu przyszło. Nieudane przesunięcie
+            // zabierało kartę razem ze sobą, bo oba stały pod jednym „try".
             if ((found.DoDate ?? found.Deadline) is { } day)
             {
-                await Calendar.ShowAsync(day, found.DoTime);
+                await Try("Kalendarz: dzień zadania z widgetu", () => Calendar.ShowAsync(day, found.DoTime));
             }
 
             await Detail.LoadAsync(found);
