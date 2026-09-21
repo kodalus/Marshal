@@ -608,12 +608,20 @@ public sealed class CalendarSyncService(
     /// dodany na komputerze nie istnieje na telefonie przez cały wieczór.
     /// </para>
     /// <para>
-    /// Pięć minut, bo pobranie przyrostowe jest tanie: znacznik z poprzedniego odczytu
-    /// sprawia, że Google oddaje samą różnicę, a najczęściej pustą. To jedno małe
-    /// zapytanie na kalendarz.
+    /// Pobranie przyrostowe jest tanie: znacznik z poprzedniego odczytu sprawia, że
+    /// Google oddaje samą różnicę, a najczęściej pustą. To jedno małe zapytanie
+    /// na kalendarz.
+    /// </para>
+    /// <para>
+    /// <b>Tyle samo, co odstęp synchronizacji zadań</b>, i to jest tu cała odpowiedź.
+    /// Pięć minut było lepsze od godziny i nadal odtwarzało ten sam obraz, tylko ciaśniej:
+    /// zmiana zrobiona na komputerze docierała na telefon zadaniami w minutę,
+    /// a wydarzeniami po pięciu — czyli siatka przez kilka minut pokazywała dwie
+    /// połowy tej samej rzeczy z dwóch różnych chwil. Jeden odstęp na obie drogi
+    /// znaczy, że nie ma czego porównywać.
     /// </para>
     /// </remarks>
-    public static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
+    public static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// Odświeża źródła, którym minął czas. Zwraca też liczbę tych, które nie odpowiedziały.

@@ -1395,6 +1395,13 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Calendar;
         await Calendar.LoadAsync();
+
+        // Wejście na kalendarz jest chwilą, w której patrzy się na siatkę — więc jest
+        // też najlepszą chwilą, żeby zapytać o świeże wydarzenia. Bez czekania: siatka
+        // jest już narysowana z bazy, a odpowiedź z sieci dorysuje się sama, gdy przyjdzie.
+        // Bez wymuszania, więc przy wejściu tuż po poprzednim pobraniu jest to sprawdzenie
+        // odstępu, a nie drugie zapytanie do Google.
+        Safely("Kalendarz: pobranie przy wejściu", FetchCalendarsAsync);
     }
 
     /// <summary>Kreator przeglądu. Wznawia niedokończony albo zakłada nowy.</summary>
