@@ -1437,6 +1437,47 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     /// <summary>
+    /// Wystąpienia rytmu widać na kafelku tak samo, jak na siatce.
+    /// </summary>
+    /// <remarks>
+    /// Widget odpowiadał na pytanie „co mam dziś zapisane", a kalendarz na pytanie
+    /// „co mam dziś" — i te dwie odpowiedzi rozjeżdżały się dokładnie o rytm, czyli
+    /// o to, co powtarza się najczęściej. Wystąpienie narysowane do przodu nie jest
+    /// jeszcze zadaniem, więc nie ma czego odhaczyć: kwadracika przy nim nie ma.
+    /// </remarks>
+    [Fact]
+    public async Task Wystapienie_rytmu_stoi_w_planie_dnia_i_zapala_kropke()
+    {
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
+        _db.Areas.Add(area);
+
+        var task = TaskItem.Capture("Praca", _clock.Now, _hlc.Next());
+        task.Schedule(area.Id, Today, _hlc.Next());
+        task.SetDoTime(new TimeOnly(9, 0), _hlc.Next());
+        task.SetEstimate(360, task.Energy, _hlc.Next());
+        task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), _hlc.Next());
+
+        _db.Tasks.Add(task);
+        _db.SaveChanges();
+
+        var plan = new DayPlanService(
+            new TaskRepository(_db), new ProjectRepository(_db), new AreaRepository(_db),
+            _clock, _service);
+
+        var tomorrow = await plan.ForDayAsync(Today.AddDays(1));
+        var row = tomorrow.Single(p => p.Title == "Praca");
+
+        row.IsAhead.Should().BeTrue();
+        row.RhythmId.Should().Be(task.Id, "dotknięcie ma dokąd prowadzić");
+        row.TaskId.Should().BeNull("tego zadania jeszcze nie ma");
+        row.CanComplete.Should().BeFalse("nie ma czego odhaczyć");
+        row.Caption.Should().Be("09:00 – 15:00");
+
+        // Kropka nad dniem liczy się z tej samej definicji, co lista pod nią.
+        (await plan.BusyAsync(Today, 7)).Should().Contain(Today.AddDays(1));
+    }
+
+    /// <summary>
     /// Ten sam wpis widziany przez dwa podłączenia rysuje się raz.
     /// </summary>
     /// <remarks>

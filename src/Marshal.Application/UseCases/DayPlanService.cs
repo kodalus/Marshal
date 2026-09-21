@@ -29,8 +29,21 @@ public sealed record PlanRow(
     string? ExternalId = null,
 
     /// <summary>Czy da się zapisać zmianę tam, skąd wpis pochodzi.</summary>
-    bool CanWrite = false)
+    bool CanWrite = false,
+
+    /// <summary>
+    /// Zadanie niosące rytm — gdy wiersz jest wystąpieniem narysowanym do przodu.
+    /// </summary>
+    /// <remarks>
+    /// Takie wystąpienie jeszcze nie istnieje: powstanie przy odhaczeniu poprzedniego.
+    /// Nie ma więc czego odhaczyć na kafelku, a dotknięcie prowadzi na siatkę tego dnia,
+    /// na którym stoi — bo to o ten dzień się pyta, patrząc na widget.
+    /// </remarks>
+    Guid? RhythmId = null)
 {
+    /// <summary>Czy wiersz jest wystąpieniem rytmu narysowanym do przodu.</summary>
+    public bool IsAhead => RhythmId is not null;
+
     /// <summary>
     /// Co da się odhaczyć wprost z kafelka: własne zadanie i wydarzenie z kalendarza,
     /// do którego umiemy pisać.
@@ -105,9 +118,10 @@ public sealed class DayPlanService(
     /// Cena jest taka, że „dzień zajęty" ma tu drugą definicję i może rozjechać się
     /// z listą pod kropką. Dlatego jest ona wypisana wprost — dzień zajmuje zadanie
     /// z dniem wykonania albo terminem, wybór na ten dzień, zaległe (należące do dzisiaj,
-    /// nie do dnia, w którym miały być) i wydarzenie z kalendarza inne niż odbicie
-    /// zadania; odhaczone nie liczy się tak samo jak w planie — a test porównuje obie
-    /// definicje dzień po dniu, żeby rozjazd wyszedł w CI, nie na kafelku.
+    /// nie do dnia, w którym miały być), wydarzenie z kalendarza inne niż odbicie zadania
+    /// oraz wystąpienie rytmu narysowane do przodu; odhaczone nie liczy się tak samo jak
+    /// w planie — a test porównuje obie definicje dzień po dniu, żeby rozjazd wyszedł
+    /// w CI, nie na kafelku.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlySet<DateOnly>> BusyAsync(
@@ -177,10 +191,9 @@ public sealed class DayPlanService(
         {
             foreach (var day in await calendar.AgendaAsync(od, days, ct))
             {
-                // Ten sam przesiew co w planie dnia: odbicia zadań nie liczą się drugi
-                // raz, odhaczone nie liczą się wcale.
-                var anything = day.AllDay.Any(e => e.Kind == AgendaKind.Event && !e.IsDone)
-                    || day.Timed.Any(s => s.Entry.Kind == AgendaKind.Event && !s.Entry.IsDone);
+                // Ten sam przesiew co w planie dnia — dosłownie ta sama funkcja, bo obie
+                // definicje „dzień zajęty" muszą się zgadzać dzień po dniu.
+                var anything = day.AllDay.Any(Shown) || day.Timed.Any(s => Shown(s.Entry));
 
                 if (anything)
                 {
@@ -271,13 +284,14 @@ public sealed class DayPlanService(
         var gridDay = days[0];
 
         var allDay = gridDay.AllDay
-            .Where(e => e.Kind == AgendaKind.Event && !e.IsDone)
+            .Where(Shown)
             .Select(e => ((TimeOnly?)null, new PlanRow(
-                null, e.Title, "cały dzień", e.Color, e.SourceId, e.ExternalId, e.CanWrite)));
+                null, e.Title, "cały dzień", e.Color, e.SourceId, e.ExternalId, e.CanWrite,
+                e.RhythmId)));
 
         var withHour = gridDay.Timed
             .Select(s => s.Entry)
-            .Where(e => e.Kind == AgendaKind.Event && !e.IsDone)
+            .Where(Shown)
             .Select(e => (
                 (TimeOnly?)TimeOnly.FromTimeSpan(e.Start.TimeOfDay),
                 new PlanRow(
@@ -288,10 +302,30 @@ public sealed class DayPlanService(
                     e.Color,
                     e.SourceId,
                     e.ExternalId,
-                    e.CanWrite)));
+                    e.CanWrite,
+                    e.RhythmId)));
 
         return allDay.Concat(withHour);
     }
+
+    /// <summary>
+    /// Co z siatki wchodzi do planu dnia: wydarzenia i wystąpienia rytmu narysowane
+    /// do przodu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zadania są w planie już z innej strony — po składnicy — i wzięte stąd drugi raz
+    /// stałyby na kafelku podwójnie. Wystąpienia rytmu **nie są jeszcze zadaniami**,
+    /// więc składnica ich nie zna i tędy wchodzą po raz pierwszy.
+    /// </para>
+    /// <para>
+    /// Bez nich widget odpowiadał na pytanie „co mam dziś zapisane", a kalendarz na
+    /// pytanie „co mam dziś" — i te dwie odpowiedzi rozjeżdżały się dokładnie o rytm,
+    /// czyli o to, co powtarza się najczęściej.
+    /// </para>
+    /// </remarks>
+    private static bool Shown(AgendaEntry entry) =>
+        !entry.IsDone && (entry.Kind == AgendaKind.Event || entry.IsAhead);
 
     /// <summary>Godzina, o której to stoi w dzisiejszym planie. Pusta, gdy bez godziny.</summary>
     /// <remarks>

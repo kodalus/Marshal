@@ -440,6 +440,17 @@ public sealed class TodayWidgetService : RemoteViewsService
             {
                 opening.PutExtra(TodayWidget.TaskIdExtra, opened.ToString());
             }
+            else if (item.IsAhead)
+            {
+                // Wystąpienie rytmu, którego jeszcze nie ma: nie ma czego otwierać
+                // kartą, więc okno schodzi na siatkę **tego dnia**, pod którym wiersz
+                // stoi. To jest odpowiedź na pytanie, które się przy nim zadaje —
+                // „jak mi wygląda ten dzień" — a sam rytm widać stamtąd jednym
+                // dotknięciem bloku.
+                opening.PutExtra(
+                    TodayWidget.DayExtra,
+                    _day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            }
             else if (item is { SourceId: { } from, ExternalId: { } what })
             {
                 // Wydarzenie z podłączonego kalendarza nie ma identyfikatora zadania,

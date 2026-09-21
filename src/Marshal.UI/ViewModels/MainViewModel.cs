@@ -270,6 +270,13 @@ public sealed partial class MainViewModel : ObservableObject
 
             if (what?.Task is not { } id)
             {
+                // Sam dzień: tak przychodzi wystąpienie rytmu z kafelka. Nie ma czego
+                // otwierać kartą — jest dzień, który trzeba pokazać.
+                if (what?.Day is { } alone)
+                {
+                    await Calendar.ShowAsync(alone);
+                }
+
                 return;
             }
 

@@ -649,6 +649,13 @@ public sealed class TodayWidget : AppWidgetProvider
                     toWindow.PutExtra(MainActivity.DayExtra, day);
                 }
             }
+            else if (intent.GetStringExtra(DayExtra) is { Length: > 0 } alone)
+            {
+                // Sam dzień, bez wskazania na wpis: tak niesie się wystąpienie rytmu,
+                // które jeszcze nie jest zadaniem. Okno ma zejść na jego dzień, a nie
+                // na ten, na którym kalendarz akurat stał.
+                toWindow.PutExtra(MainActivity.DayExtra, alone);
+            }
 
             window.StartActivity(toWindow);
             return;

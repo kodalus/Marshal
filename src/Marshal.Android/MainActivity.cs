@@ -159,6 +159,19 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
             return;
         }
 
+        // Sam dzień: wystąpienie rytmu z kafelka. Nie ma karty do otwarcia, jest dzień
+        // do pokazania.
+        if (DateOnly.TryParseExact(
+            intent.GetStringExtra(DayExtra),
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var alone))
+        {
+            App.AskForCalendar(new CalendarRequest(Day: alone));
+            return;
+        }
+
         App.AskForCalendar();
     }
 
