@@ -767,6 +767,53 @@ public sealed class CalendarStoreTests : IDisposable
     /// i po której dobiera „Teraz"; przeciągnięcie krawędzi jest tylko najszybszym
     /// sposobem, żeby ją wpisać.
     /// </remarks>
+    /// <summary>
+    /// Wejście z kafelka w wybrane zadanie pokazuje tydzień, w którym ono leży.
+    /// </summary>
+    /// <remarks>
+    /// Kafelek ma strzałki i pokazuje dowolny tydzień, a zadanie bywa zaległe. Bez
+    /// przestawienia zakresu dotknięcie wpisu sprzed dwóch tygodni otwierało kartę nad
+    /// tygodniem bieżącym — a po jej zamknięciu zostawał widok, który z dotkniętym
+    /// zadaniem nie miał nic wspólnego.
+    /// </remarks>
+    [Fact]
+    public async Task Wejscie_w_zadanie_przestawia_kalendarz_na_jego_tydzien()
+    {
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
+        await model.LoadAsync();
+
+        var day = Today.AddDays(17);
+
+        await model.ShowAsync(day, new TimeOnly(10, 0));
+
+        model.Anchor.Should().Be(
+            day.AddDays(-(((int)day.DayOfWeek + 6) % 7)),
+            "tydzień zaczyna się w poniedziałek, a pokazać ma ten, w którym leży zadanie");
+
+        model.Columns.Select(k => k.Date).Should().Contain(day, "dzień zadania ma być na siatce");
+    }
+
+    /// <summary>Wejście z kafelka nie przestawia zakresu, tylko go przesuwa.</summary>
+    /// <remarks>
+    /// Kto ogląda jeden dzień, ten po wejściu z kafelka dalej ogląda jeden dzień —
+    /// ten właściwy. Przestawienie zakresu przy okazji byłoby drugą zmianą pod jednym
+    /// dotknięciem i do poprzedniego widoku trzeba by wracać ręcznie.
+    /// </remarks>
+    [Fact]
+    public async Task Wejscie_w_zadanie_zostawia_zakres_taki_jaki_byl()
+    {
+        var model = new CalendarViewModel(_service, _clock, new Notes(), _edit);
+        await model.LoadAsync();
+        await model.ShowDayCommand.ExecuteAsync(null);
+
+        var day = Today.AddDays(-9);
+
+        await model.ShowAsync(day);
+
+        model.VisibleDays.Should().Be(1);
+        model.Anchor.Should().Be(day);
+    }
+
     [Fact]
     public async Task Rozciagniecie_bloku_zmienia_dlugosc_a_nie_pore()
     {

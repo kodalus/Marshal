@@ -234,10 +234,23 @@ public sealed partial class MainViewModel : ObservableObject
         {
             await ShowCalendarAsync();
 
-            if (task is { } id && await _tasks.FindAsync(id) is { } found)
+            if (task is not { } id || await _tasks.FindAsync(id) is not { } found)
             {
-                await Detail.LoadAsync(found);
+                return;
             }
+
+            // Na dzień zadania, a nie na ten, na którym kalendarz akurat stał. Kafelek
+            // ma strzałki i pokazuje dowolny tydzień, a zadanie bywa zaległe — dotknięcie
+            // wpisu z przyszłego wtorku otwierało więc kartę nad **tym** tygodniem, a po
+            // jej zamknięciu zostawał widok, który z dotkniętym zadaniem nie miał nic
+            // wspólnego. Dzień wykonania, a gdy go nie ma — termin: blok zadania stoi
+            // na siatce w jednym i drugim.
+            if ((found.DoDate ?? found.Deadline) is { } day)
+            {
+                await Calendar.ShowAsync(day, found.DoTime);
+            }
+
+            await Detail.LoadAsync(found);
         });
     }
 

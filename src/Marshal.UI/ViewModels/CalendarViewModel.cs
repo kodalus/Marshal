@@ -1247,6 +1247,46 @@ public sealed partial class CalendarViewModel(
         ScrollToNow();
     }
 
+    /// <summary>
+    /// Pokazanie konkretnego dnia i godziny — wejście z widgetu w wybrane zadanie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Bez zmiany zakresu.</b> Kto ogląda tydzień, ten po wejściu z kafelka dalej
+    /// ogląda tydzień — ten, w którym leży zadanie. Przestawienie na jeden dzień przy
+    /// okazji byłoby drugą zmianą pod jednym dotknięciem i do poprzedniego widoku
+    /// trzeba by wracać ręcznie.
+    /// </para>
+    /// <para>
+    /// Przewinięcie na <b>godzinę zadania</b>, a nie na bieżącą: z kafelka przychodzi się
+    /// po coś konkretnego i to ma być widać. Godzina zapasu u góry, tak samo jak przy
+    /// otwarciu kalendarza — to, co się przed tym kończy, jest częścią odpowiedzi.
+    /// Zadanie bez godziny nie ma czego wskazać, więc zostaje zwykłe przewinięcie
+    /// na teraz: ono samo pilnuje, żeby nie ruszać dnia, w którym dzisiaj nie ma.
+    /// </para>
+    /// </remarks>
+    public async Task ShowAsync(DateOnly day, TimeOnly? time = null)
+    {
+        Anchor = !IsMonth && VisibleDays == 7
+            ? day.AddDays(-(((int)day.DayOfWeek + 6) % 7))
+            : day;
+
+        await RefreshAsync();
+
+        if (IsMonth)
+        {
+            return;
+        }
+
+        if (time is { } at)
+        {
+            ScrollRequested?.Invoke(Math.Max(0, at.ToTimeSpan().TotalHours - 1) * HourHeight);
+            return;
+        }
+
+        ScrollToNow();
+    }
+
     /// <summary>Poniedziałek, od którego zaczyna się siatka miesiąca.</summary>
     /// <remarks>
     /// Tydzień na przełomie jest tygodniem: wycięcie z niego dni należących do sąsiada
