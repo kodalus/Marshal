@@ -663,6 +663,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var when = today.AddDays(3);
         var calendarId = NewService<CalendarViewModel>();
 
+        // Siatka wczytana przed otwarciem karty: zapis kończy się jej przeliczeniem,
+        // a model bez wczytania stoi na dacie zerowej i nie ma czego przeliczać.
+        await calendarId.LoadAsync();
+
         // Blok taki, jaki siatka rysuje dla wystąpienia przełożonego na dziesiątą.
         var box = new SlotBox(
             "Praca", 0, 0, 0, 0, IsTask: true, Color: null,
