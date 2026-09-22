@@ -152,9 +152,47 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
     </Style>
-    <!-- Włączone poznaje się po obwódce w barwie wyróżnienia, nie po zamalowaniu:
-         zamalowane tło zjada czytelność znaku, który na nim stoi. -->
+    <!-- Tło wpisane wprost w każdym stanie, bo motyw ma na przełącznik własne zdanie
+         i brzmi ono „zamaluj barwą wyróżnienia". Barwa wyróżnienia motywu to dokładnie
+         ta sama wartość, którą rysowana jest ikona — jedno „#7C6CF5" w palecie Fluenta,
+         drugie w zasobie „Akcent" — więc wciśnięty przycisk pokazywał plakietkę
+         **bez rysunku**: znak stał na własnej barwie i zostawał po nim sam obrys.
+
+         Ustawiane na warstwie szablonu, nie na samym przycisku: zdanie motywu też
+         siedzi na tej warstwie, a wpisane wyżej przegrywa z nim bez śladu. -->
+    <Style Selector="ToggleButton.ikona /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Pole}" />
+    </Style>
+    <Style Selector="ToggleButton.ikona:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource PoleJasne}" />
+    </Style>
+    <Style Selector="ToggleButton.ikona:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource PoleJasne}" />
+    </Style>
+
+    <!-- Włączone poznaje się po obwódce w barwie wyróżnienia i po zabarwionym rysunku,
+         a nie po zamalowaniu: zamalowane tło zjada czytelność znaku, który na nim stoi.
+         Prześwit zamiast pełnej barwy — tyle, żeby było widać, że przycisk jest wciśnięty,
+         i nie tyle, żeby znak przestał się od tła odróżniać.
+
+         Barwa treści też wpisana wprost: motyw stawia na zamalowanym tle biel, a biel
+         na jasnym prześwicie w motywie dziennym jest niewidoczna dokładnie tak samo,
+         jak był rysunek. -->
     <Style Selector="ToggleButton.ikona:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
+      <Setter Property="Foreground" Value="{DynamicResource Akcent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+      <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+    <Style Selector="ToggleButton.ikona:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
+      <Setter Property="Foreground" Value="{DynamicResource Akcent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+      <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+    <Style Selector="ToggleButton.ikona:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
+      <Setter Property="Foreground" Value="{DynamicResource Akcent}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
       <Setter Property="BorderThickness" Value="1.5" />
     </Style>
