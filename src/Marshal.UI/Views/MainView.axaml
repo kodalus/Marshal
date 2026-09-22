@@ -2687,7 +2687,7 @@
                przyciskiem; na telefonie nie ma ani prawego przycisku, ani listy pod
                ręką, więc zadania otwartego z kalendarza nie dało się usunąć w ogóle. -->
           <Button Grid.Column="0" Classes="cichy" Padding="14,8" Click="DeleteTask"
-                  Content="Do kosza" IsVisible="{Binding IsExisting}" />
+                  Content="{Binding TrashLabel}" IsVisible="{Binding IsExisting}" />
 
           <Button Grid.Column="2" Classes="cichy" Padding="14,8" Margin="8,0"
                   Click="CloseTask" Content="Zamknij" />
@@ -2957,6 +2957,17 @@
               <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource Panel}">
                 <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontStyle="Italic" />
               </Border>
+
+              <!-- Koniec serii przy serii, nie w stopce. Kosz w stopce znaczy przy rytmie
+                   „ten jeden raz" — bo tego chce się co tydzień, a skasowania rytmu raz
+                   na nigdy. Tutaj trafia się wyłącznie z rozwiniętą sekcją rytmu przed
+                   oczami, więc nazwa ma po czym trafić do właściwej rzeczy. -->
+              <StackPanel IsVisible="{Binding IsOccurrence}" Margin="0,14,0,0">
+                <Button Classes="cichy" HorizontalAlignment="Left" Padding="14,8"
+                        Click="DropRhythm" Content="Usuń cały rytm" />
+                <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                           Text="Bieżące wystąpienie do kosza i żadnego następnego. Minione zostają — zdarzyły się." />
+              </StackPanel>
 
             </StackPanel>
           </Border>

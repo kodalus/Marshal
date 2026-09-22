@@ -27,6 +27,16 @@ public sealed partial class TaskDetailViewModel(
     private bool _loading;
 
     /// <summary>
+    /// Czy otwarte zadanie niesie rytm — czyli czy jest wystąpieniem serii.
+    /// </summary>
+    /// <remarks>
+    /// Ze <b>stanu zapisanego</b>, nie z pól formularza. Rytm dopiero wybrany w oknie
+    /// i jeszcze niezapisany nie czyni z zadania wystąpienia serii, bo serii jeszcze
+    /// nie ma — a pytanie „co zrobić z resztą" miałoby wtedy puste odniesienie.
+    /// </remarks>
+    private bool _openedRhythm;
+
+    /// <summary>
     /// Odbicie tego zadania w Google, gdy je ma.
     /// </summary>
     /// <remarks>
@@ -232,6 +242,41 @@ public sealed partial class TaskDetailViewModel(
     /// „Zapisz" był pułapką: oba zamykają okno, więc pomyłki nie było jak zauważyć.
     /// </remarks>
     public bool IsExisting => _id != Guid.Empty;
+
+    /// <summary>Zgłoszenie tego, co zmienia się razem z otwartym zadaniem.</summary>
+    /// <remarks>
+    /// Trzy odpowiedzi z jednego wczytania — rozdzielone po wywołaniach rozjechałyby się
+    /// przy pierwszym dołożonym wczytaniu, a rozjazd widać dopiero z ekranu.
+    /// </remarks>
+    private void Announce()
+    {
+        OnPropertyChanged(nameof(IsExisting));
+        OnPropertyChanged(nameof(IsOccurrence));
+        OnPropertyChanged(nameof(TrashLabel));
+    }
+
+    /// <summary>Czy to, co widać w oknie, jest wystąpieniem serii.</summary>
+    public bool IsOccurrence => IsExisting && _openedRhythm;
+
+    /// <summary>
+    /// Podpis przycisku, który zabiera — i to jest cała różnica między jednym razem
+    /// a całą serią.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Regułę niesie zawsze najnowsze wystąpienie, więc wyrzucenie tego zadania
+    /// wyrzuca razem z nim cały rytm. Na liście pulpitu mówiło to menu podręczne —
+    /// osobną pozycją „Usuń cały rytm" obok „Pomiń to wystąpienie". W oknie szczegółu
+    /// nie mówiło tego nic, a <b>na telefonie okno szczegółu jest jedyną drogą</b>:
+    /// „Do kosza" przy pierwszym wystąpieniu kasowało serię, zanim zdążyła się zacząć.
+    /// </para>
+    /// <para>
+    /// Domyślnie więc ten jeden raz, nie seria. Kasowanie serii zostaje możliwe, ale
+    /// stoi przy rytmie, pod własną nazwą — bo jest rzadsze i nieodwracalne w tym
+    /// sensie, że przyszłych wystąpień nie ma skąd odtworzyć.
+    /// </para>
+    /// </remarks>
+    public string TrashLabel => IsOccurrence ? "Pomiń to wystąpienie" : "Do kosza";
 
     [ObservableProperty]
     public partial DateTimeOffset? Deadline { get; set; }
@@ -506,6 +551,7 @@ public sealed partial class TaskDetailViewModel(
         EndTime = null;
 
         _loading = false;
+        _openedRhythm = false;
         ShowMore = false;
         ShowDeadline = false;
         ShowReminder = false;
@@ -513,7 +559,7 @@ public sealed partial class TaskDetailViewModel(
         ShowEnergy = false;
         ShowRepeat = false;
         Refresh();
-        OnPropertyChanged(nameof(IsExisting));
+        Announce();
         IsOpen = true;
     }
 
@@ -560,7 +606,8 @@ public sealed partial class TaskDetailViewModel(
         LoadRule(task.Recurrence);
 
         _loading = false;
-        OnPropertyChanged(nameof(IsExisting));
+        _openedRhythm = task.Recurrence is not null;
+        Announce();
 
         // Po wczytaniu pól, nie przy podstawianiu odbicia: „czy w ogóle o tym mówić"
         // pyta o dzień wykonania i termin, a te wpisywane są niżej. Zgłoszone wcześniej
@@ -573,6 +620,13 @@ public sealed partial class TaskDetailViewModel(
             || Leads.Any(w => w.IsChecked)
             || Rhythm is not null
             || Weight != Priority.None;
+
+        // Rytm rozwinięty od razu przy zadaniu, które go niesie — i zwinięty przy każdym
+        // innym. Zwinięty przy serii karta nie różniła się niczym od karty zwykłego
+        // zadania: nic na niej nie mówiło, że za tym jednym dniem stoi seria, a cały ten
+        // błąd wziął się właśnie z tego. Ustawiane wprost także po to, żeby sekcja nie
+        // zostawała otwarta po poprzednio oglądanym zadaniu.
+        ShowRepeat = Rhythm is not null;
 
         Refresh();
         IsOpen = true;
@@ -874,9 +928,21 @@ public sealed partial class TaskDetailViewModel(
     }
 
     /// <summary>
-    /// Zadanie do kosza, z okna szczegółu.
+    /// Zadanie do kosza, z okna szczegółu — a przy serii <b>to jedno wystąpienie</b>.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// <b>Wystąpienie serii przepada samo.</b> Regułę niesie zawsze najnowsze wystąpienie,
+    /// więc wyrzucenie go stąd kasowało razem z nim cały rytm — pierwsze wystąpienie serii
+    /// wyrzucone z telefonu zabierało serię, zanim zdążyła się zacząć. Menu podręczne na
+    /// pulpicie rozróżniało to od dawna dwiema pozycjami; okno szczegółu nie rozróżniało
+    /// wcale, a na telefonie <b>jest jedyną drogą</b>.
+    /// </para>
+    /// <para>
+    /// Na wyrzucenie całej serii jest <see cref="DropRhythmAsync"/> — przy rytmie, pod
+    /// własną nazwą. Domyślne zostaje to, po co sięga się co tydzień; rzadsze wymaga
+    /// przeczytania, bo przyszłych wystąpień nie ma skąd odtworzyć.
+    /// </para>
     /// <para>
     /// Na komputerze kasowało się z listy, prawym przyciskiem. Na telefonie nie ma
     /// prawego przycisku ani listy pod ręką — szczegół jest tam całym ekranem — więc
@@ -896,11 +962,53 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     public async Task TrashAsync()
     {
-        await log.RecordAsync("Zadanie: do kosza z okna", Title);
+        await log.RecordAsync(
+            IsOccurrence ? "Zadanie: pominięcie wystąpienia z okna" : "Zadanie: do kosza z okna",
+            Title);
 
         if (_id == Guid.Empty)
         {
             // Nowe zadanie nie ma czego wyrzucać; zamknięcie okna robi dokładnie to samo.
+            Close();
+            return;
+        }
+
+        // Wystąpienie serii przepada samo, a rytm schodzi na następnik. Bez tego rozróżnienia
+        // jeden przycisk kasował dwie różne rzeczy naraz — i tę drugą zawsze niechcący.
+        if (_openedRhythm)
+        {
+            await edit.SkipOccurrenceAsync(_id);
+        }
+        else
+        {
+            await inbox.TrashAsync(_id);
+        }
+
+        IsOpen = false;
+        Saved?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Koniec całego rytmu: to wystąpienie do kosza i żadnego następnego.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stoi przy rytmie, nie przy koszu — bo dotyczy rytmu, a nie tego jednego dnia,
+    /// i bo tak trafia się tu wyłącznie z otwartą sekcją rytmu przed oczami. Kosz
+    /// w stopce znaczy przy serii „ten jeden raz" i ma tak zostać: częstsze zostaje
+    /// bliżej, rzadsze wymaga przeczytania.
+    /// </para>
+    /// <para>
+    /// Przeszłe wystąpienia zostają nietknięte — zdarzyły się i historia o tym wie.
+    /// Znika wyłącznie to, co miało dopiero powstać.
+    /// </para>
+    /// </remarks>
+    public async Task DropRhythmAsync()
+    {
+        await log.RecordAsync("Zadanie: usunięcie całego rytmu z okna", Title);
+
+        if (_id == Guid.Empty)
+        {
             Close();
             return;
         }

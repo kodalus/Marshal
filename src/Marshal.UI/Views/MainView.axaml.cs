@@ -167,6 +167,10 @@ public partial class MainView : UserControl
     private void DeleteTask(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: do kosza z okna", m => m.TrashAsync());
 
+    /// <summary>Koniec całego rytmu — osobny przycisk, bo osobna czynność.</summary>
+    private void DropRhythm(object? sender, RoutedEventArgs e) =>
+        OnDetail("Zadanie: usunięcie całego rytmu z okna", m => m.DropRhythmAsync());
+
     private void CloseTask(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: zamknięcie okna", m =>
         {

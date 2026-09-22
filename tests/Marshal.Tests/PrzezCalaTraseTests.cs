@@ -905,6 +905,94 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Kosz_w_karcie_przy_rytmie_zabiera_jedno_wystapienie_a_nie_serie()
+    {
+        // Ta droga zabrała całą serię na telefonie: pierwsze wystąpienie, karta, kosz.
+        // Regułę niesie najnowsze wystąpienie, więc wyrzucenie go wyrzucało rytm —
+        // jedna czynność kasowała dwie rzeczy, z czego drugiej nikt nie chciał.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var today = NewService<IClock>().Today;
+
+        task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), hlc.Next());
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
+
+        detail.IsOccurrence.Should().BeTrue();
+        detail.TrashLabel.Should().Be("Pomiń to wystąpienie", "nazwa mówi, czego przycisk dotyczy");
+
+        await detail.TrashAsync();
+
+        var tasks = NewService<ITaskRepository>();
+
+        (await tasks.FindAsync(task.Id))!.State.Should().Be(TaskState.Trashed);
+
+        var next = (await tasks.AllAsync()).SingleOrDefault(z => z.Id != task.Id);
+
+        next.Should().NotBeNull("rytm idzie dalej, przepada wyłącznie ten jeden raz");
+        next!.DoDate.Should().Be(today.AddDays(1));
+        next.Recurrence.Should().NotBeNull("regułę niesie teraz następne wystąpienie");
+    }
+
+    [Fact]
+    public async Task Usuniecie_calego_rytmu_z_karty_nie_zostawia_nastepnika()
+    {
+        // Druga odpowiedź na to samo pytanie i jedyna, która kasuje serię. Stoi przy
+        // rytmie, pod własną nazwą — bo przyszłych wystąpień nie ma skąd odtworzyć.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+
+        task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), hlc.Next());
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
+
+        await detail.DropRhythmAsync();
+
+        var tasks = NewService<ITaskRepository>();
+
+        (await tasks.FindAsync(task.Id))!.State.Should().Be(TaskState.Trashed);
+        (await tasks.AllAsync()).Should().NotContain(z => z.Id != task.Id);
+    }
+
+    [Fact]
+    public async Task Karta_zwyklego_zadania_nie_udaje_wystapienia_serii()
+    {
+        // Rytm dopiero wybrany w oknie i niezapisany nie czyni z zadania wystąpienia:
+        // serii jeszcze nie ma, więc „pomiń to wystąpienie" nie miałoby czego pominąć.
+        // Sekcja rytmu ma też nie zostawać otwarta po poprzednio oglądanym zadaniu.
+        var rhythm = await ZaplanowaneAsync("Praca");
+        var plain = await ZaplanowaneAsync("Zadzwonić");
+        var hlc = NewService<IHlcSource>();
+
+        rhythm.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), hlc.Next());
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var detail = NewService<TaskDetailViewModel>();
+
+        await detail.LoadAsync(rhythm);
+        detail.ShowRepeat.Should().BeTrue("przy serii karta ma od razu pokazywać, że seria jest");
+
+        detail.Load(plain);
+
+        detail.IsOccurrence.Should().BeFalse();
+        detail.TrashLabel.Should().Be("Do kosza");
+        detail.ShowRepeat.Should().BeFalse("sekcja rytmu nie zostaje po poprzednim zadaniu");
+
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
+
+        detail.IsOccurrence.Should().BeFalse("wybór w oknie to jeszcze nie zapisana seria");
+
+        await detail.TrashAsync();
+
+        (await NewService<ITaskRepository>().FindAsync(plain.Id))!
+            .State.Should().Be(TaskState.Trashed);
+    }
+
+    [Fact]
     public async Task Przypomnienie_z_dnia_i_pory_dojezdza_do_bazy()
     {
         // Dzień i pora są w oknie osobno, a w bazie są jedną chwilą. Składanie dzieje
