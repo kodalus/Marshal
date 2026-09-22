@@ -213,6 +213,7 @@ public static class DependencyInjection
         services.AddSingleton<AttachmentService>();
         services.AddSingleton<FilterService>();
         services.AddSingleton<BackupService>();
+        services.AddSingleton<DailyBackup>();
 
         // Synchronizacja z Dyskiem. Składnica powstaje dopiero przy logowaniu, więc
         // sama usługa niczego nie wymaga przy składaniu zależności — poświadczenia
@@ -322,6 +323,25 @@ public static class DependencyInjection
         return $"przejście dnia {rollover} ms, wybory {focus} ms, "
             + $"przypomnienia {reminders} ms";
     }
+
+    /// <summary>
+    /// Codzienna kopia zapasowa — obok gotowości, nie w niej.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Z tego samego powodu, co odświeżenie kalendarzy niżej: czas zapisu nie zależy od
+    /// nas. Folder kopii bywa wskazany na dysk sieciowy albo na katalog, który właśnie
+    /// się synchronizuje — a wszystko, co czeka na gotowość, czekałoby wtedy na cudzy
+    /// dysk. Woła to okno po pierwszym ekranie, kiedy jest już co pokazywać.
+    /// </para>
+    /// <para>
+    /// Własne przechwycenie wyjątku siedzi w samej kopii, nie tutaj: tam jest komplet
+    /// wiedzy o tym, co poszło nie tak i z którym folderem, a tutaj byłoby drugie
+    /// miejsce z tą samą obsługą.
+    /// </para>
+    /// </remarks>
+    public static Task BackupAsync(IServiceProvider services, CancellationToken ct = default) =>
+        services.GetRequiredService<DailyBackup>().RunAsync(ct);
 
     /// <summary>
     /// Odświeżenie kalendarzy — obok gotowości, nie w niej.

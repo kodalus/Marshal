@@ -14,6 +14,7 @@ using Marshal.Domain.Calendar;
 using Marshal.Domain.Projects;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
+using Marshal.Infrastructure.Backup;
 using Marshal.Infrastructure.Notifications;
 using Marshal.Infrastructure.Sync.Google;
 
@@ -61,6 +62,8 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly GoogleSyncService _drive;
 
     private readonly DayRolloverService _dayRollover;
+
+    private readonly DailyBackup _backup;
 
     /// <summary>
     /// Czy od ostatniego przebiegu coś zapisano w oknie.
@@ -148,9 +151,11 @@ public sealed partial class MainViewModel : ObservableObject
         ReminderService reminders,
         GoogleSyncService drive,
         DayRolloverService dayRollover,
+        DailyBackup backup,
         IWriteSignal signal)
     {
         _inbox = inbox;
+        _backup = backup;
         _shell = shell;
         _mirror = mirror;
         _calendars = calendars;
@@ -767,6 +772,12 @@ public sealed partial class MainViewModel : ObservableObject
         await Try("Kalendarz: zaległe odbicia", () => _mirror.FinishDeletionAsync());
 
         await Try("Kalendarz: pobranie w tle", FetchCalendarsAsync);
+
+        // Codzienna kopia zapasowa. Tutaj, a nie przy samym starcie: minutnik chodzi
+        // także przez północ, więc aplikacja otwarta od wczoraj zrobi dzisiejszą kopię
+        // bez zamykania. Sama kopia pilnuje, żeby zdarzyć się raz na dzień — tu jest
+        // tylko „zajrzyj, czy już czas".
+        await Try("Kopia: codzienna", () => _backup.RunAsync());
 
         // Osobno zabezpieczona: nieudany przebieg do Dysku nie ma prawa zabrać ze sobą
         // przypomnień, które właśnie się policzyły.

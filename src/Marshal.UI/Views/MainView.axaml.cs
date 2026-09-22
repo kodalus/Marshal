@@ -2739,6 +2739,22 @@ public partial class MainView : UserControl
             return file is null ? null : await file.OpenWriteAsync();
         };
 
+        // Wybierak folderu tylko tam, gdzie platforma go ma. Na Androidzie zostaje pusty
+        // i sekcja folderu się nie pokazuje: dojście do katalogu poza aplikacją wymaga
+        // tam osobnej zgody na cały magazyn, a to cena nieproporcjonalna do jednego
+        // pliku dziennie. Kopie lądują wtedy w prywatnym katalogu aplikacji.
+        model.Settings.FolderRequested = async () =>
+        {
+            var folders = await window.StorageProvider.OpenFolderPickerAsync(
+                new FolderPickerOpenOptions
+                {
+                    Title = "Folder na codzienne kopie Marshala",
+                    AllowMultiple = false,
+                });
+
+            return folders.Count == 0 ? null : folders[0].TryGetLocalPath();
+        };
+
         model.Settings.OpenRequested = async () =>
         {
             var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions

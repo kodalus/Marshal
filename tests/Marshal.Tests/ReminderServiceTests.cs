@@ -56,6 +56,14 @@ public sealed class ReminderServiceTests : IDisposable
 
         public void SetGoogle(string? clientId, string? clientSecret) =>
             throw new NotSupportedException();
+
+        public bool DailyBackup => false;
+
+        public void SetDailyBackup(bool on) => throw new NotSupportedException();
+
+        public string? BackupFolder => null;
+
+        public void SetBackupFolder(string? path) => throw new NotSupportedException();
     }
 
     private readonly SqliteConnection _connection = new("Filename=:memory:");

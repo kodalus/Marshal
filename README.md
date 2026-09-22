@@ -31,7 +31,7 @@ sprawa czekająca od trzech tygodni, obszar życia milczący od pół roku — j
 | Przegląd | Kreator ośmiu kroków, wznawialny po każdej pojedynczej pozycji |
 | Notatki | Markdown z podglądem, załączniki |
 | Filtry | Warunki łączone, zapisywane do ulubionych |
-| Kopia | Eksport i import JSON, offline |
+| Kopia | Eksport i import JSON, offline; codzienna kopia robiona sama |
 
 ## Kalendarz i udostępnianie
 

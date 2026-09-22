@@ -47,9 +47,12 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Wstrzymuje zapis w chwili wypełniania pól wartościami z ustawień.</summary>
     private bool _loading;
 
+    private readonly DailyBackup _daily;
+
     public SettingsViewModel(
         ISettings settings,
         BackupService backup,
+        DailyBackup daily,
         IClock clock,
         GoogleSyncService drive,
         CalendarSyncService calendars,
@@ -60,6 +63,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _notifications = notifications;
         _settings = settings;
         _backup = backup;
+        _daily = daily;
         _clock = clock;
         _drive = drive;
         _calendars = calendars;
@@ -96,6 +100,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         OnPropertyChanged(nameof(TokenFolder));
 
+        AutoBackup = _settings.DailyBackup;
+        AnnounceBackup();
+
         OnPropertyChanged(nameof(Now));
     }
 
@@ -103,6 +110,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     public Func<string, Task<Stream?>>? SaveRequested { get; set; }
 
     public Func<Task<Stream?>>? OpenRequested { get; set; }
+
+    /// <summary>
+    /// Pyta o folder na codzienne kopie. Zwraca ścieżkę albo <c>null</c> po rezygnacji.
+    /// </summary>
+    /// <remarks>
+    /// Podstawiane przez okno, tak samo jak dwa haki wyżej: wybieranie plików należy
+    /// do platformy, a model widoku ma nie wiedzieć, która to platforma. Pusty hak
+    /// znaczy „tu nie ma czym wybierać" — i wtedy przycisk się nie pokazuje, bo
+    /// przycisk kończący się niczym jest gorszy od jego braku.
+    /// </remarks>
+    public Func<Task<string?>>? FolderRequested { get; set; }
+
+    public bool CanChooseBackupFolder => FolderRequested is not null;
 
     public IReadOnlyList<ThemeOption> Themes => ThemeOption.All;
 
@@ -555,6 +575,100 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string? ZoneProblem => _settings.ZoneProblem;
 
     public bool HasZoneProblem => !string.IsNullOrEmpty(ZoneProblem);
+
+    /// <summary>
+    /// Czy aplikacja robi kopię sama, raz dziennie.
+    /// </summary>
+    /// <remarks>
+    /// Włączona domyślnie i to jest cała różnica między zabezpieczeniem a obietnicą:
+    /// pytanie „czy chcesz się zabezpieczyć" pada wtedy, gdy nie ma jeszcze czego
+    /// stracić, a przypomina się dopiero wtedy, gdy jest już za późno.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool AutoBackup { get; set; }
+
+    partial void OnAutoBackupChanged(bool value)
+    {
+        if (!_loading)
+        {
+            _settings.SetDailyBackup(value);
+            AnnounceBackup();
+        }
+    }
+
+    /// <summary>Folder, w którym leżą codzienne kopie.</summary>
+    public string BackupFolder => _daily.Folder;
+
+    /// <summary>Kiedy powstała ostatnia kopia — z plików w folderze, nie z ustawień.</summary>
+    /// <remarks>
+    /// Zapisane „ostatnia kopia wczoraj" przy pustym folderze znaczyłoby spokój,
+    /// którego nie ma. Nazwa pliku niesie dzień, więc folder odpowiada sam — i mówi
+    /// prawdę także wtedy, gdy ktoś te pliki skasował.
+    /// </remarks>
+    public string BackupState => !AutoBackup
+        ? "Wyłączona — kopię robi się przyciskiem niżej."
+        : _daily.Last() is { } day
+            ? day == _clock.Today
+                ? "Ostatnia kopia: dzisiaj."
+                : $"Ostatnia kopia: {day:dd.MM.yyyy}."
+            : "Jeszcze żadnej — pierwsza powstanie w ciągu minuty od otwarcia.";
+
+    private void AnnounceBackup()
+    {
+        OnPropertyChanged(nameof(BackupFolder));
+        OnPropertyChanged(nameof(BackupState));
+        OnPropertyChanged(nameof(CanChooseBackupFolder));
+    }
+
+    /// <summary>
+    /// Wskazanie folderu na codzienne kopie.
+    /// </summary>
+    /// <remarks>
+    /// Sprawdzane zapisem próbnym, nie samym istnieniem ścieżki: folder bywa tylko do
+    /// odczytu albo leży na dysku, który właśnie zniknął, a jedno i drugie wychodzi
+    /// dopiero przy zapisie. Wyjść ma tutaj, przy wyborze, a nie za dobę i po cichu.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ChooseBackupFolderAsync()
+    {
+        if (FolderRequested is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (await FolderRequested() is not { Length: > 0 } chosen)
+            {
+                return;
+            }
+
+            var probe = Path.Combine(chosen, ".marshal-proba");
+            await File.WriteAllTextAsync(probe, string.Empty);
+            File.Delete(probe);
+
+            _settings.SetBackupFolder(chosen);
+            AnnounceBackup();
+
+            Status = $"Kopie będą trafiać do {chosen}.";
+            await _journal.RecordAsync("Kopia: folder", chosen);
+        }
+        catch (Exception e)
+        {
+            Status = $"Nie da się tam pisać: {e.Message}";
+            await _journal.RecordAsync(
+                "Kopia: folder", "nie udało się", ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    /// <summary>Powrót do folderu domyślnego — bez chodzenia po wybieraku.</summary>
+    [RelayCommand]
+    private void ResetBackupFolder()
+    {
+        _settings.SetBackupFolder(null);
+        AnnounceBackup();
+        Status = $"Kopie wracają do {DailyBackup.DefaultFolder()}.";
+    }
 
     [RelayCommand]
     private async Task ExportAsync()

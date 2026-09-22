@@ -131,4 +131,28 @@ public interface ISettings
     void SetTheme(ThemeChoice theme);
 
     void SetGoogle(string? clientId, string? clientSecret);
+
+    /// <summary>
+    /// Czy robić kopię zapasową raz dziennie, samemu.
+    /// </summary>
+    /// <remarks>
+    /// <b>Domyślnie włączone.</b> Kopia, którą trzeba było najpierw włączyć, nie chroni
+    /// nikogo: pytanie „czy chcesz się zabezpieczyć" pada wtedy, gdy jeszcze nie ma
+    /// czego stracić, a przypomina się dopiero wtedy, gdy już jest za późno.
+    /// </remarks>
+    bool DailyBackup { get; }
+
+    void SetDailyBackup(bool on);
+
+    /// <summary>
+    /// Folder na codzienne kopie. Puste znaczy „domyślny dla tej platformy".
+    /// </summary>
+    /// <remarks>
+    /// <b>Lokalne, nie synchronizowane</b>, i to nie jest przeoczenie: ścieżka
+    /// z Windowsa nie znaczy nic na Androidzie, a rozesłana tam kazałaby zapisywać
+    /// w miejsce, którego nie ma.
+    /// </remarks>
+    string? BackupFolder { get; }
+
+    void SetBackupFolder(string? path);
 }

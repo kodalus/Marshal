@@ -2125,6 +2125,30 @@
         <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
                    Text="Bez zaznaczenia kopia scala się po zegarze: nowsze pole wygrywa i nic świeższego nie przepada. Z zaznaczeniem baza jest czyszczona — to tryb na urządzenie, które zaczyna od nowa." />
 
+        <!-- Codzienna kopia. Włączona domyślnie i dlatego stoi tu jako stan do
+             wyłączenia, a nie jako zachęta do włączenia: kopia, którą trzeba było
+             włączyć, nie chroni nikogo. Pytanie „czy chcesz się zabezpieczyć" pada
+             wtedy, gdy nie ma jeszcze czego stracić. -->
+        <CheckBox Margin="0,18,0,0" IsChecked="{Binding AutoBackup}"
+                  Content="Rób kopię codziennie, samemu" />
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="Raz na dobę, przy otwartej aplikacji — nie ma zadania w tle, które musiałoby zadziałać o północy. Zostaje trzydzieści ostatnich, starsze kasują się same." />
+
+        <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
+                   Text="{Binding BackupState}" />
+        <TextBlock Classes="hint" Margin="2,2,0,0" TextWrapping="Wrap"
+                   Text="{Binding BackupFolder}" />
+
+        <WrapPanel Margin="0,8,0,0" IsVisible="{Binding CanChooseBackupFolder}">
+          <Button Classes="nav" Margin="0,0,8,0" Command="{Binding ChooseBackupFolderCommand}"
+                  Content="Zmień folder" />
+          <Button Classes="cichy" Padding="14,8" Command="{Binding ResetBackupFolderCommand}"
+                  Content="Folder domyślny" />
+        </WrapPanel>
+        <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                   IsVisible="{Binding CanChooseBackupFolder}"
+                   Text="Folder poza aplikacją — np. taki, po który sięga kopia zapasowa systemu — chroni także przed utratą dysku. Zapisywalność sprawdzana od razu przy wyborze, nie za dobę." />
+
         <TextBlock Margin="0,18,0,0" TextWrapping="Wrap" Text="{Binding Status}" />
 
         <TextBlock Classes="label" Margin="0,18,0,0" Text="Konto Google — synchronizacja" />

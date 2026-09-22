@@ -25,6 +25,10 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
 
     public const string MainCalendarKey = "main-calendar";
 
+    public const string DailyBackupKey = "daily-backup";
+
+    public const string BackupFolderKey = "backup-folder";
+
     /// <summary>
     /// Strefa domyślna, gdy nic nie zapisano (spec 3.4). Wpisana wprost, nie brana
     /// z systemu — żeby świeżo zainstalowana aplikacja liczyła dni tak samo na
@@ -47,6 +51,10 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
     private bool? _googleCalendar;
 
     private string? _primaryCalendar;
+
+    private bool? _dailyBackup;
+
+    private string? _backupFolder;
 
     public TimeZoneInfo Zone
     {
@@ -202,6 +210,58 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         {
             Write(GoogleCalendarKey, enabled ? "1" : "0");
             _googleCalendar = enabled;
+        }
+    }
+
+    /// <summary>
+    /// Codzienna kopia — **włączona, dopóki nie wyłączona**.
+    /// </summary>
+    /// <remarks>
+    /// Brak wpisu znaczy „nikt o tym nie decydował", a domyślną odpowiedzią na to
+    /// pytanie jest „tak": kopia, którą trzeba było włączyć, nie chroni nikogo.
+    /// Świeżo zainstalowana aplikacja robi więc kopię od pierwszego dnia.
+    /// </remarks>
+    public bool DailyBackup
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _dailyBackup ??= Read(DailyBackupKey) != "0";
+            }
+        }
+    }
+
+    public void SetDailyBackup(bool on)
+    {
+        lock (_gate)
+        {
+            Write(DailyBackupKey, on ? "1" : "0");
+            _dailyBackup = on;
+        }
+    }
+
+    public string? BackupFolder
+    {
+        get
+        {
+            lock (_gate)
+            {
+                // Pusty tekst i brak wpisu znaczą to samo — „folder domyślny" — więc
+                // oba mają wyjść jako pustka. Inaczej wyczyszczenie pola zapisywałoby
+                // ścieżkę o zerowej długości i kopie lądowałyby w katalogu roboczym.
+                return _backupFolder ??= Read(BackupFolderKey) ?? string.Empty;
+            }
+        }
+    }
+
+    public void SetBackupFolder(string? path)
+    {
+        lock (_gate)
+        {
+            var patch = path?.Trim() ?? string.Empty;
+            Write(BackupFolderKey, patch);
+            _backupFolder = patch;
         }
     }
 
