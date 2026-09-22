@@ -2980,8 +2980,17 @@
                    na nigdy. Tutaj trafia się wyłącznie z rozwiniętą sekcją rytmu przed
                    oczami, więc nazwa ma po czym trafić do właściwej rzeczy. -->
               <StackPanel IsVisible="{Binding IsOccurrence}" Margin="0,14,0,0">
+                <!-- Dwa końce rytmu obok siebie, bo różnią się jedną rzeczą: czy
+                     wystąpienie, na które się właśnie patrzy, przeżyje. Pierwszy jest
+                     częstszy — rytm zwykle się kończy, a nie okazuje pomyłką — więc
+                     stoi wyżej. -->
+                <Button Classes="nav" HorizontalAlignment="Left"
+                        Click="EndRhythm" Content="To ostatnie wystąpienie" />
+                <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                           Text="Seria kończy się na tym: to zostaje, dalszych nie będzie." />
+
                 <Button Classes="cichy" HorizontalAlignment="Left" Padding="14,8"
-                        Click="DropRhythm" Content="Usuń cały rytm" />
+                        Margin="0,12,0,0" Click="DropRhythm" Content="Usuń cały rytm" />
                 <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
                            Text="Bieżące wystąpienie do kosza i żadnego następnego. Minione zostają — zdarzyły się." />
               </StackPanel>

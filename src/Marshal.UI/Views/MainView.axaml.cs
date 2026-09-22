@@ -171,6 +171,10 @@ public partial class MainView : UserControl
     private void DropRhythm(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: usunięcie całego rytmu z okna", m => m.DropRhythmAsync());
 
+    /// <summary>Koniec serii na tym wystąpieniu — to jedno zostaje.</summary>
+    private void EndRhythm(object? sender, RoutedEventArgs e) =>
+        OnDetail("Zadanie: koniec serii na tym wystąpieniu", m => m.EndRhythmAsync());
+
     private void CloseTask(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: zamknięcie okna", m =>
         {
@@ -2235,7 +2239,15 @@ public partial class MainView : UserControl
     private IReadOnlyList<object> Skipping(MainViewModel model, TaskItem task) =>
         task.Recurrence is null
             ? []
-            : [Item("Pomiń to wystąpienie", () => model.SkipOccurrenceAsync(task))];
+            :
+            [
+                Item("Pomiń to wystąpienie", () => model.SkipOccurrenceAsync(task)),
+
+                // Trzeci możliwy koniec: to jedno zostaje, dalszych nie ma. Te same
+                // słowa, co przycisk w karcie — jedna czynność ma jedną nazwę,
+                // niezależnie od tego, skąd się po nią sięga.
+                Item("To ostatnie wystąpienie", () => model.EndRhythmAsync(task)),
+            ];
 
     private IReadOnlyList<object> Sharing(
         MainViewModel model, TaskItem task, IReadOnlyList<CalendarSource> calendars)

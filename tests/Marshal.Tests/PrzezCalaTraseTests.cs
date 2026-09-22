@@ -959,6 +959,39 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Koniec_serii_na_tym_wystapieniu_zostawia_zadanie_i_zdejmuje_regule()
+    {
+        // Trzeci z trzech końców rytmu i najczęstszy: dzisiejsze się odbędzie, a potem
+        // już nie. Od „Usuń cały rytm" różni się dokładnie tym, że to wystąpienie żyje.
+        var task = await ZaplanowaneAsync("Praca");
+        var hlc = NewService<IHlcSource>();
+        var today = NewService<IClock>().Today;
+
+        task.SetRecurrence(new RecurrenceRule(RecurrenceKind.Daily), hlc.Next());
+        await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
+
+        await detail.EndRhythmAsync();
+
+        var tasks = NewService<ITaskRepository>();
+        var saved = await tasks.FindAsync(task.Id);
+
+        saved!.State.Should().Be(TaskState.Scheduled, "wystąpienie zostaje, kończy się seria");
+        saved.DoDate.Should().Be(today);
+        saved.Recurrence.Should().BeNull("dalszych wystąpień nie ma z czego rysować");
+        (await tasks.AllAsync()).Should().NotContain(z => z.Id != task.Id, "nic nie powstało");
+
+        // Karta pokazuje wynik od razu: sekcja rytmu stoi na „nie powtarza się",
+        // a kosz w stopce przestaje znaczyć „pomiń to wystąpienie".
+        detail.IsOpen.Should().BeTrue("zadanie zostaje, więc okno nie ma powodu się zamykać");
+        detail.IsOccurrence.Should().BeFalse();
+        detail.TrashLabel.Should().Be("Do kosza");
+        detail.SelectedRepeat!.Kind.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Karta_zwyklego_zadania_nie_udaje_wystapienia_serii()
     {
         // Rytm dopiero wybrany w oknie i niezapisany nie czyni z zadania wystąpienia:

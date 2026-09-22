@@ -1020,6 +1020,51 @@ public sealed partial class TaskDetailViewModel(
     }
 
     /// <summary>
+    /// Koniec serii na tym wystąpieniu: to jedno zostaje, dalszych nie będzie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Najczęstszy koniec rytmu wygląda właśnie tak: dzisiejsze się odbędzie, a potem
+    /// już nie. „Usuń cały rytm" obok zabiera także to jedno — i to jest potrzebne
+    /// wtedy, gdy cała seria była pomyłką, a nie wtedy, gdy się po prostu skończyła.
+    /// Dwa różne wyniki, więc dwa przyciski; różnią się dokładnie tym, czy wystąpienie,
+    /// na które się patrzy, przeżyje.
+    /// </para>
+    /// <para>
+    /// Tę samą rzecz robi „nie powtarza się" na liście rodzajów — tu i w menu podręcznym
+    /// pulpitu. Nie jest to trzecie pojęcie, tylko to samo pole, którym rytm się zakłada;
+    /// że da się nim rytm także zdjąć, wynika z niego samego. Przycisk istnieje dlatego,
+    /// że „nie powtarza się" czyta się jak <b>cecha</b> zadania, a szuka się tu
+    /// <b>czynności</b> — i szuka się jej wśród przycisków obok.
+    /// </para>
+    /// <para>
+    /// Okno zostaje otwarte, bo zadanie zostaje. Sekcja rytmu przestawia się od razu na
+    /// „nie powtarza się": wynik widać na ekranie, zamiast wierzyć, że coś się stało.
+    /// </para>
+    /// </remarks>
+    public async Task EndRhythmAsync()
+    {
+        await log.RecordAsync("Zadanie: koniec serii na tym wystąpieniu", Title);
+
+        if (_id == Guid.Empty)
+        {
+            return;
+        }
+
+        await edit.SetRecurrenceAsync(_id, null);
+
+        _loading = true;
+        LoadRule(null);
+        _loading = false;
+
+        _openedRhythm = false;
+        Announce();
+        Refresh();
+
+        Saved?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
     /// Chwila przypomnienia z dnia i pory. Sam dzień bez pory znaczy rano — ale
     /// **sama pora bez dnia nie znaczy nic**, bo nie wiadomo którego. Wtedy przypomnienia
     /// nie ma, zamiast zgadywać dzisiaj i odezwać się natychmiast.

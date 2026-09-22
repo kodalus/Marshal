@@ -1897,6 +1897,24 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Koniec serii na tym wystąpieniu: to jedno zostaje, dalszych nie będzie.
+    /// </summary>
+    /// <remarks>
+    /// Trzeci z trzech możliwych końców i najczęstszy z nich. „Pomiń to wystąpienie"
+    /// zabiera ten jeden raz i puszcza serię dalej, „Usuń cały rytm" zabiera oba, a to
+    /// zostawia wystąpienie i zdejmuje samą regułę — bo rytm zwykle się kończy, a nie
+    /// okazuje pomyłką.
+    /// </remarks>
+    public async Task EndRhythmAsync(TaskItem? task)
+    {
+        if (task is not null)
+        {
+            await _edit.SetRecurrenceAsync(task.Id, null);
+            await ReloadAsync();
+        }
+    }
+
     /// <summary>Odhaczenie zadania podanego wprost — piątka „Na dziś" niesie same zadania.</summary>
     [RelayCommand]
     public async Task CompleteTaskAsync(TaskItem? task)
