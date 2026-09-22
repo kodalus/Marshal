@@ -58,77 +58,6 @@
     <StreamGeometry x:Key="IkonaSil">M13,2 L5,14 L11,14 L11,22 L19,10 L13,10 Z</StreamGeometry>
 
     <StreamGeometry x:Key="IkonaRytmu">M5,11 C5,7.1 8.1,4 12,4 C14.6,4 16.9,5.4 18.1,7.5 M15,7 L18.5,7.5 L19,4 M19,13 C19,16.9 15.9,20 12,20 C9.4,20 7.1,18.6 5.9,16.5 M9,17 L5.5,16.5 L5,20</StreamGeometry>
-    <!--
-      Oprawa przełącznika ikony — **własna, nie przestrojony Fluent**.
-
-      Motyw zamalowuje wciśnięty przełącznik swoją barwą wyróżnienia, a ta jest
-      dokładnie tą samą wartością, którą rysowana jest ikona: „#7C6CF5" stoi i w palecie
-      Fluenta w App.axaml, i w zasobie „Akcent" w Motyw.axaml. Wciśnięty przycisk
-      pokazywał więc plakietkę **bez rysunku** — znak stał na własnej barwie i widać
-      było najwyżej jego obrys tam, gdzie kreska wychodziła poza swoje pole.
-
-      Pierwsza poprawka próbowała to nadpisać regułami na warstwie szablonu motywu
-      i nic nie dała — zdanie motywu o tym samym miejscu zostało silniejsze. Stąd
-      własna oprawa: przycisk dostaje swój szablon i swoje stany, więc motyw nie ma
-      już czego o nim powiedzieć. To jest jedyny kształt tej poprawki, który nie
-      zależy od tego, kto wygra spór o pierwszeństwo.
-
-      Włączone poznaje się po prześwicie barwy wyróżnienia, obwódce i zabarwionym
-      rysunku — nie po zamalowaniu. Zamalowane tło zjada czytelność znaku, który na nim
-      stoi, i właśnie to zjadło ten znak w całości.
-    -->
-    <ControlTheme x:Key="PrzelacznikIkony" TargetType="ToggleButton">
-      <Setter Property="Background" Value="{DynamicResource Pole}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="HorizontalContentAlignment" Value="Center" />
-      <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="Template">
-        <ControlTemplate>
-          <Border Name="Plakietka"
-                  Background="{TemplateBinding Background}"
-                  BorderBrush="{TemplateBinding BorderBrush}"
-                  BorderThickness="{TemplateBinding BorderThickness}"
-                  CornerRadius="{TemplateBinding CornerRadius}">
-            <ContentPresenter Name="PART_ContentPresenter"
-                              Content="{TemplateBinding Content}"
-                              ContentTemplate="{TemplateBinding ContentTemplate}"
-                              Padding="{TemplateBinding Padding}"
-                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
-                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
-          </Border>
-        </ControlTemplate>
-      </Setter>
-
-      <Style Selector="^:pointerover /template/ Border#Plakietka">
-        <Setter Property="Background" Value="{DynamicResource PoleJasne}" />
-      </Style>
-      <Style Selector="^:pressed /template/ Border#Plakietka">
-        <Setter Property="Background" Value="{DynamicResource PoleJasne}" />
-      </Style>
-
-      <Style Selector="^:checked /template/ Border#Plakietka">
-        <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
-        <Setter Property="BorderThickness" Value="1.5" />
-      </Style>
-      <Style Selector="^:checked:pointerover /template/ Border#Plakietka">
-        <Setter Property="Background" Value="{DynamicResource AkcentTlo}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
-        <Setter Property="BorderThickness" Value="1.5" />
-      </Style>
-
-      <!-- Barwa treści na samym przycisku, nie w szablonie: rysunek bierze ją stamtąd
-           wiązaniem, więc napis i rysunek zmieniają się razem i z jednego miejsca. -->
-      <Style Selector="^:checked">
-        <Setter Property="Foreground" Value="{DynamicResource Akcent}" />
-      </Style>
-
-      <Style Selector="^:disabled /template/ Border#Plakietka">
-        <Setter Property="Opacity" Value="0.45" />
-      </Style>
-    </ControlTheme>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -210,16 +139,28 @@
     <!-- Przełącznik rzadkiego pola. Szerokość z treści, nie kwadrat: odkąd niesie słowo,
          a nie symbol, stała szerokość albo ucinałaby napis, albo musiałaby być liczona
          pod najdłuższy z nich. -->
-    <!-- Sama miara. Barwy, zaokrąglenie i stany siedzą w oprawie „PrzelacznikIkony"
-         wyżej — dwa miejsca na tę samą rzecz rozjeżdżają się przy pierwszej zmianie
-         w jednym z nich. -->
     <Style Selector="ToggleButton.ikona">
       <Setter Property="Margin" Value="0,0,8,8" />
       <Setter Property="Padding" Value="12,0" />
       <Setter Property="MinWidth" Value="0" />
       <Setter Property="Height" Value="38" />
+      <Setter Property="CornerRadius" Value="8" />
       <Setter Property="FontSize" Value="13" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Background" Value="{DynamicResource Pole}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Krawedz}" />
     </Style>
+    <!-- Obwódka wyraźniejsza, gdy włączone. Tła nie dotykamy: motyw zamalowuje wciśnięty
+         przełącznik barwą wyróżnienia i **tak ma zostać** — próba odebrania mu tego
+         kosztowała dwie poprawki, z których żadna nie doszła do skutku. Czytelność znaku
+         załatwia barwa znaku, nie barwa tła pod nim. -->
+    <Style Selector="ToggleButton.ikona:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Akcent}" />
+      <Setter Property="BorderThickness" Value="1.5" />
+    </Style>
+
     <!-- Przełącznik z samym rysunkiem: kwadratowy, bo nie ma w nim napisu, który
          rozciągałby go na szerokość. Pięć takich mieści się w jednym wierszu także
          na telefonie — słowa rozkładały się na dwa. -->
@@ -244,11 +185,27 @@
       <Setter Property="Stroke" Value="{Binding $parent[ToggleButton].Foreground}" />
     </Style>
 
-    <!-- Wciśnięty przełącznik barwi też rysunek — ale barwi go **przez własną barwę
-         treści**, którą ustawia oprawa przełącznika, a nie osobną regułą przy rysunku.
-         Sama ramka w barwie wyróżnienia ginęła na telefonie: przy pięciu kwadracikach
-         obok siebie kreska grubości półtora punkta to za mało, żeby od razu zobaczyć,
-         który jest włączony. -->
+    <!--
+      Rysunek na wciśniętym przełączniku — **bielą na wyróżnieniu**, jak napis obok.
+
+      Stała tu barwa „Akcent", a motyw zamalowuje wciśnięty przełącznik dokładnie tą
+      samą wartością: „#7C6CF5" siedzi i w palecie Fluenta w App.axaml, i w zasobie
+      „Akcent" w Motyw.axaml. Znak był więc rysowany swoją własną barwą i po wciśnięciu
+      znikał — zostawał po nim sam obrys tam, gdzie kreska wychodziła poza pole.
+
+      Biel, nie prześwit tła: to jest ta sama odpowiedź, którą Fluent daje napisowi
+      („ToggleButtonForegroundChecked" na zamalowanym prezenterze) i którą daje
+      „Button.glowny" w Przyciski.axaml. Jeden zwyczaj zamiast drugiego obok niego.
+
+      **I jest to reguła, o której wiadomo, że dochodzi do skutku.** Dwie poprzednie
+      poprawki celowały w tło prezentera, czyli w miejsce, o którym motyw ma własne
+      zdanie — i obie przegrały ten spór bez śladu. Ta nie ma z czym przegrać: motyw
+      nie mówi nic o „Path.ikonka", a niewidzialność znaku wzięła się właśnie stąd,
+      więc to stąd da się ją odwołać.
+    -->
+    <Style Selector="ToggleButton.ikona:checked Path.ikonka">
+      <Setter Property="Stroke" Value="{DynamicResource AkcentTekst}" />
+    </Style>
 
     <Style Selector="TextBlock.godzina">
       <Setter Property="FontSize" Value="10" />
@@ -273,8 +230,10 @@
          przycisku wyłączona: barwę bloku niesie ramka w środku, a domyślne tło
          motywu zamalowałoby kolor kalendarza przy najechaniu. -->
     <Style Selector="Border.slot">
+      <Setter Property="Cursor" Value="Hand" />
     </Style>
     <Style Selector="Button.slot">
+      <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
       <Setter Property="Padding" Value="0" />
@@ -2176,7 +2135,6 @@
                Jeśli nie została wtedy zapisana, to pole bywa jedynym miejscem,
                w którym jeszcze jest — a drugie urządzenie potrzebuje tej samej. -->
           <ToggleButton Grid.Column="1" Classes="ikona" Margin="6,0,0,0"
-                        Theme="{StaticResource PrzelacznikIkony}"
                         IsChecked="{Binding ShowSecret}"
                         Content="pokaż" ToolTip.Tip="Pokaż tajemnicę" />
         </Grid>
@@ -2832,28 +2790,23 @@
                a podpis nad polem, do którego przycisk właśnie doprowadził, powtarza
                to samo drugi raz i wydłuża kartę o pięć wierszy. -->
           <WrapPanel Margin="0,14,0,0">
-            <ToggleButton Classes="ikona rysunek" Theme="{StaticResource PrzelacznikIkony}"
-                          IsChecked="{Binding ShowDeadline}"
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowDeadline}"
                           ToolTip.Tip="Termin — fakt zewnętrzny, świat się nie przesunie">
               <Path Classes="ikonka" Data="{StaticResource IkonaTerminu}" />
             </ToggleButton>
-            <ToggleButton Classes="ikona rysunek" Theme="{StaticResource PrzelacznikIkony}"
-                          IsChecked="{Binding ShowReminder}"
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowReminder}"
                           ToolTip.Tip="Przypomnienie — kiedy chcesz o tym usłyszeć">
               <Path Classes="ikonka" Data="{StaticResource IkonaPrzypomnienia}" />
             </ToggleButton>
-            <ToggleButton Classes="ikona rysunek" Theme="{StaticResource PrzelacznikIkony}"
-                          IsChecked="{Binding ShowPriority}"
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowPriority}"
                           ToolTip.Tip="Waga — co jest ważniejsze, gdy wszystkiego nie da się zrobić">
               <Path Classes="ikonka" Data="{StaticResource IkonaWagi}" />
             </ToggleButton>
-            <ToggleButton Classes="ikona rysunek" Theme="{StaticResource PrzelacznikIkony}"
-                          IsChecked="{Binding ShowEnergy}"
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowEnergy}"
                           ToolTip.Tip="Energia — ile trzeba mieć w sobie, żeby się za to wziąć">
               <Path Classes="ikonka" Data="{StaticResource IkonaSil}" />
             </ToggleButton>
-            <ToggleButton Classes="ikona rysunek" Theme="{StaticResource PrzelacznikIkony}"
-                          IsChecked="{Binding ShowRepeat}"
+            <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowRepeat}"
                           ToolTip.Tip="Rytm — jak często to wraca">
               <Path Classes="ikonka" Data="{StaticResource IkonaRytmu}" />
             </ToggleButton>
