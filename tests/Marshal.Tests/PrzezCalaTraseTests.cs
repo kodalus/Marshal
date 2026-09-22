@@ -5,6 +5,7 @@ using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure;
+using Marshal.Infrastructure.Backup;
 using Marshal.Infrastructure.Data;
 using Marshal.UI;
 using Marshal.Domain.Areas;
@@ -497,6 +498,52 @@ public sealed class PrzezCalaTraseTests : IDisposable
             .Should().NotContain(b => b.Title == "Zrobić pranie", "nie ma pory, więc nie ma bloku");
         calendar.Columns.SelectMany(k => k.AllDay)
             .Should().Contain(b => b.Title == "Zrobić pranie", "pasek nad siatką znaczy „tego dnia, kiedyś”");
+    }
+
+    [Fact]
+    public async Task Przywrocenie_z_codziennej_kopii_wraca_to_co_bylo()
+    {
+        // Cała droga przycisku: kopia powstaje sama, coś ginie, kopia wraca. Bez atrap —
+        // kontener ten sam, co w oknie, i ten sam plik na dysku, który powstałby naprawdę.
+        var folder = Path.Combine(_folder, "kopie");
+        NewService<ISettings>().SetBackupFolder(folder);
+
+        var main = NewService<MainViewModel>();
+
+        main.CaptureText = "Wynieść śmieci";
+        await main.CaptureCommand.ExecuteAsync(null);
+
+        var tasks = NewService<ITaskRepository>();
+        var task = (await tasks.InboxAsync()).Single(z => z.Title == "Wynieść śmieci");
+
+        await NewService<DailyBackup>().RunAsync();
+
+        // I teraz strata, przed którą kopia ma bronić.
+        await NewService<InboxService>().TrashAsync(task.Id);
+        (await tasks.InboxAsync()).Should().BeEmpty();
+
+        var settings = NewService<SettingsViewModel>();
+        settings.Load();
+
+        settings.HasCopies.Should().BeTrue("kopia na dziś właśnie powstała");
+        settings.SelectedCopy!.Day.Should().Be(NewService<IClock>().Today);
+
+        // Pierwsze kliknięcie uzbraja, drugie robi. Jedyna czynność w aplikacji, która
+        // podmienia wszystko naraz — i jedyna, która o to dopytuje.
+        await settings.RestoreCommand.ExecuteAsync(null);
+
+        settings.RestoreArmed.Should().BeTrue();
+        (await tasks.InboxAsync()).Should().BeEmpty("samo uzbrojenie niczego nie zmienia");
+
+        await settings.RestoreCommand.ExecuteAsync(null);
+
+        settings.RestoreArmed.Should().BeFalse();
+        (await tasks.InboxAsync()).Should().ContainSingle(z => z.Title == "Wynieść śmieci");
+
+        // I siatka pod tym wszystkim: stan sprzed przywrócenia leży obok, więc pomyłka
+        // w wyborze dnia jest do cofnięcia.
+        Directory.GetFiles(folder, "marshal-przed-przywroceniem-*.json")
+            .Should().ContainSingle();
     }
 
     [Fact]

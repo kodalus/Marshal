@@ -87,6 +87,60 @@ public sealed class DailyBackup(
         }
     }
 
+    /// <summary>Dni, z których są kopie — od najnowszej. Do wyboru przy przywracaniu.</summary>
+    public IReadOnlyList<DateOnly> Days()
+    {
+        try
+        {
+            return [.. Existing(Folder).Select(f => f.Day)];
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Otwiera kopię z danego dnia do odczytu.</summary>
+    public Stream Open(DateOnly day) =>
+        File.OpenRead(Path.Combine(Folder, $"{Prefix}{day:yyyy-MM-dd}{Suffix}"));
+
+    /// <summary>
+    /// Kopia stanu **sprzed** przywrócenia. Zwraca nazwę powstałego pliku.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przywrócenie jest jedyną czynnością w aplikacji, która podmienia wszystko naraz,
+    /// i jedyną, po której nie ma czego cofnąć — chyba że stan sprzed niej gdzieś leży.
+    /// Ta kopia sprawia, że leży: pomyłka w wyborze dnia przestaje być końcem, a staje
+    /// się drugim przywróceniem.
+    /// </para>
+    /// <para>
+    /// Nazwa celowo nie pasuje do wzorca codziennych, więc sprzątanie jej nie rusza.
+    /// Tych plików nie kasuje nic i tak ma zostać: powstają wyłącznie wtedy, gdy ktoś
+    /// przywraca, czyli parę razy w życiu bazy.
+    /// </para>
+    /// </remarks>
+    public async Task<string> SafetyAsync(CancellationToken ct = default)
+    {
+        var folder = Folder;
+        Directory.CreateDirectory(folder);
+
+        var name = $"{Prefix}przed-przywroceniem-{clock.Now:yyyy-MM-dd-HHmm}{Suffix}";
+        var target = Path.Combine(folder, name);
+        var half = target + ".czesciowy";
+
+        await using (var stream = File.Create(half))
+        {
+            await backup.ExportAsync(stream, ct);
+        }
+
+        File.Move(half, target, overwrite: true);
+
+        await journal.RecordAsync("Kopia: stan sprzed przywrócenia", name);
+
+        return name;
+    }
+
     /// <summary>
     /// Kopia na dziś, jeśli jeszcze jej nie ma. Wołanie jest powtarzalne bez skutków.
     /// </summary>

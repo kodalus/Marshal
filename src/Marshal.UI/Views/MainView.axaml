@@ -2149,6 +2149,29 @@
                    IsVisible="{Binding CanChooseBackupFolder}"
                    Text="Folder poza aplikacją — np. taki, po który sięga kopia zapasowa systemu — chroni także przed utratą dysku. Zapisywalność sprawdzana od razu przy wyborze, nie za dobę." />
 
+        <!-- Przywracanie wprost z codziennych kopii. Droga przez „Wczytaj kopię"
+             istnieje i zostaje, ale każe chodzić po dysku i szukać pliku — a szuka się
+             go wtedy, kiedy właśnie stało się coś złego i najmniej się do tego nadaje.
+
+             Lista, nie pole na datę: kopii jest trzydzieści i wszystkie są w folderze,
+             więc pytanie brzmi „która", a nie „czy istnieje". Najnowsza na górze
+             i domyślna, bo „cofnij do ostatniego znanego dobrego stanu" jest tym,
+             czego chce się najczęściej. -->
+        <StackPanel Margin="0,16,0,0" IsVisible="{Binding HasCopies}">
+          <TextBlock Classes="label" Text="Przywróć bazę z kopii" />
+          <Grid ColumnDefinitions="*,Auto">
+            <ComboBox Grid.Column="0" ItemsSource="{Binding Copies}"
+                      SelectedItem="{Binding SelectedCopy}"
+                      HorizontalAlignment="Stretch" />
+            <Button Grid.Column="1" Classes="nav" Margin="6,0,0,0" Padding="14,10"
+                    Command="{Binding RestoreCommand}" Content="{Binding RestoreLabel}" />
+          </Grid>
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                     Text="Podmienia wszystko stanem z wybranego dnia — to, co powstało później, przepada. Stan sprzed przywrócenia zapisuje się obok, w tym samym folderze, więc pomyłka w wyborze dnia jest do cofnięcia." />
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                     Text="Na urządzeniu podpiętym do synchronizacji podmiana jest pozorna: czyszczenie nie zostawia śladu w dzienniku, więc drugie urządzenie odda swój stan przy najbliższym scaleniu. To tryb na urządzenie, które zaczyna od nowa." />
+        </StackPanel>
+
         <TextBlock Margin="0,18,0,0" TextWrapping="Wrap" Text="{Binding Status}" />
 
         <TextBlock Classes="label" Margin="0,18,0,0" Text="Konto Google — synchronizacja" />

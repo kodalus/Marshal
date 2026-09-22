@@ -226,6 +226,66 @@ public sealed class DailyBackupTests : IDisposable
     }
 
     [Fact]
+    public async Task Kopie_do_przywrocenia_ida_od_najnowszej_i_daja_sie_otworzyc()
+    {
+        var (copy, _) = Build();
+
+        await copy.RunAsync();
+
+        _clock.Now = _clock.Now.AddDays(1);
+        await copy.RunAsync();
+
+        copy.Days().Should().Equal(new DateOnly(2026, 9, 23), new DateOnly(2026, 9, 22));
+
+        await using var stream = copy.Open(new DateOnly(2026, 9, 22));
+        using var reader = new StreamReader(stream);
+
+        (await reader.ReadToEndAsync()).Should().Contain("Wynieść śmieci");
+    }
+
+    [Fact]
+    public async Task Kopia_sprzed_przywrocenia_powstaje_i_nie_wchodzi_na_liste_dni()
+    {
+        var (copy, _) = Build();
+
+        await copy.RunAsync();
+
+        var name = await copy.SafetyAsync();
+
+        name.Should().StartWith("marshal-przed-przywroceniem-");
+        File.Exists(Path.Combine(_folder, name)).Should().BeTrue();
+
+        // Nie jest kopią dnia i ma się nią nie stać: inaczej przywracanie proponowałoby
+        // ją jako dzień, a sprzątanie liczyłoby ją do trzydziestu.
+        copy.Days().Should().Equal(new DateOnly(2026, 9, 22));
+        copy.Last().Should().Be(new DateOnly(2026, 9, 22));
+    }
+
+    [Fact]
+    public async Task Sprzatanie_nie_rusza_kopii_sprzed_przywrocenia()
+    {
+        Directory.CreateDirectory(_folder);
+
+        for (var back = 1; back <= 35; back++)
+        {
+            var day = DateOnly.FromDateTime(_clock.Now.Date).AddDays(-back);
+            await File.WriteAllTextAsync(
+                Path.Combine(_folder, $"marshal-{day:yyyy-MM-dd}.json"), "{}");
+        }
+
+        var (copy, _) = Build();
+        var safety = await copy.SafetyAsync();
+
+        await copy.RunAsync();
+
+        // Ta jedna przeżywa wszystko: powstaje raz na parę lat i wtedy, gdy właśnie
+        // stało się coś złego. Skasowana przez sprzątanie byłaby siatką, która znika
+        // dokładnie w chwili skoku.
+        File.Exists(Path.Combine(_folder, safety))
+            .Should().BeTrue("kopia sprzed przywrócenia nie podlega sprzątaniu");
+    }
+
+    [Fact]
     public async Task Wylaczona_kopia_nie_zaklada_nawet_folderu()
     {
         var (copy, settings) = Build();

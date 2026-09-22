@@ -133,3 +133,22 @@ public sealed record PlacementChoice(Guid AreaId, Guid? ProjectId, string Label,
 
     public override string ToString() => Label;
 }
+
+/// <summary>
+/// Codzienna kopia na liście wyboru przy przywracaniu.
+/// </summary>
+/// <remarks>
+/// Podpis składany tutaj, a nie w oknie: sam <see cref="DateOnly"/> na liście
+/// rysowałby się tak, jak każe ustawienie języka systemu — a wtedy ta jedna lista
+/// mówiłaby o dacie inaczej niż reszta aplikacji.
+/// </remarks>
+public sealed record RestoreChoice(DateOnly Day, string Label)
+{
+    public static RestoreChoice Of(DateOnly day, DateOnly today) => new(
+        day,
+        day == today ? $"dzisiaj ({day:dd.MM.yyyy})"
+            : day == today.AddDays(-1) ? $"wczoraj ({day:dd.MM.yyyy})"
+            : $"{day:dd.MM.yyyy}");
+
+    public override string ToString() => Label;
+}

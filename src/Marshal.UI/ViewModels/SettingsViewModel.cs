@@ -92,6 +92,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasAvailableGoogleCalendars));
         LoadAccounts();
 
+        // Jeszcze pod blokadą, bo przypisanie przechodzi przez właściwość: samo otwarcie
+        // ekranu zapisywałoby do bazy wartość, której nikt nie zmieniał.
+        AutoBackup = _settings.DailyBackup;
+
         _loading = false;
 
         // Wejście na ekran zawsze zastaje przycisk czynny. Gdyby poprzednia próba
@@ -100,7 +104,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
         OnPropertyChanged(nameof(TokenFolder));
 
-        AutoBackup = _settings.DailyBackup;
+        // Po zdjęciu blokady: lista kopii czytana jest z dysku, więc ma się odświeżyć
+        // przy każdym wejściu na ekran — wczorajsza kopia mogła przybyć od ostatniego.
+        RestoreArmed = false;
         AnnounceBackup();
 
         OnPropertyChanged(nameof(Now));
@@ -613,11 +619,134 @@ public sealed partial class SettingsViewModel : ObservableObject
                 : $"Ostatnia kopia: {day:dd.MM.yyyy}."
             : "Jeszcze żadnej — pierwsza powstanie w ciągu minuty od otwarcia.";
 
+    /// <summary>Kopie do wyboru przy przywracaniu — od najnowszej.</summary>
+    public ObservableCollection<RestoreChoice> Copies { get; } = [];
+
+    [ObservableProperty]
+    public partial RestoreChoice? SelectedCopy { get; set; }
+
+    public bool HasCopies => Copies.Count > 0;
+
+    /// <summary>
+    /// Czy przycisk przywracania jest już uzbrojony.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przywrócenie podmienia <b>wszystko naraz</b> i jest jedyną taką czynnością
+    /// w aplikacji. Reszta pytania o potwierdzenie nie ma i słusznie — odklikiwanie
+    /// pytań przy rzeczach odwracalnych psuje te pytania, przy których potwierdzenie
+    /// coś znaczy. To jest dokładnie to jedno.
+    /// </para>
+    /// <para>
+    /// Drugie kliknięcie zamiast okienka: w aplikacji nie ma ani jednego okna
+    /// z potwierdzeniem, a zakładanie ich mechanizmu pod jeden przycisk byłoby
+    /// budowaniem drogi do miejsca, do którego chodzi się raz na parę lat.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool RestoreArmed { get; set; }
+
+    public string RestoreLabel => RestoreArmed
+        ? "Na pewno? Kliknij jeszcze raz"
+        : "Przywróć z tej kopii";
+
+    partial void OnRestoreArmedChanged(bool value) => OnPropertyChanged(nameof(RestoreLabel));
+
+    partial void OnSelectedCopyChanged(RestoreChoice? value) => RestoreArmed = false;
+
+    /// <summary>
+    /// Przywrócenie bazy z wybranej codziennej kopii.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Najpierw kopia stanu sprzed.</b> Pomyłka w wyborze dnia przestaje przez to być
+    /// końcem i staje się drugim przywróceniem. Bez tego kroku przycisk byłby jedyną
+    /// rzeczą w aplikacji, po której nie ma czego cofnąć.
+    /// </para>
+    /// <para>
+    /// <b>Podmiana całości, nie scalenie.</b> „Przywróć" znaczy „ma być tak, jak było
+    /// tamtego dnia" — scalenie po zegarze zostawiłoby wszystko, co powstało później,
+    /// czyli dokładnie to, przed czym się ucieka. Scalenie ma swoją drogę: „Wczytaj
+    /// kopię" bez zaznaczonej podmiany.
+    /// </para>
+    /// <para>
+    /// Na urządzeniu podpiętym do synchronizacji podmiana jest pozorna i mówimy o tym
+    /// wprost w wyniku: czyszczenie nie zostawia śladu w dzienniku, więc drugie
+    /// urządzenie odda swój stan przy najbliższym scaleniu.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private async Task RestoreAsync()
+    {
+        if (SelectedCopy is not { } chosen)
+        {
+            return;
+        }
+
+        if (!RestoreArmed)
+        {
+            RestoreArmed = true;
+            Status = $"Przywrócenie podmieni wszystko stanem z {chosen.Label}. "
+                + "Stan sprzed zostanie zapisany obok, więc da się wrócić.";
+            return;
+        }
+
+        RestoreArmed = false;
+
+        try
+        {
+            var safety = await _daily.SafetyAsync();
+
+            await using var stream = _daily.Open(chosen.Day);
+            var report = await _backup.ImportAsync(stream, ImportMode.Replace);
+
+            Status = $"Przywrócone z {chosen.Label}: {report.Applied} wpisów. "
+                + $"Stan sprzed leży w {safety}.";
+
+            await _journal.RecordAsync(
+                "Kopia: przywrócenie",
+                $"z {chosen.Day:yyyy-MM-dd}, nałożone {report.Applied}, stan sprzed w {safety}");
+
+            LoadCopies();
+            Imported?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception e)
+        {
+            // Jak przy wczytywaniu: wgranie idzie w transakcji, więc baza została
+            // w stanie sprzed próby. Treść wyjątku, nie „coś poszło nie tak" — przy
+            // przywracaniu cisza jest najgorszą z możliwych odpowiedzi.
+            Status = $"Nie udało się przywrócić: {e.Message}";
+            await _journal.RecordAsync(
+                "Kopia: przywrócenie", "nie udało się", ActivityLevel.Problem, e.Message);
+        }
+    }
+
+    private void LoadCopies()
+    {
+        var was = SelectedCopy?.Day;
+        var today = _clock.Today;
+
+        Copies.Clear();
+
+        foreach (var day in _daily.Days())
+        {
+            Copies.Add(RestoreChoice.Of(day, today));
+        }
+
+        // Najnowsza z góry i ona jest domyślna: „przywróć" bez dalszego wybierania
+        // znaczy „cofnij do ostatniego znanego dobrego stanu", a tego chce się
+        // najczęściej. Wybór zachowany, gdy ten dzień nadal jest na liście.
+        SelectedCopy = Copies.FirstOrDefault(k => k.Day == was) ?? Copies.FirstOrDefault();
+
+        OnPropertyChanged(nameof(HasCopies));
+    }
+
     private void AnnounceBackup()
     {
         OnPropertyChanged(nameof(BackupFolder));
         OnPropertyChanged(nameof(BackupState));
         OnPropertyChanged(nameof(CanChooseBackupFolder));
+        LoadCopies();
     }
 
     /// <summary>
