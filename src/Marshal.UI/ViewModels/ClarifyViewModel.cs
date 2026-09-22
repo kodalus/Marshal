@@ -97,6 +97,17 @@ public sealed partial class ClarifyViewModel(
     [ObservableProperty]
     public partial DateTimeOffset? ScheduledFor { get; set; }
 
+    /// <summary>
+    /// Pora zaplanowanego zadania. Nieobowiązkowa — dzień bez pory jest poprawną
+    /// odpowiedzią i znaczy „tego dnia, nie wiadomo kiedy".
+    /// </summary>
+    /// <remarks>
+    /// Bez niej wrzut z własną godziną („wizyta o czternastej") wychodził z przetwarzania
+    /// na pasek nad siatką, a po godzinę trzeba było wrócić do zadania drugim wejściem.
+    /// </remarks>
+    [ObservableProperty]
+    public partial TimeSpan? ScheduledAt { get; set; }
+
     [ObservableProperty]
     public partial string ProjectOutcome { get; set; } = string.Empty;
 
@@ -167,6 +178,7 @@ public sealed partial class ClarifyViewModel(
         WaitingForWho = string.Empty;
         ProjectOutcome = string.Empty;
         ScheduledFor = null;
+        ScheduledAt = null;
 
         // Długość i siły należą do **tego** wrzutu — zostawione, przykleiłyby się
         // do następnego, a ten bywa zupełnie inną robotą.
@@ -235,9 +247,20 @@ public sealed partial class ClarifyViewModel(
             }
         });
 
+    /// <summary>
+    /// Konkretny dzień → zaplanowane. Pora obok dnia, bo bywa znana od razu.
+    /// </summary>
+    /// <remarks>
+    /// Sprawdzany jest wyłącznie dzień. Sama pora bez dnia nie znaczy nic — nie wiadomo
+    /// którego — a dzień bez pory znaczy dokładnie tyle, ile mówi: tego dnia, kiedyś.
+    /// </remarks>
     [RelayCommand]
     private Task Schedule() =>
-        Run(id => inbox.ScheduleAsync(id, SelectedArea!.AreaId, DateOnly.FromDateTime(ScheduledFor!.Value.Date)),
+        Run(id => inbox.ScheduleAsync(
+                id,
+                SelectedArea!.AreaId,
+                DateOnly.FromDateTime(ScheduledFor!.Value.Date),
+                ScheduledAt is { } hour ? TimeOnly.FromTimeSpan(hour) : null),
             validate: () => ScheduledFor is null ? "Na który dzień?" : null);
 
     [RelayCommand]

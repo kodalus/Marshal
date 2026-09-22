@@ -673,11 +673,22 @@
                   Command="{Binding DelegateCommand}" Content="Oczekiwane" />
         </Grid>
 
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+        <!-- Dzień i pora obok siebie, bo przy wrzucie z własną godziną („wizyta
+             o czternastej") są jedną odpowiedzią. Bez pola pory zadanie wychodziło
+             z przetwarzania na pasek nad siatką, a po godzinę trzeba było wrócić do
+             niego drugim wejściem.
+
+             Pora nieobowiązkowa i dlatego węższa: „zrobić w czwartek" jest poprawną
+             odpowiedzią, a kalendarz nie ma prawa zmyślać godziny, której nikt nie
+             podał. Sprawdzany jest wyłącznie dzień. -->
+        <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
           <k:DateField Grid.Column="0" Value="{Binding ScheduledFor}" />
-          <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
+          <k:TimeField Grid.Column="1" Margin="6,0,0,0" Value="{Binding ScheduledAt}" />
+          <Button Grid.Column="2" Margin="6,0,0,0" Padding="14,10"
                   Command="{Binding ScheduleCommand}" Content="Zaplanuj" />
         </Grid>
+        <TextBlock Classes="hint" Margin="2,0,0,6" TextWrapping="Wrap"
+                   Text="Godzina nieobowiązkowa. Z nią zadanie staje blokiem na siatce, bez niej — paskiem nad nią, jako „tego dnia, kiedyś”." />
 
         <Grid ColumnDefinitions="*,Auto">
           <TextBox Grid.Column="0" Text="{Binding ProjectOutcome}"

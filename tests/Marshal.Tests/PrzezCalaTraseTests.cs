@@ -424,6 +424,82 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Godzina_z_przetwarzania_stawia_zadanie_blokiem_na_siatce()
+    {
+        // Sedno: „Zaplanuj" nadawało sam dzień, a dzień bez pory rysuje się paskiem nad
+        // siatką, nie blokiem o godzinie. Wrzut z własną godziną — „wizyta o czternastej"
+        // — wychodził więc z przetwarzania bez niej, a po porę trzeba było wrócić do
+        // zadania drugim wejściem.
+        var main = NewService<MainViewModel>();
+        var today = NewService<IClock>().Today;
+
+        main.CaptureText = "Wizyta u lekarza";
+        await main.CaptureCommand.ExecuteAsync(null);
+
+        var przetwarzanie = NewService<ClarifyViewModel>();
+        await przetwarzanie.LoadAsync();
+
+        przetwarzanie.Current.Should().NotBeNull();
+        przetwarzanie.SelectedArea = przetwarzanie.Areas.First();
+        przetwarzanie.ScheduledFor = new DateTimeOffset(
+            today.ToDateTime(TimeOnly.MinValue), NewService<IClock>().Now.Offset);
+        przetwarzanie.ScheduledAt = new TimeSpan(14, 0, 0);
+
+        await przetwarzanie.ScheduleCommand.ExecuteAsync(null);
+
+        przetwarzanie.Problem.Should().BeNull("dzień był podany, więc zapis miał przejść");
+
+        var saved = (await NewService<ITaskRepository>().AllAsync())
+            .Single(z => z.Title == "Wizyta u lekarza");
+
+        saved.DoDate.Should().Be(today);
+        saved.DoTime.Should().Be(new TimeOnly(14, 0));
+
+        // I to jest pytanie właściwe: czy stoi na siatce, a nie na pasku nad nią.
+        var calendar = NewService<CalendarViewModel>();
+        await calendar.LoadAsync();
+
+        calendar.Columns.SelectMany(k => k.Slots)
+            .Should().ContainSingle(b => b.Title == "Wizyta u lekarza")
+            .Which.StartText.Should().Be("14:00");
+    }
+
+    [Fact]
+    public async Task Zaplanowanie_bez_godziny_zostaje_zaplanowaniem_bez_godziny()
+    {
+        // Pora jest nieobowiązkowa i ma taka zostać: „zrobić w czwartek" to poprawna
+        // odpowiedź, a kalendarz nie ma prawa zmyślać godziny, której nikt nie podał.
+        var main = NewService<MainViewModel>();
+        var today = NewService<IClock>().Today;
+
+        main.CaptureText = "Zrobić pranie";
+        await main.CaptureCommand.ExecuteAsync(null);
+
+        var przetwarzanie = NewService<ClarifyViewModel>();
+        await przetwarzanie.LoadAsync();
+
+        przetwarzanie.SelectedArea = przetwarzanie.Areas.First();
+        przetwarzanie.ScheduledFor = new DateTimeOffset(
+            today.ToDateTime(TimeOnly.MinValue), NewService<IClock>().Now.Offset);
+
+        await przetwarzanie.ScheduleCommand.ExecuteAsync(null);
+
+        var saved = (await NewService<ITaskRepository>().AllAsync())
+            .Single(z => z.Title == "Zrobić pranie");
+
+        saved.DoDate.Should().Be(today);
+        saved.DoTime.Should().BeNull();
+
+        var calendar = NewService<CalendarViewModel>();
+        await calendar.LoadAsync();
+
+        calendar.Columns.SelectMany(k => k.Slots)
+            .Should().NotContain(b => b.Title == "Zrobić pranie", "nie ma pory, więc nie ma bloku");
+        calendar.Columns.SelectMany(k => k.AllDay)
+            .Should().Contain(b => b.Title == "Zrobić pranie", "pasek nad siatką znaczy „tego dnia, kiedyś”");
+    }
+
+    [Fact]
     public async Task Czynnosci_menu_podrecznego_robia_to_co_obiecuja()
     {
         // W menu mają być **tylko rzeczy, które działają**: pozycja, która nic nie robi,

@@ -86,9 +86,39 @@ public sealed class InboxService(
             }
         }, ct);
 
-    /// <summary>Musi być w konkretnym dniu → zaplanowane.</summary>
-    public Task ScheduleAsync(Guid id, Guid areaId, DateOnly doDate, CancellationToken ct = default) =>
-        MutateAsync(id, task => task.Schedule(areaId, doDate, hlc.Next()), ct);
+    /// <summary>
+    /// Musi być w konkretnym dniu → zaplanowane. Pora nieobowiązkowa.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Pora, bo bez niej zadanie nie staje na siatce.</b> Dzień bez pory znaczy
+    /// „tego dnia, nie wiadomo kiedy" i tak też się rysuje — paskiem nad siatką, a nie
+    /// blokiem o godzinie. Przy wrzucie, który ma swoją porę („wizyta o czternastej"),
+    /// przetwarzanie kazało dotąd wpisać sam dzień, a po godzinę wrócić do zadania
+    /// drugim wejściem. Pora zostaje nieobowiązkowa: „zrobić w czwartek" to poprawna
+    /// odpowiedź, a kalendarz nie ma prawa zmyślać godziny, której nikt nie podał.
+    /// </para>
+    /// <para>
+    /// <b>I odbicie w kalendarzu, jak na każdej innej drodze.</b> Ta jedna szła przez
+    /// wspólnego pomocnika, który zapisuje i nic więcej — więc zadanie zaplanowane
+    /// z przetwarzania nie docierało do Google w ogóle, także z porą. Wzięcie na dziś
+    /// i zapis z karty odbijały od dawna; ta droga była wyjątkiem bez powodu.
+    /// </para>
+    /// </remarks>
+    public async Task ScheduleAsync(
+        Guid id, Guid areaId, DateOnly doDate, TimeOnly? doTime = null,
+        CancellationToken ct = default)
+    {
+        var task = await Required(id, ct);
+
+        task.Schedule(areaId, doDate, hlc.Next());
+        task.SetDoTime(doTime, hlc.Next());
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        // Po zapisie u nas, nie przed: baza jest prawdą, a kalendarz jej odbiciem.
+        await mirror.PushAsync(task, ct);
+    }
 
     /// <summary>
     /// Więcej niż jeden krok → nowy projekt, a ta pozycja zostaje jego pierwszą
