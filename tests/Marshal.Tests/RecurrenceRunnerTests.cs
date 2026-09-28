@@ -543,4 +543,24 @@ public sealed class RecurrenceRunnerTests
         RecurrenceRunner.Skip(task, Moment("2026-09-16"), Stempel).Should().BeNull();
         task.State.Should().Be(TaskState.Trashed);
     }
+
+    [Fact]
+    public void Tozsamosc_nastepnika_zalezy_od_poprzednika_i_dnia_a_nie_od_losu()
+    {
+        var from = Guid.CreateVersion7();
+        var day = new DateOnly(2026, 9, 28);
+
+        // Powtarzalna — na tym polega cała poprawka.
+        OccurrenceId.After(from, day).Should().Be(OccurrenceId.After(from, day));
+
+        // I rozróżnialna: inny dzień albo inny poprzednik to inne wystąpienie.
+        OccurrenceId.After(from, day).Should().NotBe(OccurrenceId.After(from, day.AddDays(1)));
+        OccurrenceId.After(from, day)
+            .Should().NotBe(OccurrenceId.After(Guid.CreateVersion7(), day));
+
+        // Poprawny UUID, bo baza i synchronizacja mają prawo to zakładać. Wersja ósma
+        // znaczy „identyfikator wyliczony" — i sprawdzenie jej łapie przy okazji
+        // pomylenie kolejności bajtów, po której nibble wersji wypada o bajt dalej.
+        OccurrenceId.After(from, day).Version.Should().Be(8);
+    }
 }

@@ -68,6 +68,70 @@ public sealed class DayRolloverServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Dwie_kopie_tej_samej_serii_schodza_do_jednej()
+    {
+        // Tak właśnie wyglądało podwojenie na siatce: telefon i pulpit przekroczyły ten
+        // sam dzień osobno, każde wylosowało następnikowi własny identyfikator, a
+        // scalanie przyjęło oba jako dwie różne rzeczy.
+        var rule = new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday);
+
+        var withPhone = Add("Praca", "2026-09-28", rule);
+        var withDesk = Add("Praca", "2026-09-28", rule);
+
+        var report = await _service.RunAsync();
+
+        report.Merged.Should().Be(1);
+
+        var alive = await new TaskRepository(_db).RecurringAsync();
+
+        alive.Should().ContainSingle(z => z.Title == "Praca");
+        alive.Single().Id.Should().Be(
+            new[] { withPhone.Id, withDesk.Id }.Min(),
+            "wybór musi wypaść tak samo na obu urządzeniach, a data utworzenia "
+                + "pochodzi z dwóch różnych zegarów");
+
+        // Do kosza, nie z bazy: pomyłka co do bliźniaka ma być do obejrzenia.
+        _db.Tasks.Single(z => z.Id == new[] { withPhone.Id, withDesk.Id }.Max())
+            .State.Should().Be(TaskState.Trashed);
+    }
+
+    [Fact]
+    public async Task Dwa_podobne_zadania_z_rytmem_to_jeszcze_nie_blizniaki()
+    {
+        // Samo podobieństwo nie wystarcza i nie ma wystarczać: dwa zadania o tej samej
+        // nazwie na dwa różne dni to zwyczajna rzecz, a skasowane byłyby stratą danych.
+        var rule = new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday);
+
+        Add("Praca", "2026-09-28", rule);
+        Add("Praca", "2026-09-29", rule);
+        Add("Praca", "2026-09-28", new RecurrenceRule(RecurrenceKind.Daily));
+
+        var report = await _service.RunAsync();
+
+        report.Merged.Should().Be(0);
+        (await new TaskRepository(_db).RecurringAsync()).Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task Nastepnik_ma_te_sama_tozsamosc_na_kazdym_urzadzeniu()
+    {
+        // Sedno poprawki: dwa urządzenia liczące ten sam następnik mają dojść do tej
+        // samej rzeczy, a nie do dwóch różnych rzeczy o tej samej nazwie.
+        var task = Add("Wynieść śmieci", "2026-09-14", new RecurrenceRule(
+            RecurrenceKind.Weekly,
+            daysOfWeek: Weekdays.Monday,
+            onMissed: OnMissed.Skip));
+
+        await _service.RunAsync();
+
+        var next = (await new TaskRepository(_db).RecurringAsync())
+            .Single(z => z.Title == "Wynieść śmieci");
+
+        next.Id.Should().Be(OccurrenceId.After(task.Id, next.DoDate!.Value));
+        next.Id.Should().NotBe(task.Id);
+    }
+
+    [Fact]
     public async Task Pusta_baza_nie_ma_czego_przesuwac()
     {
         (await _service.RunAsync()).Should().Be(new RolloverReport(0, 0));

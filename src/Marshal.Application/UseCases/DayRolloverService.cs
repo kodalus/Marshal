@@ -5,7 +5,7 @@ using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.UseCases;
 
-public sealed record RolloverReport(int Moved, int Spawned);
+public sealed record RolloverReport(int Moved, int Spawned, int Merged = 0);
 
 /// <summary>
 /// Przejście dnia: zaległe zaplanowane i pominięte wystąpienia serii (spec 8.4, 8.7).
@@ -45,6 +45,10 @@ public sealed class DayRolloverService(
         var now = clock.Now;
         var today = clock.Today;
 
+        // Najpierw bliźniaki, potem zaległości: dwie kopie tej samej serii przeszłyby
+        // przejście dnia każda osobno i wyprodukowały dwa następniki zamiast jednego.
+        var merged = await MergeTwinsAsync(ct);
+
         var queue = new Queue<TaskItem>(await tasks.OverdueByDoDateAsync(today, ct));
         var moved = 0;
         var fresh = 0;
@@ -79,6 +83,65 @@ public sealed class DayRolloverService(
             await unitOfWork.SaveChangesAsync(ct);
         }
 
-        return new RolloverReport(moved, fresh);
+        return new RolloverReport(moved, fresh, merged);
+    }
+
+    /// <summary>
+    /// Zlanie w jedno kopii tej samej serii, które powstały na dwóch urządzeniach.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Do dziś następnik dostawał identyfikator losowy, więc telefon i pulpit, które ten
+    /// sam dzień przekroczyły osobno, tworzyły dwa różne zadania — a scalanie rozpoznaje
+    /// rzeczy po identyfikatorze i przyjmowało oba. Seria podwajała się na siatce
+    /// i podwajała każdą swoją zapowiedź. Od teraz tożsamość następnika jest wyliczana
+    /// (<see cref="OccurrenceId"/>) i nowe bliźniaki nie powstają; ten krok sprząta te,
+    /// które zdążyły powstać wcześniej.
+    /// </para>
+    /// <para>
+    /// <b>Bliźniak to nie „podobne zadanie".</b> Muszą zgadzać się wszystkie cztery
+    /// rzeczy, które seria przenosi na następnik — nazwa, dzień, miejsce i sama reguła.
+    /// Dwa wystąpienia tej samej serii na ten sam dzień nie są niczym, czego ktoś mógłby
+    /// chcieć; dwa podobne zadania — jak najbardziej, i dlatego samo podobieństwo nie
+    /// wystarcza.
+    /// </para>
+    /// <para>
+    /// <b>Zostaje najmniejszy identyfikator, nie najstarszy wpis.</b> Wybór musi wypaść
+    /// tak samo na obu urządzeniach — inaczej każde zostawiłoby inną kopię i po scaleniu
+    /// nie zostałaby żadna. Data utworzenia do tego się nie nadaje: pochodzi z dwóch
+    /// różnych zegarów.
+    /// </para>
+    /// <para>
+    /// Do kosza, nie z bazy: kopia dostaje nagrobek i zostaje w archiwum. Gdyby ten krok
+    /// kiedykolwiek pomylił się co do bliźniaka, pomyłka ma być do obejrzenia i do
+    /// cofnięcia, a nie do odtworzenia z kopii zapasowej.
+    /// </para>
+    /// </remarks>
+    private async Task<int> MergeTwinsAsync(CancellationToken ct)
+    {
+        var twins = (await tasks.RecurringAsync(ct))
+            .GroupBy(t => (t.Title, t.DoDate, t.AreaId, t.ProjectId, t.RecurrenceJson))
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        if (twins.Count == 0)
+        {
+            return 0;
+        }
+
+        var gone = 0;
+
+        foreach (var group in twins)
+        {
+            foreach (var extra in group.OrderBy(t => t.Id).Skip(1))
+            {
+                extra.Trash(hlc.Next());
+                gone++;
+            }
+        }
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return gone;
     }
 }

@@ -193,6 +193,11 @@ public static class RecurrenceRunner
     /// Regułę nosi zawsze najnowsze wystąpienie. Bez tego przejście dnia puszczone
     /// dwa razy zrobiłoby dwie kopie, a <see cref="OnMissed.Accumulate"/> po jednej
     /// na każde uruchomienie.
+    ///
+    /// To zamyka powtórzenia **na jednym urządzeniu**. Między urządzeniami zamyka je
+    /// dopiero wyliczana tożsamość następnika (<see cref="OccurrenceId"/>): telefon
+    /// i pulpit, które ten sam dzień przekroczyły osobno, dochodzą wtedy do tego samego
+    /// wystąpienia, a scalanie składa je w jedno zamiast rozstawiać dwa obok siebie.
     /// </remarks>
     private static TaskItem? Spawn(
         TaskItem task, RecurrenceRule rule, DateOnly basis, DateTimeOffset now, Func<Hlc> stamp)
@@ -205,7 +210,8 @@ public static class RecurrenceRunner
         }
 
         return task.SpawnNextOccurrence(
-            slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes);
+            slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes,
+            OccurrenceId.After(task.Id, slot.Date));
     }
 
     private static TaskItem? SpawnFrom(
@@ -224,7 +230,8 @@ public static class RecurrenceRunner
         }
 
         return task.SpawnNextOccurrence(
-            slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes);
+            slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes,
+            OccurrenceId.After(task.Id, slot.Date));
     }
 
     /// <summary>

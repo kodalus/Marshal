@@ -395,9 +395,14 @@ public sealed class TaskItem : Entity
         DateTimeOffset now,
         Hlc stamp,
         TimeOnly? at = null,
-        int? length = null)
+        int? length = null,
+        Guid? id = null)
     {
-        var next = new TaskItem(Guid.CreateVersion7(), now, stamp, Title)
+        // Tożsamość podaje wołający, bo to od niego zależy, czy wystąpienie ma być
+        // **tą samą rzeczą** co na drugim urządzeniu. Przejście dnia i odhaczenie podają
+        // tożsamość wyliczoną (zob. OccurrenceId); wyjęcie wystąpienia z serii podaje
+        // nową, bo powstaje z jednego kliknięcia na jednym urządzeniu i nie ma bliźniaka.
+        var next = new TaskItem(id ?? Guid.CreateVersion7(), now, stamp, Title)
         {
             Note = Note,
             State = TaskState.Scheduled,
