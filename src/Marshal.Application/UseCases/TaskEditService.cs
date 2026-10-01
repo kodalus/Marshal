@@ -312,16 +312,25 @@ public sealed class TaskEditService(
             return null;
         }
 
-        // Odhaczenie zostawia ślad na siatce: blok kończy się **teraz**, a zaczyna
-        // tyle wcześniej, ile zadanie miało trwać. Zadanie bez godziny znikało dotąd
-        // z kalendarza bez śladu, więc wieczorem nie było z czego odczytać, na co
-        // poszedł dzień. Godziny wpisanej wcześniej nie ruszamy — to była decyzja,
-        // a nie zapis tego, co się stało.
-        if (task.DoTime is null && task.State != TaskState.Done)
-        {
-            await SaveDoTimeAsync(task, ct);
-        }
-
+        // Odhaczenie **nie dotyka godziny ani dnia**. Zadanie bez godziny zostaje bez
+        // godziny, także wtedy, gdy jest zrobione.
+        //
+        // Dotąd dopisywało blok kończący się „teraz" — żeby wieczorem było z czego
+        // odczytać, na co poszedł dzień. Cel był dobry, a droga zła: godzina została
+        // wpisana w pole, które znaczy **decyzję**, a nie zapis tego, co się stało.
+        // Dwie linijki niżej stało o tym wprost: „godziny wpisanej wcześniej nie
+        // ruszamy — to była decyzja, a nie zapis tego, co się stało". Ta sama zasada
+        // zabrania wpisywać tam godzinę, której nikt nie wybrał.
+        //
+        // Ta godzina nie była nawet zapisem prawdy: brana z zegara zaokrąglonego do
+        // pięciu minut i cofnięta o **oszacowanie**, czyli o liczbę, którą ktoś kiedyś
+        // zgadł. Rzecz wstawiona w dzień jako punkt bez pory dostawała po odhaczeniu
+        // „05:00" i przestawała być punktem — w widoku miesiąca widać to od razu, bo
+        // tam wpis bez pory jest właśnie znacznikiem dnia.
+        //
+        // Chwila wykonania nie ginie: niesie ją TaskItem.CompletedAt, czyli pole, które
+        // znaczy dokładnie to. Przy okazji odhaczenie przestało przestawiać dzień
+        // wykonania na dzisiaj — rzecz zrobiona w czwartek ma zostać w czwartek.
         var next = RecurrenceRunner.Complete(task, clock.Now, hlc.Next);
 
         if (next is not null)
@@ -539,28 +548,6 @@ public sealed class TaskEditService(
 
         return task;
     }
-
-    /// <summary>Blok kończący się teraz, o długości równej oszacowaniu.</summary>
-    private async Task SaveDoTimeAsync(TaskItem task, CancellationToken ct)
-    {
-        var now = clock.Now;
-
-        // Do pięciu minut w dół: „skończone o 14:37" jest dokładniejsze, niż bywa prawda.
-        var end = new TimeOnly(now.Hour, now.Minute / 5 * 5);
-        var length = TimeSpan.FromMinutes(task.EstimatedMinutes ?? DefaultMinutes);
-
-        // Początek przycięty do północy: blok ma opisać dzisiaj, a nie sięgnąć wstecz
-        // na wczoraj przez zadanie oszacowane na trzy godziny i odhaczone o pierwszej.
-        var start = end.ToTimeSpan() > length
-            ? TimeOnly.FromTimeSpan(end.ToTimeSpan() - length)
-            : TimeOnly.MinValue;
-
-        await ApplyDoDateAsync(task, clock.Today, task.AreaId, ct);
-        task.SetDoTime(start, hlc.Next());
-    }
-
-    /// <summary>Ile trwa zadanie bez oszacowania (spec 11).</summary>
-    private const int DefaultMinutes = 30;
 
     /// <summary>
     /// Nadanie i zdjęcie dnia wykonania.

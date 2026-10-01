@@ -1979,15 +1979,16 @@ public sealed class CalendarStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Odhaczenie_zapisuje_blok_konczacy_sie_teraz()
+    public async Task Odhaczenie_nie_dopisuje_godziny_zadaniu_bez_godziny()
     {
-        // Zadanie bez godziny znikało po odhaczeniu z kalendarza bez śladu, więc
-        // wieczorem nie było z czego odczytać, na co poszedł dzień. Blok zapisuje się
-        // wstecz: kończy się teraz, zaczyna tyle wcześniej, ile miało trwać.
+        // Rzecz wstawiona w dzień jako punkt bez pory ma punktem zostać — także wtedy,
+        // gdy jest zrobiona. Dotąd odhaczenie dopisywało jej blok kończący się „teraz",
+        // czyli godzinę, której nikt nie wybrał, w polu znaczącym decyzję. W widoku
+        // miesiąca widać to było od razu: przy punkcie pojawiała się godzina.
         _clock.Now = new DateTimeOffset(2026, 9, 17, 14, 37, 0, TimeSpan.FromHours(2));
 
         var task = TaskItem.Capture("Zadzwonić", _clock.Now, _hlc.Next());
-        task.Schedule(Guid.CreateVersion7(), Today, _hlc.Next());
+        task.Schedule(Guid.CreateVersion7(), Today.AddDays(-1), _hlc.Next());
         task.SetEstimate(15, Energy.Unknown, _hlc.Next());
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
@@ -1996,9 +1997,12 @@ public sealed class CalendarStoreTests : IDisposable
 
         var po = _db.Tasks.Single(z => z.Id == task.Id);
 
-        // 14:37 w dół do pięciu minut to 14:35, minus kwadrans daje 14:20.
-        po.DoTime.Should().Be(new TimeOnly(14, 20));
+        po.DoTime.Should().BeNull("pora wykonania jest decyzją, a nikt jej nie podjął");
+        po.DoDate.Should().Be(Today.AddDays(-1), "rzecz zrobiona wczoraj zostaje we wczoraj");
         po.State.Should().Be(TaskState.Done);
+
+        // Chwila wykonania nie ginie — niesie ją pole, które znaczy dokładnie to.
+        po.CompletedAt.Should().Be(_clock.Now);
     }
 
     [Fact]

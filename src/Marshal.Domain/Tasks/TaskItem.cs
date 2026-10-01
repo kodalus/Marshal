@@ -678,9 +678,12 @@ public sealed class TaskItem : Entity
     /// w tym sensie, że przestawałaby cokolwiek znaczyć — zadanie miałoby dzień
     /// i nie byłoby zaplanowane, czyli stan, którego N8 zabrania.
     ///
-    /// Godzina zostaje. Przy odhaczeniu zadania bez godziny wpisuje się porę, o której
-    /// naprawdę się skończyło — i jest to jedyny zapis tego, że to się w ogóle działo.
-    /// Kasowanie go przy zdjęciu ptaszka usuwałoby fakt, żeby cofnąć decyzję.
+    /// Godzina zostaje taka, jaka była — bo odhaczenie jej nie ruszało. Dotąd ruszało:
+    /// zadaniu bez pory dopisywało blok kończący się „teraz", a tamten zapis trzeba
+    /// było przy zdjęciu ptaszka zachować, żeby cofnięcie decyzji nie kasowało faktu.
+    /// Faktu nie ma już gdzie kasować: chwilę wykonania niesie
+    /// <see cref="CompletedAt"/>, czyli pole, które znaczy dokładnie to, a pora
+    /// wykonania zostaje tym, czym była — decyzją.
     /// </remarks>
     public void Reopen(Hlc stamp)
     {
