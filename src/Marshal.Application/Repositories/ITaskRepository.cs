@@ -31,6 +31,23 @@ public interface ITaskRepository
     Task<IReadOnlyList<TaskItem>> ByAreaAsync(Guid areaId, CancellationToken ct = default);
 
     /// <summary>
+    /// Zadania, w których szukany tekst stoi w nazwie albo w notatce.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Także zrobione i wyrzucone.</b> Szuka się rzeczy, o których pamięta się tyle,
+    /// że były — a „było" znaczy najczęściej, że już nie wisi na żadnej liście.
+    /// Szukanie, które pokazuje wyłącznie otwarte, odpowiada „nie ma" na pytanie
+    /// „gdzie to zapisałam".
+    /// </para>
+    /// <para>
+    /// Pusty tekst oddaje pustkę, a nie wszystko: pole szukania przed wpisaniem czegokolwiek
+    /// nie jest prośbą o całą bazę.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> SearchAsync(string? query, CancellationToken ct = default);
+
+    /// <summary>
     /// Wszystkie żywe zadania — wejście filtrów łączonych (spec 11.5).
     /// </summary>
     /// <remarks>

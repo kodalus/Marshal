@@ -454,6 +454,8 @@
                     Command="{Binding ShowReviewCommand}" Content="Przegląd" />
             <Button Classes="boczny" Classes.wybrany="{Binding IsNotes}"
                     Command="{Binding ShowNotesCommand}" Content="Notatki" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsSearch}"
+                    Command="{Binding ShowSearchCommand}" Content="Szukaj" />
             <Button Classes="boczny" Classes.wybrany="{Binding IsFilters}"
                     Command="{Binding ShowFiltersCommand}" Content="Filtry" />
             <Button Classes="boczny" Classes.wybrany="{Binding IsArchive}"
@@ -1777,6 +1779,99 @@
 
     </Panel>
 
+    <!-- Szukanie: jedno pole, dwie listy pod nim.
+
+         Kontekst zostaje przy oknie, a nie przechodzi na model szukania: wiersz
+         zadania sięga po te same polecenia, co na każdej innej liście („Szczegół",
+         „Zrobione"), i sięga po nie tą samą drogą. Przełożenie kontekstu kazałoby
+         wymyślić dla tych dwóch przycisków drugą drogę do tego samego. -->
+    <DockPanel IsVisible="{Binding IsSearch}">
+
+      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+        <Grid ColumnDefinitions="*,Auto">
+          <!-- Szuka przy każdym znaku, bez przycisku „szukaj": lista zwężająca się
+               w trakcie pisania mówi od razu, czy to jest to słowo, czy nie. -->
+          <TextBox Grid.Column="0" Text="{Binding Search.Query}"
+                   Watermark="Szukaj w zadaniach i notatkach" />
+          <Button Grid.Column="1" Classes="cichy" Margin="6,0,0,0" Padding="14,10"
+                  Command="{Binding Search.ClearCommand}" Content="Wyczyść" />
+        </Grid>
+
+        <!-- Pustka nazwana wprost. Lista bez wierszy i lista, o którą nikt nie pytał,
+             wyglądają identycznie, a znaczą co innego. -->
+        <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
+                   Text="{Binding Search.Message}"
+                   IsVisible="{Binding Search.HasMessage}" />
+      </StackPanel>
+
+      <ScrollViewer>
+        <StackPanel>
+
+          <TextBlock Classes="label" Text="Zadania"
+                     IsVisible="{Binding Search.HasTasks}" />
+          <ListBox ItemsSource="{Binding Search.Tasks}" DoubleTapped="OpenFromList"
+                   IsVisible="{Binding Search.HasTasks}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:TaskRow">
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,3"
+                      Opacity="{Binding Opacity}">
+                  <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" />
+                    <!-- Los zadania jednym słowem. Szukanie oddaje także zrobione
+                         i wyrzucone, więc wiersz musi powiedzieć, na co się patrzy —
+                         bez tego „jest" i „było" wyglądają tak samo. -->
+                    <TextBlock Classes="badge" Text="{Binding Fate}"
+                               IsVisible="{Binding HasFate}" />
+                    <TextBlock Classes="badge" Text="{Binding Badges}" TextWrapping="Wrap"
+                               IsVisible="{Binding HasBadges}" />
+                  </StackPanel>
+                  <Button Grid.Column="1" Content="Szczegół" Padding="10,4" Margin="0,0,6,0"
+                          VerticalAlignment="Center"
+                          Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).OpenCommand}"
+                          CommandParameter="{Binding}" />
+                  <!-- „Zrobione" tylko przy tym, co da się jeszcze zrobić. Przycisk
+                       przy zadaniu odhaczonym albo wyrzuconym obiecywałby czynność,
+                       która nic nie znaczy. -->
+                  <Button Grid.Column="2" Content="Zrobione" Padding="10,4"
+                          VerticalAlignment="Center" IsVisible="{Binding CanComplete}"
+                          Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).CompleteCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <TextBlock Classes="label" Margin="0,14,0,0" Text="Notatki"
+                     IsVisible="{Binding Search.HasNotes}" />
+          <ItemsControl ItemsSource="{Binding Search.Notes}"
+                        IsVisible="{Binding Search.HasNotes}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:NoteCard">
+                <Button Classes="kafelek" HorizontalAlignment="Stretch" Margin="0,0,0,6"
+                        Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Search.OpenNoteCommand}"
+                        CommandParameter="{Binding}">
+                  <StackPanel>
+                    <Grid ColumnDefinitions="*,Auto">
+                      <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
+                                 TextWrapping="Wrap" MaxLines="2"
+                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock Grid.Column="1" Text="★" Margin="6,0,0,0"
+                                 VerticalAlignment="Top" IsVisible="{Binding IsPinned}" />
+                    </Grid>
+                    <TextBlock Classes="hint" Margin="0,6,0,0" Text="{Binding Beginning}"
+                               TextWrapping="Wrap" MaxLines="3"
+                               TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding HasBeginning}" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+        </StackPanel>
+      </ScrollViewer>
+    </DockPanel>
+
     <!-- Notatki: lista, edytor i podgląd obok siebie -->
     <Panel IsVisible="{Binding IsNotes}">
     <DockPanel DataContext="{Binding Notes}">
@@ -2695,6 +2790,7 @@
           <Button Classes="sheet" Content="Kiedyś" Command="{Binding ShowSomedayCommand}" />
           <Button Classes="sheet" Content="Przegląd" Command="{Binding ShowReviewCommand}" />
           <Button Classes="sheet" Content="Notatki" Command="{Binding ShowNotesCommand}" />
+          <Button Classes="sheet" Content="Szukaj" Command="{Binding ShowSearchCommand}" />
           <Button Classes="sheet" Content="Filtry" Command="{Binding ShowFiltersCommand}" />
           <Button Classes="sheet" Content="Archiwum" Command="{Binding ShowArchiveCommand}" />
           <Button Classes="sheet" Content="Ustawienia" Command="{Binding ShowSettingsCommand}" />

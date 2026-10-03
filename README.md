@@ -30,6 +30,7 @@ sprawa czekająca od trzech tygodni, obszar życia milczący od pół roku — j
 | Kalendarz | Godzinowo, dzień/3 dni/tydzień/miesiąc, z Google Calendar i kanałów iCal |
 | Przegląd | Kreator ośmiu kroków, wznawialny po każdej pojedynczej pozycji |
 | Notatki | Markdown z podglądem, załączniki |
+| Szukaj | Jedno pole po nazwach i treściach zadań oraz notatek, razem z archiwum |
 | Filtry | Warunki łączone, zapisywane do ulubionych |
 | Kopia | Eksport i import JSON, offline; codzienna kopia robiona sama |
 

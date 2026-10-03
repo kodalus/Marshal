@@ -32,6 +32,10 @@ public enum Screen
     Waiting,
     Calendar,
     Notes,
+
+    /// <summary>Szukanie po nazwach i treściach zadań oraz notatek.</summary>
+    Search,
+
     Filters,
     Settings,
     Archive,
@@ -140,6 +144,7 @@ public sealed partial class MainViewModel : ObservableObject
         NowViewModel nowVm,
         CalendarViewModel calendar,
         NotesViewModel notes,
+        SearchViewModel search,
         FiltersViewModel filters,
         SettingsViewModel settings,
         JournalViewModel journal,
@@ -188,7 +193,17 @@ public sealed partial class MainViewModel : ObservableObject
         Now = nowVm;
         Calendar = calendar;
         Notes = notes;
+        Search = search;
         Filters = filters;
+
+        // Notatka z wyników szukania otwiera się tam, gdzie mieszka — na ekranie
+        // notatek, w edytorze. Druga droga do tego samego oznaczałaby dwa miejsca,
+        // w których notatkę się pisze, i rozjazd przy pierwszej zmianie w jednym z nich.
+        Search.NoteRequested += note => Safely("Szukanie: notatka", async () =>
+        {
+            await ShowNotesAsync();
+            Notes.OpenCommand.Execute(note);
+        });
         Settings = settings;
         Journal = journal;
         Clarify.Emptied += (_, _) => Safely("Skrzynka opróżniona", ShowInboxAsync);
@@ -330,6 +345,9 @@ public sealed partial class MainViewModel : ObservableObject
     public CalendarViewModel Calendar { get; }
 
     public NotesViewModel Notes { get; }
+
+    /// <summary>Szukanie — jedno pole na zadania i notatki naraz.</summary>
+    public SearchViewModel Search { get; }
 
     public FiltersViewModel Filters { get; }
 
@@ -485,6 +503,8 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsCalendar => Current == Screen.Calendar;
 
     public bool IsNotes => Current == Screen.Notes;
+
+    public bool IsSearch => Current == Screen.Search;
 
     public bool IsJournal => Current == Screen.Journal;
 
@@ -669,6 +689,7 @@ public sealed partial class MainViewModel : ObservableObject
         Screen.Waiting => ShowWaitingCommand,
         Screen.Calendar => ShowCalendarCommand,
         Screen.Notes => ShowNotesCommand,
+        Screen.Search => ShowSearchCommand,
         Screen.Filters => ShowFiltersCommand,
         Screen.Archive => ShowArchiveCommand,
         Screen.Journal => ShowJournalCommand,
@@ -690,6 +711,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWaiting));
         OnPropertyChanged(nameof(IsCalendar));
         OnPropertyChanged(nameof(IsNotes));
+        OnPropertyChanged(nameof(IsSearch));
         OnPropertyChanged(nameof(IsJournal));
         OnPropertyChanged(nameof(IsFilters));
         OnPropertyChanged(nameof(IsSettings));
@@ -1408,6 +1430,20 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Notes;
         await Notes.LoadAsync();
+    }
+
+    /// <summary>
+    /// Szukanie po całej aplikacji.
+    /// </summary>
+    /// <remarks>
+    /// Bez czyszczenia pola przy wejściu: wraca się tu po to, żeby otworzyć drugi
+    /// wynik tego samego pytania, a nie żeby zadać je od nowa.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ShowSearchAsync()
+    {
+        Current = Screen.Search;
+        await Search.LoadAsync();
     }
 
     /// <summary>Ustawienia: motyw, strefa, kopia zapasowa (spec 11, 12).</summary>

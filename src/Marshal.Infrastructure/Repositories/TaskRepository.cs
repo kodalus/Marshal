@@ -103,6 +103,41 @@ public sealed class TaskRepository(MarshalDbContext db, IDbQueue? queue = null)
     /// Domyślne ukrycie cmentarza siedzi w <see cref="Marshal.Domain.Filters.FilterQuery"/>,
     /// czyli w jednym miejscu, razem z powodem.
     /// </remarks>
+    public async Task<IReadOnlyList<TaskItem>> SearchAsync(
+        string? query, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        var wanted = LikePattern.Containing(query.Trim());
+
+        // Bez indeksu pełnotekstowego, tak samo jak przy notatkach: przy kilku tysiącach
+        // zadań przejrzenie po kolei jest niezauważalne, a indeks w SQLite to osobna
+        // tabela, którą trzeba by utrzymywać w zgodzie przy każdym scaleniu.
+        var found = await _queue.RunAsync(() => db.Tasks
+            .Where(t => !t.Deleted)
+            .Where(t => EF.Functions.Like(t.Title, wanted, LikePattern.Escape)
+                     || (t.Note != null
+                         && EF.Functions.Like(t.Note, wanted, LikePattern.Escape)))
+            .ToListAsync(ct), ct);
+
+        // Porządek układany w pamięci, nie zapytaniem: wyników szukania są dziesiątki,
+        // a warunek „otwarte przed zamkniętymi" zapisany w SQL-u byłby sortowaniem po
+        // wyrażeniu logicznym — czyli po czymś, co każdy dostawca tłumaczy po swojemu.
+        return
+        [
+            .. found
+                .OrderBy(Closed)
+                .ThenByDescending(t => t.DoDate ?? t.Deadline ?? DateOnly.MinValue)
+                .ThenByDescending(t => t.CreatedAt)
+        ];
+
+        static bool Closed(TaskItem task) =>
+            task.State is TaskState.Done or TaskState.Trashed;
+    }
+
     public async Task<IReadOnlyList<TaskItem>> AllAsync(CancellationToken ct = default) =>
         await _queue.RunAsync(() => db.Tasks
             .Where(t => !t.Deleted)

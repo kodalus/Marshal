@@ -29,6 +29,23 @@ public sealed record TaskRow(TaskItem Task, string Badges)
 
     public string Mark => IsDone ? "✓" : string.Empty;
 
-    /// <summary>Zrobione przygaszone — jest, ale nie woła już o uwagę.</summary>
-    public double Opacity => IsDone ? 0.5 : 1.0;
+    /// <summary>
+    /// Wyrzucone. Na zwykłych listach nie bywa — pojawia się w szukaniu, bo szuka się
+    /// także rzeczy, których już nie ma.
+    /// </summary>
+    public bool IsTrashed => Task.State == TaskState.Trashed;
+
+    /// <summary>
+    /// Czy jest jeszcze co odhaczać. Przycisk przy zadaniu zrobionym albo wyrzuconym
+    /// obiecywałby czynność, która nic nie znaczy.
+    /// </summary>
+    public bool CanComplete => !IsDone && !IsTrashed;
+
+    /// <summary>Jednym słowem, co się z tym stało. Puste, gdy nic — czyli gdy wciąż żyje.</summary>
+    public string Fate => IsDone ? "zrobione" : IsTrashed ? "w koszu" : string.Empty;
+
+    public bool HasFate => Fate.Length > 0;
+
+    /// <summary>Zamknięte przygaszone — jest, ale nie woła już o uwagę.</summary>
+    public double Opacity => IsDone || IsTrashed ? 0.5 : 1.0;
 }
