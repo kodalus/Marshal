@@ -1,5 +1,6 @@
 using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
+using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
 
@@ -26,7 +27,8 @@ public sealed class DayRolloverService(
     ITaskRepository tasks,
     IUnitOfWork unitOfWork,
     IClock clock,
-    IHlcSource hlc)
+    IHlcSource hlc,
+    IActivityLog? journal = null)
 {
     /// <summary>
     /// Ile wystąpień wolno dorobić w jednym przebiegu.
@@ -99,17 +101,28 @@ public sealed class DayRolloverService(
     /// które zdążyły powstać wcześniej.
     /// </para>
     /// <para>
-    /// <b>Bliźniak to nie „podobne zadanie".</b> Muszą zgadzać się wszystkie cztery
-    /// rzeczy, które seria przenosi na następnik — nazwa, dzień, miejsce i sama reguła.
-    /// Dwa wystąpienia tej samej serii na ten sam dzień nie są niczym, czego ktoś mógłby
-    /// chcieć; dwa podobne zadania — jak najbardziej, i dlatego samo podobieństwo nie
-    /// wystarcza.
+    /// <b>Bliźniak to nie „podobne zadanie".</b> Muszą zgadzać się nazwa, miejsce
+    /// i <b>kształt</b> rytmu — rodzaj, odstęp, dni, zaczepienie, odpowiedź na minięcie.
+    /// Dwa zadania o tej samej nazwie i tym samym rytmie, w tym samym obszarze
+    /// i projekcie, nie są dwiema rzeczami: w modelu seria ma naraz **jedno** żywe
+    /// wystąpienie. Dwa podobne zadania bez rytmu — jak najbardziej, i dlatego samo
+    /// podobieństwo nie wystarcza.
     /// </para>
     /// <para>
-    /// <b>Zostaje najmniejszy identyfikator, nie najstarszy wpis.</b> Wybór musi wypaść
-    /// tak samo na obu urządzeniach — inaczej każde zostawiłoby inną kopię i po scaleniu
-    /// nie zostałaby żadna. Data utworzenia do tego się nie nadaje: pochodzi z dwóch
-    /// różnych zegarów.
+    /// <b>Po kształcie, nie po całym zapisie reguły, i bez pytania o dzień.</b> Pierwsze
+    /// podejście pytało o jedno i drugie — i nie sklejało niczego. Kopie rozchodzą się
+    /// w obu tych wymiarach: przejście dnia obcina minione odwołania i pomniejsza licznik
+    /// pozostałych wystąpień, a urządzenie otwarte później przeskakuje serię dalej, bo
+    /// nadrabia więcej dni. Pytanie „czy zapisy są identyczne" odpowiadało więc „to różne
+    /// rytmy" na dwie kopie tego samego.
+    /// </para>
+    /// <para>
+    /// <b>Zostaje wystąpienie najbliższe, a remis rozstrzyga identyfikator.</b> Żywym
+    /// wystąpieniem serii jest to następne w kolejce; zostawienie tego, które pobiegło
+    /// do przodu, gubiłoby dzień po drodze. Rozstrzygnięcie remisu musi wypaść tak samo
+    /// na obu urządzeniach — inaczej każde zostawiłoby inną kopię i po scaleniu nie
+    /// zostałaby żadna. Data utworzenia do tego się nie nadaje: pochodzi z dwóch różnych
+    /// zegarów.
     /// </para>
     /// <para>
     /// Do kosza, nie z bazy: kopia dostaje nagrobek i zostaje w archiwum. Gdyby ten krok
@@ -119,8 +132,15 @@ public sealed class DayRolloverService(
     /// </remarks>
     private async Task<int> MergeTwinsAsync(CancellationToken ct)
     {
+        // Po **kształcie** rytmu, nie po całym jego zapisie. Pierwsze podejście
+        // porównywało reguły znak w znak i dlatego nie sklejało niczego: dwie kopie tej
+        // samej serii niemal nigdy nie mają identycznego zapisu, bo każda zaszła kawałek
+        // dalej po swojemu — przejście dnia obcina minione odwołania i pomniejsza licznik
+        // pozostałych wystąpień. Kształt (rodzaj, odstęp, dni, zaczepienie, odpowiedź na
+        // minięcie) stoi przez całe życie serii i odpowiada na pytanie „który to rytm".
         var twins = (await tasks.RecurringAsync(ct))
-            .GroupBy(t => (t.Title, t.DoDate, t.AreaId, t.ProjectId, t.RecurrenceJson))
+            .Where(t => t.Recurrence is not null)
+            .GroupBy(t => (t.Title, t.AreaId, t.ProjectId, t.Recurrence!.Shape))
             .Where(g => g.Count() > 1)
             .ToList();
 
@@ -133,7 +153,19 @@ public sealed class DayRolloverService(
 
         foreach (var group in twins)
         {
-            foreach (var extra in group.OrderBy(t => t.Id).Skip(1))
+            // Zostaje wystąpienie **najbliższe**, a nie najstarszy wpis. Kopie rozchodzą
+            // się nie tylko w zapisie reguły, ale i w czasie: urządzenie otwarte później
+            // przeskoczyło serię dalej, bo nadrabiało więcej dni. W modelu żyje naraz
+            // jedno wystąpienie serii i jest nim to następne w kolejce — zostawienie
+            // tego, które pobiegło do przodu, gubiłoby dzień po drodze.
+            //
+            // Identyfikator rozstrzyga remis i musi go rozstrzygać, bo wybór ma wypaść
+            // tak samo na obu urządzeniach: inaczej każde zostawiłoby inną kopię
+            // i po scaleniu nie zostałaby żadna.
+            foreach (var extra in group
+                .OrderBy(t => t.DoDate ?? DateOnly.MaxValue)
+                .ThenBy(t => t.Id)
+                .Skip(1))
             {
                 extra.Trash(hlc.Next());
                 gone++;
@@ -141,6 +173,24 @@ public sealed class DayRolloverService(
         }
 
         await unitOfWork.SaveChangesAsync(ct);
+
+        // Do dziennika, bo to jedyna czynność w przejściu dnia, która **zabiera**
+        // zadania — i jedyna, o której trzeba móc powiedzieć „zadziałała" albo „nie
+        // zadziałała" bez zaglądania do bazy. Brak tego wpisu kosztował jedną rundę:
+        // nie dało się odróżnić „nie znalazło bliźniaków" od „w ogóle nie doszło".
+        if (journal is not null)
+        {
+            var what = string.Join(", ", twins
+                .Select(g => $"{g.Key.Title} ×{g.Count()}")
+                .Take(5));
+
+            await journal.RecordAsync(
+                "Przejście dnia: sklejenie kopii serii",
+                $"{gone} do kosza",
+                ActivityLevel.Ok,
+                what,
+                ct);
+        }
 
         return gone;
     }

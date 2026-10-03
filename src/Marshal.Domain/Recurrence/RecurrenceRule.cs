@@ -129,6 +129,30 @@ public sealed record RecurrenceRule
     public int? Count { get; }
 
     /// <summary>
+    /// Kształt rytmu — to, co odpowiada na pytanie „który to rytm", a nie „jak daleko
+    /// zaszedł".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reguła niesie dwa rodzaje pól i mylenie ich kosztowało już jedną nieudaną
+    /// poprawkę. Rodzaj, odstęp, dni tygodnia, dzień miesiąca, zaczepienie i odpowiedź
+    /// na minięcie <b>stoją</b> przez całe życie serii. Licznik, data końca i lista
+    /// odwołanych dni <b>zmieniają się przy każdym przejściu</b> — zob.
+    /// <see cref="Advance"/>, który obcina zmiany już minione i pomniejsza licznik.
+    /// </para>
+    /// <para>
+    /// Dwie kopie tej samej serii, powstałe na dwóch urządzeniach, niemal nigdy nie mają
+    /// identycznego zapisu reguły: każda zaszła kawałek dalej po swojemu. Porównywanie
+    /// ich po całej regule odpowiada więc „to są różne rytmy" na dwie kopie tego samego
+    /// — i dokładnie tak nie zadziałało pierwsze sklejanie bliźniaków. Kształt odpowiada
+    /// na to pytanie poprawnie.
+    /// </para>
+    /// </remarks>
+    public (RecurrenceKind Kind, int Interval, Weekdays Days, int? DayOfMonth,
+        RecurrenceAnchor Anchor, OnMissed OnMissed) Shape =>
+        (Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed);
+
+    /// <summary>
     /// Wystąpienia odwołane i przełożone — po jednym wpisie na dzień z reguły.
     /// </summary>
     /// <remarks>

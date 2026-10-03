@@ -96,20 +96,83 @@ public sealed class DayRolloverServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Dwa_podobne_zadania_z_rytmem_to_jeszcze_nie_blizniaki()
+    public async Task Kopie_sklejaja_sie_takze_wtedy_gdy_reguly_zaszly_roznie_daleko()
     {
-        // Samo podobieństwo nie wystarcza i nie ma wystarczać: dwa zadania o tej samej
-        // nazwie na dwa różne dni to zwyczajna rzecz, a skasowane byłyby stratą danych.
+        // To jest powód, dla którego pierwsze sklejanie nie zadziałało. Porównywało
+        // reguły znak w znak, a dwie kopie tej samej serii niemal nigdy nie mają
+        // identycznego zapisu: każda zaszła kawałek dalej po swojemu — przejście dnia
+        // obcina minione odwołania i pomniejsza licznik pozostałych wystąpień.
+        var shape = new RecurrenceRule(
+            RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday, count: 10);
+
+        var withPhone = Add("Praca", "2026-10-05", shape);
+
+        // Ta sama seria widziana z drugiego urządzenia: o dwa wystąpienia dalej
+        // i z odwołanym jednym dniem. Inny zapis, ten sam rytm.
+        var withDesk = Add("Praca", "2026-10-05", new RecurrenceRule(
+            RecurrenceKind.Weekly,
+            daysOfWeek: Weekdays.Monday,
+            count: 8,
+            changes: [new RecurrenceChange(D("2026-10-12"), Dropped: true)]));
+
+        withPhone.RecurrenceJson.Should().NotBe(
+            withDesk.RecurrenceJson, "zapisy mają się różnić — o to w tym teście chodzi");
+
+        var report = await _service.RunAsync();
+
+        report.Merged.Should().Be(1);
+        (await new TaskRepository(_db).RecurringAsync())
+            .Should().ContainSingle(z => z.Title == "Praca");
+    }
+
+    [Fact]
+    public async Task Rozne_rytmy_o_tej_samej_nazwie_nie_sa_kopiami()
+    {
+        // Kształt rozstrzyga i ma rozstrzygać: „co poniedziałek" i „co wtorek" to dwie
+        // różne rzeczy, choćby nazywały się tak samo.
+        Add("Praca", "2026-10-05",
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday));
+        Add("Praca", "2026-10-05",
+            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Tuesday));
+
+        (await _service.RunAsync()).Merged.Should().Be(0);
+        (await new TaskRepository(_db).RecurringAsync()).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Rozne_nazwy_i_rozne_ksztalty_nie_sa_kopiami()
+    {
+        // Samo podobieństwo nie wystarcza i nie ma wystarczać. Rozstrzyga nazwa, miejsce
+        // i kształt rytmu — skasowanie czegoś, co tylko wygląda podobnie, byłoby stratą.
         var rule = new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday);
 
         Add("Praca", "2026-09-28", rule);
-        Add("Praca", "2026-09-29", rule);
+        Add("Zakupy", "2026-09-28", rule);
         Add("Praca", "2026-09-28", new RecurrenceRule(RecurrenceKind.Daily));
 
         var report = await _service.RunAsync();
 
         report.Merged.Should().Be(0);
         (await new TaskRepository(_db).RecurringAsync()).Should().HaveCount(3);
+    }
+
+    [Fact]
+    public async Task Kopie_na_roznych_dniach_schodza_do_tej_blizszej()
+    {
+        // Kopie rozchodzą się także w czasie: urządzenie otwarte później przeskoczyło
+        // serię dalej, bo nadrabiało więcej dni. Żywym wystąpieniem serii jest to
+        // następne w kolejce — zostawienie tego, które pobiegło do przodu, gubiłoby
+        // dzień po drodze.
+        var rule = new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday);
+
+        Add("Praca", "2026-10-12", rule);
+        var nearest = Add("Praca", "2026-10-05", rule);
+
+        (await _service.RunAsync()).Merged.Should().Be(1);
+
+        (await new TaskRepository(_db).RecurringAsync())
+            .Should().ContainSingle(z => z.Title == "Praca")
+            .Which.Id.Should().Be(nearest.Id);
     }
 
     [Fact]
