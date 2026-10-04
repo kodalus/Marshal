@@ -171,6 +171,26 @@ public partial class MainView : UserControl
     private void DropRhythm(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: usunięcie całego rytmu z okna", m => m.DropRhythmAsync());
 
+    /// <summary>
+    /// Barwa nawyku — ta sama wybieraczka, co przy obszarach i projektach.
+    /// </summary>
+    /// <remarks>
+    /// Ustawiana od razu, bez „Zapisz": tak samo jak przy obszarach, i z tego samego
+    /// powodu — barwę wybiera się patrząc, a patrzy się na kafelek, nie na formularz.
+    /// Drugi krok kazałby wracać wzrokiem do przycisku, żeby zobaczyć to, co już widać.
+    /// </remarks>
+    private void HabitColor(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || sender is not Control source
+            || model.Habits.Opened is not { } habit)
+        {
+            return;
+        }
+
+        ShowPalette(source, habit.Habit.Color, color => model.Habits.PickColorAsync(color));
+    }
+
     /// <summary>Koniec serii na tym wystąpieniu — to jedno zostaje.</summary>
     private void EndRhythm(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: koniec serii na tym wystąpieniu", m => m.EndRhythmAsync());
@@ -1994,12 +2014,24 @@ public partial class MainView : UserControl
     /// w dzienniku zmian, z którym potem scala się drugie urządzenie.
     /// </para>
     /// </remarks>
-    private void ShowPalette(MainViewModel model, Control source, ProjectTreeRow row)
+    private void ShowPalette(MainViewModel model, Control source, ProjectTreeRow row) =>
+        ShowPalette(source, row.Color, color => model.SetRowColorAsync(row, color));
+
+    /// <summary>
+    /// Ta sama wybieraczka dla wszystkiego, co ma barwę.
+    /// </summary>
+    /// <remarks>
+    /// Przyjmuje barwę bieżącą i to, co zrobić z wybraną — reszta, czyli koło, suwaki,
+    /// pole szesnastkowe i rząd barw przygotowanych, jest wspólna. Druga wybieraczka
+    /// na nawyki znaczyłaby dwa miejsca, w których ustawia się barwę, i rozjazd przy
+    /// pierwszej zmianie w jednym z nich.
+    /// </remarks>
+    private void ShowPalette(Control source, string? current, Func<string?, Task> apply)
     {
         var kolo = new ColorView
         {
-            Color = Color.TryParse(row.Color ?? string.Empty, out var current)
-                ? current
+            Color = Color.TryParse(current ?? string.Empty, out var read)
+                ? read
                 : Colors.SlateGray,
             IsAlphaEnabled = false,
             IsAlphaVisible = false,
@@ -2015,15 +2047,13 @@ public partial class MainView : UserControl
         {
             flyout.Hide();
             var c = kolo.Color;
-            _ = Try(
-                "Barwa: ustawienie",
-                () => model.SetRowColorAsync(row, $"#{c.R:X2}{c.G:X2}{c.B:X2}"));
+            _ = Try("Barwa: ustawienie", () => apply($"#{c.R:X2}{c.G:X2}{c.B:X2}"));
         };
 
         clear.Click += (_, _) =>
         {
             flyout.Hide();
-            _ = Try("Barwa: zdjęcie", () => model.SetRowColorAsync(row, null));
+            _ = Try("Barwa: zdjęcie", () => apply(null));
         };
 
         // Barwy przygotowane zostają nad kołem, jednym kliknięciem. Koło jest po to,
@@ -2055,7 +2085,7 @@ public partial class MainView : UserControl
             checkbox.Click += (_, _) =>
             {
                 flyout.Hide();
-                _ = Try("Barwa: ustawienie", () => model.SetRowColorAsync(row, choice.Value));
+                _ = Try("Barwa: ustawienie", () => apply(choice.Value));
             };
 
             quick.Children.Add(checkbox);

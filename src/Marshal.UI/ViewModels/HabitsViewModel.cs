@@ -33,10 +33,22 @@ public sealed record HabitBox(HabitCard Card, IReadOnlyList<HabitWeek> Weeks)
     private const byte Full = 0xF2;
 
     /// <summary>Dzień zaczęty, ale poniżej progu.</summary>
-    private const byte Half = 0x80;
+    private const byte Half = 0x72;
 
     /// <summary>Dzień pusty. Widoczny, bo siatka bez pustych dni nie jest siatką.</summary>
-    private const byte Empty = 0x24;
+    private const byte Empty = 0x2E;
+
+    /// <summary>
+    /// Kwadraciki rysowane <b>bielą na barwie kafelka</b>, a nie barwą na tle okna.
+    /// </summary>
+    /// <remarks>
+    /// Kafelek niesie barwę nawyku w pełnej sile, bo to po niej rozpoznaje się go
+    /// z odległości ręki — i wtedy siatka w tej samej barwie zlewa się z tłem. Biel
+    /// o trzech kryciach działa tak samo przy każdym odcieniu: nie trzeba jej dobierać
+    /// do barwy, a kontrast jest ten sam na fiolecie i na żółci.
+    /// </remarks>
+    private static IBrush Square(byte opacity) =>
+        new SolidColorBrush(Color.FromArgb(opacity, 0xFF, 0xFF, 0xFF));
 
     public static HabitBox From(HabitCard card)
     {
@@ -45,10 +57,7 @@ public sealed record HabitBox(HabitCard Card, IReadOnlyList<HabitWeek> Weeks)
                 day.Day,
                 day.Amount,
                 day.Counts,
-                Palette.Background(
-                    card.Habit.Color,
-                    task: true,
-                    day.Counts ? Full : day.Partial ? Half : Empty),
+                Square(day.Counts ? Full : day.Partial ? Half : Empty),
                 $"{day.Day:dd.MM.yyyy} — {(day.Amount > 0 ? day.Amount.ToString() : "nic")}"))
             .ToList();
 
@@ -76,7 +85,16 @@ public sealed record HabitBox(HabitCard Card, IReadOnlyList<HabitWeek> Weeks)
 
     public bool HasScore => Card.HasScore;
 
-    public IBrush Background => Palette.Background(Card.Habit.Color, task: true, Empty);
+    /// <summary>
+    /// Tło kafelka — barwa nawyku w pełnej sile.
+    /// </summary>
+    /// <remarks>
+    /// Przy sześciu kafelkach pod sobą barwa odpowiada na „który to" szybciej niż
+    /// nazwa, ale tylko wtedy, gdy jest jej dość, żeby ją zobaczyć. Prześwit na tle
+    /// okna dawał sześć prostokątów w sześciu odcieniach granatu — różnicę dało się
+    /// znaleźć, patrząc, a nie zobaczyć.
+    /// </remarks>
+    public IBrush Background => Palette.Background(Card.Habit.Color, task: true, 0xFF);
 
     /// <summary>Seria jednym zdaniem — bo to jest powód, dla którego się tu patrzy.</summary>
     public string Streak => Card.Streak switch
@@ -203,7 +221,11 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
 
     public bool IsEditing => Opened is not null;
 
-    partial void OnOpenedChanged(HabitBox? value) => OnPropertyChanged(nameof(IsEditing));
+    partial void OnOpenedChanged(HabitBox? value)
+    {
+        OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(EditColorBrush));
+    }
 
     [ObservableProperty]
     public partial string EditTitle { get; set; } = string.Empty;
@@ -215,10 +237,31 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
     [ObservableProperty]
     public partial string EditUnit { get; set; } = string.Empty;
 
-    [ObservableProperty]
-    public partial ColorChoice? EditColor { get; set; }
+    /// <summary>Barwa otwartego nawyku, do pokazania na przycisku wybieraczki.</summary>
+    public IBrush EditColorBrush => Opened is { } box
+        ? Palette.Background(box.Habit.Color, task: true, 0xFF)
+        : Brushes.Transparent;
 
-    public IReadOnlyList<ColorChoice> Colors => ColorChoice.All;
+    /// <summary>
+    /// Barwa z wybieraczki — zapisywana od razu, bez „Zapisz".
+    /// </summary>
+    /// <remarks>
+    /// Tak samo jak przy obszarach i projektach, i z tego samego powodu: barwę wybiera
+    /// się patrząc, a patrzy się na kafelek, nie na formularz. Drugi krok kazałby wracać
+    /// wzrokiem do przycisku, żeby zobaczyć to, co już widać.
+    /// </remarks>
+    public async Task PickColorAsync(string? color)
+    {
+        if (Opened is not { } box)
+        {
+            return;
+        }
+
+        await habits.SetColorAsync(box.Id, color);
+        await LoadAsync();
+
+        Opened = Items.FirstOrDefault(z => z.Id == box.Id);
+    }
 
     /// <summary>
     /// Czy kasowanie jest już uzbrojone.
@@ -248,8 +291,6 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
         EditTitle = box.Habit.Title;
         EditTarget = box.Habit.Target;
         EditUnit = box.Habit.Unit ?? string.Empty;
-        EditColor = ColorChoice.All.FirstOrDefault(b => b.Value == box.Habit.Color)
-            ?? ColorChoice.All[0];
         DeleteArmed = false;
     }
 
@@ -274,7 +315,6 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
             box.Id,
             EditTarget is { } target ? (int)target : null,
             EditUnit);
-        await habits.SetColorAsync(box.Id, EditColor?.Value);
 
         await LoadAsync();
 
