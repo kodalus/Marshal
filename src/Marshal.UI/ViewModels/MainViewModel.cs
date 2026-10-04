@@ -36,6 +36,9 @@ public enum Screen
     /// <summary>Szukanie po nazwach i treściach zadań oraz notatek.</summary>
     Search,
 
+    /// <summary>Nawyki — siatka dni, osobno od zadań i kalendarza.</summary>
+    Habits,
+
     Filters,
     Settings,
     Archive,
@@ -145,6 +148,7 @@ public sealed partial class MainViewModel : ObservableObject
         CalendarViewModel calendar,
         NotesViewModel notes,
         SearchViewModel search,
+        HabitsViewModel habits,
         FiltersViewModel filters,
         SettingsViewModel settings,
         JournalViewModel journal,
@@ -194,6 +198,7 @@ public sealed partial class MainViewModel : ObservableObject
         Calendar = calendar;
         Notes = notes;
         Search = search;
+        Habits = habits;
         Filters = filters;
 
         // Notatka z wyników szukania otwiera się tam, gdzie mieszka — na ekranie
@@ -348,6 +353,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Szukanie — jedno pole na zadania i notatki naraz.</summary>
     public SearchViewModel Search { get; }
+
+    /// <summary>Nawyki — siatka dni, niezależna od kalendarza.</summary>
+    public HabitsViewModel Habits { get; }
 
     public FiltersViewModel Filters { get; }
 
@@ -505,6 +513,8 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsNotes => Current == Screen.Notes;
 
     public bool IsSearch => Current == Screen.Search;
+
+    public bool IsHabits => Current == Screen.Habits;
 
     public bool IsJournal => Current == Screen.Journal;
 
@@ -690,6 +700,7 @@ public sealed partial class MainViewModel : ObservableObject
         Screen.Calendar => ShowCalendarCommand,
         Screen.Notes => ShowNotesCommand,
         Screen.Search => ShowSearchCommand,
+        Screen.Habits => ShowHabitsCommand,
         Screen.Filters => ShowFiltersCommand,
         Screen.Archive => ShowArchiveCommand,
         Screen.Journal => ShowJournalCommand,
@@ -712,6 +723,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCalendar));
         OnPropertyChanged(nameof(IsNotes));
         OnPropertyChanged(nameof(IsSearch));
+        OnPropertyChanged(nameof(IsHabits));
         OnPropertyChanged(nameof(IsJournal));
         OnPropertyChanged(nameof(IsFilters));
         OnPropertyChanged(nameof(IsSettings));
@@ -1444,6 +1456,21 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Current = Screen.Search;
         await Search.LoadAsync();
+    }
+
+    /// <summary>
+    /// Nawyki — rzeczy, których się nie odhacza, tylko się je ciągnie.
+    /// </summary>
+    /// <remarks>
+    /// Osobny ekran, nie zakładka w zadaniach. Nawyk nie jest rzeczą do zrobienia
+    /// i nie ma wchodzić ani do skrzynki, ani do przeglądu, ani do liczników
+    /// zaległości — pięć nawyków dziennie zasypałoby listę tym, co i tak się wydarzy.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ShowHabitsAsync()
+    {
+        Current = Screen.Habits;
+        await Habits.LoadAsync();
     }
 
     /// <summary>Ustawienia: motyw, strefa, kopia zapasowa (spec 11, 12).</summary>

@@ -456,6 +456,8 @@
                     Command="{Binding ShowNotesCommand}" Content="Notatki" />
             <Button Classes="boczny" Classes.wybrany="{Binding IsSearch}"
                     Command="{Binding ShowSearchCommand}" Content="Szukaj" />
+            <Button Classes="boczny" Classes.wybrany="{Binding IsHabits}"
+                    Command="{Binding ShowHabitsCommand}" Content="Nawyki" />
             <Button Classes="boczny" Classes.wybrany="{Binding IsFilters}"
                     Command="{Binding ShowFiltersCommand}" Content="Filtry" />
             <Button Classes="boczny" Classes.wybrany="{Binding IsArchive}"
@@ -1872,6 +1874,93 @@
       </ScrollViewer>
     </DockPanel>
 
+    <!-- Nawyki: siatka dni zamiast listy do odhaczenia.
+
+         Kafelek jest w całości przyciskiem — dotknięcie znaczy „dzisiaj było".
+         To jedyna czynność robiona codziennie, więc nie ma w niej nic do wycelowania:
+         cel jest wielkości kafelka, nie kwadracika w rogu. -->
+    <DockPanel IsVisible="{Binding IsHabits}">
+
+      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0" Text="{Binding Habits.NewTitle}"
+                   Watermark="Nowy nawyk — co ciągniesz?">
+            <TextBox.KeyBindings>
+              <KeyBinding Gesture="Enter" Command="{Binding Habits.CreateCommand}" />
+            </TextBox.KeyBindings>
+          </TextBox>
+          <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
+                  Command="{Binding Habits.CreateCommand}" Content="Dodaj" />
+        </Grid>
+        <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
+                   Text="{Binding Habits.Message}"
+                   IsVisible="{Binding !Habits.HasItems}" />
+      </StackPanel>
+
+      <ScrollViewer>
+        <ItemsControl ItemsSource="{Binding Habits.Items}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:HabitBox">
+              <Border Background="{Binding Background}" CornerRadius="10" Padding="12"
+                      Margin="0,0,0,10">
+                <StackPanel>
+
+                  <Grid ColumnDefinitions="*,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
+                               VerticalAlignment="Center" TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="1" Classes="hint" Margin="8,0"
+                               VerticalAlignment="Center"
+                               Text="{Binding Score}" IsVisible="{Binding HasScore}" />
+                    <!-- Krążek po prawej, jak na liście zadań: tu się dotyka. -->
+                    <Button Grid.Column="2" Classes="nav" Padding="14,6"
+                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Habits.BumpCommand}"
+                            CommandParameter="{Binding}">
+                      <TextBlock Text="{Binding Mark}" MinWidth="12"
+                                 HorizontalAlignment="Center" />
+                    </Button>
+                  </Grid>
+
+                  <!-- Siatka: kolumna to tydzień, wiersz to dzień tygodnia. Bez
+                       wyrównania do poniedziałku kolumna nie byłaby tygodniem i nie
+                       dałoby się zobaczyć, że coś wypada zawsze w weekendy. -->
+                  <ScrollViewer Margin="0,10,0,0" HorizontalScrollBarVisibility="Auto"
+                                VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Weeks}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HabitWeek">
+                          <ItemsControl ItemsSource="{Binding Days}" Margin="0,0,3,0">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:HabitCell">
+                                <Border Width="11" Height="11" Margin="0,0,0,3"
+                                        CornerRadius="2"
+                                        Background="{Binding Fill}"
+                                        ToolTip.Tip="{Binding Tip}" />
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+
+                  <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0">
+                    <TextBlock Grid.Column="0" Classes="hint" Text="{Binding Streak}" />
+                    <TextBlock Grid.Column="1" Classes="hint" Text="{Binding Totals}" />
+                  </Grid>
+
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </DockPanel>
+
     <!-- Notatki: lista, edytor i podgląd obok siebie -->
     <Panel IsVisible="{Binding IsNotes}">
     <DockPanel DataContext="{Binding Notes}">
@@ -2780,9 +2869,24 @@
            ma być jednym gestem, a nie wejściem w listę i wyjściem z niej.
            Widoczność i podmiana kontekstu na osobnych elementach, jak wszędzie. -->
       <Panel IsVisible="{Binding IsMoreOpen}" Background="{DynamicResource Zaslona}">
-      <Border VerticalAlignment="Bottom" Padding="12" CornerRadius="12,12,0,0"
-              Background="{DynamicResource Karta}">
-      <ScrollViewer MaxHeight="440">
+      <!-- Wysokość z treści, ale do pełnej wysokości okna, gdy treść tyle zajmuje.
+           Dotąd stało tu sztywne czterysta czterdzieści punktów: przy dwunastu
+           pozycjach lista przewijała się na telefonie od pierwszego otwarcia, choć
+           ekran miał dwa razy tyle wolnego miejsca. Przewijanie w nawigacji jest
+           najgorsze z możliwych — pozycja, której nie widać, nie istnieje, a szuka
+           się jej właśnie wtedy, gdy się nie wie, gdzie jest.
+
+           Margines od góry zostaje, żeby arkusz nie wszedł pod pasek stanu telefonu,
+           a na pulpicie żeby było widać, że pod spodem coś jest. -->
+      <Border VerticalAlignment="Bottom" Margin="0,32,0,0" Padding="12"
+              CornerRadius="12,12,0,0" Background="{DynamicResource Karta}">
+      <DockPanel>
+      <!-- „Zamknij" poza przewijaniem. W środku listy odjeżdżało razem z nią w górę,
+           czyli znikało dokładnie wtedy, gdy arkusz robił się na tyle długi, żeby
+           chcieć go zamknąć bez wybierania czegokolwiek. -->
+      <Button DockPanel.Dock="Bottom" Classes="sheet" Content="Zamknij" Margin="0,8,0,0"
+              Command="{Binding CloseMoreCommand}" />
+      <ScrollViewer>
         <StackPanel>
           <Button Classes="sheet" Content="Następne" Command="{Binding ShowNextCommand}" />
           <Button Classes="sheet" Content="Obszary i projekty" Command="{Binding ShowProjectsCommand}" />
@@ -2791,14 +2895,14 @@
           <Button Classes="sheet" Content="Przegląd" Command="{Binding ShowReviewCommand}" />
           <Button Classes="sheet" Content="Notatki" Command="{Binding ShowNotesCommand}" />
           <Button Classes="sheet" Content="Szukaj" Command="{Binding ShowSearchCommand}" />
+          <Button Classes="sheet" Content="Nawyki" Command="{Binding ShowHabitsCommand}" />
           <Button Classes="sheet" Content="Filtry" Command="{Binding ShowFiltersCommand}" />
           <Button Classes="sheet" Content="Archiwum" Command="{Binding ShowArchiveCommand}" />
           <Button Classes="sheet" Content="Ustawienia" Command="{Binding ShowSettingsCommand}" />
           <Button Classes="sheet" Content="Co się działo" Command="{Binding ShowJournalCommand}" />
-          <Button Classes="sheet" Content="Zamknij" Margin="0,8,0,0"
-                  Command="{Binding CloseMoreCommand}" />
         </StackPanel>
       </ScrollViewer>
+      </DockPanel>
       </Border>
       </Panel>
 

@@ -5,6 +5,7 @@ using Marshal.Domain.Attachments;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Filters;
+using Marshal.Domain.Habits;
 using Marshal.Domain.Notes;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
@@ -75,6 +76,12 @@ public sealed class MarshalDbContext : DbContext
 
     /// <summary>Co aplikacja zrobiła i co z tego wyszło. Lokalne — opisuje to urządzenie.</summary>
     public DbSet<ActivityEntry> ActivityEntries => Set<ActivityEntry>();
+
+    /// <summary>Nawyki — rzeczy, których się nie odhacza, tylko się je ciągnie.</summary>
+    public DbSet<Habit> Habits => Set<Habit>();
+
+    /// <summary>Dni nawyków: jeden wiersz na dzień, nie na dotknięcie.</summary>
+    public DbSet<HabitMark> HabitMarks => Set<HabitMark>();
 
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy
