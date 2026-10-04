@@ -224,7 +224,7 @@ public sealed class HabitServiceTests : IDisposable
 
         card.Streak.Should().Be(3);
         card.Total.Should().Be(3);
-        card.Missed.Should().Be(0);
+        card.Missed.Should().Be(0, "dzisiejszy jeszcze trwa, więc nie jest przepadnięty");
     }
 
     [Fact]
@@ -321,9 +321,13 @@ public sealed class HabitServiceTests : IDisposable
         card.Started.Should().Be(Today.AddDays(-10));
         card.Since.Should().Be(11, "dziesięć dni wstecz plus dzisiejszy");
         card.Total.Should().Be(8);
-        card.Missed.Should().Be(3, "dwie dziury w środku i dzisiejszy jeszcze pusty");
+        card.Missed.Should().Be(2, "dwie dziury w środku; dzisiejszy jeszcze trwa");
         card.Best.Should().Be(3);
         card.Rate.Should().Be(73);
+
+        // „Razem" i „pominięte" nie sumują się do „dni od startu" i tak ma być:
+        // brakującą jedynką jest dzisiejszy, wciąż otwarty.
+        (card.Total + card.Missed).Should().Be(card.Since - 1);
     }
 
     [Fact]

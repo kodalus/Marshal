@@ -130,7 +130,7 @@ public sealed class HabitService(
                 counting.Count,
                 mine.GetValueOrDefault(today),
                 began,
-                Math.Max(0, today.DayNumber - began.DayNumber + 1 - counting.Count)));
+                Missed(counting, began, today)));
         }
 
         return cards;
@@ -246,6 +246,23 @@ public sealed class HabitService(
 
         change(habit);
         await unitOfWork.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Ile dni przepadło między pierwszym zaliczonym a dzisiaj.
+    /// </summary>
+    /// <remarks>
+    /// <b>Dzisiejszy jeszcze nieodhaczony nie jest pominięty</b> — dokładnie tak samo,
+    /// jak nie zrywa serii. Dzień trwa; policzony jako przepadnięty byłby karą za to,
+    /// że jest rano, a rano jest tą chwilą, w której na te liczby się patrzy.
+    /// Stąd „razem" i „pominięte" nie muszą się zsumować do „dni od startu": brakującą
+    /// jedynką jest dzisiejszy, wciąż otwarty.
+    /// </remarks>
+    private static int Missed(HashSet<DateOnly> counting, DateOnly began, DateOnly today)
+    {
+        var judged = counting.Contains(today) ? today : today.AddDays(-1);
+
+        return Math.Max(0, judged.DayNumber - began.DayNumber + 1 - counting.Count);
     }
 
     /// <summary>
