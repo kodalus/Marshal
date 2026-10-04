@@ -1929,8 +1929,12 @@
            poprawić, więc ekran należy do tej jednej rzeczy — nakładka zostawiałaby
            pod spodem listę, której i tak nie widać, i zabierała jej miejsce
            na siatkę. -->
-      <ScrollViewer IsVisible="{Binding Habits.IsEditing}"
-                    DataContext="{Binding Habits}" x:DataType="vm:HabitsViewModel">
+      <!-- Widoczność i podmiana kontekstu na osobnych elementach, jak wszędzie
+           w tym oknie. Razem na jednym „x:DataType" rozstrzyga **wszystkie** wiązania
+           tego elementu, więc „Habits.IsEditing" szukałoby się już wewnątrz modelu
+           nawyków — i nie znajdowało. -->
+      <Panel IsVisible="{Binding Habits.IsEditing}">
+      <ScrollViewer DataContext="{Binding Habits}" x:DataType="vm:HabitsViewModel">
         <StackPanel>
 
           <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,10">
@@ -2054,6 +2058,7 @@
 
         </StackPanel>
       </ScrollViewer>
+      </Panel>
 
       <ScrollViewer IsVisible="{Binding !Habits.IsEditing}">
         <ItemsControl ItemsSource="{Binding Habits.Items}">
