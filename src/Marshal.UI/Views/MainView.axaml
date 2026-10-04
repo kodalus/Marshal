@@ -1921,14 +1921,14 @@
       <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10"
                   IsVisible="{Binding !Habits.IsEditing}">
         <Grid ColumnDefinitions="*,Auto">
+          <!-- Enter obsługiwany w kodzie, nie wiązaniem klawisza: tak samo jak
+               przyciski niżej, żeby obie drogi do dodania nawyku biegły tą samą
+               metodą i obie zostawiały ślad, gdy coś pójdzie nie tak. -->
           <TextBox Grid.Column="0" Text="{Binding Habits.NewTitle}"
-                   Watermark="Nowy nawyk — co ciągniesz?">
-            <TextBox.KeyBindings>
-              <KeyBinding Gesture="Enter" Command="{Binding Habits.CreateCommand}" />
-            </TextBox.KeyBindings>
-          </TextBox>
+                   KeyDown="HabitKey"
+                   Watermark="Nowy nawyk — co ciągniesz?" />
           <Button Grid.Column="1" Margin="6,0,0,0" Padding="14,10"
-                  Command="{Binding Habits.CreateCommand}" Content="Dodaj" />
+                  Click="HabitCreate" Content="Dodaj" />
         </Grid>
         <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
                    Text="{Binding Habits.Message}"
@@ -1951,10 +1951,15 @@
             <TextBox Grid.Column="0" Text="{Binding EditTitle}" FontSize="18"
                      Watermark="Nazwa nawyku" />
             <Button Grid.Column="1" Classes="glowny" Margin="6,0,0,0" Padding="14,10"
-                    Command="{Binding SaveCommand}" Content="Zapisz" />
+                    Click="HabitSave" Content="Zapisz" />
             <Button Grid.Column="2" Classes="cichy" Margin="6,0,0,0" Padding="14,10"
-                    Command="{Binding CloseCommand}" Content="Wróć" />
+                    Click="HabitClose" Content="Wróć" />
           </Grid>
+          <!-- Potwierdzenie na ekranie, a nie w milczeniu: zapis nie zmienia nic, co
+               tu widać, więc bez tego napisu nie da się odróżnić zapisanego
+               od przycisku, który nie zadziałał. -->
+          <TextBlock Classes="hint" Margin="2,0,0,8"
+                     Text="{Binding Status}" IsVisible="{Binding HasStatus}" />
 
           <Grid ColumnDefinitions="*,*">
             <StackPanel Grid.Column="0" Margin="0,0,6,0">
@@ -2052,8 +2057,7 @@
                         <Button Classes="kratka" Margin="0,0,0,4"
                                 Background="{Binding Fill}"
                                 ToolTip.Tip="{Binding Tip}"
-                                Command="{Binding $parent[ItemsControl].((vm:HabitsViewModel)DataContext).ToggleDayCommand}"
-                                CommandParameter="{Binding}" />
+                                Click="HabitDay" />
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
@@ -2068,10 +2072,9 @@
           <TextBlock Classes="label" Margin="0,20,0,0" Text="Koniec z tym nawykiem" />
           <WrapPanel Margin="0,4,0,0">
             <Button Classes="nav" Margin="0,0,8,0"
-                    Command="{Binding ArchiveCommand}" CommandParameter="{Binding Opened}"
-                    Content="Odłóż na półkę" />
+                    Click="HabitArchive" Content="Odłóż na półkę" />
             <Button Classes="cichy" Padding="14,8"
-                    Command="{Binding DeleteCommand}" Content="{Binding DeleteLabel}" />
+                    Click="HabitDelete" Content="{Binding DeleteLabel}" />
           </WrapPanel>
           <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
                      Text="Odłożony schodzi z listy, a historia zostaje — da się go wrócić. Skasowanie zabiera razem z nim wszystkie dni, więc pyta drugi raz." />
@@ -2097,8 +2100,7 @@
                          w co się celuje. -->
                     <Button Grid.Column="0" Classes="cichy" Padding="0"
                             HorizontalAlignment="Left" HorizontalContentAlignment="Left"
-                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Habits.OpenCommand}"
-                            CommandParameter="{Binding}">
+                            Click="HabitOpen">
                       <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
                                  TextWrapping="Wrap" />
                     </Button>
@@ -2107,8 +2109,7 @@
                                Text="{Binding Score}" IsVisible="{Binding HasScore}" />
                     <!-- Krążek po prawej, jak na liście zadań: tu się dotyka. -->
                     <Button Grid.Column="2" Classes="nav" Padding="14,6"
-                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Habits.BumpCommand}"
-                            CommandParameter="{Binding}">
+                            Click="HabitBump">
                       <TextBlock Text="{Binding Mark}" MinWidth="12"
                                  HorizontalAlignment="Center" />
                     </Button>

@@ -167,8 +167,7 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
         OnPropertyChanged(nameof(HasItems));
     }
 
-    [RelayCommand]
-    private async Task CreateAsync()
+    public async Task CreateAsync()
     {
         if (string.IsNullOrWhiteSpace(NewTitle))
         {
@@ -182,8 +181,7 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
     }
 
     /// <summary>Dotknięcie kafelka: dziś zrobione, a przy nawyku na ilość — o jeden więcej.</summary>
-    [RelayCommand]
-    private async Task BumpAsync(HabitBox? box)
+    public async Task BumpAsync(HabitBox? box)
     {
         if (box is null)
         {
@@ -195,8 +193,7 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
     }
 
     /// <summary>Odłożenie na półkę — historia zostaje, seria przestaje się liczyć.</summary>
-    [RelayCommand]
-    private async Task ArchiveAsync(HabitBox? box)
+    public async Task ArchiveAsync(HabitBox? box)
     {
         if (box is not null)
         {
@@ -275,12 +272,27 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
     [ObservableProperty]
     public partial bool DeleteArmed { get; set; }
 
+    /// <summary>
+    /// Co się właśnie stało. Puste, dopóki nic.
+    /// </summary>
+    /// <remarks>
+    /// Zapis, który zmienia samą nazwę, nie zmienia na ekranie **niczego** — pole
+    /// już tę nazwę pokazuje. Przycisk bez odpowiedzi wygląda wtedy dokładnie jak
+    /// przycisk zepsuty, a odróżnić jednego od drugiego nie da się inaczej niż
+    /// wychodząc z ekranu i wracając.
+    /// </remarks>
+    [ObservableProperty]
+    public partial string? Status { get; set; }
+
+    public bool HasStatus => !string.IsNullOrEmpty(Status);
+
+    partial void OnStatusChanged(string? value) => OnPropertyChanged(nameof(HasStatus));
+
     public string DeleteLabel => DeleteArmed ? "Na pewno? Kliknij jeszcze raz" : "Skasuj";
 
     partial void OnDeleteArmedChanged(bool value) => OnPropertyChanged(nameof(DeleteLabel));
 
-    [RelayCommand]
-    private void Open(HabitBox? box)
+    public void Open(HabitBox? box)
     {
         if (box is null)
         {
@@ -292,21 +304,30 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
         EditTarget = box.Habit.Target;
         EditUnit = box.Habit.Unit ?? string.Empty;
         DeleteArmed = false;
+        Status = null;
     }
 
-    [RelayCommand]
-    private void Close()
+    public void Close()
     {
         Opened = null;
         DeleteArmed = false;
+        Status = null;
     }
 
     /// <summary>Zapis nazwy, progu i barwy — trzy pola, jeden przycisk.</summary>
-    [RelayCommand]
-    private async Task SaveAsync()
+    public async Task SaveAsync()
     {
-        if (Opened is not { } box || string.IsNullOrWhiteSpace(EditTitle))
+        if (Opened is not { } box)
         {
+            return;
+        }
+
+        // Pusta nazwa mówi, czemu nic się nie stało. Milczące wyjście w tym miejscu było
+        // nieodróżnialne od zepsutego przycisku — a pole samo z siebie nie mówi, że jest
+        // wymagane.
+        if (string.IsNullOrWhiteSpace(EditTitle))
+        {
+            Status = "Nazwa nie może być pusta.";
             return;
         }
 
@@ -322,6 +343,8 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
         // bo dni poniżej nowej wartości przestają się liczyć. Zamknięcie szczegółu
         // kazałoby wejść drugi raz, żeby to zobaczyć.
         Opened = Items.FirstOrDefault(z => z.Id == box.Id);
+
+        Status = "Zapisane.";
     }
 
     /// <summary>
@@ -332,8 +355,7 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
     /// schodzi do zera, a każdy inny skacze **do progu** — bo poprawia się tu zwykle
     /// „było, tylko nie kliknęłam", a nie „było dokładnie siedem stron".
     /// </remarks>
-    [RelayCommand]
-    private async Task ToggleDayAsync(HabitCell? cell)
+    public async Task ToggleDayAsync(HabitCell? cell)
     {
         if (Opened is not { } box || cell is null)
         {
@@ -349,8 +371,7 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
     }
 
     /// <summary>Skasowanie razem z historią — stąd dwa kliknięcia.</summary>
-    [RelayCommand]
-    private async Task DeleteAsync()
+    public async Task DeleteAsync()
     {
         if (Opened is not { } box)
         {

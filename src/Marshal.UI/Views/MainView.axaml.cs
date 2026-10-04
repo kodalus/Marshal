@@ -191,6 +191,88 @@ public partial class MainView : UserControl
         ShowPalette(source, habit.Habit.Color, color => model.Habits.PickColorAsync(color));
     }
 
+    /// <summary>
+    /// Nawyki wołane wprost, bez poleceń.
+    /// </summary>
+    /// <remarks>
+    /// Ta sama pułapka, co w oknie zadania: kliknięcie w „Zapisz" w szczegółach nawyku
+    /// kończyło się niczym. Polecenie asynchroniczne odmawia po cichu — gdy jedno już
+    /// biegnie, drugie kliknięcie jest po prostu zjadane, a odmowa wygląda dokładnie
+    /// jak martwy przycisk i nie zostawia śladu nigdzie. Tutaj metoda jest wołana
+    /// wprost, a wyjątek ma dokąd trafić.
+    /// </remarks>
+    private void HabitCreate(object? sender, RoutedEventArgs e) =>
+        OnHabits("Nawyk: dodanie", m => m.CreateAsync());
+
+    /// <summary>Enter w polu nazwy dodaje — tą samą drogą, co przycisk obok.</summary>
+    private void HabitKey(object? sender, KeyEventArgs e)
+    {
+        if (e.Key is Key.Enter or Key.Return)
+        {
+            e.Handled = true;
+            OnHabits("Nawyk: dodanie z klawisza", m => m.CreateAsync());
+        }
+    }
+
+    private void HabitSave(object? sender, RoutedEventArgs e) =>
+        OnHabits("Nawyk: zapis ze szczegółów", m => m.SaveAsync());
+
+    private void HabitClose(object? sender, RoutedEventArgs e) =>
+        OnHabits("Nawyk: zamknięcie szczegółów", m =>
+        {
+            m.Close();
+            return Task.CompletedTask;
+        });
+
+    private void HabitArchive(object? sender, RoutedEventArgs e) =>
+        OnHabits("Nawyk: odłożenie na półkę", m => m.ArchiveAsync(m.Opened));
+
+    private void HabitDelete(object? sender, RoutedEventArgs e) =>
+        OnHabits("Nawyk: skasowanie", m => m.DeleteAsync());
+
+    /// <summary>Kafelek na liście — nazwa otwiera, krążek zalicza dzisiejszy dzień.</summary>
+    private void HabitOpen(object? sender, RoutedEventArgs e) =>
+        OnHabits("Nawyk: wejście w szczegóły", sender, (m, box) =>
+        {
+            m.Open(box);
+            return Task.CompletedTask;
+        });
+
+    private void HabitBump(object? sender, RoutedEventArgs e) =>
+        OnHabits("Nawyk: zaliczenie dnia", sender, (m, box) => m.BumpAsync(box));
+
+    /// <summary>Kwadracik w siatce przestawia ten jeden dzień.</summary>
+    private void HabitDay(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel model && sender is Control { DataContext: HabitCell cell })
+        {
+            _ = Try("Nawyk: przestawienie dnia", () => model.Habits.ToggleDayAsync(cell));
+        }
+    }
+
+    private void OnHabits(string what, Func<HabitsViewModel, Task> work)
+    {
+        if (DataContext is MainViewModel model)
+        {
+            _ = Try(what, () => work(model.Habits));
+        }
+    }
+
+    /// <summary>
+    /// Wariant dla kafelka: który nawyk, mówi kontekst klikniętego przycisku.
+    /// </summary>
+    /// <remarks>
+    /// Parametr polecenia brał się z wiązania; bez polecenia bierze się z elementu,
+    /// bo to ten sam kontekst danych i nie trzeba go nigdzie powtarzać.
+    /// </remarks>
+    private void OnHabits(string what, object? sender, Func<HabitsViewModel, HabitBox, Task> work)
+    {
+        if (DataContext is MainViewModel model && sender is Control { DataContext: HabitBox box })
+        {
+            _ = Try(what, () => work(model.Habits, box));
+        }
+    }
+
     /// <summary>Koniec serii na tym wystąpieniu — to jedno zostaje.</summary>
     private void EndRhythm(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: koniec serii na tym wystąpieniu", m => m.EndRhythmAsync());
