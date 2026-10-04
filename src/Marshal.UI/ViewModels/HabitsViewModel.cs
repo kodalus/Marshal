@@ -8,7 +8,13 @@ using Marshal.Domain.Habits;
 namespace Marshal.UI.ViewModels;
 
 /// <summary>Jeden kwadracik siatki — jeden dzień.</summary>
-public sealed record HabitCell(IBrush Fill, string Tip);
+/// <remarks>
+/// Niesie swój dzień i swoją liczbę, bo w szczegółach nawyku kwadracik jest klikalny:
+/// poprawianie dni wstecz jest tym, po co się tam w ogóle wchodzi. Ktoś odhaczył
+/// wieczorem po północy, ktoś zapomniał telefonu — siatka ma mówić prawdę o tym,
+/// jak było, a nie o tym, kiedy zdążył kliknąć.
+/// </remarks>
+public sealed record HabitCell(DateOnly Day, int Amount, bool Counts, IBrush Fill, string Tip);
 
 /// <summary>Kolumna siatki — jeden tydzień, od poniedziałku.</summary>
 public sealed record HabitWeek(IReadOnlyList<HabitCell> Days);
@@ -36,6 +42,9 @@ public sealed record HabitBox(HabitCard Card, IReadOnlyList<HabitWeek> Weeks)
     {
         var cells = card.Days
             .Select(day => new HabitCell(
+                day.Day,
+                day.Amount,
+                day.Counts,
                 Palette.Background(
                     card.Habit.Color,
                     task: true,
@@ -78,6 +87,25 @@ public sealed record HabitBox(HabitCard Card, IReadOnlyList<HabitWeek> Weeks)
     };
 
     public string Totals => $"rekord {Card.Best}  ·  razem {Card.Total}";
+
+    // Liczby do szczegółu. Osobno, bo kafelek na liście ma mówić jednym spojrzeniem,
+    // a szczegół — odpowiadać na pytania, które się po tym spojrzeniu pojawiają.
+
+    public string StreakNumber => Card.Streak.ToString();
+
+    public string BestNumber => Card.Best.ToString();
+
+    public string TotalNumber => Card.Total.ToString();
+
+    public string MissedNumber => Card.Missed.ToString();
+
+    public string SinceNumber => Card.Since.ToString();
+
+    public string RateNumber => $"{Card.Rate}%";
+
+    public string StartedLabel => Card.Total == 0
+        ? "jeszcze nie ruszyło"
+        : $"od {Card.Started:dd.MM.yyyy}";
 }
 
 /// <summary>
@@ -155,7 +183,148 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
         if (box is not null)
         {
             await habits.ArchiveAsync(box.Id);
+            Close();
             await LoadAsync();
         }
+    }
+
+    // ——— Szczegół nawyku ———————————————————————————————————————————————
+
+    /// <summary>
+    /// Otwarty nawyk. Szczegół zamiast listy, nie nakładka nad nią.
+    /// </summary>
+    /// <remarks>
+    /// Tak samo jak przy notatkach: wchodzi się tu, żeby coś poprawić, a nie zerknąć,
+    /// więc ekran ma należeć do tej jednej rzeczy. Nakładka zostawia pod spodem listę,
+    /// której i tak nie widać, a zabiera jej miejsce na siatkę.
+    /// </remarks>
+    [ObservableProperty]
+    public partial HabitBox? Opened { get; set; }
+
+    public bool IsEditing => Opened is not null;
+
+    partial void OnOpenedChanged(HabitBox? value) => OnPropertyChanged(nameof(IsEditing));
+
+    [ObservableProperty]
+    public partial string EditTitle { get; set; } = string.Empty;
+
+    /// <summary>Próg dnia. Pusty znaczy „nawyk na ptaszek".</summary>
+    [ObservableProperty]
+    public partial decimal? EditTarget { get; set; }
+
+    [ObservableProperty]
+    public partial string EditUnit { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial ColorChoice? EditColor { get; set; }
+
+    public IReadOnlyList<ColorChoice> Colors => ColorChoice.All;
+
+    /// <summary>
+    /// Czy kasowanie jest już uzbrojone.
+    /// </summary>
+    /// <remarks>
+    /// Drugie kliknięcie zamiast okienka — tak samo jak przy przywracaniu kopii i z tego
+    /// samego powodu: skasowanie nawyku zabiera <b>całą jego historię</b>, czyli jedyną
+    /// rzecz, która ma w nim wartość. Odłożenie na półkę stoi obok i jest odwracalne —
+    /// i to ono ma być tym, po co sięga się najczęściej.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool DeleteArmed { get; set; }
+
+    public string DeleteLabel => DeleteArmed ? "Na pewno? Kliknij jeszcze raz" : "Skasuj";
+
+    partial void OnDeleteArmedChanged(bool value) => OnPropertyChanged(nameof(DeleteLabel));
+
+    [RelayCommand]
+    private void Open(HabitBox? box)
+    {
+        if (box is null)
+        {
+            return;
+        }
+
+        Opened = box;
+        EditTitle = box.Habit.Title;
+        EditTarget = box.Habit.Target;
+        EditUnit = box.Habit.Unit ?? string.Empty;
+        EditColor = ColorChoice.All.FirstOrDefault(b => b.Value == box.Habit.Color)
+            ?? ColorChoice.All[0];
+        DeleteArmed = false;
+    }
+
+    [RelayCommand]
+    private void Close()
+    {
+        Opened = null;
+        DeleteArmed = false;
+    }
+
+    /// <summary>Zapis nazwy, progu i barwy — trzy pola, jeden przycisk.</summary>
+    [RelayCommand]
+    private async Task SaveAsync()
+    {
+        if (Opened is not { } box || string.IsNullOrWhiteSpace(EditTitle))
+        {
+            return;
+        }
+
+        await habits.RenameAsync(box.Id, EditTitle.Trim());
+        await habits.SetTargetAsync(
+            box.Id,
+            EditTarget is { } target ? (int)target : null,
+            EditUnit);
+        await habits.SetColorAsync(box.Id, EditColor?.Value);
+
+        await LoadAsync();
+
+        // Otwarty zostaje otwarty, tylko świeży: po zmianie progu siatka wygląda inaczej,
+        // bo dni poniżej nowej wartości przestają się liczyć. Zamknięcie szczegółu
+        // kazałoby wejść drugi raz, żeby to zobaczyć.
+        Opened = Items.FirstOrDefault(z => z.Id == box.Id);
+    }
+
+    /// <summary>
+    /// Przestawienie dnia wstecz.
+    /// </summary>
+    /// <remarks>
+    /// Przy nawyku na ptaszek zwykłe przełączenie. Przy nawyku na ilość: zaliczony dzień
+    /// schodzi do zera, a każdy inny skacze **do progu** — bo poprawia się tu zwykle
+    /// „było, tylko nie kliknęłam", a nie „było dokładnie siedem stron".
+    /// </remarks>
+    [RelayCommand]
+    private async Task ToggleDayAsync(HabitCell? cell)
+    {
+        if (Opened is not { } box || cell is null)
+        {
+            return;
+        }
+
+        var target = Math.Max(1, box.Habit.Target ?? 1);
+
+        await habits.SetAsync(box.Id, cell.Day, cell.Counts ? 0 : target);
+        await LoadAsync();
+
+        Opened = Items.FirstOrDefault(z => z.Id == box.Id);
+    }
+
+    /// <summary>Skasowanie razem z historią — stąd dwa kliknięcia.</summary>
+    [RelayCommand]
+    private async Task DeleteAsync()
+    {
+        if (Opened is not { } box)
+        {
+            return;
+        }
+
+        if (!DeleteArmed)
+        {
+            DeleteArmed = true;
+            return;
+        }
+
+        await habits.DeleteAsync(box.Id);
+        Close();
+        await LoadAsync();
     }
 }

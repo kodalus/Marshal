@@ -377,6 +377,33 @@
       <Setter Property="HorizontalAlignment" Value="Stretch" />
     </Style>
 
+    <!-- Kafelek liczby w szczegółach nawyku i kwadracik klikalnej siatki. -->
+    <Style Selector="Border.liczba">
+      <Setter Property="Background" Value="{DynamicResource Pole}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12,10" />
+      <Setter Property="Margin" Value="0,0,8,8" />
+      <Setter Property="MinWidth" Value="104" />
+    </Style>
+    <Style Selector="TextBlock.duza">
+      <Setter Property="FontSize" Value="22" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+    <Style Selector="Button.kratka">
+      <Setter Property="Width" Value="14" />
+      <Setter Property="Height" Value="14" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.kratka /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
     <Style Selector="ToggleButton.day">
       <Setter Property="MinWidth" Value="44" />
       <Setter Property="Padding" Value="8,6" />
@@ -1881,7 +1908,8 @@
          cel jest wielkości kafelka, nie kwadracika w rogu. -->
     <DockPanel IsVisible="{Binding IsHabits}">
 
-      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+      <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10"
+                  IsVisible="{Binding !Habits.IsEditing}">
         <Grid ColumnDefinitions="*,Auto">
           <TextBox Grid.Column="0" Text="{Binding Habits.NewTitle}"
                    Watermark="Nowy nawyk — co ciągniesz?">
@@ -1897,7 +1925,137 @@
                    IsVisible="{Binding !Habits.HasItems}" />
       </StackPanel>
 
-      <ScrollViewer>
+      <!-- Szczegół nawyku: zamiast listy, nie nad nią. Wchodzi się tu, żeby coś
+           poprawić, więc ekran należy do tej jednej rzeczy — nakładka zostawiałaby
+           pod spodem listę, której i tak nie widać, i zabierała jej miejsce
+           na siatkę. -->
+      <ScrollViewer IsVisible="{Binding Habits.IsEditing}"
+                    DataContext="{Binding Habits}" x:DataType="vm:HabitsViewModel">
+        <StackPanel>
+
+          <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,10">
+            <TextBox Grid.Column="0" Text="{Binding EditTitle}" FontSize="18"
+                     Watermark="Nazwa nawyku" />
+            <Button Grid.Column="1" Classes="glowny" Margin="6,0,0,0" Padding="14,10"
+                    Command="{Binding SaveCommand}" Content="Zapisz" />
+            <Button Grid.Column="2" Classes="cichy" Margin="6,0,0,0" Padding="14,10"
+                    Command="{Binding CloseCommand}" Content="Wróć" />
+          </Grid>
+
+          <Grid ColumnDefinitions="*,*">
+            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+              <TextBlock Classes="label" Text="Barwa" />
+              <ComboBox ItemsSource="{Binding Colors}" SelectedItem="{Binding EditColor}"
+                        HorizontalAlignment="Stretch" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+              <TextBlock Classes="label" Text="Ile dziennie" />
+              <NumericUpDown Value="{Binding EditTarget}" Minimum="2" Maximum="9999"
+                             Increment="1" FormatString="0" />
+            </StackPanel>
+          </Grid>
+
+          <TextBlock Classes="label" Margin="0,8,0,0" Text="Czego" />
+          <TextBox Text="{Binding EditUnit}" Watermark="stron, szklanek, kilometrów…" />
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                     Text="Puste „ile dziennie” znaczy nawyk na ptaszek: było albo nie było. Wpisana liczba robi z niego nawyk na ilość — dzień liczy się dopiero od niej w górę." />
+
+          <!-- Liczby. Siatka mówi „jak to szło" jednym spojrzeniem, a te odpowiadają
+               na pytania, które się po tym spojrzeniu pojawiają. -->
+          <TextBlock Classes="label" Margin="0,16,0,0" Text="Jak idzie" />
+          <WrapPanel>
+            <Border Classes="liczba">
+              <StackPanel>
+                <TextBlock Classes="hint" Text="Seria teraz" />
+                <TextBlock Classes="duza" Text="{Binding Opened.StreakNumber}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="liczba">
+              <StackPanel>
+                <TextBlock Classes="hint" Text="Rekord" />
+                <TextBlock Classes="duza" Text="{Binding Opened.BestNumber}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="liczba">
+              <StackPanel>
+                <TextBlock Classes="hint" Text="Razem dni" />
+                <TextBlock Classes="duza" Text="{Binding Opened.TotalNumber}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="liczba">
+              <StackPanel>
+                <TextBlock Classes="hint" Text="Pominięte" />
+                <TextBlock Classes="duza" Text="{Binding Opened.MissedNumber}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="liczba">
+              <StackPanel>
+                <TextBlock Classes="hint" Text="Dni od startu" />
+                <TextBlock Classes="duza" Text="{Binding Opened.SinceNumber}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="liczba">
+              <StackPanel>
+                <TextBlock Classes="hint" Text="Skuteczność" />
+                <TextBlock Classes="duza" Text="{Binding Opened.RateNumber}" />
+              </StackPanel>
+            </Border>
+          </WrapPanel>
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                     Text="{Binding Opened.StartedLabel}" />
+          <TextBlock Classes="hint" Margin="2,2,0,0" TextWrapping="Wrap"
+                     Text="Liczone od pierwszego zaliczonego dnia, nie od założenia nawyku — inaczej wpisany w styczniu, a zaczęty w marcu miałby dwa miesiące kary za to, że został wpisany wcześniej." />
+
+          <!-- Siatka klikalna: poprawianie dni wstecz jest tym, po co się tu wchodzi.
+               Ktoś odhaczył po północy, ktoś zapomniał telefonu — siatka ma mówić
+               prawdę o tym, jak było, a nie o tym, kiedy zdążył kliknąć. -->
+          <TextBlock Classes="label" Margin="0,16,0,0" Text="Dni" />
+          <TextBlock Classes="hint" Margin="2,0,0,6" TextWrapping="Wrap"
+                     Text="Dotknięcie kwadracika przestawia ten dzień." />
+          <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Opened.Weeks}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:HabitWeek">
+                  <ItemsControl ItemsSource="{Binding Days}" Margin="0,0,4,0">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:HabitCell">
+                        <Button Classes="kratka" Margin="0,0,0,4"
+                                Background="{Binding Fill}"
+                                ToolTip.Tip="{Binding Tip}"
+                                Command="{Binding $parent[ItemsControl].((vm:HabitsViewModel)DataContext).ToggleDayCommand}"
+                                CommandParameter="{Binding}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <!-- Odłożenie przed skasowaniem i wyżej od niego: historia nawyku jest
+               jedyną rzeczą, która ma w nim wartość po fakcie, więc droga odwracalna
+               ma być tą, po którą sięga się pierwszą. -->
+          <TextBlock Classes="label" Margin="0,20,0,0" Text="Koniec z tym nawykiem" />
+          <WrapPanel Margin="0,4,0,0">
+            <Button Classes="nav" Margin="0,0,8,0"
+                    Command="{Binding ArchiveCommand}" CommandParameter="{Binding Opened}"
+                    Content="Odłóż na półkę" />
+            <Button Classes="cichy" Padding="14,8"
+                    Command="{Binding DeleteCommand}" Content="{Binding DeleteLabel}" />
+          </WrapPanel>
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                     Text="Odłożony schodzi z listy, a historia zostaje — da się go wrócić. Skasowanie zabiera razem z nim wszystkie dni, więc pyta drugi raz." />
+
+        </StackPanel>
+      </ScrollViewer>
+
+      <ScrollViewer IsVisible="{Binding !Habits.IsEditing}">
         <ItemsControl ItemsSource="{Binding Habits.Items}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:HabitBox">
@@ -1906,8 +2064,16 @@
                 <StackPanel>
 
                   <Grid ColumnDefinitions="*,Auto,Auto">
-                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"
-                               VerticalAlignment="Center" TextWrapping="Wrap" />
+                    <!-- Nazwa jest wejściem w szczegół. Osobny przycisk „otwórz"
+                         zabierałby szerokość kafelkowi, a nazwa i tak jest tym,
+                         w co się celuje. -->
+                    <Button Grid.Column="0" Classes="cichy" Padding="0"
+                            HorizontalAlignment="Left" HorizontalContentAlignment="Left"
+                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Habits.OpenCommand}"
+                            CommandParameter="{Binding}">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                 TextWrapping="Wrap" />
+                    </Button>
                     <TextBlock Grid.Column="1" Classes="hint" Margin="8,0"
                                VerticalAlignment="Center"
                                Text="{Binding Score}" IsVisible="{Binding HasScore}" />

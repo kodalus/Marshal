@@ -25,8 +25,25 @@ public sealed record HabitCard(
     int Streak,
     int Best,
     int Total,
-    int Today)
+    int Today,
+    DateOnly Started,
+    int Missed)
 {
+    /// <summary>Ile dni temu to się zaczęło — razem z dzisiejszym.</summary>
+    public int Since => Days.Count > 0
+        ? Math.Max(1, Days[^1].Day.DayNumber - Started.DayNumber + 1)
+        : 1;
+
+    /// <summary>
+    /// Ile z nich wyszło, w procentach.
+    /// </summary>
+    /// <remarks>
+    /// Liczone od pierwszego zaliczonego dnia, nie od założenia nawyku. Nawyk wpisany
+    /// w styczniu i zaczęty w marcu miałby inaczej dwa miesiące kary za to, że został
+    /// wpisany wcześniej — a to jest liczba, którą się ogląda po to, żeby się nie zniechęcić.
+    /// </remarks>
+    public int Rate => Since == 0 ? 0 : (int)Math.Round(100.0 * Total / Since);
+
     public bool DoneToday => Today >= Math.Max(1, Habit.Target ?? 1);
 
     /// <summary>Ile razem — „4/20 stron" albo sam ptaszek.</summary>
@@ -95,6 +112,11 @@ public sealed class HabitService(
             var threshold = Math.Max(1, habit.Target ?? 1);
             var counting = mine.Where(z => z.Value >= threshold).Select(z => z.Key).ToHashSet();
 
+            // Początek to **pierwszy zaliczony dzień**, a nie dzień założenia. Nawyk
+            // wpisany w styczniu i zaczęty w marcu miałby inaczej dwa miesiące
+            // pominiętych dni, zanim w ogóle ruszył.
+            var began = counting.Count > 0 ? counting.Min() : today;
+
             cards.Add(new HabitCard(
                 habit,
                 [.. Enumerable.Range(0, today.DayNumber - start.DayNumber + 1)
@@ -106,7 +128,9 @@ public sealed class HabitService(
                 Streak(counting, today),
                 Best(counting),
                 counting.Count,
-                mine.GetValueOrDefault(today)));
+                mine.GetValueOrDefault(today),
+                began,
+                Math.Max(0, today.DayNumber - began.DayNumber + 1 - counting.Count)));
         }
 
         return cards;

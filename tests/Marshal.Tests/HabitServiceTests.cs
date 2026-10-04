@@ -206,6 +206,127 @@ public sealed class HabitServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Poprawiony_dzien_wstecz_wchodzi_do_serii()
+    {
+        // Po to się wchodzi w szczegół: ktoś odhaczył po północy, ktoś zapomniał
+        // telefonu. Siatka ma mówić prawdę o tym, jak było, a nie o tym, kiedy
+        // zdążył kliknąć.
+        var habit = await _habits.CreateAsync("Ćwiczenia");
+
+        Mark(habit.Id, Today.AddDays(-1));
+        Mark(habit.Id, Today.AddDays(-3));
+
+        (await _habits.BoardAsync()).Single().Streak.Should().Be(1, "brakuje przedwczoraj");
+
+        await _habits.SetAsync(habit.Id, Today.AddDays(-2), 1);
+
+        var card = (await _habits.BoardAsync()).Single();
+
+        card.Streak.Should().Be(3);
+        card.Total.Should().Be(3);
+        card.Missed.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Zdjety_dzien_wstecz_wypada_z_serii_i_z_licznika()
+    {
+        var habit = await _habits.CreateAsync("Ćwiczenia");
+
+        foreach (var back in Enumerable.Range(1, 4))
+        {
+            Mark(habit.Id, Today.AddDays(-back));
+        }
+
+        await _habits.SetAsync(habit.Id, Today.AddDays(-2), 0);
+
+        var card = (await _habits.BoardAsync()).Single();
+
+        card.Streak.Should().Be(1, "seria kończy się na dziurze");
+        card.Total.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Podniesiony_prog_odbiera_dni_ktore_do_niego_nie_siegaja()
+    {
+        // Próg jest własnością nawyku, nie dnia, więc jego zmiana przelicza całą
+        // historię. To jest zamierzone: „dwadzieścia stron" znaczy to samo wstecz
+        // i w przód, a inaczej siatka pokazywałaby dwie różne miary naraz.
+        var habit = await _habits.CreateAsync("Czytanie", target: 10, unit: "stron");
+
+        Mark(habit.Id, Today.AddDays(-1), amount: 10);
+        Mark(habit.Id, Today.AddDays(-2), amount: 12);
+        Mark(habit.Id, Today.AddDays(-3), amount: 30);
+
+        (await _habits.BoardAsync()).Single().Total.Should().Be(3);
+
+        await _habits.SetTargetAsync(habit.Id, 20, "stron");
+
+        var card = (await _habits.BoardAsync()).Single();
+
+        card.Total.Should().Be(1, "tylko trzydzieści stron sięga nowego progu");
+        card.Streak.Should().Be(0);
+        card.Score.Should().Be("0/20 stron");
+    }
+
+    [Fact]
+    public async Task Prog_i_barwa_dajace_sie_zmienic_wracaja_z_bazy()
+    {
+        var habit = await _habits.CreateAsync("Czytanie");
+
+        await _habits.RenameAsync(habit.Id, "Czytanie przed snem");
+        await _habits.SetTargetAsync(habit.Id, 20, "stron");
+        await _habits.SetColorAsync(habit.Id, "#3FA36B");
+
+        var saved = (await _store.ListAsync()).Single();
+
+        saved.Title.Should().Be("Czytanie przed snem");
+        saved.Target.Should().Be(20);
+        saved.Unit.Should().Be("stron");
+        saved.Color.Should().Be("#3FA36B");
+
+        // Zdjęcie progu zdejmuje też jednostkę: „stron" bez liczby nie znaczy nic.
+        await _habits.SetTargetAsync(habit.Id, null, "stron");
+
+        var plain = (await _store.ListAsync()).Single();
+
+        plain.Target.Should().BeNull();
+        plain.Unit.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Skasowany_nawyk_znika_razem_z_liczeniem()
+    {
+        var habit = await _habits.CreateAsync("Bieganie");
+        Mark(habit.Id, Today.AddDays(-1));
+
+        await _habits.DeleteAsync(habit.Id);
+
+        (await _habits.BoardAsync()).Should().BeEmpty();
+        (await _store.FindAsync(habit.Id)).Should().BeNull("nagrobek znaczy „tego nie ma”");
+    }
+
+    [Fact]
+    public async Task Liczby_szczegolu_mowia_o_calej_historii()
+    {
+        var habit = await _habits.CreateAsync("Ćwiczenia");
+
+        // Start dziesięć dni temu, w środku dwie dziury.
+        foreach (var back in new[] { 10, 9, 8, 6, 5, 3, 2, 1 })
+        {
+            Mark(habit.Id, Today.AddDays(-back));
+        }
+
+        var card = (await _habits.BoardAsync()).Single();
+
+        card.Started.Should().Be(Today.AddDays(-10));
+        card.Since.Should().Be(11, "dziesięć dni wstecz plus dzisiejszy");
+        card.Total.Should().Be(8);
+        card.Missed.Should().Be(3, "dwie dziury w środku i dzisiejszy jeszcze pusty");
+        card.Best.Should().Be(3);
+        card.Rate.Should().Be(73);
+    }
+
+    [Fact]
     public async Task Odlozony_nawyk_schodzi_z_listy_ale_historia_zostaje()
     {
         var habit = await _habits.CreateAsync("Bieganie");
