@@ -115,6 +115,42 @@ public sealed class HabitServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Zaliczony_dzien_nawyku_na_ilosc_schodzi_do_zera_zamiast_rosnac_dalej()
+    {
+        // Zgłoszone z użycia: dwadzieścia stron z dwudziestu, a kolejne dotknięcie
+        // dawało 21, 22, 23 — i nie było w całym programie miejsca, w którym da się
+        // powiedzieć „pomyłka, dzisiaj tego nie było".
+        var habit = await _habits.CreateAsync("Czytanie", target: 20, unit: "stron");
+
+        (await _habits.BumpAsync(habit.Id, by: 19)).Should().Be(19);
+        (await _habits.BumpAsync(habit.Id)).Should().Be(20, "dzień właśnie się zaliczył");
+        (await _habits.BumpAsync(habit.Id)).Should().Be(0, "a teraz się zdejmuje");
+        (await _habits.BumpAsync(habit.Id)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Ilosc_wpisana_wprost_zastepuje_liczbe_a_nie_doklada_do_niej()
+    {
+        // Droga dla dużych progów: dwudziestu stron nie dotyka się dwadzieścia razy.
+        var habit = await _habits.CreateAsync("Czytanie", target: 20, unit: "stron");
+
+        await _habits.BumpAsync(habit.Id, by: 4);
+        await _habits.SetAsync(habit.Id, Today, 20);
+
+        var card = (await _habits.BoardAsync()).Single();
+
+        card.Today.Should().Be(20, "wpisanie to poprawka, nie dokładanie");
+        card.DoneToday.Should().BeTrue();
+        card.Score.Should().Be("20/20 stron");
+
+        // Liczba ponad próg zostaje taka, jaka była podana: dzień i tak jest zaliczony,
+        // a ucięcie do progu byłoby zmyśleniem liczby za kogoś.
+        await _habits.SetAsync(habit.Id, Today, 25);
+
+        (await _habits.BoardAsync()).Single().Today.Should().Be(25);
+    }
+
+    [Fact]
     public async Task Dzisiejszy_jeszcze_nieodhaczony_nie_zrywa_serii()
     {
         // Seria pokazana jako zerwana o poranku byłaby karą za to, że jest rano —

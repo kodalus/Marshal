@@ -141,8 +141,13 @@ public sealed class HabitService(
     /// </summary>
     /// <remarks>
     /// Dotknięcie dzisiejszego kafelka jest jedyną czynnością, którą robi się codziennie,
-    /// więc nie pyta o nic. Pomyłka kosztuje drugie dotknięcie: ptaszek zdejmuje się tym
-    /// samym miejscem, a liczbę poprawia się z karty nawyku.
+    /// więc nie pyta o nic. Pomyłka kosztuje drugie dotknięcie: zaliczony dzień schodzi
+    /// do zera tym samym miejscem — przy ptaszku i przy ilości jednakowo.
+    ///
+    /// <b>Dokładanie po jednym jest drogą dla małych progów</b>, nie dla wszystkich.
+    /// Osiem szklanek wody tak się właśnie pije, ale do dwudziestu stron dochodziło się
+    /// dwudziestoma dotknięciami — dlatego liczbę wpisuje się też wprost, tam gdzie
+    /// jest pokazana (<see cref="SetAsync"/>).
     /// </remarks>
     public async Task<int> BumpAsync(Guid habitId, int by = 1, CancellationToken ct = default)
     {
@@ -160,11 +165,19 @@ public sealed class HabitService(
             habits.Add(mark);
         }
 
-        // Ptaszek przestawia się, a nie rośnie: nawyk bez progu ma dwa stany i drugie
-        // dotknięcie ma je zdejmować, a nie robić „dwa razy medytacja".
-        var amount = habit.Target is null
-            ? mark.Amount > 0 ? 0 : 1
-            : mark.Amount + by;
+        var amount = habit.Target switch
+        {
+            // Ptaszek przestawia się, a nie rośnie: nawyk bez progu ma dwa stany i drugie
+            // dotknięcie ma je zdejmować, a nie robić „dwa razy medytacja".
+            null => mark.Amount > 0 ? 0 : 1,
+
+            // Nawyk na ilość też musi dawać się odhaczyć z powrotem. Bez tego dzień raz
+            // zaliczony rósł dalej — 21, 22, 23 stron — i nie było w całym programie
+            // miejsca, w którym da się powiedzieć „pomyłka, dzisiaj tego nie było".
+            { } goal when mark.Amount >= Math.Max(1, goal) => 0,
+
+            _ => mark.Amount + by,
+        };
 
         mark.Set(amount, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);

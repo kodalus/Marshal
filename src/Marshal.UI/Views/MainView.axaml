@@ -2040,7 +2040,7 @@
                prawdę o tym, jak było, a nie o tym, kiedy zdążył kliknąć. -->
           <TextBlock Classes="label" Margin="0,16,0,0" Text="Dni" />
           <TextBlock Classes="hint" Margin="2,0,0,6" TextWrapping="Wrap"
-                     Text="Dotknięcie kwadracika przestawia ten dzień." />
+                     Text="Dotknięcie kwadracika przestawia ten dzień — przy nawyku na ilość otwiera pole z liczbą." />
           <ScrollViewer HorizontalScrollBarVisibility="Auto"
                         VerticalScrollBarVisibility="Disabled">
             <ItemsControl ItemsSource="{Binding Opened.Weeks}">
@@ -2104,12 +2104,20 @@
                       <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
                                  TextWrapping="Wrap" />
                     </Button>
-                    <TextBlock Grid.Column="1" Classes="hint" Margin="8,0"
-                               VerticalAlignment="Center"
-                               Text="{Binding Score}" IsVisible="{Binding HasScore}" />
+                    <!-- Liczba jest przyciskiem: miejsce, w którym się ją widzi, jest
+                         tym samym, w którym chce się ją zmienić. Dochodzenie do
+                         dwudziestu stron po jednym dotknięciu krążka było dwudziestoma
+                         dotknięciami, a dwudzieste pierwsze dawało 21 stron. -->
+                    <Button Grid.Column="1" Classes="cichy" Margin="4,0" Padding="8,4"
+                            VerticalAlignment="Center" Click="HabitAmount"
+                            IsVisible="{Binding HasScore}"
+                            ToolTip.Tip="Dotknij, żeby wpisać ile">
+                      <TextBlock Classes="hint" Text="{Binding Score}" />
+                    </Button>
                     <!-- Krążek po prawej, jak na liście zadań: tu się dotyka. -->
                     <Button Grid.Column="2" Classes="nav" Padding="14,6"
-                            Click="HabitBump">
+                            Click="HabitBump"
+                            ToolTip.Tip="Dotknij: o jeden więcej, a gdy dzień już zaliczony — z powrotem na zero">
                       <TextBlock Text="{Binding Mark}" MinWidth="12"
                                  HorizontalAlignment="Center" />
                     </Button>

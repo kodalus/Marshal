@@ -241,13 +241,140 @@ public partial class MainView : UserControl
     private void HabitBump(object? sender, RoutedEventArgs e) =>
         OnHabits("Nawyk: zaliczenie dnia", sender, (m, box) => m.BumpAsync(box));
 
-    /// <summary>Kwadracik w siatce przestawia ten jeden dzień.</summary>
+    /// <summary>
+    /// Kwadracik w siatce: przy ptaszku przestawia dzień, przy ilości otwiera pole.
+    /// </summary>
+    /// <remarks>
+    /// Nawyk na ptaszek ma dwa stany, więc dotknięcie je przestawia i nie ma o co pytać.
+    /// Nawyk na ilość ma ich tyle, ile wynosi próg — tam „było albo nie było" nie jest
+    /// całą prawdą o dniu, a zgadnięty próg byłby wpisaniem liczby, której nikt nie podał.
+    /// </remarks>
     private void HabitDay(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel model && sender is Control { DataContext: HabitCell cell })
+        if (DataContext is not MainViewModel model
+            || sender is not Control { DataContext: HabitCell cell } source
+            || model.Habits.Opened is not { } box)
+        {
+            return;
+        }
+
+        if (box.Habit.Target is null)
         {
             _ = Try("Nawyk: przestawienie dnia", () => model.Habits.ToggleDayAsync(cell));
+            return;
         }
+
+        ShowAmount(model, source, box, cell.Day, cell.Amount);
+    }
+
+    /// <summary>Liczba na kafelku jest przyciskiem — dotknięcie otwiera pole.</summary>
+    private void HabitAmount(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || sender is not Control { DataContext: HabitBox box } source
+            || box.Card.Days.Count == 0)
+        {
+            return;
+        }
+
+        // Dzisiejszy to ostatni dzień siatki — okno kończy się na dziś, więc zegara
+        // nie trzeba tu pytać drugi raz o to, co karta już przyniosła.
+        ShowAmount(model, source, box, box.Card.Days[^1].Day, box.Card.Today);
+    }
+
+    /// <summary>
+    /// Pole z liczbą dla jednego dnia nawyku.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tam, gdzie liczba jest pokazana, tam się ją zmienia. Dokładanie po jednym zostaje
+    /// przy krążku, bo przy ośmiu szklankach wody tak się właśnie pije; przy dwudziestu
+    /// stronach było dwudziestoma dotknięciami.
+    /// </para>
+    /// <para>
+    /// <b>Dwa skróty obok pola</b>, bo to są dwie odpowiedzi padające najczęściej:
+    /// „wyszło tyle, ile miało" i „dzisiaj tego nie było". Przepisywanie progu z ręki
+    /// za każdym razem byłoby podawaniem liczby, którą program i tak zna.
+    /// </para>
+    /// </remarks>
+    private void ShowAmount(
+        MainViewModel model, Control source, HabitBox box, DateOnly day, int current)
+    {
+        var goal = Math.Max(1, box.Habit.Target ?? 1);
+        var unit = box.Habit.Unit is { Length: > 0 } named ? $" {named}" : string.Empty;
+
+        var pole = new TextBox { Text = current.ToString(), Width = 200 };
+        var flyout = new Flyout { Placement = PlacementMode.BottomEdgeAlignedLeft };
+
+        void Set(int amount)
+        {
+            flyout.Hide();
+            _ = Try(
+                "Nawyk: wpisanie ilości",
+                () => model.Habits.SetAmountAsync(box, day, amount));
+        }
+
+        void Commit()
+        {
+            // Śmieć w polu nie zmienia nic i nie zamyka okienka: zamknięcie bez skutku
+            // wygląda dokładnie jak zapis, który się udał.
+            if (int.TryParse((pole.Text ?? string.Empty).Trim(), out var amount) && amount >= 0)
+            {
+                Set(amount);
+                return;
+            }
+
+            pole.SelectAll();
+        }
+
+        pole.KeyDown += (_, args) =>
+        {
+            if (args.Key is Key.Enter or Key.Return)
+            {
+                args.Handled = true;
+                Commit();
+            }
+        };
+
+        var set = new Button { Content = "Ustaw", Padding = new Thickness(14, 6) };
+        set.Click += (_, _) => Commit();
+
+        var none = new Button { Content = "Zeruj", Padding = new Thickness(14, 6) };
+        none.Click += (_, _) => Set(0);
+
+        var full = new Button
+        {
+            Content = $"Cały dzień — {goal}{unit}",
+            Padding = new Thickness(14, 6),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+        };
+
+        full.Click += (_, _) => Set(goal);
+
+        var naglowek = new TextBlock { Text = $"{day:dd.MM.yyyy} — ile{unit}" };
+        naglowek.Classes.Add("hint");
+
+        flyout.Content = new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                naglowek,
+                pole,
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    Children = { set, none },
+                },
+                full,
+            },
+        };
+
+        flyout.ShowAt(source);
+
+        pole.Focus();
+        pole.SelectAll();
     }
 
     private void OnHabits(string what, Func<HabitsViewModel, Task> work)

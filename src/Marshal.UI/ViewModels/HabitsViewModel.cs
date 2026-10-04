@@ -192,6 +192,34 @@ public sealed partial class HabitsViewModel(HabitService habits) : ObservableObj
         await LoadAsync();
     }
 
+    /// <summary>
+    /// Wpisanie liczby wprost, dla wskazanego dnia.
+    /// </summary>
+    /// <remarks>
+    /// Dokładanie po jednym jest dobre przy progu wielkości ośmiu szklanek wody i złe
+    /// przy dwudziestu stronach: tam dochodzenie do dnia zaliczonego było dwudziestoma
+    /// dotknięciami. Liczbę zmienia się więc tam, gdzie jest pokazana — na kafelku
+    /// i na kwadraciku w siatce.
+    /// </remarks>
+    public async Task SetAmountAsync(HabitBox? box, DateOnly day, int amount)
+    {
+        if (box is null)
+        {
+            return;
+        }
+
+        await habits.SetAsync(box.Id, day, Math.Max(0, amount));
+        await LoadAsync();
+
+        // Szczegół, jeśli jest otwarty, zostaje otwarty — tylko świeży. Z listy
+        // „Opened" jest puste i ma takie zostać, bo wpisanie liczby na kafelku
+        // nie jest wchodzeniem w nawyk.
+        if (Opened is not null)
+        {
+            Opened = Items.FirstOrDefault(z => z.Id == box.Id);
+        }
+    }
+
     /// <summary>Odłożenie na półkę — historia zostaje, seria przestaje się liczyć.</summary>
     public async Task ArchiveAsync(HabitBox? box)
     {
