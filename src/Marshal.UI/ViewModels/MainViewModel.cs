@@ -1400,14 +1400,25 @@ public sealed partial class MainViewModel : ObservableObject
         await RefreshInboxAsync();
     }
 
-    [RelayCommand]
+    // ——— Zakładki ———————————————————————————————————————————————————————————
+    //
+    // „AllowConcurrentExecutions", i to nie jest ozdoba. Polecenie asynchroniczne
+    // domyślnie **wyłącza swój przycisk na czas pracy** — a wyłączony przycisk, którego
+    // praca się nie skończyła, zostaje wyłączony na zawsze. Zakładka wyszarzała się
+    // wtedy i nie dawała się kliknąć ponownie, czyli nawigacja ginęła przez to, że
+    // ekran się długo wczytywał.
+    //
+    // To jest ta sama pułapka, co martwy przycisk „Zapisz", tylko widziana od drugiej
+    // strony: tam polecenie odmawiało po cichu, tu odmawia widocznie i na stałe.
+    // Wolne wczytywanie ma być wolne, a nie ma zabierać drogi powrotnej.
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private Task ShowInboxAsync()
     {
         Current = Screen.Inbox;
         return RefreshInboxAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowClarifyAsync()
     {
         if (InboxCount == 0)
@@ -1419,14 +1430,14 @@ public sealed partial class MainViewModel : ObservableObject
         await Clarify.LoadAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowNextAsync()
     {
         Current = Screen.Next;
         await Fill(NextActions, _tasks.ByStateAsync(TaskState.Next));
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowProjectsAsync()
     {
         Current = Screen.Projects;
@@ -1454,7 +1465,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowWaitingAsync()
     {
         Current = Screen.Waiting;
@@ -1469,7 +1480,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Notatki — materiał referencyjny, którego nie trzeba robić.</summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowNotesAsync()
     {
         Current = Screen.Notes;
@@ -1483,7 +1494,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// Bez czyszczenia pola przy wejściu: wraca się tu po to, żeby otworzyć drugi
     /// wynik tego samego pytania, a nie żeby zadać je od nowa.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowSearchAsync()
     {
         Current = Screen.Search;
@@ -1498,7 +1509,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// i nie ma wchodzić ani do skrzynki, ani do przeglądu, ani do liczników
     /// zaległości — pięć nawyków dziennie zasypałoby listę tym, co i tak się wydarzy.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowHabitsAsync()
     {
         Current = Screen.Habits;
@@ -1520,7 +1531,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// Osobny ekran, a nie kawałek Ustawień: zagląda się tu wtedy, gdy coś nie wyszło,
     /// i wtedy nie chce się przewijać pola na sekrety Google, żeby dojść do odpowiedzi.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowJournalAsync()
     {
         Current = Screen.Journal;
@@ -1528,7 +1539,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Własne widoki — konstruktor warunków i Ulubione (spec 11.5).</summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowFiltersAsync()
     {
         Current = Screen.Filters;
@@ -1553,11 +1564,27 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Kalendarz godzinowy — wydarzenia i zadania na jednej siatce.</summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowCalendarAsync()
     {
         Current = Screen.Calendar;
+
+        // Ile trwa wczytanie siatki — do dziennika, i to nie z ciekawości. Zapisane
+        // okno serii postawiło w bazie po kilkadziesiąt wierszy na każdy rytm, więc
+        // siatka ma dziś do ułożenia wielokrotnie więcej bloków niż wtedy, gdy
+        // zapowiedzi były rysowane w locie. „Długo" bez liczby nie mówi, czy to
+        // dziesiąta część sekundy, czy pięć — a od tego zależy, czego szukać.
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
         await Calendar.LoadAsync();
+
+        if (started.ElapsedMilliseconds > 400)
+        {
+            await Try("Kalendarz: wczytanie siatki", () => _activity.RecordAsync(
+                "Kalendarz: wczytanie siatki",
+                $"{started.ElapsedMilliseconds} ms",
+                started.ElapsedMilliseconds > 2000 ? ActivityLevel.Problem : ActivityLevel.Ok));
+        }
 
         // Wejście na kalendarz jest chwilą, w której patrzy się na siatkę — więc jest
         // też najlepszą chwilą, żeby zapytać o świeże wydarzenia. Bez czekania: siatka
@@ -1568,7 +1595,7 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Kreator przeglądu. Wznawia niedokończony albo zakłada nowy.</summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowReviewAsync()
     {
         Current = Screen.Review;
@@ -1576,14 +1603,14 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Widok „Teraz" — trzy do pięciu pozycji po wyborze czasu i energii.</summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowNowAsync()
     {
         Current = Screen.Now;
         await Now.LoadAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowTodayAsync()
     {
         Current = Screen.Today;
@@ -1614,14 +1641,14 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasBlocked));
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowSomedayAsync()
     {
         Current = Screen.Someday;
         await FillPlain(SomedayItems, _tasks.ByStateAsync(TaskState.Someday));
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowArchiveAsync()
     {
         Current = Screen.Archive;
