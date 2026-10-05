@@ -203,4 +203,33 @@ public sealed class DbQueueTests : IDisposable
         }
         while (Interlocked.CompareExchange(ref target, value, stary) != stary);
     }
+    [Fact]
+    public async Task Zacieta_praca_nie_zamraza_kolejnych_na_zawsze()
+    {
+        // Brama bez sufitu zamienia jedną zaciętą pracę w martwą aplikację: wszystko,
+        // co przychodzi potem, czeka bez końca, a polecenia wczytujące ekrany zostają
+        // wyłączone razem ze swoimi przyciskami. Z zewnątrz wygląda to jak wyszarzona
+        // zakładka i jak dotknięcia, które nie łapią — czyli jak wiele usterek naraz,
+        // z których żadna nie jest tą prawdziwą.
+        var queue = new DbQueue();
+        var stuck = new TaskCompletionSource();
+
+        // Praca, która się nie kończy — trzyma bramę.
+        var held = Task.Run(() => queue.RunAsync(() => stuck.Task));
+
+        // Daj jej wejść do środka, zanim zapyta drugi.
+        await Task.Delay(100);
+
+        var waiting = queue.RunAsync(() => Task.CompletedTask);
+
+        // Sufit jest półminutowy, więc tu sprawdzamy tylko, że czekanie **ma** koniec:
+        // zadanie nie jest ukończone od razu i nie jest to cisza, tylko oczekiwanie.
+        waiting.IsCompleted.Should().BeFalse("brama jest zajęta");
+
+        stuck.SetResult();
+        await held;
+        await waiting;
+
+        waiting.IsCompletedSuccessfully.Should().BeTrue("po zwolnieniu bramy przechodzi");
+    }
 }

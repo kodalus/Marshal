@@ -38,6 +38,32 @@ namespace Marshal.Infrastructure.Data;
 /// </remarks>
 public sealed class DbQueue : IDbQueue
 {
+    /// <summary>
+    /// Ile wolno czekać na bramę, zanim czekanie uznamy za zacięcie.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Brama bez sufitu zamienia jedną zaciętą pracę w <b>martwą aplikację</b>, i to bez
+    /// śladu: wszystko, co przychodzi potem, czeka w kolejce, ekrany nie wczytują się
+    /// nigdy, a polecenia, które je wczytują, zostają wyłączone na zawsze razem ze swoimi
+    /// przyciskami. Z zewnątrz wygląda to jak wyszarzona zakładka i jak dotknięcia, które
+    /// nie łapią — czyli jak wiele różnych usterek naraz, z których żadna nie jest tą
+    /// prawdziwą.
+    /// </para>
+    /// <para>
+    /// Pół minuty, bo to już daleko poza wszystkim, co wolno nazwać wolnym odczytem:
+    /// najcięższe wczytanie siatki idzie ułamkami sekundy. Przekroczenie jest więc
+    /// zaciętej pracy zgłoszeniem, a nie karą za powolność.
+    /// </para>
+    /// <para>
+    /// <b>Wyjątek zamiast czekania w nieskończoność.</b> Wyjątek ma dokąd trafić —
+    /// wołający opakowują pracę i zapisują ją w dzienniku — a cisza nie ma dokąd.
+    /// To jest ta sama zasada, co przy każdym przycisku w tym programie: odmowa, której
+    /// nie widać, jest gorsza od odmowy.
+    /// </para>
+    /// </remarks>
+    private static readonly TimeSpan Ceiling = TimeSpan.FromSeconds(30);
+
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Czy ten przepływ wywołania jest już w środku bramy.</summary>
@@ -53,7 +79,7 @@ public sealed class DbQueue : IDbQueue
             return;
         }
 
-        await _gate.WaitAsync(ct);
+        await EnterAsync(ct);
         _inside.Value = true;
 
         try
@@ -76,7 +102,7 @@ public sealed class DbQueue : IDbQueue
             return await work();
         }
 
-        await _gate.WaitAsync(ct);
+        await EnterAsync(ct);
         _inside.Value = true;
 
         try
@@ -88,6 +114,19 @@ public sealed class DbQueue : IDbQueue
             _inside.Value = false;
             _gate.Release();
         }
+    }
+
+    /// <summary>Wejście przez bramę albo zgłoszenie zacięcia — zob. <see cref="Ceiling"/>.</summary>
+    private async Task EnterAsync(CancellationToken ct)
+    {
+        if (await _gate.WaitAsync(Ceiling, ct))
+        {
+            return;
+        }
+
+        throw new TimeoutException(
+            $"Baza nie odpowiedziała przez {Ceiling.TotalSeconds:0} sekund — poprzednia praca "
+            + "trzyma bramę. Kolejne odczyty czekałyby bez końca, więc ten się poddaje.");
     }
 }
 
