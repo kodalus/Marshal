@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Marshal.Application.Abstractions;
 
 namespace Marshal.Infrastructure.Data;
@@ -66,10 +67,25 @@ public sealed class DbQueue : IDbQueue
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    /// <summary>Kto jest w środku i od kiedy. Puste, gdy brama wolna.</summary>
+    /// <remarks>
+    /// Bez tego komunikat o zacięciu mówił wyłącznie, że ktoś bramę trzyma — a ten,
+    /// kto ją trzyma, nigdy sam o sobie nie zgłasza, bo właśnie pracuje. Trzy rundy
+    /// z rzędu widziałam więc same ofiary i zgadywałam sprawcę. Imię wypełnia
+    /// kompilator nazwą metody wołającej, więc nie kosztuje nic.
+    /// </remarks>
+    private volatile string? _holder;
+
+    private long _since;
+
     /// <summary>Czy ten przepływ wywołania jest już w środku bramy.</summary>
     private readonly AsyncLocal<bool> _inside = new();
 
-    public async Task RunAsync(Func<Task> work, CancellationToken ct = default)
+    public async Task RunAsync(
+        Func<Task> work,
+        CancellationToken ct = default,
+        [CallerMemberName] string? who = null,
+        [CallerFilePath] string? where = null)
     {
         ArgumentNullException.ThrowIfNull(work);
 
@@ -79,7 +95,7 @@ public sealed class DbQueue : IDbQueue
             return;
         }
 
-        await EnterAsync(ct);
+        await EnterAsync(Name(who, where), ct);
         _inside.Value = true;
 
         try
@@ -89,11 +105,16 @@ public sealed class DbQueue : IDbQueue
         finally
         {
             _inside.Value = false;
+            _holder = null;
             _gate.Release();
         }
     }
 
-    public async Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken ct = default)
+    public async Task<T> RunAsync<T>(
+        Func<Task<T>> work,
+        CancellationToken ct = default,
+        [CallerMemberName] string? who = null,
+        [CallerFilePath] string? where = null)
     {
         ArgumentNullException.ThrowIfNull(work);
 
@@ -102,7 +123,7 @@ public sealed class DbQueue : IDbQueue
             return await work();
         }
 
-        await EnterAsync(ct);
+        await EnterAsync(Name(who, where), ct);
         _inside.Value = true;
 
         try
@@ -112,22 +133,36 @@ public sealed class DbQueue : IDbQueue
         finally
         {
             _inside.Value = false;
+            _holder = null;
             _gate.Release();
         }
     }
 
     /// <summary>Wejście przez bramę albo zgłoszenie zacięcia — zob. <see cref="Ceiling"/>.</summary>
-    private async Task EnterAsync(CancellationToken ct)
+    private async Task EnterAsync(string name, CancellationToken ct)
     {
         if (await _gate.WaitAsync(Ceiling, ct))
         {
+            _holder = name;
+            _since = Environment.TickCount64;
             return;
         }
 
+        // **Z imieniem tego, kto trzyma.** Ten, kto trzyma, nigdy sam o sobie nie
+        // zgłosi — bo właśnie pracuje — więc bez tego w dzienniku widać wyłącznie
+        // ofiary, a sprawcę trzeba zgadywać. Trzy razy zgadłam źle.
+        var holding = _holder is { Length: > 0 } busy
+            ? $"{busy}, od {(Environment.TickCount64 - _since) / 1000} s"
+            : "nieznana praca";
+
         throw new TimeoutException(
-            $"Baza nie odpowiedziała przez {Ceiling.TotalSeconds:0} sekund — poprzednia praca "
-            + "trzyma bramę. Kolejne odczyty czekałyby bez końca, więc ten się poddaje.");
+            $"Baza nie odpowiedziała przez {Ceiling.TotalSeconds:0} sekund. "
+            + $"Bramę trzyma: {holding}. Prosił: {name}.");
     }
+
+    /// <summary>Imię wołającego: metoda i plik, bez ścieżki.</summary>
+    private static string Name(string? who, string? where) =>
+        $"{who ?? "?"} ({(where is null ? "?" : Path.GetFileName(where))})";
 }
 
 /// <summary>
@@ -140,9 +175,17 @@ public sealed class DbQueue : IDbQueue
 /// </remarks>
 public sealed class DirectQueue : IDbQueue
 {
-    public Task RunAsync(Func<Task> work, CancellationToken ct = default) =>
+    public Task RunAsync(
+        Func<Task> work,
+        CancellationToken ct = default,
+        [CallerMemberName] string? who = null,
+        [CallerFilePath] string? where = null) =>
         work is null ? throw new ArgumentNullException(nameof(work)) : work();
 
-    public Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken ct = default) =>
+    public Task<T> RunAsync<T>(
+        Func<Task<T>> work,
+        CancellationToken ct = default,
+        [CallerMemberName] string? who = null,
+        [CallerFilePath] string? where = null) =>
         work is null ? throw new ArgumentNullException(nameof(work)) : work();
 }

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Marshal.Application.Abstractions;
 
 /// <summary>
@@ -35,7 +37,21 @@ namespace Marshal.Application.Abstractions;
 /// </remarks>
 public interface IDbQueue
 {
-    Task RunAsync(Func<Task> work, CancellationToken ct = default);
+    /// <param name="who">
+    /// Kto prosi o bramę. Wypełniane przez kompilator nazwą metody wołającej, więc
+    /// nie kosztuje nic i nie wymaga pamiętania o nim przy wołaniu.
+    /// </param>
+    /// <param name="where">Plik wołającego — żeby nazwa metody nie była dwuznaczna.</param>
+    Task RunAsync(
+        Func<Task> work,
+        CancellationToken ct = default,
+        [CallerMemberName] string? who = null,
+        [CallerFilePath] string? where = null);
 
-    Task<T> RunAsync<T>(Func<Task<T>> work, CancellationToken ct = default);
+    /// <inheritdoc cref="RunAsync(Func{Task}, CancellationToken, string, string)"/>
+    Task<T> RunAsync<T>(
+        Func<Task<T>> work,
+        CancellationToken ct = default,
+        [CallerMemberName] string? who = null,
+        [CallerFilePath] string? where = null);
 }
