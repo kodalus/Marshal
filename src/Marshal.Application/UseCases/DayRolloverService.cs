@@ -81,11 +81,17 @@ public sealed class DayRolloverService(
         return 1;
     }
 
-    /// <summary>Czy ten rytm wypadł od tamtego dnia jeszcze raz — i ten dzień już minął.</summary>
+    /// <summary>Czy ten rytm wypadł od tamtego dnia jeszcze raz — i ten dzień już nadszedł.</summary>
+    /// <remarks>
+    /// Zastępuje wyłącznie wystąpienie <b>żywe</b>: dzień, który sam został wyrzucony
+    /// albo przepadł, nie jest następnym razem i nie ma prawa uciszać poprzedniego.
+    /// </remarks>
     private static bool Superseded(TaskItem task, List<TaskItem> siblings, DateOnly today) =>
         siblings.Any(z => z.Id != task.Id
                        && z.DoDate > task.DoDate
-                       && z.DoDate <= today);
+                       && z.DoDate <= today
+                       && z.State is TaskState.Scheduled or TaskState.Next or TaskState.Waiting
+                            or TaskState.Done);
 
     private Dictionary<Guid, OnMissed> _rules = [];
 
@@ -103,18 +109,23 @@ public sealed class DayRolloverService(
         var moved = 0;
         var gone = 0;
 
-        // Zaległe wystąpienia serii **po seriach**, bo odpowiedź na „to już przepadło"
-        // zależy u nich od tego, czy ten rytm wypadł od tamtej pory jeszcze raz.
-        var standing = overdue
-            .Where(t => t.SeriesId is { } id && id != Guid.Empty)
-            .GroupBy(t => t.SeriesId!.Value)
-            .ToDictionary(g => g.Key, g => g.ToList());
+        // Wszystkie wystąpienia serii, nie tylko zaległe. Odpowiedź na „to już
+        // przepadło" zależy od tego, czy ten rytm wypadł od tamtej pory jeszcze raz —
+        // a wystąpienie, które je zastępuje, jest zwykle umówione **na dziś**, czyli
+        // nie jest zaległe i w zbiorze zaległych go nie ma. Pytane tylko o nie,
+        // przegapione dni nigdy nie przestawały pytać.
+        var standing = overdue.Any(t => t.SeriesId is not null)
+            ? (await series.AllOccurrencesAsync(ct))
+                .Where(t => t.SeriesId is not null)
+                .GroupBy(t => t.SeriesId!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList())
+            : [];
 
         foreach (var task in overdue)
         {
             if (task.SeriesId is { } id)
             {
-                gone += Judge(task, standing[id], today);
+                gone += Judge(task, standing.GetValueOrDefault(id, []), today);
                 continue;
             }
 

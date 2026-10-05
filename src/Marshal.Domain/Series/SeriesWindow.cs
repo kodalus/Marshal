@@ -103,9 +103,10 @@ public static class SeriesWindow
     /// po dniu poprzednim wypada akurat na początku, więc błąd pokazywał się dopiero
     /// przy odstępie większym od jednego.
     ///
-    /// Reguła oddana dalszym dniom jest <b>pomniejszona o to jedno wystąpienie</b>:
-    /// seria „jeszcze pięć razy" liczy początek jako pierwszy z pięciu, a nie jako
-    /// darmowy szósty.
+    /// Licznik pozostałych wystąpień <b>liczy bieżące</b> — tak mówi reguła i tak liczy
+    /// wyznaczanie następnego dnia. Początek nie pomniejsza go więc osobno: seria
+    /// „jeszcze pięć razy" to początek i cztery dni po nim, a pomniejszenie z ręki
+    /// odbierało jej jeden dzień.
     /// </remarks>
     private static IEnumerable<(DateOnly Date, TimeOnly? Time, int? Minutes)> Walk(
         TaskSeries series, DateOnly bound)
@@ -126,7 +127,7 @@ public static class SeriesWindow
             }
         }
 
-        foreach (var slot in RecurrenceSchedule.Following(rule.Advance(first), first, bound))
+        foreach (var slot in RecurrenceSchedule.Following(rule, first, bound))
         {
             yield return (slot.Date, slot.Time, slot.Minutes);
         }

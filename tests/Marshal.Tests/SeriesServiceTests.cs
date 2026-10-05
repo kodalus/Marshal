@@ -205,12 +205,24 @@ public sealed class SeriesServiceTests : IDisposable
         // następnika z poprzednika i z dnia, w którym urządzenie akurat było otwarte,
         // więc telefon i pulpit rozchodziły się na dwa rozłączne łańcuchy.
         var one = await Start();
-        var mine = Days(one).Select(z => z.Id).ToHashSet();
+
+        // Dni, nie identyfikatory: pierwszy dzień obsadza zadanie, które istniało przed
+        // serią, i niesie swój dawny identyfikator. Okno to wie — pomija dzień już
+        // zajęty — więc zgodność jest o dniach, nie o tożsamościach.
+        var mine = Days(one).Where(z => z.DoDate is not null)
+            .Select(z => z.DoDate!.Value).ToHashSet();
 
         // Drugie urządzenie: ta sama seria, własny zegar logiczny, okno liczone u siebie.
-        var theirs = SeriesWindow.Plan(one, Today).Select(z => z.Id).ToHashSet();
+        var theirs = SeriesWindow.Plan(one, Today).Select(z => z.Date).ToHashSet();
 
-        theirs.Should().BeSubsetOf(mine);
+        theirs.Should().BeEquivalentTo(mine);
+
+        // A tam, gdzie wiersz powstał z okna, tożsamość jest wyliczona — i to jest
+        // ta rzecz, która zamyka podwajanie się serii między urządzeniami.
+        foreach (var day in Days(one).Where(z => z.DoDate > Today))
+        {
+            day.Id.Should().Be(OccurrenceId.For(one.Id, day.DoDate!.Value));
+        }
     }
 
     public void Dispose()

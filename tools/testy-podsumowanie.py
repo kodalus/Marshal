@@ -39,7 +39,23 @@ def main() -> int:
             # Jedna linijka powodu. Pełny komunikat niesie ślad stosu i akapity
             # o tym, jak wyciszyć ostrzeżenie — czyli to, czego się tu nie szuka.
             short = re.sub(r"\s+", " ", message).strip()
-            failures.append((name, short[:300]))
+
+            # Przy wyjątku sam komunikat nie mówi nic: „NullReferenceException" bez
+            # miejsca to zagadka, a zgadywanie z niej kosztowało już rundę. Pierwsza
+            # ramka z naszego kodu mówi, gdzie patrzeć, i zajmuje jedną linijkę.
+            trace = "".join(
+                (node.text or "") for node in result.iter(f"{{{NS['t']}}}StackTrace"))
+            frame = next(
+                (line.strip() for line in trace.splitlines()
+                 if "Marshal." in line and "/tests/" not in line),
+                None)
+            frame = frame or next(
+                (line.strip() for line in trace.splitlines() if "Marshal." in line), None)
+
+            if frame and "Exception" in short:
+                short = f"{short[:200]} ← {frame[:180]}"
+
+            failures.append((name, short[:420]))
 
     if not failures:
         print("Wszystkie testy przeszły.")
