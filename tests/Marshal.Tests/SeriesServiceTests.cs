@@ -199,6 +199,63 @@ public sealed class SeriesServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Okno_zabiera_dni_ktorych_juz_nie_chce()
+    {
+        // Zgłoszone z użycia: dane serii rozjechały się między telefonem a pulpitem.
+        // Przyczyna nie była w synchronizacji, a w tym, że okno **tylko dokładało**.
+        // Początek serii jest polem scalanym, więc dwa urządzenia, które przeniosły
+        // rytm przed zsynchronizowaniem się, zaczynały ją od różnych dni i każde
+        // stawiało własny zestaw dat. Po scaleniu początek się uzgadniał, a oba zestawy
+        // zostawały obok siebie — rozjazd, którego nic nie zamykało.
+        var one = await Start(interval: 2);
+        var before = Days(one).Count(z => z.State == TaskState.Scheduled);
+
+        // Początek przestawiony o jeden dzień: wszystkie dni rytmu co drugi dzień
+        // przeskakują na przeciwną parzystość.
+        one.MoveStart(Today.AddDays(1), _hlc.Next());
+        _db.SaveChanges();
+
+        var report = await _rhythms.TopUpAsync(one);
+
+        report.Added.Should().BeGreaterThan(0, "nowa faza to nowe dni");
+        report.Pruned.Should().BeGreaterThan(0, "a stara faza ma zniknąć");
+
+        // Po uzgodnieniu żywe dni są dokładnie tymi, które mówi plan.
+        var plan = SeriesWindow.Plan(one, Today).Select(z => z.Date).ToHashSet();
+
+        Days(one)
+            .Where(z => z.State == TaskState.Scheduled && z.DoDate > Today && !z.Overridden)
+            .Should().OnlyContain(z => plan.Contains(z.DoDate!.Value));
+
+        Days(one).Count(z => z.State == TaskState.Scheduled).Should().BeLessThanOrEqualTo(before + 2);
+    }
+
+    [Fact]
+    public async Task Uzgadnianie_nie_rusza_minionych_odhaczonych_ani_zmienionych_z_reki()
+    {
+        var one = await Start();
+
+        var pinned = Days(one).Single(z => z.DoDate == Today.AddDays(5));
+        pinned.Override(_hlc.Next());
+
+        var done = Days(one).Single(z => z.DoDate == Today.AddDays(6));
+        done.Complete(_clock.Now, _hlc.Next());
+        _db.SaveChanges();
+
+        // Koniec serii na dniu wcześniejszym niż oba: uzgadnianie ma czego nie chcieć.
+        one.EndOn(Today.AddDays(1), _hlc.Next());
+        _db.SaveChanges();
+
+        await _rhythms.TopUpAsync(one);
+
+        _db.Tasks.Single(t => t.Id == pinned.Id).State
+            .Should().Be(TaskState.Scheduled, "zmienione z ręki było świadomą decyzją");
+
+        _db.Tasks.Single(t => t.Id == done.Id).State
+            .Should().Be(TaskState.Done, "odhaczone to zapis tego, co było");
+    }
+
+    [Fact]
     public async Task Dwa_urzadzenia_dopelniajace_okno_osobno_daja_te_same_wiersze()
     {
         // To jest cała przebudowa w jednym zdaniu. Stary model liczył tożsamość

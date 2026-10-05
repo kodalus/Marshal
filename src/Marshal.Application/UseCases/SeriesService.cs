@@ -8,7 +8,7 @@ using Marshal.Domain.Tasks;
 namespace Marshal.Application.UseCases;
 
 /// <summary>Co zrobiło dopełnianie okna.</summary>
-public sealed record TopUpReport(int Added, int Retired = 0);
+public sealed record TopUpReport(int Added, int Retired = 0, int Pruned = 0);
 
 /// <summary>
 /// Serie powtarzalne: zakładanie, dopełnianie okna i kończenie.
@@ -84,36 +84,43 @@ public sealed class SeriesService(
     public async Task<TopUpReport> TopUpAsync(CancellationToken ct = default)
     {
         var added = 0;
+        var pruned = 0;
 
         foreach (var one in await series.ListAsync(ct))
         {
-            added += await FillAsync(one, ct);
+            var (fresh, gone) = await ReconcileAsync(one, ct);
+            added += fresh;
+            pruned += gone;
         }
 
-        if (added > 0)
+        if (added > 0 || pruned > 0)
         {
             await unitOfWork.SaveChangesAsync(ct);
 
             if (journal is not null)
             {
                 await journal.RecordAsync(
-                    "Serie: dopełnienie okna", $"{added} wystąpień", ActivityLevel.Ok, null, ct);
+                    "Serie: uzgodnienie okna",
+                    $"{added} dołożonych, {pruned} zabranych",
+                    ActivityLevel.Ok,
+                    null,
+                    ct);
             }
         }
 
-        return new TopUpReport(added);
+        return new TopUpReport(added, 0, pruned);
     }
 
     public async Task<TopUpReport> TopUpAsync(TaskSeries one, CancellationToken ct = default)
     {
-        var added = await FillAsync(one, ct);
+        var (added, pruned) = await ReconcileAsync(one, ct);
 
-        if (added > 0)
+        if (added > 0 || pruned > 0)
         {
             await unitOfWork.SaveChangesAsync(ct);
         }
 
-        return new TopUpReport(added);
+        return new TopUpReport(added, 0, pruned);
     }
 
     /// <summary>
@@ -259,7 +266,7 @@ public sealed class SeriesService(
 
         // Stawiane od nowa **po** zapisaniu nagrobków: dopełnianie pomija dni już zajęte,
         // więc puszczone przed nimi nie postawiłoby ani jednego wiersza.
-        var fresh = await FillAsync(one, ct);
+        var (fresh, _) = await ReconcileAsync(one, ct);
 
         if (fresh > 0)
         {
@@ -286,9 +293,12 @@ public sealed class SeriesService(
     /// doklejonym do reguły, które przy pierwszym obcięciu minionych zmian przepadało.
     /// </para>
     /// </remarks>
-    private async Task<int> FillAsync(TaskSeries one, CancellationToken ct)
+    private async Task<(int Added, int Pruned)> ReconcileAsync(
+        TaskSeries one, CancellationToken ct)
     {
+        var today = clock.Today;
         var standing = await series.OccurrencesAsync(one.Id, ct);
+        var plan = SeriesWindow.Plan(one, today);
 
         var byId = standing.Select(t => t.Id).ToHashSet();
         var byDay = standing.Where(t => t.DoDate is not null)
@@ -298,7 +308,7 @@ public sealed class SeriesService(
         var template = one.Template;
         var added = 0;
 
-        foreach (var slot in SeriesWindow.Plan(one, clock.Today))
+        foreach (var slot in plan)
         {
             if (byId.Contains(slot.Id) || byDay.Contains(slot.Date))
             {
@@ -309,7 +319,36 @@ public sealed class SeriesService(
             added++;
         }
 
-        return added;
+        // ——— Zabieranie dni, których okno nie chce ———————————————————————————
+        //
+        // Bez tego kroku okno **nie było funkcją serii i daty**, tylko sumą wszystkiego,
+        // co kiedykolwiek którekolwiek urządzenie policzyło. A policzyć mogły różnie:
+        // początek serii jest polem scalanym, więc telefon i pulpit, które przeniosły
+        // rytm przed zsynchronizowaniem się, zaczynały ją od różnych dni — każde
+        // stawiało wtedy własny zestaw dat. Po scaleniu początek się uzgadniał, a oba
+        // zestawy zostawały na siatce obok siebie. Rozjazd, którego nic nie zamykało.
+        //
+        // Dzień zabiera się tylko wtedy, gdy spełnia **wszystkie** warunki: jest przed
+        // nami, jest jeszcze otwarty, nie został zmieniony z ręki i nie ma go w planie.
+        // Minione i odhaczone zostają, bo to zapis tego, co było; zmienione z ręki
+        // zostają, bo były ostatnią świadomą decyzją o swoim dniu.
+        var wanted = plan.Select(z => z.Date).ToHashSet();
+        var pruned = 0;
+
+        foreach (var occurrence in standing)
+        {
+            if (occurrence.DoDate is { } day
+                && day > today
+                && Open(occurrence)
+                && !occurrence.Overridden
+                && !wanted.Contains(day))
+            {
+                occurrence.Trash(hlc.Next());
+                pruned++;
+            }
+        }
+
+        return (added, pruned);
     }
 
     /// <summary>

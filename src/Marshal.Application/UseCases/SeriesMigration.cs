@@ -80,7 +80,7 @@ public sealed class SeriesMigration(
             var moved = Calendared(rule);
 
             var fresh = TaskSeries.Create(
-                carrier.DoDate ?? clock.Today,
+                Phase(carrier),
                 moved,
                 SeriesService.Blend(SeriesTemplate.From(carrier), moved),
                 clock.Now,
@@ -211,6 +211,30 @@ public sealed class SeriesMigration(
 
         return gone;
     }
+
+    /// <summary>
+    /// Dzień, od którego liczy się rytm przeniesionej serii.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Z pola zapisanego, a nie z dzisiejszej daty.</b> Stare przejście dnia
+    /// przesuwało datę wykonania zaległego zadania na dzisiejszą — na każdym urządzeniu
+    /// osobno i w dniu, w którym akurat je otwarto. Wzięta wprost dawała więc telefonowi
+    /// i pulpitowi różne początki tej samej serii, a różny początek to inna faza rytmu
+    /// i inny zestaw dni. Tożsamość serii była już wyliczana, więc obie wersje były
+    /// <b>tą samą serią z dwoma oknami</b> — i oba zostawały na siatce obok siebie.
+    /// </para>
+    /// <para>
+    /// „Zaległe od" jest tu najlepszą odpowiedzią: zapisuje dzień, na który rzecz była
+    /// umówiona, <b>zanim</b> przejście dnia zaczęło ją przesuwać. Dalej data wykonania,
+    /// a na końcu dzień założenia zadania — wszystkie trzy są polami zapisanymi, więc po
+    /// zsynchronizowaniu oba urządzenia czytają w nich to samo.
+    /// </para>
+    /// </remarks>
+    private DateOnly Phase(TaskItem carrier) =>
+        carrier.CarriedSince
+            ?? carrier.DoDate
+            ?? DateOnly.FromDateTime(carrier.CreatedAt.Date);
 
     /// <summary>
     /// Rytm codzienny przestawiony na zaczepienie kalendarzowe.
