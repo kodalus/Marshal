@@ -88,6 +88,14 @@ jobs:
       - name: Testy
         run: dotnet test tests/Marshal.Tests/Marshal.Tests.csproj -c Release --no-build --logger "trx;LogFileName=wyniki.trx" --results-directory artefakty/testy
 
+      # Nieudane testy zwięźle i jako adnotacje. Log przebiegu ma kilkaset wierszy
+      # na jeden nieudany test, a przez API GitHub nie daje się go przeszukać — wydaje
+      # go spod adresu, którego pośrednik sieciowy tej sesji nie przepuszcza. Adnotacje
+      # czyta się jednym zapytaniem.
+      - name: Nieudane testy — podsumowanie
+        if: always()
+        run: ./tools/testy-podsumowanie.py
+
       - name: Migracje zgodne z modelem
         run: |
           export PATH="$PATH:$HOME/.dotnet/tools"

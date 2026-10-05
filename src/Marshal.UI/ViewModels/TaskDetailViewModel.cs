@@ -504,7 +504,11 @@ public sealed partial class TaskDetailViewModel(
         ArgumentNullException.ThrowIfNull(task);
 
         await LoadSlotsAsync();
-        Load(task);
+
+        // Reguła z serii, nie z zadania. Wystąpienie serii nie nosi już reguły, więc
+        // czytana z niego dawałaby „nie powtarza się" przy każdym rytmie — na ekranie,
+        // który służy do zmieniania właśnie tego.
+        Load(task, await edit.RuleOfAsync(task));
     }
 
     /// <summary>
@@ -563,9 +567,11 @@ public sealed partial class TaskDetailViewModel(
         IsOpen = true;
     }
 
-    public void Load(TaskItem task)
+    public void Load(TaskItem task, RecurrenceRule? rule = null)
     {
         ArgumentNullException.ThrowIfNull(task);
+
+        rule ??= task.Recurrence;
 
         _loading = true;
         Problem = null;
@@ -603,10 +609,10 @@ public sealed partial class TaskDetailViewModel(
             ? start.ToTimeSpan() + TimeSpan.FromMinutes(length)
             : null;
         SelectedEnergyLevel = Energies.First(e => e.Value == task.Energy);
-        LoadRule(task.Recurrence);
+        LoadRule(rule);
 
         _loading = false;
-        _openedRhythm = task.Recurrence is not null;
+        _openedRhythm = rule is not null;
         Announce();
 
         // Po wczytaniu pól, nie przy podstawianiu odbicia: „czy w ogóle o tym mówić"

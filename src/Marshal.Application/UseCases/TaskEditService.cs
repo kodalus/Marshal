@@ -123,20 +123,34 @@ public sealed class TaskEditService(
             task.SetEstimate(edit.EstimatedMinutes, edit.Energy, hlc.Next());
         }
 
-        // Rytm **tylko dla zadania bez serii**. Wystąpienie serii nie nosi reguły —
-        // nosi ją seria — więc pusta sekcja rytmu w oknie nie znaczy tu „skończ serię",
-        // tylko „to okno o rytmie nie mówi". Potraktowana jako zmiana kasowałaby serię
-        // przy każdym zapisie nazwy, a nikt by o to nie prosił. Koniec serii ma własną
-        // drogę: SetRecurrenceAsync z pustym rodzajem.
-        if (task.SeriesId is null && edit.Recurrence != task.Recurrence)
+        // Rytm porównywany z regułą **serii**, nie z regułą zadania. Wystąpienie serii
+        // nie nosi już reguły, więc porównanie z nim samym widziałoby zmianę przy każdym
+        // zapisie — i przy każdym zapisie nazwy stawiałoby okno serii od nowa.
+        var standing = task.SeriesId is { } mine ? await series.FindAsync(mine, ct) : null;
+
+        if (edit.Recurrence != (standing?.Rule ?? task.Recurrence))
         {
-            if (edit.Recurrence is { } fresh)
+            switch (edit.Recurrence, standing)
             {
-                await rhythms.StartAsync(task, fresh, ct);
-            }
-            else
-            {
-                task.SetRecurrence(null, hlc.Next());
+                case ({ } fresh, null):
+                    await rhythms.StartAsync(task, fresh, ct);
+                    break;
+
+                case ({ } fresh, { } one):
+                    await rhythms.ChangeAsync(one, SeriesTemplate.From(task), fresh, ct);
+                    break;
+
+                // Pusta sekcja rytmu przy serii znaczy „to ostatnie wystąpienie" —
+                // tak samo jak „nie powtarza się" z menu. Reguła leży w serii, więc
+                // nie ma już czego z zadania zdejmować; zostaje pytanie o dalsze dni
+                // i jedna sensowna odpowiedź na nie.
+                case (null, { } one):
+                    await rhythms.EndAsync(one, task.DoDate ?? clock.Today, ct);
+                    break;
+
+                case (null, null):
+                    task.SetRecurrence(null, hlc.Next());
+                    break;
             }
         }
 
@@ -156,6 +170,19 @@ public sealed class TaskEditService(
         if (edit.DoTime != task.DoTime)
         {
             task.SetDoTime(edit.DoTime, hlc.Next());
+        }
+
+        // Zapisanie karty wystąpienia znaczy, że ten jeden dzień został zmieniony
+        // świadomie — i od tej chwili zmiana szablonu serii go nie dotyka. Bez tego
+        // znacznika poprawiona godzina jednego wtorku przepadałaby przy najbliższej
+        // zmianie nazwy całej serii, bez pytania i bez śladu.
+        //
+        // Nie wtedy, gdy zapis zmieniał rytm: wtedy karta mówiła o całej serii, a nie
+        // o tym dniu, i przypięcie zostawiłoby jeden wiersz na starym dniu obok okna
+        // postawionego od nowa.
+        if (task.SeriesId is not null && edit.Recurrence == (standing?.Rule ?? task.Recurrence))
+        {
+            task.Override(hlc.Next());
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -290,6 +317,26 @@ public sealed class TaskEditService(
     }
 
     /// <summary>
+    /// Reguła, którą zadanie się rządzi — z serii, a przy zadaniu bez serii z niego samego.
+    /// </summary>
+    /// <remarks>
+    /// Okno szczegółu pokazuje sekcję rytmu i musi ją czymś wypełnić. Czytane z samego
+    /// zadania pokazywałoby „nie powtarza się" przy każdym wystąpieniu serii — czyli
+    /// kłamałoby o rzeczy, którą ten ekran służy zmieniać.
+    /// </remarks>
+    public async Task<RecurrenceRule?> RuleOfAsync(TaskItem task, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        if (task.SeriesId is not { } mine)
+        {
+            return task.Recurrence;
+        }
+
+        return (await series.FindAsync(mine, ct))?.Rule ?? task.Recurrence;
+    }
+
+    /// <summary>
     /// Koniec całej serii: razem z tym wystąpieniem i z tym, co stało dalej.
     /// </summary>
     /// <remarks>
@@ -380,6 +427,12 @@ public sealed class TaskEditService(
 
         await ApplyDoDateAsync(task, day, task.AreaId, ct);
         task.SetDoTime(time, hlc.Next());
+
+        // Przestawione palcem po siatce zostaje przestawione: zob. zapis karty wyżej.
+        if (task.SeriesId is not null)
+        {
+            task.Override(hlc.Next());
+        }
 
         await unitOfWork.SaveChangesAsync(ct);
         await MirrorAsync(task, ct);
