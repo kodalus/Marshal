@@ -57,7 +57,17 @@ public static class SeriesWindow
     {
         ArgumentNullException.ThrowIfNull(series);
 
-        var keep = today.AddDays(Days);
+        // Rytm zaczepiony na wykonaniu **nie ma** dat do wyliczenia. „Co 3 dni od
+        // wykonania" mówi, kiedy wypadnie następne, dopiero gdy poprzednie zostanie
+        // odhaczone — i to jest cecha rytmu, nie brak w programie. Okno na jedno
+        // wystąpienie jest tu jedyną uczciwą odpowiedzią: sześćdziesiąt wierszy
+        // postawionych na datach zgadniętych z założenia „wszystko na czas" trzeba by
+        // przy każdym spóźnieniu skasować i postawić od nowa, a kalendarz pokazywałby
+        // do tej chwili rozkład, którego nikt nie obiecał.
+        var reach = series.Rule.Anchor == RecurrenceAnchor.FromCompletion ? 1 : Ahead;
+        var keep = series.Rule.Anchor == RecurrenceAnchor.FromCompletion
+            ? today.AddDays(-1)
+            : today.AddDays(Days);
         var slots = new List<SeriesSlot>(Ahead);
 
         foreach (var slot in RecurrenceSchedule.Following(
@@ -71,7 +81,7 @@ public static class SeriesWindow
                 continue;
             }
 
-            if (slots.Count >= Ceiling || (slots.Count >= Ahead && slot.Date > keep))
+            if (slots.Count >= Ceiling || (slots.Count >= reach && slot.Date > keep))
             {
                 break;
             }

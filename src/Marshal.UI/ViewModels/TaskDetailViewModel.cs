@@ -1013,7 +1013,13 @@ public sealed partial class TaskDetailViewModel(
             return;
         }
 
-        await inbox.TrashAsync(_id);
+        // Cała seria, nie to jedno wystąpienie. Odkąd wystąpienia stoją w bazie
+        // z osobna, kosz na jednym z nich zabiera dokładnie jedno — a ten przycisk
+        // obiecuje koniec rytmu. Bez tej drogi obiecywałby coś, czego nie robi.
+        if (!await edit.DropSeriesAsync(_id))
+        {
+            await inbox.TrashAsync(_id);
+        }
 
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);

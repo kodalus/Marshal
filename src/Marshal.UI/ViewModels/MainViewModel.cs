@@ -70,6 +70,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly DayRolloverService _dayRollover;
 
+    private readonly SeriesMigration _seriesMigration;
+
     private readonly DailyBackup _backup;
 
     /// <summary>
@@ -160,6 +162,7 @@ public sealed partial class MainViewModel : ObservableObject
         ReminderService reminders,
         GoogleSyncService drive,
         DayRolloverService dayRollover,
+        SeriesMigration seriesMigration,
         DailyBackup backup,
         IWriteSignal signal)
     {
@@ -171,6 +174,7 @@ public sealed partial class MainViewModel : ObservableObject
         _reminders = reminders;
         _drive = drive;
         _dayRollover = dayRollover;
+        _seriesMigration = seriesMigration;
 
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
         // dokładnie dwie rzeczy: odłożyć notatkę i poprosić wątek okna o wysyłkę.
@@ -758,6 +762,16 @@ public sealed partial class MainViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
+        // Przeniesienie rytmów do serii — raz, przy pierwszym uruchomieniu po
+        // przebudowie. Przed wczytaniem czegokolwiek, bo zmienia to, co się wczyta:
+        // zadanie niosące regułę staje się pierwszym wystąpieniem serii, a za nim
+        // staje okno dni, których do tej pory nie było w bazie.
+        //
+        // Z czekaniem, inaczej niż synchronizacja niżej: ekran startowy jest
+        // kalendarzem, a kalendarz pokazywałby wtedy stan sprzed przeniesienia —
+        // czyli dokładnie to, co przebudowa ma naprawić.
+        await Try("Rytmy: przeniesienie do serii", () => _seriesMigration.RunAsync());
+
         CollectReminders();
         await RefreshInboxAsync();
 

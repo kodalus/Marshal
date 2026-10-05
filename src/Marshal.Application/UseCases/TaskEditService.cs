@@ -2,6 +2,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Recurrence;
+using Marshal.Domain.Series;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.UseCases;
@@ -44,7 +45,9 @@ public sealed class TaskEditService(
     IHlcSource hlc,
     IClock clock,
     IAreaRepository areas,
-    ITaskMirror mirror)
+    ITaskMirror mirror,
+    ITaskSeriesRepository series,
+    SeriesService rhythms)
 {
     /// <summary>
     /// Wyrównanie odbicia w kalendarzu po zapisie.
@@ -120,9 +123,21 @@ public sealed class TaskEditService(
             task.SetEstimate(edit.EstimatedMinutes, edit.Energy, hlc.Next());
         }
 
-        if (edit.Recurrence != task.Recurrence)
+        // Rytm **tylko dla zadania bez serii**. Wystąpienie serii nie nosi reguły —
+        // nosi ją seria — więc pusta sekcja rytmu w oknie nie znaczy tu „skończ serię",
+        // tylko „to okno o rytmie nie mówi". Potraktowana jako zmiana kasowałaby serię
+        // przy każdym zapisie nazwy, a nikt by o to nie prosił. Koniec serii ma własną
+        // drogę: SetRecurrenceAsync z pustym rodzajem.
+        if (task.SeriesId is null && edit.Recurrence != task.Recurrence)
         {
-            task.SetRecurrence(edit.Recurrence, hlc.Next());
+            if (edit.Recurrence is { } fresh)
+            {
+                await rhythms.StartAsync(task, fresh, ct);
+            }
+            else
+            {
+                task.SetRecurrence(null, hlc.Next());
+            }
         }
 
         // Zmiana obszaru rusza stan tylko wtedy, gdy zadanie już wyszło ze skrzynki:
@@ -223,13 +238,83 @@ public sealed class TaskEditService(
         ChangeAsync(id, z => z.SetPriority(priority, hlc.Next()), ct);
 
     /// <summary>Rytm z menu: same rodzaje, bez zaczepienia i pominięć — te mają swój ekran.</summary>
-    public Task<TaskItem?> SetRecurrenceAsync(
-        Guid id, RecurrenceKind? kind, CancellationToken ct = default) =>
-        ChangeAsync(
-            id,
-            z => z.SetRecurrence(
-                kind is { } value ? new RecurrenceRule(value) : null, hlc.Next()),
-            ct);
+    /// <summary>
+    /// Nadanie rytmu, zmiana rodzaju albo koniec serii — jedną drogą.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pusty rodzaj to „nie powtarza się" i przy wystąpieniu serii znaczy <b>koniec serii
+    /// na tym dniu</b>, a nie zdjęcie pola. Reguła leży w serii, więc nie ma już czego
+    /// z zadania zdejmować; pytanie „co z dalszymi wystąpieniami" trzeba za to postawić
+    /// i jest na nie jedna sensowna odpowiedź — to, na co się patrzy, zostaje, dalszych
+    /// nie ma.
+    /// </para>
+    /// <para>
+    /// Zmiana rodzaju przy serii już istniejącej idzie do serii, nie zakłada drugiej.
+    /// Dwie serie o tym samym szablonie znaczyłyby dwa wystąpienia na dzień — czyli
+    /// dokładnie to, przed czym cała ta przebudowa ma chronić.
+    /// </para>
+    /// </remarks>
+    public async Task<TaskItem?> SetRecurrenceAsync(
+        Guid id, RecurrenceKind? kind, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } task)
+        {
+            return null;
+        }
+
+        var standing = task.SeriesId is { } mine ? await series.FindAsync(mine, ct) : null;
+
+        switch (kind, standing)
+        {
+            case (null, { } one):
+                await rhythms.EndAsync(one, task.DoDate ?? clock.Today, ct);
+                break;
+
+            case (null, null):
+                task.SetRecurrence(null, hlc.Next());
+                await unitOfWork.SaveChangesAsync(ct);
+                break;
+
+            case ({ } value, null):
+                await rhythms.StartAsync(task, new RecurrenceRule(value), ct);
+                break;
+
+            case ({ } value, { } one):
+                await rhythms.ChangeAsync(
+                    one, SeriesTemplate.From(task), new RecurrenceRule(value), ct);
+                break;
+        }
+
+        return task;
+    }
+
+    /// <summary>
+    /// Koniec całej serii: razem z tym wystąpieniem i z tym, co stało dalej.
+    /// </summary>
+    /// <remarks>
+    /// Inny wynik niż „to ostatnie wystąpienie" i dlatego osobna droga: tamto jest dla
+    /// serii, która się skończyła, ta dla serii, która była pomyłką. Wystąpienia minione
+    /// zostają — zdarzyły się i historia o tym wie.
+    /// </remarks>
+    public async Task<bool> DropSeriesAsync(Guid id, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { SeriesId: { } mine } task
+            || await series.FindAsync(mine, ct) is not { } one)
+        {
+            return false;
+        }
+
+        await rhythms.DropAsync(one, ct);
+
+        if (task.State is not TaskState.Trashed)
+        {
+            task.Trash(hlc.Next());
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        return true;
+    }
 
     /// <summary>Przeniesienie do projektu albo wyjęcie z niego.</summary>
     public async Task<TaskItem?> SetProjectAsync(
@@ -331,17 +416,59 @@ public sealed class TaskEditService(
         // Chwila wykonania nie ginie: niesie ją TaskItem.CompletedAt, czyli pole, które
         // znaczy dokładnie to. Przy okazji odhaczenie przestało przestawiać dzień
         // wykonania na dzisiaj — rzecz zrobiona w czwartek ma zostać w czwartek.
-        var next = RecurrenceRunner.Complete(task, clock.Now, hlc.Next);
-
-        if (next is not null)
-        {
-            tasks.Add(next);
-        }
-
+        task.Complete(clock.Now, hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
+
+        // Odhaczenie **nie rodzi już następnika**: wystąpienia stoją w bazie z góry,
+        // a okno dopełnia się o jedno na drugim końcu. Rodzenie następnika było tym
+        // miejscem, w którym tożsamość serii brała się z poprzednika i z dnia odhaczenia
+        // — czyli z chwili, w której ktoś akurat kliknął. Dwa urządzenia klikające
+        // w różnych dniach rozchodziły się tu na dwa łańcuchy.
+        var next = await AfterCompletionAsync(task, ct);
+
         await MirrorAsync(task, ct);
 
         return next;
+    }
+
+    /// <summary>
+    /// Co po odhaczeniu wystąpienia serii.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przy rytmie zaczepionym na kalendarzu — nic: następne wystąpienia stoją już
+    /// w bazie, a okno dopełni się przy najbliższym przejściu dnia.
+    /// </para>
+    /// <para>
+    /// Przy rytmie zaczepionym na <b>wykonaniu</b> — przestawienie początku serii na
+    /// dzisiaj i dopełnienie. „Co 3 dni od wykonania" nie ma dat do wyliczenia, dopóki
+    /// poprzednie nie zostanie odhaczone, więc okno takiej serii sięga na jedno
+    /// wystąpienie i liczy się od ostatniego wykonania. Dzień wykonania jest przy tym
+    /// zapisem, który obchodzi oba urządzenia — nie chwilą, w której jedno z nich było
+    /// akurat otwarte — więc oba dojdą do tej samej daty i do tego samego wiersza.
+    /// </para>
+    /// </remarks>
+    private async Task<TaskItem?> AfterCompletionAsync(TaskItem task, CancellationToken ct)
+    {
+        if (task.SeriesId is not { } mine || await series.FindAsync(mine, ct) is not { } one)
+        {
+            return null;
+        }
+
+        if (one.Rule.Anchor == RecurrenceAnchor.FromCompletion)
+        {
+            one.MoveStart(clock.Today, hlc.Next());
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        await rhythms.TopUpAsync(one, ct);
+
+        return (await series.OccurrencesAsync(mine, ct))
+            .Where(z => z.DoDate >= clock.Today
+                     && z.Id != task.Id
+                     && z.State is TaskState.Scheduled or TaskState.Next or TaskState.Waiting)
+            .OrderBy(z => z.DoDate)
+            .FirstOrDefault();
     }
 
     /// <summary>
@@ -359,11 +486,23 @@ public sealed class TaskEditService(
             return null;
         }
 
-        var next = RecurrenceRunner.Skip(task, clock.Now, hlc.Next);
+        // Nagrobek na tym jednym wierszu i nic więcej. W starym modelu trzeba tu było
+        // zrodzić następnika, bo wyrzucane wystąpienie niosło regułę i razem z nim
+        // przepadałby cały rytm; teraz reguła leży w serii, a dalsze dni stoją już
+        // w bazie. Nagrobek z wyliczoną tożsamością jest przy tym zapisem trwałym:
+        // dopełnianie okna pomija ten dzień, więc „tej środy nie będzie" nie wraca
+        // przy najbliższym uruchomieniu.
+        var next = task.SeriesId is null
+            ? RecurrenceRunner.Skip(task, clock.Now, hlc.Next)
+            : null;
 
         if (next is not null)
         {
             tasks.Add(next);
+        }
+        else
+        {
+            task.Trash(hlc.Next());
         }
 
         await unitOfWork.SaveChangesAsync(ct);

@@ -21,8 +21,8 @@ namespace Marshal.Infrastructure.Data.Compiled
                 "Marshal.Domain.Tasks.TaskItem",
                 typeof(TaskItem),
                 baseEntityType,
-                propertyCount: 32,
-                unnamedIndexCount: 11,
+                propertyCount: 34,
+                unnamedIndexCount: 12,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -147,6 +147,13 @@ namespace Marshal.Infrastructure.Data.Compiled
                 fieldInfo: typeof(TaskItem).GetField("<Note>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 nullable: true);
 
+            var overridden = runtimeEntityType.AddProperty(
+                "Overridden",
+                typeof(bool),
+                propertyInfo: typeof(TaskItem).GetProperty("Overridden", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(TaskItem).GetField("<Overridden>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                sentinel: false);
+
             var parentTaskId = runtimeEntityType.AddProperty(
                 "ParentTaskId",
                 typeof(Guid?),
@@ -203,6 +210,15 @@ namespace Marshal.Infrastructure.Data.Compiled
                 propertyInfo: typeof(TaskItem).GetProperty("RollCount", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(TaskItem).GetField("<RollCount>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 sentinel: 0);
+
+            var seriesId = runtimeEntityType.AddProperty(
+                "SeriesId",
+                typeof(Guid?),
+                propertyInfo: typeof(TaskItem).GetProperty("SeriesId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(TaskItem).GetField("<SeriesId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                maxLength: 36,
+                valueConverter: new GuidToStringConverter());
 
             var sharedCalendarId = runtimeEntityType.AddProperty(
                 "SharedCalendarId",
@@ -303,12 +319,15 @@ namespace Marshal.Infrastructure.Data.Compiled
                 new[] { reminderAt });
 
             var index7 = runtimeEntityType.AddIndex(
-                new[] { sharedCalendarId });
+                new[] { seriesId });
 
             var index8 = runtimeEntityType.AddIndex(
-                new[] { state });
+                new[] { sharedCalendarId });
 
             var index9 = runtimeEntityType.AddIndex(
+                new[] { state });
+
+            var index10 = runtimeEntityType.AddIndex(
                 new[] { state, doDate });
 
             return runtimeEntityType;

@@ -11,7 +11,7 @@ namespace Marshal.Infrastructure.Data.Compiled
     public partial class MarshalDbContextModel
     {
         private MarshalDbContextModel()
-            : base(skipDetectChanges: false, modelId: new Guid("8f52fbef-6763-4d6d-a304-05324a6f04e2"), entityTypeCount: 21)
+            : base(skipDetectChanges: false, modelId: new Guid("8f52fbef-6763-4d6d-a304-05324a6f04e2"), entityTypeCount: 22)
         {
         }
 
@@ -30,6 +30,7 @@ namespace Marshal.Infrastructure.Data.Compiled
             var note = NoteEntityType.Create(this);
             var project = ProjectEntityType.Create(this);
             var reviewSession = ReviewSessionEntityType.Create(this);
+            var taskSeries = TaskSeriesEntityType.Create(this);
             var changeEntry = ChangeEntryEntityType.Create(this);
             var fieldStamp = FieldStampEntityType.Create(this);
             var localSetting = LocalSettingEntityType.Create(this);
@@ -52,6 +53,7 @@ namespace Marshal.Infrastructure.Data.Compiled
             NoteEntityType.CreateAnnotations(note);
             ProjectEntityType.CreateAnnotations(project);
             ReviewSessionEntityType.CreateAnnotations(reviewSession);
+            TaskSeriesEntityType.CreateAnnotations(taskSeries);
             ChangeEntryEntityType.CreateAnnotations(changeEntry);
             FieldStampEntityType.CreateAnnotations(fieldStamp);
             LocalSettingEntityType.CreateAnnotations(localSetting);

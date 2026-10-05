@@ -284,13 +284,24 @@ public sealed record RecurrenceRule
     /// Domyślne zaczepienie **liczone z rodzaju**, nie stałe (spec 5.7).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Przy tygodniowym, miesięcznym i rocznym nazywasz konkretny dzień („poniedziałek",
     /// „15-go") — to z definicji rytm narzucony z zewnątrz. „Co 3 dni" nie ma zaczepienia
     /// w świecie; gdyby miało, powiedziałabyś „w poniedziałki i czwartki".
+    /// </para>
+    /// <para>
+    /// <b>Codziennie zaczepione na kalendarzu, nie na wykonaniu.</b> Przy odstępie jednego
+    /// dnia obie odpowiedzi znaczą to samo — następny dzień jest następnym dniem, licząc
+    /// od czegokolwiek — a różnią się czymś innym: rytm zaczepiony na wykonaniu nie ma
+    /// wyliczalnych dat, dopóki się go nie wykona, więc okno takiej serii sięga na jedno
+    /// wystąpienie (zob. <c>SeriesWindow</c>). „Codziennie" jest rytmem, przy którym widok
+    /// miesiąca ma sens największy, więc zaczepienie, które ten widok odbiera, byłoby tu
+    /// kosztem bez pokrycia.
+    /// </para>
     /// </remarks>
     public static RecurrenceAnchor DefaultAnchorFor(RecurrenceKind kind) => kind switch
     {
-        RecurrenceKind.Daily or RecurrenceKind.EveryNDays => RecurrenceAnchor.FromCompletion,
+        RecurrenceKind.EveryNDays => RecurrenceAnchor.FromCompletion,
         _ => RecurrenceAnchor.FromScheduled,
     };
 

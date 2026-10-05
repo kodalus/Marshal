@@ -2,6 +2,7 @@ using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
+using Marshal.Domain.Series;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Data;
 using Marshal.Infrastructure.Repositories;
@@ -17,6 +18,19 @@ namespace Marshal.Tests;
 /// Przejście dnia na prawdziwej bazie: to tu widać, czy zapytanie wybiera właściwe
 /// zadania i czy powtórne wołanie naprawdę nic nie dokłada.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Wystąpienie serii nie przesuwa się na dziś</b> i to jest tu rzecz najważniejsza.
+/// W modelu z zapisanym oknem dzień jest częścią tożsamości wiersza — identyfikator
+/// liczy się z serii i z niego — więc przeniesienie zaległego postawiłoby wiersz na
+/// dniu, który seria sama ma obsadzić. Tą drogą wracały „po dwa wystąpienia na dzień",
+/// tylko wejściem od innej strony.
+/// </para>
+/// <para>
+/// Odpowiedź na minięcie różni się więc wreszcie czymś, co widać: przepadło i nie wraca,
+/// przypomina do następnego razu, albo zostaje na zawsze jako zaległość.
+/// </para>
+/// </remarks>
 public sealed class DayRolloverServiceTests : IDisposable
 {
     private sealed class Clock : IClock
@@ -29,6 +43,8 @@ public sealed class DayRolloverServiceTests : IDisposable
     private readonly MarshalDbContext _db;
     private readonly Clock _clock = new();
     private readonly DayRolloverService _service;
+    private readonly SeriesService _rhythms;
+    private readonly TaskSeriesRepository _series;
     private readonly HlcSource _hlc;
     private readonly Guid _area = Guid.CreateVersion7();
 
@@ -46,153 +62,38 @@ public sealed class DayRolloverServiceTests : IDisposable
         // ruszające od zera wydałyby te same znaczniki dwa razy i drugi zapis zostałby
         // odrzucony jako cofnięcie zegara — co jest zachowaniem prawidłowym.
         _hlc = new HlcSource(_clock, "biurko");
-        _service = new DayRolloverService(
-            new TaskRepository(_db), new UnitOfWork(_db), _clock, _hlc);
+        _series = new TaskSeriesRepository(_db);
+
+        var store = new TaskRepository(_db);
+        var work = new UnitOfWork(_db);
+
+        _rhythms = new SeriesService(_series, store, work, _clock, _hlc);
+        _service = new DayRolloverService(store, _series, _rhythms, work, _clock, _hlc);
     }
 
     private static DateOnly D(string iso) => DateOnly.Parse(iso);
 
-    private TaskItem Add(string title, string doDate, RecurrenceRule? rule = null)
+    private TaskItem Add(string title, string doDate)
     {
         var task = TaskItem.Capture(title, _clock.Now, _hlc.Next());
         task.Schedule(_area, D(doDate), _hlc.Next());
-
-        if (rule is not null)
-        {
-            task.SetRecurrence(rule, _hlc.Next());
-        }
 
         _db.Tasks.Add(task);
         _db.SaveChanges();
         return task;
     }
 
-    [Fact]
-    public async Task Dwie_kopie_tej_samej_serii_schodza_do_jednej()
+    /// <summary>Seria z wystąpieniami postawionymi od podanego dnia.</summary>
+    private async Task<TaskSeries> Series(string title, string from, OnMissed onMissed)
     {
-        // Tak właśnie wyglądało podwojenie na siatce: telefon i pulpit przekroczyły ten
-        // sam dzień osobno, każde wylosowało następnikowi własny identyfikator, a
-        // scalanie przyjęło oba jako dwie różne rzeczy.
-        var rule = new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday);
+        var first = Add(title, from);
+        var rule = new RecurrenceRule(RecurrenceKind.Daily, onMissed: onMissed);
 
-        var withPhone = Add("Praca", "2026-09-28", rule);
-        var withDesk = Add("Praca", "2026-09-28", rule);
-
-        var report = await _service.RunAsync();
-
-        report.Merged.Should().Be(1);
-
-        var alive = await new TaskRepository(_db).RecurringAsync();
-
-        alive.Should().ContainSingle(z => z.Title == "Praca");
-        alive.Single().Id.Should().Be(
-            new[] { withPhone.Id, withDesk.Id }.Min(),
-            "wybór musi wypaść tak samo na obu urządzeniach, a data utworzenia "
-                + "pochodzi z dwóch różnych zegarów");
-
-        // Do kosza, nie z bazy: pomyłka co do bliźniaka ma być do obejrzenia.
-        _db.Tasks.Single(z => z.Id == new[] { withPhone.Id, withDesk.Id }.Max())
-            .State.Should().Be(TaskState.Trashed);
+        return await _rhythms.StartAsync(first, rule);
     }
 
-    [Fact]
-    public async Task Kopie_sklejaja_sie_takze_wtedy_gdy_reguly_zaszly_roznie_daleko()
-    {
-        // To jest powód, dla którego pierwsze sklejanie nie zadziałało. Porównywało
-        // reguły znak w znak, a dwie kopie tej samej serii niemal nigdy nie mają
-        // identycznego zapisu: każda zaszła kawałek dalej po swojemu — przejście dnia
-        // obcina minione odwołania i pomniejsza licznik pozostałych wystąpień.
-        var shape = new RecurrenceRule(
-            RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday, count: 10);
-
-        var withPhone = Add("Praca", "2026-10-05", shape);
-
-        // Ta sama seria widziana z drugiego urządzenia: o dwa wystąpienia dalej
-        // i z odwołanym jednym dniem. Inny zapis, ten sam rytm.
-        var withDesk = Add("Praca", "2026-10-05", new RecurrenceRule(
-            RecurrenceKind.Weekly,
-            daysOfWeek: Weekdays.Monday,
-            count: 8,
-            changes: [new RecurrenceChange(D("2026-10-12"), Dropped: true)]));
-
-        withPhone.RecurrenceJson.Should().NotBe(
-            withDesk.RecurrenceJson, "zapisy mają się różnić — o to w tym teście chodzi");
-
-        var report = await _service.RunAsync();
-
-        report.Merged.Should().Be(1);
-        (await new TaskRepository(_db).RecurringAsync())
-            .Should().ContainSingle(z => z.Title == "Praca");
-    }
-
-    [Fact]
-    public async Task Rozne_rytmy_o_tej_samej_nazwie_nie_sa_kopiami()
-    {
-        // Kształt rozstrzyga i ma rozstrzygać: „co poniedziałek" i „co wtorek" to dwie
-        // różne rzeczy, choćby nazywały się tak samo.
-        Add("Praca", "2026-10-05",
-            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday));
-        Add("Praca", "2026-10-05",
-            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Tuesday));
-
-        (await _service.RunAsync()).Merged.Should().Be(0);
-        (await new TaskRepository(_db).RecurringAsync()).Should().HaveCount(2);
-    }
-
-    [Fact]
-    public async Task Rozne_nazwy_i_rozne_ksztalty_nie_sa_kopiami()
-    {
-        // Samo podobieństwo nie wystarcza i nie ma wystarczać. Rozstrzyga nazwa, miejsce
-        // i kształt rytmu — skasowanie czegoś, co tylko wygląda podobnie, byłoby stratą.
-        var rule = new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday);
-
-        Add("Praca", "2026-09-28", rule);
-        Add("Zakupy", "2026-09-28", rule);
-        Add("Praca", "2026-09-28", new RecurrenceRule(RecurrenceKind.Daily));
-
-        var report = await _service.RunAsync();
-
-        report.Merged.Should().Be(0);
-        (await new TaskRepository(_db).RecurringAsync()).Should().HaveCount(3);
-    }
-
-    [Fact]
-    public async Task Kopie_na_roznych_dniach_schodza_do_tej_blizszej()
-    {
-        // Kopie rozchodzą się także w czasie: urządzenie otwarte później przeskoczyło
-        // serię dalej, bo nadrabiało więcej dni. Żywym wystąpieniem serii jest to
-        // następne w kolejce — zostawienie tego, które pobiegło do przodu, gubiłoby
-        // dzień po drodze.
-        var rule = new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Monday);
-
-        Add("Praca", "2026-10-12", rule);
-        var nearest = Add("Praca", "2026-10-05", rule);
-
-        (await _service.RunAsync()).Merged.Should().Be(1);
-
-        (await new TaskRepository(_db).RecurringAsync())
-            .Should().ContainSingle(z => z.Title == "Praca")
-            .Which.Id.Should().Be(nearest.Id);
-    }
-
-    [Fact]
-    public async Task Nastepnik_ma_te_sama_tozsamosc_na_kazdym_urzadzeniu()
-    {
-        // Sedno poprawki: dwa urządzenia liczące ten sam następnik mają dojść do tej
-        // samej rzeczy, a nie do dwóch różnych rzeczy o tej samej nazwie.
-        var task = Add("Wynieść śmieci", "2026-09-14", new RecurrenceRule(
-            RecurrenceKind.Weekly,
-            daysOfWeek: Weekdays.Monday,
-            onMissed: OnMissed.Skip));
-
-        await _service.RunAsync();
-
-        var next = (await new TaskRepository(_db).RecurringAsync())
-            .Single(z => z.Title == "Wynieść śmieci");
-
-        next.Id.Should().Be(OccurrenceId.For(task.Id, next.DoDate!.Value));
-        next.Id.Should().NotBe(task.Id);
-    }
+    private List<TaskItem> Occurrences(TaskSeries one) =>
+        [.. _db.Tasks.Where(t => t.SeriesId == one.Id).OrderBy(t => t.DoDate)];
 
     [Fact]
     public async Task Pusta_baza_nie_ma_czego_przesuwac()
@@ -223,78 +124,99 @@ public sealed class DayRolloverServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Drugie_uruchomienie_tego_samego_dnia_nic_nie_zmienia()
+    public async Task Wystapienie_serii_zostaje_na_swoim_dniu()
     {
-        Add("Zadzwonić", "2026-09-10");
-        Add("Podlać", "2026-09-12", new RecurrenceRule(RecurrenceKind.Daily));
+        // Sedno przebudowy. Dzień jest częścią tożsamości wiersza, więc przeniesienie
+        // zaległego na dziś postawiłoby go na dniu, który seria sama obsadza — i tą
+        // drogą wracałyby dwa wystąpienia na jeden dzień.
+        var one = await Series("Zapłacić", "2026-09-14", OnMissed.Accumulate);
 
         await _service.RunAsync();
-        var drugie = await _service.RunAsync();
 
-        drugie.Should().Be(new RolloverReport(0, 0));
+        var missed = Occurrences(one).Single(z => z.DoDate == D("2026-09-14"));
+
+        missed.DoDate.Should().Be(D("2026-09-14"), "zaległe zostaje tam, gdzie było");
+        missed.State.Should().Be(TaskState.Scheduled);
+
+        Occurrences(one).Count(z => z.DoDate == D("2026-09-16"))
+            .Should().Be(1, "dzisiejsze jest jedno, a nie dwa");
     }
 
     [Fact]
-    public async Task Accumulate_domyka_cala_zaleglosc_w_jednym_przebiegu()
+    public async Task Skip_zamyka_przegapione_od_razu()
     {
-        // Tydzień bez otwierania aplikacji ma dać tydzień pozycji od razu, a nie po
-        // jednej na uruchomienie.
-        Add("Trening", "2026-09-09",
-            new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Accumulate));
+        var one = await Series("Wynieść śmieci", "2026-09-09", OnMissed.Skip);
 
-        var report = await _service.RunAsync();
+        await _service.RunAsync();
 
-        report.Spawned.Should().Be(7);
+        var days = Occurrences(one);
 
-        // Jedno umówione na dziś i siedem zaległości bez dnia — a nie osiem pozycji
-        // stłoczonych na dzisiaj, co wyszłoby z dosłownego czytania 8.7.
-        _db.Tasks.Count(t => t.State == TaskState.Scheduled).Should().Be(1);
-        _db.Tasks.Count(t => t.State == TaskState.Next).Should().Be(7);
-        _db.Tasks.Single(t => t.RecurrenceJson != null).DoDate.Should().Be(D("2026-09-16"));
+        days.Where(z => z.DoDate < D("2026-09-16"))
+            .Should().OnlyContain(z => z.State == TaskState.Trashed);
 
-        (await _service.RunAsync()).Should().Be(new RolloverReport(0, 0));
+        days.Single(z => z.DoDate == D("2026-09-16")).State
+            .Should().Be(TaskState.Scheduled, "dzisiejsze żyje");
     }
 
     [Fact]
-    public async Task Skip_po_tygodniu_zostawia_jedno_zywe_wystapienie()
+    public async Task Carry_pyta_do_nastepnego_razu_i_przestaje()
     {
-        Add("Wynieść śmieci", "2026-09-09",
-            new RecurrenceRule(RecurrenceKind.Daily, onMissed: OnMissed.Skip));
+        // „Co poniedziałek śmieci" ma pytać przez tydzień i przestać, kiedy przychodzi
+        // następny poniedziałek: dwa wystąpienia tej samej rzeczy nie są dwiema rzeczami.
+        var one = await Series("Wynieść śmieci", "2026-09-14", OnMissed.Carry);
+
+        await _service.RunAsync();
+
+        var days = Occurrences(one);
+
+        // Przedwczorajsze i wczorajsze przepadły, bo rytm wypadł od tamtej pory znowu.
+        days.Single(z => z.DoDate == D("2026-09-14")).State.Should().Be(TaskState.Trashed);
+        days.Single(z => z.DoDate == D("2026-09-15")).State.Should().Be(TaskState.Trashed);
+
+        // Dzisiejsze żyje i nic go nie zastąpiło.
+        days.Single(z => z.DoDate == D("2026-09-16")).State.Should().Be(TaskState.Scheduled);
+    }
+
+    [Fact]
+    public async Task Accumulate_zostawia_kazda_zaleglosc()
+    {
+        // Trzy opuszczone treningi to trzy treningi, których nie było.
+        var one = await Series("Trening", "2026-09-13", OnMissed.Accumulate);
+
+        await _service.RunAsync();
+
+        Occurrences(one)
+            .Where(z => z.DoDate < D("2026-09-16"))
+            .Should().HaveCount(3).And.OnlyContain(z => z.State == TaskState.Scheduled);
+    }
+
+    [Fact]
+    public async Task Drugie_uruchomienie_tego_samego_dnia_nic_nie_zmienia()
+    {
+        // Warunek, nie wygoda: dwa urządzenia robią to samo, nie umawiając się, które ma.
+        Add("Zadzwonić", "2026-09-10");
+        await Series("Podlać", "2026-09-12", OnMissed.Carry);
+
+        await _service.RunAsync();
+        var second = await _service.RunAsync();
+
+        second.Should().Be(new RolloverReport(0, 0));
+    }
+
+    [Fact]
+    public async Task Przejscie_dnia_dopelnia_okno_serii()
+    {
+        var one = await Series("Podlać", "2026-09-16", OnMissed.Carry);
+
+        var before = Occurrences(one).Count;
+
+        // Dzień dalej: okno ma się przesunąć o jeden, a nie stać w miejscu.
+        _clock.Now = _clock.Now.AddDays(1);
 
         var report = await _service.RunAsync();
 
         report.Spawned.Should().Be(1);
-        _db.Tasks.Count(t => t.State == TaskState.Scheduled).Should().Be(1);
-        _db.Tasks.Count(t => t.State == TaskState.Trashed).Should().Be(1);
-    }
-
-    [Fact]
-    public async Task Carry_zostawia_jedna_pozycje_z_data_pierwszego_przegapienia()
-    {
-        var id = Add("Zapłacić", "2026-09-09", new RecurrenceRule(RecurrenceKind.Daily)).Id;
-
-        await _service.RunAsync();
-
-        var task = _db.Tasks.Single(t => t.Id == id);
-        task.DoDate.Should().Be(D("2026-09-16"));
-        task.CarriedSince.Should().Be(D("2026-09-09"));
-        _db.Tasks.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task Regula_przezywa_zapis_do_bazy_i_odczyt()
-    {
-        // Reguła idzie do bazy jako tekst. Gdyby odczyt jej nie odtwarzał, przejście
-        // dnia widziałoby zwykłe zadanie i cicho zgubiłoby rytm.
-        Add("Podlać", "2026-09-15",
-            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Tuesday));
-
-        _db.ChangeTracker.Clear();
-
-        var odczytane = _db.Tasks.Single();
-        odczytane.Recurrence.Should().NotBeNull();
-        odczytane.Recurrence!.Kind.Should().Be(RecurrenceKind.Weekly);
-        odczytane.Recurrence.DaysOfWeek.Should().Be(Weekdays.Tuesday);
+        Occurrences(one).Count.Should().Be(before + 1);
     }
 
     public void Dispose()

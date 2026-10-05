@@ -179,6 +179,28 @@ public sealed class SeriesWindowTests
     }
 
     [Fact]
+    public void Rytm_od_wykonania_ma_okno_na_jedno_wystapienie()
+    {
+        // „Co 3 dni od wykonania" nie ma dat do wyliczenia, dopóki poprzednie nie
+        // zostanie odhaczone. Sześćdziesiąt wierszy na datach zgadniętych z założenia
+        // „wszystko na czas" trzeba by przy każdym spóźnieniu skasować i postawić od
+        // nowa — a do tej chwili kalendarz pokazywałby rozkład, którego nikt nie obiecał.
+        var series = Series(new RecurrenceRule(
+            RecurrenceKind.EveryNDays, interval: 3, anchor: RecurrenceAnchor.FromCompletion));
+
+        SeriesWindow.Plan(series, Today).Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void Rytm_codzienny_ma_pelne_okno()
+    {
+        // Przy odstępie jednego dnia zaczepienie na wykonaniu i na kalendarzu znaczą
+        // to samo, więc „codziennie" domyślnie stoi na kalendarzu — i ma okno.
+        SeriesWindow.Plan(Series(new RecurrenceRule(RecurrenceKind.Daily)), Today).Count
+            .Should().BeGreaterThan(SeriesWindow.Ahead);
+    }
+
+    [Fact]
     public void Szablon_i_regula_wracaja_z_zapisu()
     {
         // Jedna kolumna tekstu na jedną decyzję — ta sama zasada, co przy regule.

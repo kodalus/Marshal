@@ -254,7 +254,7 @@ public sealed class CalendarStoreTests : IDisposable
 
         _edit = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _clock, new AreaRepository(_db),
-            new NoTaskMirror());
+            new NoTaskMirror(), new TaskSeriesRepository(_db), Rhythms());
 
         _source = new CalendarSource(
             Guid.CreateVersion7(), _clock.Now, _hlc.Next(),
@@ -294,6 +294,9 @@ public sealed class CalendarStoreTests : IDisposable
     /// zostawały w kontekście i przewracały każde następne podłączenie.
     /// </para>
     /// </remarks>
+    private SeriesService Rhythms() => new(
+        new TaskSeriesRepository(_db), new TaskRepository(_db), new UnitOfWork(_db), _clock, _hlc);
+
     [Fact]
     public async Task Powtorzony_wpis_w_jednym_pobraniu_nie_psuje_odswiezenia()
     {
@@ -1210,7 +1213,7 @@ public sealed class CalendarStoreTests : IDisposable
         // Przesunięcie po siatce ma dojść do kalendarza, bo tam ktoś na to patrzy.
         var edit = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _clock,
-            new AreaRepository(_db), mirror);
+            new AreaRepository(_db), mirror, new TaskSeriesRepository(_db), Rhythms());
 
         await edit.RescheduleAsync(task.Id, Today, new TimeOnly(17, 30));
 
@@ -1378,7 +1381,7 @@ public sealed class CalendarStoreTests : IDisposable
 
         var edit = new TaskEditService(
             new TaskRepository(_db), new UnitOfWork(_db), _hlc, _clock,
-            new AreaRepository(_db), mirror);
+            new AreaRepository(_db), mirror, new TaskSeriesRepository(_db), Rhythms());
 
         var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
         _db.Areas.Add(area);

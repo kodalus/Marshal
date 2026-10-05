@@ -155,7 +155,11 @@ public sealed class RecurrenceScheduleTests
     }
 
     [Theory]
-    [InlineData(RecurrenceKind.Daily, RecurrenceAnchor.FromCompletion)]
+    // Codziennie zaczepione na kalendarzu: przy odstępie jednego dnia obie odpowiedzi
+    // znaczą to samo, a zaczepienie na wykonaniu odbiera serii wyliczalne daty — czyli
+    // i okno zapisanych wystąpień, i widok miesiąca, przy którym ten rytm ma sens
+    // największy.
+    [InlineData(RecurrenceKind.Daily, RecurrenceAnchor.FromScheduled)]
     [InlineData(RecurrenceKind.EveryNDays, RecurrenceAnchor.FromCompletion)]
     [InlineData(RecurrenceKind.Weekly, RecurrenceAnchor.FromScheduled)]
     [InlineData(RecurrenceKind.Monthly, RecurrenceAnchor.FromScheduled)]
