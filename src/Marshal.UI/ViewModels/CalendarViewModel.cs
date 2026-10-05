@@ -942,7 +942,18 @@ public sealed partial class CalendarViewModel(
         ? $"Przeniesiono „{activity.Title}”. Cofnąć na {activity.Start:dd.MM} {activity.Start:HH}:{activity.Start:mm}?"
         : string.Empty;
 
-    [RelayCommand]
+    // ——— Polecenia ——————————————————————————————————————————————————————————
+    //
+    // Wszystkie z „AllowConcurrentExecutions", i to nie jest ozdoba. Polecenie
+    // asynchroniczne domyślnie **wyłącza swój przycisk na czas pracy** — a przycisk,
+    // którego praca się nie skończyła, zostaje wyłączony na zawsze. Tak zniknął
+    // „Skasuj" przy wydarzeniu z Google: brama na bazę była zajęta scalaniem, polecenie
+    // czekało, przycisk wyszarzał się i nie było już jak go nacisnąć.
+    //
+    // Wolna praca ma być wolna, a nie zabierać drogi do siebie. To ta sama pułapka,
+    // co martwy „Zapisz" i co wyszarzone zakładki — trzeci raz ta sama, w trzecim
+    // miejscu.
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task UndoMoveAsync()
     {
         if (Undo is not { } activity)
@@ -968,7 +979,7 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private void ForgetUndo()
     {
         Undo = null;
@@ -1025,7 +1036,7 @@ public sealed partial class CalendarViewModel(
     /// </summary>
     private IReadOnlyList<AgendaDay> _days = [];
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task RefreshAsync()
     {
         // Sąsiedzi złożeni pod poprzedni stan przestają być sąsiadami.
@@ -1181,7 +1192,7 @@ public sealed partial class CalendarViewModel(
     /// Pobranie świeżych wydarzeń na żądanie. Osobno od przerysowania, bo to dwie różne
     /// rzeczy: siatkę składamy z tego, co w bazie, a sieć bywa niedostępna.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task FetchAsync()
     {
         var report = await calendar.RefreshAsync(force: true);
@@ -1198,21 +1209,21 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task PreviousAsync()
     {
         Anchor = IsMonth ? Anchor.AddMonths(-1) : Anchor.AddDays(-VisibleDays);
         await RefreshAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task NextAsync()
     {
         Anchor = IsMonth ? Anchor.AddMonths(1) : Anchor.AddDays(VisibleDays);
         await RefreshAsync();
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task TodayAsync()
     {
         GoToToday();
@@ -1231,13 +1242,13 @@ public sealed partial class CalendarViewModel(
     /// żeby zgadnąć przyczynę z wyglądu. Trzy polecenia bez parametru nie mają tego
     /// problemu w ogóle.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private Task ShowDay() => SetDaysAsync(1);
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private Task ShowThreeDays() => SetDaysAsync(3);
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private Task ShowWeek() => SetDaysAsync(7);
 
     /// <summary>
@@ -1248,7 +1259,7 @@ public sealed partial class CalendarViewModel(
     /// miesiąc mówi „gdzie są zagęszczenia i które dni są puste" — a tego nie widać
     /// z siatki godzinowej, bo ta pokazuje naraz najwyżej siedem dni.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowMonth()
     {
         IsMonth = true;
@@ -1357,7 +1368,7 @@ public sealed partial class CalendarViewModel(
     /// jest wejście w dzień, który się właśnie wypatrzyło — a nie wracanie do przycisków
     /// u góry i przewijanie do niego od nowa.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task OpenMonthDayAsync(MonthCell? cell)
     {
         if (cell is null)
@@ -1705,7 +1716,7 @@ public sealed partial class CalendarViewModel(
     /// się przeliczyć z bazy, a nie tylko wyrzucić odhaczony blok: następnik potrafi
     /// wypaść na tym samym widocznym dniu.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task CompleteAsync(Guid? id)
     {
         if (id is not { } taskId)
@@ -1726,7 +1737,7 @@ public sealed partial class CalendarViewModel(
     /// zmiana nazwy w cudzym kalendarzu, jest rzeczą do rozstrzygnięcia tutaj, a nie
     /// w oknie — inaczej okno musiałoby wiedzieć, czym blok jest, żeby wiedzieć, co wołać.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ToggleAsync(SlotBox? block)
     {
         if (block is not { CanComplete: true })
@@ -1790,7 +1801,7 @@ public sealed partial class CalendarViewModel(
     /// Karta zamyka się po odhaczeniu, tak samo jak okno zadania: to jest koniec
     /// czynności, po której nie ma czego dalej oglądać.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ToggleOpenedAsync()
     {
         if (Opened is not { CanComplete: true } block)
@@ -1895,7 +1906,7 @@ public sealed partial class CalendarViewModel(
     /// to jak zepsuty przycisk, bo zaznaczone pole wyboru z natury obiecuje, że da się
     /// je odznaczyć.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ReopenAsync(Guid? id)
     {
         if (id is not { } taskId)
@@ -1913,7 +1924,7 @@ public sealed partial class CalendarViewModel(
     /// należy do czegoś innego i ma inne pola. Odhaczyć i przeciągnąć da się je wprost
     /// na siatce, a karta mówi, co to jest i z którego kalendarza pochodzi.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private void OpenTask(SlotBox? block)
     {
         if (block is null)
@@ -2070,7 +2081,7 @@ public sealed partial class CalendarViewModel(
     /// kalendarzu, może potwierdzić. To jest inna rzecz niż wspólny kalendarz — tam
     /// wszystko pojawia się po cichu i na zawsze, tu jedna rzecz i za wiedzą obu stron.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task ShowPersonAsync(Contact? person)
     {
         if (person is null || Shown is not var (source, entry, title))
@@ -2113,7 +2124,7 @@ public sealed partial class CalendarViewModel(
     /// zawczasu. Imię bierzemy z części przed małpą; poprawia się je potem, jeśli
     /// w ogóle ma to znaczenie.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task AddPersonAsync()
     {
         var address = NewPerson.Trim();
@@ -2309,7 +2320,7 @@ public sealed partial class CalendarViewModel(
     }
 
     /// <summary>Odwołanie wystąpienia z jego karty.</summary>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task DropOpenedAsync()
     {
         if (Opened is not { RhythmId: { } rhythm, RhythmDate: { } occurrence })
@@ -2329,7 +2340,7 @@ public sealed partial class CalendarViewModel(
     /// dopisać — przypomnienie, notatkę, udostępnienie — więc zatrzymanie się na siatce
     /// kazałoby szukać go wzrokiem i kliknąć drugi raz.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task DetachOpenedAsync()
     {
         if (Opened is not { RhythmId: { } rhythm, RhythmDate: { } occurrence })
@@ -2374,7 +2385,7 @@ public sealed partial class CalendarViewModel(
     /// Nazwa, projekt i sam rytm należą do serii, a nie do jednego dnia — zmienia się je
     /// tam, gdzie mieszkają. Karta wystąpienia odpowiada wyłącznie za ten jeden raz.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private void ShowRhythm()
     {
         if (Opened is not { RhythmId: { } rhythm })
@@ -2394,7 +2405,7 @@ public sealed partial class CalendarViewModel(
     /// jak zapis udany, a przy pisaniu do cudzego kalendarza to jest różnica między
     /// „zmienione" a „wydaje ci się, że zmienione".
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task SaveOpenedAsync()
     {
         if (Opened is { RhythmId: { } rhythm, RhythmDate: { } occurrence } ahead)
@@ -2469,7 +2480,7 @@ public sealed partial class CalendarViewModel(
     /// pytania, przez co psuje się także to, przy którym potwierdzenie ma sens.
     /// Ostrzeżenie zostaje na karcie: ono mówi coś, czego nie widać, i nie kosztuje ruchu.
     /// </remarks>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task DeleteOpenedAsync()
     {
         if (Opened is not { SourceId: { } source, ExternalId: { } id })
@@ -2509,7 +2520,7 @@ public sealed partial class CalendarViewModel(
         OnPropertyChanged(nameof(CanEditOpenedTimes));
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private void CloseOpened()
     {
         Opened = null;
