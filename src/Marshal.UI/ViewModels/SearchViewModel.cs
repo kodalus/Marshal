@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application;
 using Marshal.Application.Abstractions;
+using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Notes;
 
@@ -25,7 +26,7 @@ namespace Marshal.UI.ViewModels;
 /// </para>
 /// </remarks>
 public sealed partial class SearchViewModel(
-    SearchService search, IClock clock) : ObservableObject
+    SearchService search, IClock clock, ITaskSeriesRepository series) : ObservableObject
 {
     private readonly LatestOnly _queue = new();
 
@@ -67,10 +68,14 @@ public sealed partial class SearchViewModel(
         var hits = await search.FindAsync(Query);
         var today = clock.Today;
 
+        // Reguły serii raz na listę: wystąpienie zna tylko przynależność, a etykieta
+        // ma brzmieć „co poniedziałek", nie „w serii".
+        var rules = (await series.ListAsync()).ToDictionary(z => z.Id, z => z.Rule);
+
         Tasks.Clear();
         foreach (var task in hits.Tasks)
         {
-            Tasks.Add(TaskRow.From(task, today));
+            Tasks.Add(TaskRow.From(task, today, rules));
         }
 
         Notes.Clear();

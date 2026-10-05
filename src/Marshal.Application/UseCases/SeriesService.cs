@@ -55,7 +55,7 @@ public sealed class SeriesService(
 
         var starts = task.DoDate ?? clock.Today;
         var fresh = TaskSeries.Create(
-            starts, rule, SeriesTemplate.From(task), clock.Now, hlc.Next());
+            starts, rule, Blend(SeriesTemplate.From(task), rule), clock.Now, hlc.Next());
 
         series.Add(fresh);
 
@@ -204,14 +204,14 @@ public sealed class SeriesService(
 
         var before = one.Rule;
 
-        if (template is not null)
-        {
-            one.SetTemplate(template, hlc.Next());
-        }
-
         if (rule is not null)
         {
             one.SetRule(rule, hlc.Next());
+        }
+
+        if (template is not null)
+        {
+            one.SetTemplate(Blend(template, one.Rule), hlc.Next());
         }
 
         var today = clock.Today;
@@ -310,6 +310,36 @@ public sealed class SeriesService(
         }
 
         return added;
+    }
+
+    /// <summary>
+    /// Szablon z porą i długością <b>serii</b>, nie tego jednego dnia.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Szablon zdejmuje się z zadania, a zadanie bywa wystąpieniem przestawionym
+    /// wyjątkowo: ktoś przeciągnął dzisiejszy blok z dziewiątej na dziesiątą. Wzięta
+    /// wprost, taka godzina stawała się godziną wszystkich następnych dni — czyli
+    /// wyjątek jednego dnia przepisywał się na całą serię, dokładnie wbrew temu, po co
+    /// reguła pamięta porę.
+    /// </para>
+    /// <para>
+    /// Pora i długość zapamiętane w regule <b>są</b> decyzją o serii i dlatego mają
+    /// pierwszeństwo. Zadanie odpowiada tylko tam, gdzie reguła milczy — bo wtedy nic
+    /// jej jeszcze nie powiedziało.
+    /// </para>
+    /// </remarks>
+    public static SeriesTemplate Blend(SeriesTemplate template, RecurrenceRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        ArgumentNullException.ThrowIfNull(rule);
+
+        return template with
+        {
+            DoTime = rule.Time ?? template.DoTime,
+            EstimatedMinutes = rule.Minutes ?? template.EstimatedMinutes,
+            Leads = rule.Leads.Count > 0 ? rule.Leads : template.Leads,
+        };
     }
 
     /// <summary>

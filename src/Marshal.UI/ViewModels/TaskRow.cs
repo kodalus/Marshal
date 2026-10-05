@@ -1,4 +1,5 @@
 using Marshal.Application.UseCases;
+using Marshal.Domain.Recurrence;
 using Marshal.Domain.Tasks;
 
 namespace Marshal.UI.ViewModels;
@@ -13,8 +14,24 @@ namespace Marshal.UI.ViewModels;
 /// </remarks>
 public sealed record TaskRow(TaskItem Task, string Badges)
 {
-    public static TaskRow From(TaskItem task, DateOnly today) =>
-        new(task, string.Join("  ·  ", RecurrenceText.Badges(task, today)));
+    /// <summary>
+    /// Wiersz listy. Reguła podawana z zewnątrz, bo leży w serii, a nie w zadaniu.
+    /// </summary>
+    /// <remarks>
+    /// Bez podania wystąpieniu serii zostaje etykieta „w serii" — prawdziwa, ale uboższa
+    /// niż „co poniedziałek". Lista, która ma skąd wziąć reguły, podaje je i wtedy
+    /// etykieta brzmi tak jak zawsze.
+    /// </remarks>
+    public static TaskRow From(
+        TaskItem task, DateOnly today, IReadOnlyDictionary<Guid, RecurrenceRule>? rules = null)
+    {
+        var rule = task.SeriesId is { } mine && rules is not null
+            && rules.TryGetValue(mine, out var found)
+                ? found
+                : null;
+
+        return new TaskRow(task, string.Join("  ·  ", RecurrenceText.Badges(task, today, rule)));
+    }
 
     public string Title => Task.Title;
 

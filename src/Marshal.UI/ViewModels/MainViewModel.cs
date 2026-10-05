@@ -72,6 +72,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly SeriesMigration _seriesMigration;
 
+    private readonly ITaskSeriesRepository _series;
+
     private readonly DailyBackup _backup;
 
     /// <summary>
@@ -163,6 +165,7 @@ public sealed partial class MainViewModel : ObservableObject
         GoogleSyncService drive,
         DayRolloverService dayRollover,
         SeriesMigration seriesMigration,
+        ITaskSeriesRepository series,
         DailyBackup backup,
         IWriteSignal signal)
     {
@@ -175,6 +178,7 @@ public sealed partial class MainViewModel : ObservableObject
         _drive = drive;
         _dayRollover = dayRollover;
         _seriesMigration = seriesMigration;
+        _series = series;
 
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
         // dokładnie dwie rzeczy: odłożyć notatkę i poprosić wątek okna o wysyłkę.
@@ -1298,10 +1302,12 @@ public sealed partial class MainViewModel : ObservableObject
 
         candidates = candidates.Where(t => !selected.Contains(t.Id)).ToList();
 
+        var rules = await RulesAsync();
+
         FocusCandidates.Clear();
         foreach (var task in candidates)
         {
-            FocusCandidates.Add(TaskRow.From(task, today));
+            FocusCandidates.Add(TaskRow.From(task, today, rules));
         }
 
         OnPropertyChanged(nameof(FocusIsFull));
@@ -1617,13 +1623,25 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var items = await source;
         var today = Today;
+        var rules = await RulesAsync();
 
         target.Clear();
         foreach (var item in items)
         {
-            target.Add(TaskRow.From(item, today));
+            target.Add(TaskRow.From(item, today, rules));
         }
     }
+
+    /// <summary>
+    /// Reguły serii pod ręką przy budowaniu listy.
+    /// </summary>
+    /// <remarks>
+    /// Pytane raz na listę, nie raz na wiersz: serii jest kilkanaście, a wierszy bywa
+    /// kilkaset. Bez tego wystąpieniu serii zostawała etykieta „w serii" zamiast
+    /// „co poniedziałek" — reguła leży w serii, a wiersz zna tylko przynależność.
+    /// </remarks>
+    private async Task<Dictionary<Guid, RecurrenceRule>> RulesAsync() =>
+        (await _series.ListAsync()).ToDictionary(z => z.Id, z => z.Rule);
 
     private static async Task FillPlain(
         ObservableCollection<TaskItem> target, Task<IReadOnlyList<TaskItem>> source)

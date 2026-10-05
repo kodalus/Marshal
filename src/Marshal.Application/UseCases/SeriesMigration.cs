@@ -68,10 +68,15 @@ public sealed class SeriesMigration(
                 continue;
             }
 
+            // Szablon z porą i długością **serii**, nie tego jednego dnia: zadanie
+            // niosące regułę bywa wystąpieniem przestawionym wyjątkowo, a reguła
+            // pamięta porę właśnie po to, żeby ten wyjątek nie przepisał się na resztę.
+            var moved = Calendared(rule);
+
             var fresh = TaskSeries.Create(
                 carrier.DoDate ?? clock.Today,
-                Calendared(rule),
-                SeriesTemplate.From(carrier),
+                moved,
+                SeriesService.Blend(SeriesTemplate.From(carrier), moved),
                 clock.Now,
                 hlc.Next());
 

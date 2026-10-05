@@ -69,7 +69,8 @@ public static class RecurrenceText
     }
 
     /// <summary>Stan zadania po polsku: zaległość, przesunięcia, termin.</summary>
-    public static IReadOnlyList<string> Badges(TaskItem task, DateOnly today)
+    public static IReadOnlyList<string> Badges(
+        TaskItem task, DateOnly today, RecurrenceRule? rule = null)
     {
         ArgumentNullException.ThrowIfNull(task);
         var labels = new List<string>();
@@ -93,9 +94,17 @@ public static class RecurrenceText
                 : $"termin {deadline:yyyy-MM-dd}");
         }
 
-        if (task.Recurrence is { } rule)
+        // Reguła podana z zewnątrz albo zdjęta z zadania. Wystąpienie serii nie nosi
+        // reguły, więc bez podania zostaje mu samo „w serii" — mniej, niż mówi zdanie
+        // o rytmie, ale prawda. Listy, które mają czym zapytać, podają regułę i wtedy
+        // etykieta brzmi tak jak zawsze.
+        if ((rule ?? task.Recurrence) is { } found)
         {
-            labels.Add(Describe(rule));
+            labels.Add(Describe(found));
+        }
+        else if (task.SeriesId is not null)
+        {
+            labels.Add("w serii");
         }
 
         return labels;

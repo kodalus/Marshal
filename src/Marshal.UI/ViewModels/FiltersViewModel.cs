@@ -35,6 +35,8 @@ public sealed partial class FiltersViewModel : ObservableObject
     private readonly ITagRepository _tags;
     private readonly IClock _clock;
 
+    private readonly ITaskSeriesRepository _series;
+
     /// <summary>Wstrzymuje przeliczanie na czas wypełniania pól z zapisanego widoku.</summary>
     private bool _loading;
 
@@ -45,13 +47,15 @@ public sealed partial class FiltersViewModel : ObservableObject
         IAreaRepository areas,
         IProjectRepository projects,
         ITagRepository tags,
-        IClock clock)
+        IClock clock,
+        ITaskSeriesRepository series)
     {
         _filters = filters;
         _areas = areas;
         _projects = projects;
         _tags = tags;
         _clock = clock;
+        _series = series;
 
         Fill(States, TaskStates);
         Fill(Priorities, PriorityChoice.All.Select(p => (p.Value.ToString(), p.Label)));
@@ -275,10 +279,14 @@ public sealed partial class FiltersViewModel : ObservableObject
     {
         var today = _clock.Today;
 
+        // Reguły serii raz na listę — zob. TaskRow.From: wystąpienie zna tylko
+        // przynależność, a etykieta ma brzmieć tak jak zawsze.
+        var rules = (await _series.ListAsync()).ToDictionary(z => z.Id, z => z.Rule);
+
         Results.Clear();
         foreach (var task in await _filters.RunAsync(Build()))
         {
-            Results.Add(TaskRow.From(task, today));
+            Results.Add(TaskRow.From(task, today, rules));
         }
 
         OnPropertyChanged(nameof(HasResults));
