@@ -186,10 +186,11 @@ public sealed class TaskEditService(
         // znacznika poprawiona godzina jednego wtorku przepadałaby przy najbliższej
         // zmianie nazwy całej serii, bez pytania i bez śladu.
         //
-        // Nie wtedy, gdy zapis zmieniał rytm: wtedy karta mówiła o całej serii, a nie
-        // o tym dniu, i przypięcie zostawiłoby jeden wiersz na starym dniu obok okna
-        // postawionego od nowa.
-        if (task.SeriesId is not null && !ruleChanged)
+        // **Także wtedy, gdy zapis zmieniał rytm.** Karta pokazuje jedno wystąpienie
+        // i to na nie się patrzy, naciskając „Zapisz"; nowy rytm idzie przy tym do serii
+        // razem z szablonem zdjętym z tej właśnie karty, więc dzień, na który się
+        // patrzyło, zostaje taki, jak go zapisano.
+        if (task.SeriesId is not null)
         {
             task.Override(hlc.Next());
         }

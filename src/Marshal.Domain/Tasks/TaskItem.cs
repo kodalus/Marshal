@@ -549,6 +549,59 @@ public sealed class TaskItem : Entity
         return occurrence;
     }
 
+    /// <summary>
+    /// Przepisanie wystąpienia z szablonu serii — bez ruszania dnia.
+    /// </summary>
+    /// <remarks>
+    /// Wołane przy zmianie serii, która nie przestawia dni: nowa nazwa, pora albo
+    /// długość mają dojść do wystąpień już postawionych, a wyrzucenie ich i postawienie
+    /// od nowa byłoby tylko sześćdziesięcioma wpisami w dzienniku synchronizacji
+    /// i nowymi identyfikatorami dla dni, które nigdzie się nie ruszyły.
+    ///
+    /// Dzień zostaje nietknięty, bo jest częścią tożsamości wiersza. Wystąpienie
+    /// zmienione z ręki tędy nie przechodzi — o tym rozstrzyga wołający.
+    /// </remarks>
+    public void Restamp(
+        SeriesTemplate template, TimeOnly? time, int? minutes, Func<Hlc> stamp)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        ArgumentNullException.ThrowIfNull(stamp);
+
+        if (Title != template.Title)
+        {
+            Rename(template.Title, stamp());
+        }
+
+        if (Note != template.Note)
+        {
+            SetNote(template.Note, stamp());
+        }
+
+        if (Priority != template.Priority)
+        {
+            SetPriority(template.Priority, stamp());
+        }
+
+        var length = minutes ?? template.EstimatedMinutes;
+
+        if (EstimatedMinutes != length || Energy != template.Energy)
+        {
+            SetEstimate(length, template.Energy, stamp());
+        }
+
+        var at = time ?? template.DoTime;
+
+        if (DoTime != at)
+        {
+            SetDoTime(at, stamp());
+        }
+
+        if (template.Leads is { } leads && !leads.SequenceEqual(ReminderLeads))
+        {
+            SetReminderLeads(leads, stamp());
+        }
+    }
+
     /// <summary>Oznaczenie wystąpienia zmienionego z ręki — zob. <see cref="Overridden"/>.</summary>
     public void Override(Hlc stamp)
     {

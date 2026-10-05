@@ -202,6 +202,8 @@ public sealed class SeriesService(
     {
         ArgumentNullException.ThrowIfNull(one);
 
+        var before = one.Rule;
+
         if (template is not null)
         {
             one.SetTemplate(template, hlc.Next());
@@ -213,9 +215,38 @@ public sealed class SeriesService(
         }
 
         var today = clock.Today;
+        var standing = await series.OccurrencesAsync(one.Id, ct);
+        var mine = one.Template;
+
+        // Okno stawiane od nowa **tylko wtedy, gdy zmieniły się dni**. Zmiana nazwy,
+        // pory czy długości nie przestawia żadnego dnia, więc wyrzucanie
+        // sześćdziesięciu wierszy i stawianie sześćdziesięciu nowych byłoby wyłącznie
+        // sześćdziesięcioma wpisami w dzienniku synchronizacji — i nowymi
+        // identyfikatorami dla dni, które nigdzie się nie ruszyły.
+        if (!Moves(before, one.Rule))
+        {
+            var touched = 0;
+
+            foreach (var occurrence in standing)
+            {
+                if (occurrence.DoDate >= today && Open(occurrence) && !occurrence.Overridden)
+                {
+                    occurrence.Restamp(mine, one.Rule.Time, one.Rule.Minutes, hlc.Next);
+                    touched++;
+                }
+            }
+
+            if (touched > 0)
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+            }
+
+            return new TopUpReport(0, 0);
+        }
+
         var retired = 0;
 
-        foreach (var occurrence in await series.OccurrencesAsync(one.Id, ct))
+        foreach (var occurrence in standing)
         {
             if (occurrence.DoDate >= today && Open(occurrence) && !occurrence.Overridden)
             {
@@ -280,6 +311,22 @@ public sealed class SeriesService(
 
         return added;
     }
+
+    /// <summary>
+    /// Czy nowa reguła przestawia <b>dni</b>, a nie tylko to, co dzień niesie.
+    /// </summary>
+    /// <remarks>
+    /// Kształt rytmu, data końca i licznik pozostałych wystąpień wyznaczają, które dni
+    /// wypadają. Pora, długość i wyprzedzenia nie wyznaczają niczego — zmieniają
+    /// wyłącznie treść dni, które i tak wypadłyby tam, gdzie wypadają. Rozróżnienie
+    /// jest potrzebne, bo zapis karty niesie regułę zawsze, także wtedy, gdy nikt rytmu
+    /// nie dotknął: pora i długość są w niej zapamiętywane, więc samo poprawienie
+    /// tytułu wyglądało jak zmiana rytmu i stawiało całe okno od nowa.
+    /// </remarks>
+    private static bool Moves(RecurrenceRule before, RecurrenceRule after) =>
+        before.Shape != after.Shape
+        || before.Until != after.Until
+        || before.Count != after.Count;
 
     private static bool Open(TaskItem task) =>
         task.State is TaskState.Next or TaskState.Scheduled or TaskState.Waiting;

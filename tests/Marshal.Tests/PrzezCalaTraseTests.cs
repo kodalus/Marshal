@@ -770,7 +770,18 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         saved!.Title.Should().Be("Praca zdalna");
         saved.DoTime.Should().Be(new TimeOnly(10, 0), "to wystąpienie zostaje o dziesiątej");
-        saved.Recurrence!.Time.Should().Be(new TimeOnly(9, 0), "rytm zostaje przy dziewiątej");
+        saved.Overridden.Should().BeTrue("zapisana karta mówi o tym jednym dniu");
+
+        // Dalsze dni serii zostają przy porze, którą miały. Karta pokazuje jedno
+        // wystąpienie, a przeciągnięcie po siatce było decyzją o tym dniu — zapis
+        // samego tytułu nie ma prawa przepisać jej na cały rytm.
+        var next = (await NewService<ITaskSeriesRepository>()
+                .OccurrencesAsync(saved.SeriesId!.Value))
+            .Where(t => t.DoDate > saved.DoDate)
+            .OrderBy(t => t.DoDate)
+            .First();
+
+        next.DoTime.Should().Be(new TimeOnly(9, 0), "rytm zostaje przy dziewiątej");
     }
 
     [Fact]
@@ -798,7 +809,17 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var saved = await tasks.FindAsync(task.Id);
 
         saved!.DoTime.Should().Be(new TimeOnly(11, 0));
-        saved.Recurrence!.Time.Should().Be(new TimeOnly(11, 0), "w karcie mówi się o serii");
+
+        // W karcie mówi się o serii: pora dochodzi do dni, które jeszcze przed nami,
+        // a nie tylko do tego jednego. Reguła leży w serii, więc tam się o to pyta.
+        var one = await NewService<ITaskSeriesRepository>().FindAsync(saved.SeriesId!.Value);
+
+        one!.Rule.Time.Should().Be(new TimeOnly(11, 0));
+
+        (await NewService<ITaskSeriesRepository>().OccurrencesAsync(one.Id))
+            .Where(z => z.DoDate > saved.DoDate)
+            .Should().NotBeEmpty()
+            .And.OnlyContain(z => z.DoTime == new TimeOnly(11, 0));
     }
 
     [Fact]
