@@ -270,6 +270,16 @@ public sealed record RecurrenceRule
         new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, Until, Count,
             Changes, Minutes, time, Leads);
 
+    /// <summary>Ta sama reguła z datą końca.</summary>
+    /// <remarks>
+    /// „To ostatnie wystąpienie" w modelu z zapisanym oknem znaczy właśnie tyle: dzień,
+    /// za który nie wolno już wyjść. Wystąpienia minione zostają tym, czym są, a okno
+    /// przestaje mieć co dokładać — bez kasowania czegokolwiek wstecz.
+    /// </remarks>
+    public RecurrenceRule EndingOn(DateOnly last) =>
+        new(Kind, Interval, DaysOfWeek, DayOfMonth, Anchor, OnMissed, last, Count,
+            Changes, Minutes, Time, Leads);
+
     /// <summary>
     /// Domyślne zaczepienie **liczone z rodzaju**, nie stałe (spec 5.7).
     /// </summary>

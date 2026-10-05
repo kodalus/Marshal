@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 namespace Marshal.Domain.Recurrence;
 
 /// <summary>
-/// Tożsamość kolejnego wystąpienia serii — **wyliczana, nie losowana**.
+/// Tożsamość wystąpienia — **wyliczana z właściciela i dnia, nie losowana**.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,10 +18,19 @@ namespace Marshal.Domain.Recurrence;
 /// się na siatce i podwajała każdą swoją zapowiedź.
 /// </para>
 /// <para>
-/// Identyfikator liczony z poprzednika i dnia sprawia, że oba urządzenia dochodzą do
-/// <b>tego samego</b> wystąpienia: scalanie widzi jedną rzecz zapisaną dwa razy i składa
-/// ją w jedną, zamiast rozstawiać dwie obok siebie. To jest ta sama odpowiedź, co przy
-/// zapowiedziach rytmu — wyliczać, a nie przechowywać — tyle że o identyfikator.
+/// Identyfikator liczony z <b>właściciela i dnia</b> sprawia, że oba urządzenia dochodzą
+/// do tej samej rzeczy: scalanie widzi jedną rzecz zapisaną dwa razy i składa ją w jedną,
+/// zamiast rozstawiać dwie obok siebie. To jest ta sama odpowiedź, co przy zapowiedziach
+/// rytmu — wyliczać, a nie przechowywać — tyle że o identyfikator.
+/// </para>
+/// <para>
+/// <b>Właścicielem jest seria albo nawyk, nigdy poprzednie wystąpienie.</b> Pierwsze
+/// podejście liczyło z poprzednika: <c>f(poprzednik, dzień)</c>. Funkcja była
+/// deterministyczna, ale jej wejścia nie były wspólne — dzień, na który wypada następnik,
+/// zależał od tego, kiedy dane urządzenie zostało otwarte. Telefon otwarty w poniedziałek
+/// i pulpit otwarty w środę liczyły różne daty, więc różne identyfikatory, a stąd dwa
+/// rozłączne łańcuchy, które reguła sprowadzała z powrotem na te same dni. Seria i nawyk
+/// są faktami o rzeczy, nie o historii urządzenia, i dlatego nadają się na wejście.
 /// </para>
 /// <para>
 /// Wersja 8, czyli „identyfikator z nazwy": mówi wprost, że te bity nie są losowe
@@ -31,12 +40,16 @@ namespace Marshal.Domain.Recurrence;
 /// </remarks>
 public static class OccurrenceId
 {
-    /// <summary>Identyfikator wystąpienia, które <paramref name="from"/> rodzi na dany dzień.</summary>
-    public static Guid After(Guid from, DateOnly day)
+    /// <summary>Identyfikator dnia <paramref name="day"/> u właściciela <paramref name="owner"/>.</summary>
+    /// <remarks>
+    /// Nazwa mówi „w czym", nie „po czym": liczy się z rzeczy trwałej — serii albo
+    /// nawyku — a nie z wystąpienia poprzedniego.
+    /// </remarks>
+    public static Guid For(Guid owner, DateOnly day)
     {
         Span<byte> seed = stackalloc byte[20];
 
-        from.TryWriteBytes(seed);
+        owner.TryWriteBytes(seed);
         BinaryPrimitives.WriteInt32LittleEndian(seed[16..], day.DayNumber);
 
         Span<byte> digest = stackalloc byte[32];

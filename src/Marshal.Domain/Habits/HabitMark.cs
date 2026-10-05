@@ -64,5 +64,5 @@ public sealed class HabitMark : Entity
     public bool Counts(int? target) => Amount >= Math.Max(1, target ?? 1);
 
     internal static Guid Identity(Guid habitId, DateOnly day) =>
-        OccurrenceId.After(habitId, day);
+        OccurrenceId.For(habitId, day);
 }

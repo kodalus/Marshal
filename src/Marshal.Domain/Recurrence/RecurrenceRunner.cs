@@ -211,7 +211,7 @@ public static class RecurrenceRunner
 
         return task.SpawnNextOccurrence(
             slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes,
-            OccurrenceId.After(task.Id, slot.Date));
+            OccurrenceId.For(task.Id, slot.Date));
     }
 
     private static TaskItem? SpawnFrom(
@@ -231,7 +231,7 @@ public static class RecurrenceRunner
 
         return task.SpawnNextOccurrence(
             slot.Date, slot.Rule, now, stamp(), slot.Time, slot.Minutes,
-            OccurrenceId.After(task.Id, slot.Date));
+            OccurrenceId.For(task.Id, slot.Date));
     }
 
     /// <summary>

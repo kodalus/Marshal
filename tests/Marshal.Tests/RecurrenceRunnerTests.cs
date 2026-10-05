@@ -551,16 +551,16 @@ public sealed class RecurrenceRunnerTests
         var day = new DateOnly(2026, 9, 28);
 
         // Powtarzalna — na tym polega cała poprawka.
-        OccurrenceId.After(from, day).Should().Be(OccurrenceId.After(from, day));
+        OccurrenceId.For(from, day).Should().Be(OccurrenceId.For(from, day));
 
         // I rozróżnialna: inny dzień albo inny poprzednik to inne wystąpienie.
-        OccurrenceId.After(from, day).Should().NotBe(OccurrenceId.After(from, day.AddDays(1)));
-        OccurrenceId.After(from, day)
-            .Should().NotBe(OccurrenceId.After(Guid.CreateVersion7(), day));
+        OccurrenceId.For(from, day).Should().NotBe(OccurrenceId.For(from, day.AddDays(1)));
+        OccurrenceId.For(from, day)
+            .Should().NotBe(OccurrenceId.For(Guid.CreateVersion7(), day));
 
         // Poprawny UUID, bo baza i synchronizacja mają prawo to zakładać. Wersja ósma
         // znaczy „identyfikator wyliczony" — i sprawdzenie jej łapie przy okazji
         // pomylenie kolejności bajtów, po której nibble wersji wypada o bajt dalej.
-        OccurrenceId.After(from, day).Version.Should().Be(8);
+        OccurrenceId.For(from, day).Version.Should().Be(8);
     }
 }

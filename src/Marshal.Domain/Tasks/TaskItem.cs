@@ -1,5 +1,6 @@
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Recurrence;
+using Marshal.Domain.Series;
 
 namespace Marshal.Domain.Tasks;
 
@@ -192,6 +193,38 @@ public sealed class TaskItem : Entity
             return _recurrence;
         }
     }
+
+    /// <summary>
+    /// Seria, z której wystąpienie powstało. Puste przy zadaniu zwykłym.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przynależność zamiast reguły na wystąpieniu. Do tej pory regułę nosiło najnowsze
+    /// wystąpienie, co miało jedną zaletę — nie wymagało tożsamości serii — i dwie wady,
+    /// z których obie zdążyły się odezwać. Skasowanie tego jednego wystąpienia zabierało
+    /// razem z nim cały rytm. A tożsamość następnika, liczona z poprzednika i z dnia,
+    /// zależała od tego, kiedy które urządzenie zostało otwarte, więc seria rozchodziła
+    /// się na dwa rozłączne łańcuchy i podwajała się na siatce.
+    /// </para>
+    /// <para>
+    /// Tutaj wystąpienie jest zwykłym zadaniem, które <b>wie, czyje jest</b>. Reguła
+    /// leży w serii i nie da się jej skasować, kasując jeden dzień; tożsamość liczy się
+    /// z serii i dnia, więc dwa urządzenia dochodzą do tego samego wiersza.
+    /// </para>
+    /// </remarks>
+    public Guid? SeriesId { get; private set; }
+
+    /// <summary>
+    /// Wystąpienie zmienione z ręki — zmiana szablonu serii go nie dotyka.
+    /// </summary>
+    /// <remarks>
+    /// Bez tej flagi zmiana nazwy serii przepisywałaby też ten jeden wtorek, który
+    /// został przestawiony świadomie, i zmiana rytmu byłaby cichym skasowaniem cudzej
+    /// decyzji. Flaga odpowiada na pytanie, które w modelu z zapisanym oknem pojawia się
+    /// nieuchronnie — „co wygrywa, szablon czy ten jeden dzień" — i odpowiada na nie
+    /// na korzyść dnia, bo to on był ostatnią świadomą decyzją.
+    /// </remarks>
+    public bool Overridden { get; private set; }
 
     /// <summary>
     /// Od kiedy wystąpienie jest zaległe przy <see cref="OnMissed.Carry"/>. Ustawiane
@@ -457,6 +490,82 @@ public sealed class TaskItem : Entity
 
         next.SetRecurrence(rule, stamp);
         return next;
+    }
+
+    /// <summary>
+    /// Wystąpienie serii postawione z szablonu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tożsamość podaje wołający i jest <b>wyliczona z serii i dnia</b>
+    /// (<see cref="OccurrenceId"/>), a nie losowana — dzięki temu dwa urządzenia, które
+    /// dopełniły okno niezależnie, zapisały tę samą rzecz, a nie dwie.
+    /// </para>
+    /// <para>
+    /// Termin i chwila przypomnienia liczą się z <b>odstępu</b> zapamiętanego w szablonie,
+    /// nie z daty: „zapłacić do 10-go" przy racie robionej 5-go to pięć dni zapasu, co
+    /// miesiąc tyle samo. Skopiowane wprost byłyby od razu przeterminowane, a N5 zaczęłoby
+    /// kłamać.
+    /// </para>
+    /// </remarks>
+    public static TaskItem InSeries(
+        Guid seriesId,
+        SeriesSlot slot,
+        SeriesTemplate template,
+        DateTimeOffset now,
+        Hlc stamp)
+    {
+        ArgumentNullException.ThrowIfNull(slot);
+        ArgumentNullException.ThrowIfNull(template);
+
+        var occurrence = new TaskItem(slot.Id, now, stamp, template.Title)
+        {
+            Note = template.Note,
+            State = TaskState.Scheduled,
+            AreaId = template.AreaId,
+            ProjectId = template.ProjectId,
+            ParentTaskId = template.ParentTaskId,
+            DoDate = slot.Date,
+            Priority = template.Priority,
+            Color = template.Color,
+            Energy = template.Energy,
+            SeriesId = seriesId,
+
+            // Pora i długość tego jednego dnia mają pierwszeństwo nad szablonem:
+            // przełożone wystąpienie niesie je w swoim miejscu w oknie.
+            DoTime = slot.Time ?? template.DoTime,
+            EstimatedMinutes = slot.Minutes ?? template.EstimatedMinutes,
+
+            ReminderLeadsCsv = template.Leads is { Count: > 0 } leads
+                ? string.Join(',', leads)
+                : null,
+        };
+
+        if (template.DeadlineOffsetDays is { } offset)
+        {
+            occurrence.Deadline = slot.Date.AddDays(offset);
+        }
+
+        return occurrence;
+    }
+
+    /// <summary>Oznaczenie wystąpienia zmienionego z ręki — zob. <see cref="Overridden"/>.</summary>
+    public void Override(Hlc stamp)
+    {
+        if (Overridden)
+        {
+            return;
+        }
+
+        Overridden = true;
+        Touch(stamp);
+    }
+
+    /// <summary>Przypisanie do serii. Wołane przy migracji starego modelu i przy nadaniu rytmu.</summary>
+    public void JoinSeries(Guid? seriesId, Hlc stamp)
+    {
+        SeriesId = seriesId;
+        Touch(stamp);
     }
 
     /// <summary>

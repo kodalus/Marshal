@@ -190,7 +190,7 @@ public sealed class DayRolloverServiceTests : IDisposable
         var next = (await new TaskRepository(_db).RecurringAsync())
             .Single(z => z.Title == "Wynieść śmieci");
 
-        next.Id.Should().Be(OccurrenceId.After(task.Id, next.DoDate!.Value));
+        next.Id.Should().Be(OccurrenceId.For(task.Id, next.DoDate!.Value));
         next.Id.Should().NotBe(task.Id);
     }
 
