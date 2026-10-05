@@ -679,9 +679,11 @@ public sealed partial class TaskDetailViewModel(
             ? start.ToTimeSpan() + TimeSpan.FromMinutes(length)
             : null;
         SelectedEnergyLevel = Energies.First(e => e.Value == task.Energy);
-        // Karta dnia nie edytuje rytmu — pokazuje go zdaniem i prowadzi do serii.
-        // Reguła wczytywana mimo to, bo zdanie bierze się właśnie z niej.
-        LoadRule(IsSeries ? rule : null);
+        // Edytor rytmu wypełniany **tylko przy zadaniu bez serii** — bo tam rytm się
+        // nadaje i tam karta jest jedynym miejscem, w którym serię da się założyć.
+        // Wystąpienie serii dostaje zamiast edytora zdanie o rytmie i drogę do serii:
+        // rytm jest własnością serii, a nie tego jednego wtorku.
+        LoadRule(task.SeriesId is null ? rule : null);
         SeriesLabel = rule is null ? null : RecurrenceText.Describe(rule);
 
         _series = task.SeriesId ?? Guid.Empty;

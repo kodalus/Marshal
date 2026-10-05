@@ -740,26 +740,29 @@ public sealed class PrzezCalaTraseTests : IDisposable
     [Fact]
     public async Task Zapis_karty_nie_przepisuje_na_rytm_wyjatku_z_siatki()
     {
-        // Karta pokazuje porę i długość **tego wystąpienia**, a po przeciągnięciu po
-        // siatce bywają one inne niż w serii. Zapis karty — choćby po poprawieniu samego
-        // tytułu — przepisywał je na cały rytm, czyli cofał to, co siatka właśnie zrobiła.
+        // Karta pokazuje porę **tego wystąpienia**, a po przeciągnięciu po siatce bywa
+        // ona inna niż w serii. Zapis karty — choćby po poprawieniu samego tytułu —
+        // nie ma prawa przepisać jej na cały rytm.
         var task = await ZaplanowaneAsync("Praca");
         var hlc = NewService<IHlcSource>();
         var clock = NewService<IClock>();
 
         task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
         task.SetEstimate(480, task.Energy, hlc.Next());
-        task.SetRecurrence(
-            new RecurrenceRule(RecurrenceKind.Weekly, daysOfWeek: Weekdays.Workdays), hlc.Next());
-
         await NewService<IUnitOfWork>().SaveChangesAsync();
+
+        var tasks = NewService<ITaskRepository>();
+        var detail = NewService<TaskDetailViewModel>();
+
+        await detail.LoadAsync(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
+        await detail.SaveAsync();
+
+        var mine = (await tasks.FindAsync(task.Id))!.SeriesId!.Value;
 
         // Siatka: dziś zaczynam o dziesiątej.
         await NewService<TaskEditService>()
             .RescheduleAsync(task.Id, clock.Today, new TimeOnly(10, 0));
-
-        var tasks = NewService<ITaskRepository>();
-        var detail = NewService<TaskDetailViewModel>();
 
         await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
         detail.Title = "Praca zdalna";
@@ -772,16 +775,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
         saved.DoTime.Should().Be(new TimeOnly(10, 0), "to wystąpienie zostaje o dziesiątej");
         saved.Overridden.Should().BeTrue("zapisana karta mówi o tym jednym dniu");
 
-        // Dalsze dni serii zostają przy porze, którą miały. Karta pokazuje jedno
-        // wystąpienie, a przeciągnięcie po siatce było decyzją o tym dniu — zapis
-        // samego tytułu nie ma prawa przepisać jej na cały rytm.
-        var next = (await NewService<ITaskSeriesRepository>()
-                .OccurrencesAsync(saved.SeriesId!.Value))
-            .Where(t => t.DoDate > saved.DoDate)
-            .OrderBy(t => t.DoDate)
-            .First();
+        var one = await NewService<ITaskSeriesRepository>().FindAsync(mine);
 
-        next.DoTime.Should().Be(new TimeOnly(9, 0), "rytm zostaje przy dziewiątej");
+        one!.Template.DoTime.Should().Be(new TimeOnly(9, 0), "seria zostaje przy dziewiątej");
+        one.Template.Title.Should().Be("Praca", "nazwa serii też nie jest decyzją z karty dnia");
     }
 
     [Fact]
@@ -826,25 +823,20 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var hlc = NewService<IHlcSource>();
 
         task.SetDoTime(new TimeOnly(9, 0), hlc.Next());
-        task.SetRecurrence(
-            new RecurrenceRule(
-                RecurrenceKind.Weekly, daysOfWeek: Weekdays.Workdays, time: new TimeOnly(9, 0)),
-            hlc.Next());
-
         await NewService<IUnitOfWork>().SaveChangesAsync();
 
         var tasks = NewService<ITaskRepository>();
         var detail = NewService<TaskDetailViewModel>();
 
-        // Zapis karty zakłada serię — bo zadanie serii jeszcze nie ma.
-        await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
+        // Rytm nadany z karty zadania bez serii — tak się serię zakłada.
+        await detail.LoadAsync(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
         await detail.SaveAsync();
 
         var mine = (await tasks.FindAsync(task.Id))!.SeriesId;
-        mine.Should().NotBeNull("rytm na zadaniu bez serii zakłada serię");
+        mine.Should().NotBeNull("rytm nadany z karty zakłada serię");
 
-        // A teraz to samo zadanie jest już wystąpieniem serii: zmiana godziny w karcie
-        // dotyczy tego dnia i tylko jego.
+        // To samo zadanie jest już wystąpieniem serii: zmiana godziny dotyczy tego dnia.
         await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
         detail.DoTime = new TimeSpan(11, 0, 0);
 
@@ -858,7 +850,6 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var one = await NewService<ITaskSeriesRepository>().FindAsync(mine!.Value);
 
         one!.Template.DoTime.Should().Be(new TimeOnly(9, 0), "seria zostaje przy dziewiątej");
-        one.Rule.Time.Should().Be(new TimeOnly(9, 0));
     }
 
     [Fact]
@@ -1094,8 +1085,13 @@ public sealed class PrzezCalaTraseTests : IDisposable
         counted!.Count.Should().Be(5);
         counted.Until.Should().BeNull("odpowiedź jest jedna, nie dwie");
 
-        // Ta sama karta, druga odpowiedź: data zastępuje liczbę, a nie dokłada się do niej.
+        // Druga odpowiedź — **z ekranu serii**, bo rytm jest własnością serii i karta
+        // dnia już o nim nie decyduje. Data zastępuje liczbę, a nie dokłada się do niej.
         await detail.LoadAsync(afterCount!);
+        await detail.OpenSeriesAsync();
+
+        detail.IsSeries.Should().BeTrue("to jest ekran całej serii");
+
         detail.SelectedEnd = EndChoice.All.Single(k => k.Value == RepeatEnd.OnDate);
         detail.RhythmEnd = new DateTimeOffset(new DateTime(2027, 1, 31), TimeSpan.Zero);
 
