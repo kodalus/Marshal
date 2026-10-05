@@ -22,6 +22,7 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(t => t.UpdatedAt).IsRequired();
         builder.Property(t => t.Deleted).IsRequired();
         builder.Property(t => t.RecurrenceJson).HasMaxLength(500);
+        builder.Property(t => t.Overridden).IsRequired();
         builder.Property(t => t.RollCount).IsRequired();
         builder.Property(t => t.Energy).IsRequired().HasConversion<int>();
         builder.Property(t => t.FocusMissCount).IsRequired();
@@ -60,6 +61,11 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.HasIndex(t => t.Priority);
 
         // Przejście dnia odpytuje po tej dacie przy każdym starcie aplikacji.
+        // Dopełnianie okna pyta o wszystkie wystąpienia jednej serii, w każdym stanie
+        // i razem z nagrobkami: wiersz skasowany ma zostać skasowany, a nie wrócić
+        // przy najbliższym dopełnieniu.
+        builder.HasIndex(t => t.SeriesId);
+
         builder.HasIndex(t => new { t.State, t.DoDate });
 
         // Świadomie bez kluczy obcych do Areas i Projects — zob. uwagę

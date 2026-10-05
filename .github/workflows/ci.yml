@@ -50,12 +50,46 @@ jobs:
           dotnet build src/Marshal.Desktop/Marshal.Desktop.csproj -c Release --no-restore
           dotnet build tests/Marshal.Tests/Marshal.Tests.csproj -c Release --no-restore
 
+      - name: Narzędzia EF
+        run: dotnet tool install --global dotnet-ef
+
+      # Migracja pisana przez narzędzie, nie z ręki — na zamówienie złożone plikiem.
+      #
+      # Powód jest ten sam, co przy skompilowanym modelu: do wygenerowania migracji
+      # trzeba SDK i narzędzi EF, a praca nad tym projektem odbywa się tam, gdzie ich
+      # nie ma. Trzy pliki na migrację (sama migracja, jej projekt i odbicie modelu,
+      # razem około dwóch tysięcy wierszy mechanicznego kodu) przepisane z ręki to nie
+      # oszczędność, tylko zaproszenie do pomyłki, której nie widać w przeglądzie —
+      # bo rozjazd odbicia modelu z encjami wychodzi dopiero po danych.
+      #
+      # Zamówienie składa się, wpisując nazwę migracji do „tools/migracja.txt".
+      # Wynik ląduje na gałęzi „migracja-wygenerowana", skąd wciąga go człowiek,
+      # osobnym commitem, razem z usunięciem pliku z zamówieniem.
+      # Przed testami, nie za nimi: przy brakującej migracji padają **wszystkie**
+      # testy dotykające bazy, a krok za krokiem, który się zapalił, nie rusza.
+      # Narzędzie, które odpala się tylko wtedy, gdy nie jest potrzebne, nie jest
+      # narzędziem.
+      - name: Migracja — wygenerowanie na zamówienie
+        if: hashFiles('tools/migracja.txt') != ''
+        run: |
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          nazwa=$(tr -d '[:space:]' < tools/migracja.txt)
+
+          if [ -z "$nazwa" ]; then
+            echo "::error::tools/migracja.txt jest pusty — nazwa migracji jest wymagana."
+            exit 1
+          fi
+
+          dotnet ef migrations add "$nazwa" \
+            -p src/Marshal.Infrastructure \
+            -s src/Marshal.Infrastructure \
+            -o Data/Migrations
+
       - name: Testy
         run: dotnet test tests/Marshal.Tests/Marshal.Tests.csproj -c Release --no-build --logger "trx;LogFileName=wyniki.trx" --results-directory artefakty/testy
 
       - name: Migracje zgodne z modelem
         run: |
-          dotnet tool install --global dotnet-ef
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet ef migrations has-pending-model-changes \
             -p src/Marshal.Infrastructure \
@@ -135,6 +169,20 @@ jobs:
           git add -f src/Marshal.Infrastructure/Data/Compiled
           git commit -m "Model skompilowany z $GITHUB_SHA"
           git push -f origin model-wygenerowany
+
+      # Migracja razem ze skompilowanym modelem, bo nowa encja zmienia oba i wciągać
+      # trzeba je jednym commitem: migracja bez przegenerowanego modelu znaczy tabelę,
+      # której EF nie widzi, a model bez migracji — pole, pod które nie ma kolumny.
+      - name: Migracja — na gałąź
+        if: always() && github.ref == 'refs/heads/main' && hashFiles('tools/migracja.txt') != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan migracja-wygenerowana
+          git rm -rf --cached . > /dev/null
+          git add -f src/Marshal.Infrastructure/Data/Migrations src/Marshal.Infrastructure/Data/Compiled
+          git commit -m "Migracja i model z $GITHUB_SHA"
+          git push -f origin migracja-wygenerowana
 
       - name: Model skompilowany — do pobrania
         if: always()

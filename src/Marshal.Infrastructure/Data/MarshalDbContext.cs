@@ -6,6 +6,7 @@ using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Filters;
 using Marshal.Domain.Habits;
+using Marshal.Domain.Series;
 using Marshal.Domain.Notes;
 using Marshal.Domain.Primitives;
 using Marshal.Domain.Projects;
@@ -82,6 +83,9 @@ public sealed class MarshalDbContext : DbContext
 
     /// <summary>Dni nawyków: jeden wiersz na dzień, nie na dotknięcie.</summary>
     public DbSet<HabitMark> HabitMarks => Set<HabitMark>();
+
+    /// <summary>Serie powtarzalne: reguła i szablon, z których powstają wystąpienia.</summary>
+    public DbSet<TaskSeries> TaskSeries => Set<TaskSeries>();
 
     /// <remarks>
     /// Powiązania między agregatami są trzymane jako gołe identyfikatory, **bez kluczy
