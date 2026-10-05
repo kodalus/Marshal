@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
@@ -980,6 +981,28 @@ public partial class MainView : UserControl
     private void SlideBack(double from) =>
         _ = Try("Kalendarz: dojazd siatki", () => AfterCoastAsync(BackAsync(from)));
 
+    /// <summary>
+    /// Dojazd liczony tutaj, minutnikiem — bez maszynerii animacji.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dawniej robiła to <c>Animation</c> ruszająca <c>TranslateTransform.X</c>. Na
+    /// telefonie kończyło się to przy <b>każdym</b> przejechaniu palcem wyjątkiem
+    /// „InvalidCastException" bez nazwy typu — czyli nieudanym odpakowaniem gdzieś
+    /// w środku doboru animatora. Ozdoba nie zamykała aplikacji, bo stoi pod wspólnym
+    /// zabezpieczeniem, ale zasypywała dziennik przy każdym geście i zabierała dojazd.
+    /// </para>
+    /// <para>
+    /// Przyczyny tego odpakowania nie umiem wskazać z kodu, więc nie udaję, że ją znam —
+    /// usuwam za to maszynerię, której ta ozdoba nie potrzebuje. Jedna liczba
+    /// przesuwana w czasie to kilkanaście wierszy: nie ma tu czego odpakowywać, nie ma
+    /// doboru animatora i nie ma czego pomylić.
+    /// </para>
+    /// <para>
+    /// Łagodzenie to ten sam kształt, co poprzednio — sześcian wyhamowujący — bo ruch
+    /// ma wyglądać jak dociągnięcie, a nie jak przesunięcie ze stałą prędkością.
+    /// </para>
+    /// </remarks>
     private Task BackAsync(double from)
     {
         if (_gridOffset is not { } offset)
@@ -987,31 +1010,42 @@ public partial class MainView : UserControl
             return Task.CompletedTask;
         }
 
-        var animation = new Animation
+        if (Math.Abs(from) < 0.5)
         {
-            Duration = CoastTime,
-            Easing = new CubicEaseOut(),
-            FillMode = FillMode.None,
-            Children =
-            {
-                new KeyFrame
-                {
-                    Cue = new Cue(0d),
-                    Setters = { new Setter(TranslateTransform.XProperty, from) },
-                },
-                new KeyFrame
-                {
-                    Cue = new Cue(1d),
-                    Setters = { new Setter(TranslateTransform.XProperty, 0d) },
-                },
-            },
+            offset.X = 0;
+            return Task.CompletedTask;
+        }
+
+        var done = new TaskCompletionSource();
+        var started = Stopwatch.StartNew();
+
+        var timer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16),
         };
 
-        // Wartość zdejmowana od razu, żeby po animacji nie wrócił na nią stary stan:
-        // animacja z wygaszaniem „None" oddaje własność temu, co w niej zapisane.
-        offset.X = 0;
+        timer.Tick += (_, _) =>
+        {
+            var part = Math.Clamp(started.Elapsed / CoastTime, 0d, 1d);
 
-        return animation.RunAsync(offset);
+            // Sześcian wyhamowujący: szybko na początku, miękko na końcu.
+            var eased = 1 - Math.Pow(1 - part, 3);
+
+            offset.X = from * (1 - eased);
+
+            if (part < 1)
+            {
+                return;
+            }
+
+            timer.Stop();
+            offset.X = 0;
+            done.TrySetResult();
+        };
+
+        timer.Start();
+
+        return done.Task;
     }
 
     /// <summary>Warstwa linii godzin — pionowy punkt odniesienia dla przeciągania.</summary>
