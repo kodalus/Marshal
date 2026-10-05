@@ -400,6 +400,17 @@ public partial class MainView : UserControl
         }
     }
 
+    /// <summary>
+    /// Wejście w serię z karty dnia.
+    /// </summary>
+    /// <remarks>
+    /// Osobne wejście jest tu całą zmianą: ten sam formularz, ale wiadomo, czego
+    /// dotyczy. Dopóki rytm stał na karcie dnia, zapisanie poprawionej nazwy było
+    /// nieodróżnialne od decyzji o wszystkich następnych dniach.
+    /// </remarks>
+    private void OpenSeries(object? sender, RoutedEventArgs e) =>
+        OnDetail("Seria: otwarcie z karty dnia", m => m.OpenSeriesAsync());
+
     /// <summary>Koniec serii na tym wystąpieniu — to jedno zostaje.</summary>
     private void EndRhythm(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: koniec serii na tym wystąpieniu", m => m.EndRhythmAsync());

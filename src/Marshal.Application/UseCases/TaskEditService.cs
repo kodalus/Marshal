@@ -141,57 +141,33 @@ public sealed class TaskEditService(
             task.SetDoTime(edit.DoTime, hlc.Next());
         }
 
-        // Rytm **na końcu**, po dniu i porze. Seria bierze z zadania początek i szablon,
-        // więc ustawiona wcześniej dostawała dzień i godzinę sprzed tego zapisu —
-        // wpisanie daty i rytmu naraz zakładało serię od starego dnia.
+        // ——— Rytm ———————————————————————————————————————————————————————————————
         //
-        // Reguła porównywana z regułą **serii**, nie z regułą zadania. Wystąpienie serii
-        // nie nosi już reguły, więc porównanie z nim samym widziałoby zmianę przy każdym
-        // zapisie i przy każdym zapisie nazwy stawiało okno serii od nowa.
-        var standing = task.SeriesId is { } mine ? await series.FindAsync(mine, ct) : null;
-
-        // **Dokładne pytanie, nie przybliżone.** Zapis karty niesie regułę zawsze, bo
-        // pora i długość są w niej zapamiętywane — więc samo porównanie reguł mówiło
-        // „zmieniło się" przy każdym zapisie, a każde takie „zmieniło się" wczytywało
-        // wszystkie wystąpienia serii i przechodziło je po kolei. Stąd zapis, który
+        // **Karta dnia nie dotyka serii.** Zadanie bez serii może rytm dostać — tak się
+        // serię zakłada — ale wystąpienie, które do serii już należy, jest tu zwykłym
+        // zadaniem i edytuje wyłącznie siebie. Serię zmienia się na jej własnym ekranie.
+        //
+        // Poprzedni układ mieszał te dwie rzeczy w jednym oknie i z tego wyszły trzy
+        // osobne usterki: godzina jednego przestawionego dnia przepisywała się na całą
+        // serię, „czy rytm się zmienił" było prawdą przy **każdym** zapisie (bo pora
+        // i długość są w regule zapamiętywane), a każde takie „zmieniło się" wczytywało
+        // wszystkie wystąpienia serii i przechodziło je po kolei — stąd zapis, który
         // trwał tak długo, że wyglądał na niedziałający.
         //
-        // Pytane jest więc o jedno i drugie: reguła i szablon. Gdy oba są te same,
-        // seria nie jest w ogóle dotykana i zapis kosztuje jeden wiersz.
-        var ruleChanged = standing is { } current
-            ? edit.Recurrence is null
-                || edit.Recurrence != current.Rule
-                || SeriesService.Blend(SeriesTemplate.From(task), edit.Recurrence)
-                    != current.Template
-            : edit.Recurrence != task.Recurrence;
-
-        if (ruleChanged)
+        // Nie da się patrzeć na jeden dzień i jednocześnie decydować o wszystkich.
+        if (task.SeriesId is null && edit.Recurrence != task.Recurrence)
         {
             // Dzień i pora już zapisane, żeby szablon serii wyszedł z tego, co zapisane,
             // a nie z tego, co było przed chwilą.
             await unitOfWork.SaveChangesAsync(ct);
 
-            switch (edit.Recurrence, standing)
+            if (edit.Recurrence is { } fresh)
             {
-                case ({ } fresh, null):
-                    await rhythms.StartAsync(task, fresh, ct);
-                    break;
-
-                case ({ } fresh, { } one):
-                    await rhythms.ChangeAsync(one, SeriesTemplate.From(task), fresh, ct);
-                    break;
-
-                // Pusta sekcja rytmu przy serii znaczy „to ostatnie wystąpienie" —
-                // tak samo jak „nie powtarza się" z menu. Reguła leży w serii, więc
-                // nie ma już czego z zadania zdejmować; zostaje pytanie o dalsze dni
-                // i jedna sensowna odpowiedź na nie.
-                case (null, { } one):
-                    await rhythms.EndAsync(one, task.DoDate ?? clock.Today, ct);
-                    break;
-
-                case (null, null):
-                    task.SetRecurrence(null, hlc.Next());
-                    break;
+                await rhythms.StartAsync(task, fresh, ct);
+            }
+            else
+            {
+                task.SetRecurrence(null, hlc.Next());
             }
         }
 
@@ -200,10 +176,8 @@ public sealed class TaskEditService(
         // znacznika poprawiona godzina jednego wtorku przepadałaby przy najbliższej
         // zmianie nazwy całej serii, bez pytania i bez śladu.
         //
-        // **Także wtedy, gdy zapis zmieniał rytm.** Karta pokazuje jedno wystąpienie
-        // i to na nie się patrzy, naciskając „Zapisz"; nowy rytm idzie przy tym do serii
-        // razem z szablonem zdjętym z tej właśnie karty, więc dzień, na który się
-        // patrzyło, zostaje taki, jak go zapisano.
+        // Bez wyjątków i bez pytania „czy to było o dniu, czy o serii": karta dnia jest
+        // o dniu. Pytanie zniknęło razem z sekcją rytmu, która je tu wnosiła.
         if (task.SeriesId is not null)
         {
             task.Override(hlc.Next());
@@ -340,6 +314,51 @@ public sealed class TaskEditService(
         return task;
     }
 
+    /// <summary>Seria po identyfikatorze — dla jej własnego ekranu.</summary>
+    public Task<TaskSeries?> SeriesByIdAsync(Guid seriesId, CancellationToken ct = default) =>
+        series.FindAsync(seriesId, ct);
+
+    /// <summary>Seria, do której wystąpienie należy — albo <c>null</c>.</summary>
+    public async Task<TaskSeries?> SeriesOfAsync(TaskItem task, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+
+        return task.SeriesId is { } mine ? await series.FindAsync(mine, ct) : null;
+    }
+
+    /// <summary>
+    /// Zapis <b>całej serii</b> — z jej własnego ekranu, nie z karty dnia.
+    /// </summary>
+    /// <remarks>
+    /// Tu i tylko tu zmiana rozchodzi się na dni, które jeszcze przed nami. Jest to
+    /// czynność droga — okno serii bywa kilkudziesięciowierszowe — i dlatego ma być
+    /// czynnością <b>proszoną</b>, a nie skutkiem ubocznym zapisania jednego dnia.
+    /// </remarks>
+    public async Task<TopUpReport> SaveSeriesAsync(
+        Guid seriesId, SeriesTemplate template, RecurrenceRule rule,
+        CancellationToken ct = default)
+    {
+        if (await series.FindAsync(seriesId, ct) is not { } one)
+        {
+            return new TopUpReport(0);
+        }
+
+        return await rhythms.ChangeAsync(one, template, rule, ct);
+    }
+
+    /// <summary>Koniec serii na dniu, z jej ekranu.</summary>
+    public async Task<int> EndSeriesAsync(
+        Guid seriesId, DateOnly last, CancellationToken ct = default) =>
+        await series.FindAsync(seriesId, ct) is { } one
+            ? await rhythms.EndAsync(one, last, ct)
+            : 0;
+
+    /// <summary>Skasowanie serii z jej ekranu. Historia zostaje.</summary>
+    public async Task<int> DropSeriesAsync(Guid seriesId, CancellationToken ct = default) =>
+        await series.FindAsync(seriesId, ct) is { } one
+            ? await rhythms.DropAsync(one, ct)
+            : 0;
+
     /// <summary>
     /// Reguła, którą zadanie się rządzi — z serii, a przy zadaniu bez serii z niego samego.
     /// </summary>
@@ -368,7 +387,7 @@ public sealed class TaskEditService(
     /// serii, która się skończyła, ta dla serii, która była pomyłką. Wystąpienia minione
     /// zostają — zdarzyły się i historia o tym wie.
     /// </remarks>
-    public async Task<bool> DropSeriesAsync(Guid id, CancellationToken ct = default)
+    public async Task<bool> DropSeriesOfTaskAsync(Guid id, CancellationToken ct = default)
     {
         if (await tasks.FindAsync(id, ct) is not { SeriesId: { } mine } task
             || await series.FindAsync(mine, ct) is not { } one)

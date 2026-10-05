@@ -3271,7 +3271,11 @@
                           ToolTip.Tip="Energia — ile trzeba mieć w sobie, żeby się za to wziąć">
               <Path Classes="ikonka" Data="{StaticResource IkonaSil}" />
             </ToggleButton>
+            <!-- Rytm znika z karty dnia, gdy dzień należy już do serii: rytm jest
+                 własnością serii, a nie tego jednego wtorku. Zostaje przy zadaniu bez
+                 serii, bo tam właśnie serię się zakłada. -->
             <ToggleButton Classes="ikona rysunek" IsChecked="{Binding ShowRepeat}"
+                          IsVisible="{Binding !HasSeries}"
                           ToolTip.Tip="Rytm — jak często to wraca">
               <Path Classes="ikonka" Data="{StaticResource IkonaRytmu}" />
             </ToggleButton>
@@ -3357,6 +3361,25 @@
                        Text="Nieokreślona przechodzi przy każdym poziomie — brak decyzji nie udaje decyzji." />
           </StackPanel>
           </StackPanel>
+
+          <!-- Zdanie o rytmie na karcie dnia: do przeczytania i do wejścia w serię,
+               nie do zmieniania. Nie da się patrzeć na jeden dzień i jednocześnie
+               decydować o wszystkich — z tego pomieszania wyszły trzy osobne usterki:
+               godzina jednego przestawionego dnia przepisywała się na całą serię, zapis
+               karty zawsze wyglądał na zmianę rytmu, a każda taka zmiana przechodziła
+               wszystkie wystąpienia serii po kolei. -->
+          <Border Margin="0,18,0,0" Padding="14" CornerRadius="8"
+                  Background="{DynamicResource Panel}"
+                  IsVisible="{Binding HasSeries}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock Classes="label" Text="Rytm" />
+                <TextBlock Text="{Binding SeriesLabel}" TextWrapping="Wrap" />
+              </StackPanel>
+              <Button Grid.Column="1" Classes="nav" Padding="14,8" VerticalAlignment="Center"
+                      Click="OpenSeries" Content="Cała seria…" />
+            </Grid>
+          </Border>
 
           <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="{DynamicResource Panel}"
                   IsVisible="{Binding ShowRepeat}">

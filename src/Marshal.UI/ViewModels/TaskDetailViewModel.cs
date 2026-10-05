@@ -5,6 +5,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
+using Marshal.Domain.Series;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Tasks;
 
@@ -35,6 +36,9 @@ public sealed partial class TaskDetailViewModel(
     /// nie ma — a pytanie „co zrobić z resztą" miałoby wtedy puste odniesienie.
     /// </remarks>
     private bool _openedRhythm;
+
+    /// <summary>Seria otwarta do edycji — wtedy okno mówi o całej serii, nie o dniu.</summary>
+    private Guid _series;
 
     /// <summary>
     /// Odbicie tego zadania w Google, gdy je ma.
@@ -259,6 +263,44 @@ public sealed partial class TaskDetailViewModel(
     /// „Zapisz" był pułapką: oba zamykają okno, więc pomyłki nie było jak zauważyć.
     /// </remarks>
     public bool IsExisting => _id != Guid.Empty;
+
+    /// <summary>
+    /// Czy okno mówi o <b>całej serii</b>, a nie o jednym dniu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ten sam formularz, inny cel zapisu. Rytm, pora, długość i przypomnienia znaczą
+    /// to samo w obu przypadkach — różnią się wyłącznie tym, czego dotyczą — więc drugi
+    /// formularz obok byłby drugim miejscem do utrzymywania tej samej rzeczy, a listy
+    /// rodzajów rytmu rozjeżdżają się w takich parach przy pierwszej zmianie.
+    /// </para>
+    /// <para>
+    /// Rozdzielone jest natomiast <b>wejście</b>, i to jest cała zmiana: nie da się
+    /// patrzeć na jeden dzień i jednocześnie decydować o wszystkich. Dzień otwiera się
+    /// z siatki, seria — przyciskiem „Cała seria…", który o tym mówi.
+    /// </para>
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsSeries { get; set; }
+
+    partial void OnIsSeriesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsOccurrenceCard));
+        OnPropertyChanged(nameof(HasSeries));
+        OnPropertyChanged(nameof(Heading));
+    }
+
+    /// <summary>Czy to karta jednego dnia należącego do serii.</summary>
+    public bool HasSeries => !IsSeries && _series != Guid.Empty;
+
+    /// <summary>Karta dnia: wszystko poza trybem serii.</summary>
+    public bool IsOccurrenceCard => !IsSeries;
+
+    public string Heading => IsSeries ? "Cała seria" : Title;
+
+    /// <summary>Zdanie o rytmie na karcie dnia — do czytania, nie do zmieniania.</summary>
+    [ObservableProperty]
+    public partial string? SeriesLabel { get; set; }
 
     /// <summary>Zgłoszenie tego, co zmienia się razem z otwartym zadaniem.</summary>
     /// <remarks>
@@ -553,6 +595,9 @@ public sealed partial class TaskDetailViewModel(
 
         Title = string.Empty;
         Note = string.Empty;
+        SeriesLabel = null;
+        _series = Guid.Empty;
+        IsSeries = false;
         IsDone = false;
         Deadline = null;
         ReminderDay = null;
@@ -634,7 +679,13 @@ public sealed partial class TaskDetailViewModel(
             ? start.ToTimeSpan() + TimeSpan.FromMinutes(length)
             : null;
         SelectedEnergyLevel = Energies.First(e => e.Value == task.Energy);
-        LoadRule(rule);
+        // Karta dnia nie edytuje rytmu — pokazuje go zdaniem i prowadzi do serii.
+        // Reguła wczytywana mimo to, bo zdanie bierze się właśnie z niej.
+        LoadRule(IsSeries ? rule : null);
+        SeriesLabel = rule is null ? null : RecurrenceText.Describe(rule);
+
+        _series = task.SeriesId ?? Guid.Empty;
+        IsSeries = false;
 
         _loading = false;
         _openedRhythm = rule is not null;
@@ -710,7 +761,63 @@ public sealed partial class TaskDetailViewModel(
     public void Close()
     {
         _ = log.RecordAsync("Zadanie: zamknięcie okna bez zapisu", Title);
+        IsSeries = false;
         IsOpen = false;
+    }
+
+    /// <summary>
+    /// Otwarcie <b>serii</b>, do której należy otwarty dzień.
+    /// </summary>
+    /// <remarks>
+    /// Pola wypełnia szablon i reguła serii, nie zadanie: zadanie bywa dniem
+    /// przestawionym wyjątkowo, a tu mówi się o tym, co seria robi za każdym razem.
+    /// </remarks>
+    public async Task OpenSeriesAsync()
+    {
+        if (_series == Guid.Empty)
+        {
+            return;
+        }
+
+        if (await edit.SeriesByIdAsync(_series) is not { } one)
+        {
+            Problem = "Tej serii już nie ma.";
+            OnPropertyChanged(nameof(HasProblem));
+            return;
+        }
+
+        await LoadSlotsAsync();
+
+        _loading = true;
+
+        var template = one.Template;
+
+        Title = template.Title;
+        Note = template.Note ?? string.Empty;
+        IsDone = false;
+        Deadline = null;
+        ReminderDay = null;
+        ReminderTime = null;
+        SelectedPriority = Priorities.First(p => p.Value == template.Priority);
+        SelectedEnergyLevel = Energies.First(e => e.Value == template.Energy);
+        EstimatedMinutes = template.EstimatedMinutes;
+        DoDate = new DateTimeOffset(one.Starts.ToDateTime(TimeOnly.MinValue), clock.Now.Offset);
+        DoTime = template.DoTime?.ToTimeSpan();
+        EndTime = null;
+
+        LoadLeads(template.Leads ?? []);
+        LoadRule(one.Rule);
+
+        _loading = false;
+        _openedRhythm = true;
+
+        IsSeries = true;
+        ShowRepeat = true;
+        Refresh();
+        Announce();
+        IsOpen = true;
+
+        await log.RecordAsync("Seria: otwarcie", Title);
     }
 
     /// <summary>
@@ -779,6 +886,45 @@ public sealed partial class TaskDetailViewModel(
 
         try
         {
+            // ——— Zapis serii ————————————————————————————————————————————————————
+            //
+            // Tu i tylko tu zmiana rozchodzi się na dni, które jeszcze przed nami.
+            // Jest to czynność droga — okno serii bywa kilkudziesięciowierszowe — więc
+            // ma być czynnością proszoną, a nie skutkiem ubocznym zapisania jednego dnia.
+            if (IsSeries)
+            {
+                if (rule is null)
+                {
+                    Problem = "Seria bez rytmu nie jest serią — na koniec serii jest własny przycisk.";
+                    OnPropertyChanged(nameof(HasProblem));
+                    return;
+                }
+
+                await edit.SaveSeriesAsync(
+                    _series,
+                    new SeriesTemplate(
+                        Title.Trim(),
+                        string.IsNullOrWhiteSpace(Note) ? null : Note,
+                        SelectedPlacement?.AreaId,
+                        SelectedPlacement?.ProjectId,
+                        null,
+                        DoTime is { } at ? TimeOnly.FromTimeSpan(at) : null,
+                        Minutes(),
+                        Weight,
+                        Energy,
+                        null,
+                        SelectedLeads()),
+                    rule);
+
+                await log.RecordAsync(
+                    "Seria: zapis", $"{Title} — {RecurrenceText.Describe(rule)}");
+
+                IsSeries = false;
+                IsOpen = false;
+                Saved?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
             if (_id == Guid.Empty)
             {
                 if (string.IsNullOrWhiteSpace(Title))
@@ -1069,7 +1215,7 @@ public sealed partial class TaskDetailViewModel(
         // Cała seria, nie to jedno wystąpienie. Odkąd wystąpienia stoją w bazie
         // z osobna, kosz na jednym z nich zabiera dokładnie jedno — a ten przycisk
         // obiecuje koniec rytmu. Bez tej drogi obiecywałby coś, czego nie robi.
-        if (!await edit.DropSeriesAsync(_id))
+        if (!await edit.DropSeriesOfTaskAsync(_id))
         {
             await inbox.TrashAsync(_id);
         }

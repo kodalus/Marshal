@@ -816,8 +816,12 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
-    public async Task Pora_ruszona_w_karcie_jest_decyzja_o_calej_serii()
+    public async Task Pora_ruszona_w_karcie_dnia_jest_decyzja_o_tym_dniu()
     {
+        // Odwrócenie dawnej zasady, i to świadome. W starym modelu seria miała naraz
+        // jedno żywe wystąpienie, więc „w karcie mówi się o serii" było jedyną możliwą
+        // odpowiedzią. W modelu z zapisanym oknem wystąpienie **jest** zwykłym zadaniem,
+        // a jego karta edytuje to zadanie — serię zmienia się na jej własnym ekranie.
         var task = await ZaplanowaneAsync("Praca");
         var hlc = NewService<IHlcSource>();
 
@@ -832,6 +836,15 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var tasks = NewService<ITaskRepository>();
         var detail = NewService<TaskDetailViewModel>();
 
+        // Zapis karty zakłada serię — bo zadanie serii jeszcze nie ma.
+        await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
+        await detail.SaveAsync();
+
+        var mine = (await tasks.FindAsync(task.Id))!.SeriesId;
+        mine.Should().NotBeNull("rytm na zadaniu bez serii zakłada serię");
+
+        // A teraz to samo zadanie jest już wystąpieniem serii: zmiana godziny w karcie
+        // dotyczy tego dnia i tylko jego.
         await detail.LoadAsync((await tasks.FindAsync(task.Id))!);
         detail.DoTime = new TimeSpan(11, 0, 0);
 
@@ -839,18 +852,13 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         var saved = await tasks.FindAsync(task.Id);
 
-        saved!.DoTime.Should().Be(new TimeOnly(11, 0));
+        saved!.DoTime.Should().Be(new TimeOnly(11, 0), "ten dzień zaczyna się o jedenastej");
+        saved.Overridden.Should().BeTrue("zapisana karta dnia jest decyzją o tym dniu");
 
-        // W karcie mówi się o serii: pora dochodzi do dni, które jeszcze przed nami,
-        // a nie tylko do tego jednego. Reguła leży w serii, więc tam się o to pyta.
-        var one = await NewService<ITaskSeriesRepository>().FindAsync(saved.SeriesId!.Value);
+        var one = await NewService<ITaskSeriesRepository>().FindAsync(mine!.Value);
 
-        one!.Rule.Time.Should().Be(new TimeOnly(11, 0));
-
-        (await NewService<ITaskSeriesRepository>().OccurrencesAsync(one.Id))
-            .Where(z => z.DoDate > saved.DoDate)
-            .Should().NotBeEmpty()
-            .And.OnlyContain(z => z.DoTime == new TimeOnly(11, 0));
+        one!.Template.DoTime.Should().Be(new TimeOnly(9, 0), "seria zostaje przy dziewiątej");
+        one.Rule.Time.Should().Be(new TimeOnly(9, 0));
     }
 
     [Fact]
