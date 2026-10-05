@@ -537,7 +537,12 @@ public sealed partial class TaskDetailViewModel(
     /// z góry zostawiałoby po zamknięciu bez zapisu pusty wpis w skrzynce — czyli
     /// karę za rozmyślenie się.
     /// </remarks>
-    public async Task NewAsync(DateOnly day, TimeOnly time)
+    /// <param name="time">
+    /// Godzina z siatki. <c>null</c> znaczy „bez godziny" — tak przychodzi plusik
+    /// z kafelka, który wskazuje dzień i nic poza nim. Wpisana z góry byłaby decyzją,
+    /// której nikt nie podjął, a w widoku miesiąca wpis bez pory jest znacznikiem dnia.
+    /// </param>
+    public async Task NewAsync(DateOnly day, TimeOnly? time)
     {
         await LoadSlotsAsync();
 
@@ -561,10 +566,13 @@ public sealed partial class TaskDetailViewModel(
         // Nowe zadanie z godziny na siatce ma domyślnie odezwać się o tej godzinie.
         // Wpisanie czegoś w kalendarz i niedowiedzenie się o tym jest najczęstszym
         // sposobem na przegapienie — a odznaczenie kosztuje jedno kliknięcie.
-        LoadLeads([0]);
+        //
+        // Bez godziny nie ma „o tej godzinie", więc i przypomnienia nie ma: dzień bez
+        // pory znaczy rano, a rano nie jest chwilą, o którą ktoś prosił.
+        LoadLeads(time is null ? [] : [0]);
 
         DoDate = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), clock.Now.Offset);
-        DoTime = time.ToTimeSpan();
+        DoTime = time?.ToTimeSpan();
 
         // Bez końca i bez długości: pół godziny to sposób **rysowania** bloku bez
         // oszacowania, a nie oszacowanie. Wpisane tu z góry zapisałoby się jako

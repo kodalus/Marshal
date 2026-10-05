@@ -42,6 +42,14 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
 
     public const string DayExtra = "dzien-wydarzenia";
 
+    /// <summary>Otwórz kartę nowego wpisu na wskazanym dniu — plusik z kafelka.</summary>
+    /// <remarks>
+    /// Osobny dodatek, a nie brak pozostałych: sam dzień znaczy już „pokaż ten dzień"
+    /// i tak przychodzi dotknięcie wiersza kafelka. To są dwie różne prośby o ten sam
+    /// dzień i muszą dać się odróżnić.
+    /// </remarks>
+    public const string NewExtra = "nowe-zdarzenie";
+
     protected override AppBuilder CustomizeAppBuilder(AppBuilder builder) =>
         base.CustomizeAppBuilder(builder).WithInterFont();
 
@@ -134,6 +142,24 @@ public sealed class MainActivity : AvaloniaMainActivity<App>
     {
         if (intent?.GetBooleanExtra(CalendarExtra, false) != true)
         {
+            return;
+        }
+
+        // Plusik z kafelka — przed wszystkim innym, bo niesie dzień tak samo jak wiersz,
+        // a chce czegoś innego niż wiersz.
+        if (intent.GetBooleanExtra(NewExtra, false))
+        {
+            App.AskForCalendar(new CalendarRequest(
+                Day: DateOnly.TryParseExact(
+                    intent.GetStringExtra(DayExtra),
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var wanted)
+                        ? wanted
+                        : null,
+                Fresh: true));
+
             return;
         }
 

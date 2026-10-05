@@ -75,6 +75,29 @@
         android:textSize="15sp"
         android:text="›" />
 
+    <!--
+      Powrót na dzisiaj. Schowany, dopóki kafelek stoi na dzisiejszym tygodniu:
+      przycisk bez skutku uczy nieufności do pozostałych. Schowany oddaje miejsce
+      napisowi z miesiącem, a nie kolumnom paska — tam oddane miejsce rozsypałoby
+      siatkę i dlatego kropki znikają tam podmianą tła, nie ukryciem.
+    -->
+    <Button
+        android:id="@+id/today"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:layout_marginEnd="6dp"
+        android:visibility="gone"
+        android:background="@drawable/widget_button"
+        android:textColor="@color/text"
+        android:textSize="13sp"
+        android:text="dziś" />
+
     <Button
         android:id="@+id/capture"
         android:layout_width="wrap_content"

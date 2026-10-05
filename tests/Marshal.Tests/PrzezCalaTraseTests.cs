@@ -785,6 +785,37 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Plusik_z_kafelka_zaklada_wpis_na_dniu_i_bez_godziny()
+    {
+        // Plusik na kafelku wskazuje **dzień** i nic poza nim. Godzina wpisana z góry
+        // byłaby decyzją, której nikt nie podjął — a w widoku miesiąca wpis bez pory
+        // jest znacznikiem dnia i właśnie po to się go tam stawia.
+        var detail = NewService<TaskDetailViewModel>();
+        var when = NewService<IClock>().Today.AddDays(3);
+
+        await detail.NewAsync(when, null);
+
+        detail.IsOpen.Should().BeTrue();
+        detail.DoTime.Should().BeNull("kafelek nie podał godziny");
+        detail.Leads.Should().NotContain(w => w.IsChecked,
+            "przypomnienie „o tej godzinie" bez godziny nie znaczy nic");
+
+        detail.DoDate.Should().NotBeNull();
+        DateOnly.FromDateTime(detail.DoDate!.Value.Date).Should().Be(when);
+
+        detail.Title = "Odebrać Sanię";
+        await detail.SaveAsync();
+
+        detail.Problem.Should().BeNull("zapis miał się udać");
+
+        var saved = (await NewService<ITaskRepository>().AllAsync())
+            .Single(z => z.Title == "Odebrać Sanię");
+
+        saved.DoDate.Should().Be(when);
+        saved.DoTime.Should().BeNull("wpis bez pory zostaje bez pory");
+    }
+
+    [Fact]
     public async Task Pora_ruszona_w_karcie_jest_decyzja_o_calej_serii()
     {
         var task = await ZaplanowaneAsync("Praca");

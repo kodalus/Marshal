@@ -29,8 +29,17 @@ public sealed record CalendarRequest(
     Guid? Task = null,
     Guid? Source = null,
     string? Event = null,
-    DateOnly? Day = null)
+    DateOnly? Day = null,
+    bool Fresh = false)
 {
+    /// <summary>Czy prośba znaczy „otwórz nowe zdarzenie", a nie „pokaż istniejące".</summary>
+    /// <remarks>
+    /// Osobne od wskazania dnia, bo dzień sam znaczy „pokaż ten dzień" — tak przychodzi
+    /// dotknięcie wiersza kafelka. Plusik na kafelku chce czegoś innego: tego samego
+    /// dnia, ale z otwartą kartą nowego wpisu.
+    /// </remarks>
+    public bool IsFresh => Fresh;
+
     /// <summary>Czy prośba wskazuje wydarzenie z podłączonego kalendarza.</summary>
     public bool IsEvent => Source is not null && Event is { Length: > 0 } && Day is not null;
 }

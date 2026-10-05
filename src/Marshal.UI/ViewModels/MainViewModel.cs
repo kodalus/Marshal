@@ -301,6 +301,18 @@ public sealed partial class MainViewModel : ObservableObject
                 return;
             }
 
+            // Plusik z kafelka: ten sam dzień, ale z otwartą kartą nowego wpisu.
+            // Bez godziny — kafelek wskazuje dzień i nic poza nim, a godzina wpisana
+            // z góry byłaby decyzją, której nikt nie podjął.
+            if (what is { IsFresh: true })
+            {
+                var day = what.Day ?? Today;
+
+                await Calendar.ShowAsync(day);
+                await Detail.NewAsync(day, null);
+                return;
+            }
+
             if (what?.Task is not { } id)
             {
                 // Sam dzień: tak przychodzi wystąpienie rytmu z kafelka. Nie ma czego

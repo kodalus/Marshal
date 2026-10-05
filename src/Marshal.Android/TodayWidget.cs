@@ -5,6 +5,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Android.Appwidget;
 using Android.Content;
+using Android.Views;
 using Android.Widget;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Diagnostics;
@@ -87,6 +88,9 @@ public sealed class TodayWidget : AppWidgetProvider
 
     private const string Daily = "dzien";
 
+    /// <summary>Powrót na dzisiejszy tydzień — jednym dotknięciem, a nie strzałkami.</summary>
+    private const string WhatToday = "dzisiaj";
+
     private const string DeltaExtra = "delta";
 
     /// <summary>Który dzień ogląda ten widget, licząc od dzisiejszego.</summary>
@@ -134,6 +138,18 @@ public sealed class TodayWidget : AppWidgetProvider
         patch.Edit()?.PutInt($"dzien-{widgetId}", fresh)?.Apply();
     }
 
+    /// <summary>Powrót kafelka na dzisiaj. Wprost na zero, nie o różnicę.</summary>
+    /// <remarks>
+    /// Liczona różnica dawałaby ten sam wynik tylko wtedy, gdy przesunięcie czytane
+    /// jest w tej samej chwili, w której zostało zapisane — a kafelek stoi na ekranie
+    /// domowym tygodniami i przeżywa po drodze każdą północ.
+    /// </remarks>
+    private static void Jump(Context context, int widgetId)
+    {
+        context.GetSharedPreferences(Settings, FileCreationMode.Private)
+            ?.Edit()?.PutInt($"dzien-{widgetId}", 0)?.Apply();
+    }
+
     /// <summary>Zapomnienie ustawienia widgetu, który zdjęto z ekranu.</summary>
     public override void OnDeleted(Context? context, int[]? appWidgetIds)
     {
@@ -169,6 +185,8 @@ public sealed class TodayWidget : AppWidgetProvider
     private const int OpenCode = 1;
 
     private const int CaptureCode = 2;
+
+    private const int TodayCode = 3;
 
     /// <summary>Od tego numeru w górę idą dotknięcia dni — po dziewięć na każdy kafelek.</summary>
     /// <remarks>
@@ -392,7 +410,26 @@ public sealed class TodayWidget : AppWidgetProvider
         // Wypadło przy przebudowie na listę i przez to przycisk nie robił nic — a nic
         // nie robi też przycisk, którego zapomniano podpiąć, i przycisk zasłonięty przez
         // cudze dotknięcie. Z zewnątrz wyglądają identycznie.
-        view.SetOnClickPendingIntent(Resource.Id.capture, LaunchIntent(context));
+        //
+        // **Na oglądany dzień i od razu z kartą.** Samo otwarcie aplikacji zostawiało
+        // plusik w połowie drogi: kafelek pokazywał czwartek, a aplikacja otwierała się
+        // tam, gdzie stała, i trzeba było dojść do czwartku i nacisnąć drugi plus.
+        view.SetOnClickPendingIntent(
+            Resource.Id.capture, LaunchIntent(context, widgetId, shown));
+
+        // Powrót na dzisiaj. Widoczny **tylko wtedy, gdy jest skąd wracać**: przycisk
+        // bez skutku uczy nieufności do pozostałych, a na dzisiejszym tygodniu nie
+        // miałby czego zrobić. Schowany oddaje miejsce napisowi z miesiącem, nie
+        // kolumnom paska — tam oddane miejsce rozsypałoby siatkę.
+        var away = Offset(context, widgetId) != 0;
+
+        view.SetViewVisibility(
+            Resource.Id.today, away ? ViewStates.Visible : ViewStates.Gone);
+
+        if (away)
+        {
+            view.SetOnClickPendingIntent(Resource.Id.today, TodayIntent(context, widgetId));
+        }
 
         var toService = new Intent(context, typeof(TodayWidgetService));
         toService.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
@@ -661,6 +698,22 @@ public sealed class TodayWidget : AppWidgetProvider
             return;
         }
 
+        if (what == WhatToday)
+        {
+            var tile = intent.GetIntExtra(
+                AppWidgetManager.ExtraAppwidgetId, AppWidgetManager.InvalidAppwidgetId);
+
+            if (tile == AppWidgetManager.InvalidAppwidgetId
+                || AppWidgetManager.GetInstance(window) is not { } home)
+            {
+                return;
+            }
+
+            Jump(window, tile);
+            Redraw(window, home, [tile], freshEvents: false);
+            return;
+        }
+
         if (what == Daily)
         {
             var widgetId = intent.GetIntExtra(
@@ -744,15 +797,45 @@ public sealed class TodayWidget : AppWidgetProvider
         });
     }
 
-    private static PendingIntent? LaunchIntent(Context context)
+    /// <summary>
+    /// Plusik: aplikacja, oglądany dzień i otwarta karta nowego wpisu.
+    /// </summary>
+    /// <remarks>
+    /// Numer żądania osobny dla każdego kafelka, bo system porównuje zamiary <b>bez
+    /// patrzenia na dodatkowe dane</b>: przy wspólnym numerze dwa kafelki pokazujące
+    /// różne tygodnie miałyby jeden plusik i oba otwierałyby ten sam dzień.
+    /// </remarks>
+    private static PendingIntent? LaunchIntent(Context context, int widgetId, DateOnly shown)
     {
         var intent = new Intent(context, typeof(MainActivity));
         intent.SetFlags(ActivityFlags.NewTask | ActivityFlags.SingleTop);
+        intent.PutExtra(MainActivity.CalendarExtra, true);
+        intent.PutExtra(MainActivity.NewExtra, true);
+        intent.PutExtra(
+            MainActivity.DayExtra,
+            shown.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
 
         return PendingIntent.GetActivity(
-            context, CaptureCode, intent,
+            context, Socket(widgetId, CaptureCode), intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
+
+    /// <summary>Powrót kafelka na dzisiejszy tydzień.</summary>
+    private static PendingIntent? TodayIntent(Context context, int widgetId)
+    {
+        var intent = new Intent(context, typeof(TodayWidget));
+        intent.SetAction(CompleteAction);
+        intent.PutExtra(CoExtra, WhatToday);
+        intent.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
+
+        return PendingIntent.GetBroadcast(
+            context, Socket(widgetId, TodayCode), intent,
+            PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
+    }
+
+    /// <summary>Numer żądania własny dla kafelka — zob. <see cref="DayCode"/>.</summary>
+    private static int Socket(int widgetId, int slot) =>
+        DayCode + (Math.Abs(widgetId) % 10_000 * CodesPerTile) + slot;
 
     /// <summary>
     /// Zależności aplikacji razem z gotową bazą.
