@@ -131,6 +131,7 @@ public static class DependencyInjection
         services.AddSingleton<ITagRepository, TagRepository>();
         services.AddSingleton<INoteRepository, NoteRepository>();
         services.AddSingleton<IHabitRepository, HabitRepository>();
+        services.AddSingleton<ITaskSeriesRepository, TaskSeriesRepository>();
         services.AddSingleton<IAttachmentRepository, AttachmentRepository>();
         services.AddSingleton<ISavedFilterRepository, SavedFilterRepository>();
         services.AddSingleton<IContactRepository, ContactRepository>();
@@ -203,6 +204,7 @@ public static class DependencyInjection
         services.AddSingleton<NoteService>();
         services.AddSingleton<SearchService>();
         services.AddSingleton<HabitService>();
+        services.AddSingleton<SeriesService>();
         // Treść załączników leży obok bazy, w katalogu adresowanym skrótem. Na Dysk
         // pojedzie dopiero razem z synchronizacją (spec 9.2) — do tego czasu składnica
         // lokalna jest nie prowizorką, tylko poprawnym stanem: wpis i plik są

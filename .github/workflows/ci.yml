@@ -108,7 +108,13 @@ jobs:
       #
       # Kasowany przed wygenerowaniem, żeby porównanie niżej widziało także plik, który
       # przestał być potrzebny — nie tylko zmieniony.
+      # „always", bo przegenerowanie jest najbardziej potrzebne wtedy, gdy przebieg się
+      # zapalił: nowa encja przewraca testy dotykające bazy aż do wciągnięcia migracji,
+      # a model przegenerowany dopiero w następnym przebiegu znaczy jedną rundę więcej
+      # na każdą encję. Przy zepsutym budowaniu ten krok też się zapali — przebieg i tak
+      # jest już czerwony, a pierwszy błąd stoi wyżej.
       - name: Model skompilowany — wygenerowanie
+        if: always()
         run: |
           export PATH="$PATH:$HOME/.dotnet/tools"
           rm -rf src/Marshal.Infrastructure/Data/Compiled
@@ -124,6 +130,7 @@ jobs:
       # Stąd ten krok jest zaporą, a nie ozdobą: świeżo wygenerowany musi być co do
       # znaku taki sam jak ten w repozytorium.
       - name: Model skompilowany zgodny z encjami
+        if: always()
         run: |
           # Identyfikator modelu jest losowany przy każdym generowaniu i nie niesie nic
           # poza tożsamością wpisu w pamięci podręcznej EF. Bez tej linijki porównanie
