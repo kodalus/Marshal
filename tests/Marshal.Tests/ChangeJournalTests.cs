@@ -1,6 +1,8 @@
 using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Domain.Primitives;
+using Marshal.Domain.Recurrence;
+using Marshal.Domain.Series;
 using Marshal.Domain.Sync;
 using Marshal.Domain.Tasks;
 using Marshal.Infrastructure.Data;
@@ -209,5 +211,88 @@ public sealed class ChangeJournalTests : IDisposable
     {
         _db.Dispose();
         _connection.Dispose();
+    }
+
+    /// <summary>Wystąpienie postawione z okna serii — dokładnie takie, jak wylicza seria.</summary>
+    private (TaskSeries Series, TaskItem Day) Occurrence()
+    {
+        var starts = new DateOnly(2026, 10, 6);
+
+        var series = TaskSeries.Create(
+            starts,
+            new RecurrenceRule(RecurrenceKind.Daily),
+            new SeriesTemplate("Śmieci", AreaId: _area),
+            DateTimeOffset.UtcNow,
+            Stamp());
+
+        var slot = new SeriesSlot(OccurrenceId.For(series.Id, starts), starts, null, null);
+        var day = TaskItem.InSeries(series.Id, slot, series.Template, DateTimeOffset.UtcNow, Stamp());
+
+        _db.TaskSeries.Add(series);
+        _db.Tasks.Add(day);
+        _db.SaveChanges();
+
+        return (series, day);
+    }
+
+    [Fact]
+    public void Wystapienie_wyliczalne_z_serii_nie_wchodzi_do_dziennika()
+    {
+        // Zdjęcie przyczyny, a nie łata na skutki. Dziennik zapisuje osobno każde pole
+        // i osobno jego znacznik — około sześćdziesięciu wierszy na jedno wystąpienie.
+        // Przy kilkunastu seriach po kilkadziesiąt dni to dziesiątki tysięcy wierszy
+        // do wysłania i do nałożenia po drugiej stronie: stąd scalanie trwające minuty
+        // i zatkana brama na bazę.
+        //
+        // A wysyłać tego nie trzeba: tożsamość wystąpienia liczy się z serii i dnia,
+        // więc drugie urządzenie dojdzie do tych samych wierszy samo.
+        var (series, day) = Occurrence();
+
+        _db.Changes.Should().NotContain(
+            w => w.EntityId == day.Id, "dzień wyliczalny z serii nie jedzie synchronizacją");
+
+        _db.Changes.Should().Contain(
+            w => w.EntityId == series.Id, "ale sama seria jedzie — z niej liczy się reszta");
+    }
+
+    [Fact]
+    public void Odhaczone_wystapienie_jedzie_w_calosci()
+    {
+        // W chwili, w której dzień przestaje być tym, co okno wylicza, druga strona
+        // musi dostać go **w całości**. Same zmienione pola opisywałyby wiersz, którego
+        // tamta strona może jeszcze nie mieć — jej okno bywa krótsze — a wtedy
+        // z „zrobione" bez nazwy i bez dnia powstałoby zadanie-widmo.
+        var (_, day) = Occurrence();
+
+        day.Complete(DateTimeOffset.UtcNow, Stamp());
+        _db.SaveChanges();
+
+        var pola = _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field).ToList();
+
+        pola.Should().Contain("State");
+        pola.Should().Contain("CompletedAt");
+        pola.Should().Contain(nameof(TaskItem.Title), "bez nazwy powstałoby zadanie-widmo");
+        pola.Should().Contain(nameof(TaskItem.DoDate), "i bez dnia też");
+        pola.Should().Contain(nameof(TaskItem.SeriesId), "razem z przynależnością do serii");
+    }
+
+    [Fact]
+    public void Dalsze_zmiany_odhaczonego_jada_juz_zwyklymi_polami()
+    {
+        // Całość tylko przy wyjściu z wyliczalności. Potem wiersz jest po obu stronach
+        // i powtarzanie go w komplecie przy każdej zmianie byłoby tym samym marnotrawstwem,
+        // przed którym cała ta zmiana ma chronić.
+        var (_, day) = Occurrence();
+
+        day.Complete(DateTimeOffset.UtcNow, Stamp());
+        _db.SaveChanges();
+        _db.Changes.RemoveRange(_db.Changes.Where(w => w.EntityId == day.Id));
+        _db.SaveChanges();
+
+        day.Rename("Śmieci — szkło", Stamp());
+        _db.SaveChanges();
+
+        _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field)
+            .Should().BeEquivalentTo([nameof(TaskItem.Title), nameof(Entity.UpdatedAt)]);
     }
 }
