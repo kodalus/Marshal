@@ -798,7 +798,7 @@ public sealed class PrzezCalaTraseTests : IDisposable
         detail.IsOpen.Should().BeTrue();
         detail.DoTime.Should().BeNull("kafelek nie podał godziny");
         detail.Leads.Should().NotContain(w => w.IsChecked,
-            "przypomnienie „o tej godzinie" bez godziny nie znaczy nic");
+            "przypomnienie „o tej godzinie” bez godziny nie znaczy nic");
 
         detail.DoDate.Should().NotBeNull();
         DateOnly.FromDateTime(detail.DoDate!.Value.Date).Should().Be(when);
