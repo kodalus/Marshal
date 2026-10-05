@@ -122,43 +122,94 @@ public sealed class SyncEngine(
             return 0;
         }
 
-        return await _queue.RunAsync(() => ApplyAsync(chunks, ct), ct);
+        // ——— Nakładanie partiami ——————————————————————————————————————————————
+        //
+        // Brama brana na **kawałek porcji**, a nie na całe scalanie. Trzymanie jej przez
+        // cały przebieg było w porządku, dopóki scalanie trwało chwilę — i przestało:
+        // zapisane okno serii dopisuje do dziennika po kilkadziesiąt wierszy na każde
+        // wystąpienie, więc porcja z drugiego urządzenia liczy dziś dziesiątki tysięcy
+        // linii. Przez te minuty **nic innego nie docierało do bazy**: nie otwierała się
+        // karta, nie zapisywało nowe zadanie, nie nastawiał się budzik. Z zewnątrz
+        // wyglądało to jak aplikacja, która po minucie dobrej pracy nagle przestaje
+        // reagować.
+        //
+        // Przerwanie w połowie porcji nic nie psuje: kursor przesuwa się dopiero po jej
+        // ostatnim kawałku, a scalanie jest powtarzalne bez skutków ubocznych — linia
+        // nałożona dwa razy przegrywa sama ze sobą po znaczniku zegara. Kosztem jest
+        // powtórzenie kawałka, zyskiem aplikacja, która odpowiada.
+        var applied = 0;
+
+        foreach (var (device, name, content) in chunks)
+        {
+            var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+            for (var from = 0; from < lines.Length; from += Block)
+            {
+                var slice = lines[from..Math.Min(from + Block, lines.Length)];
+                var last = from + Block >= lines.Length;
+
+                applied += await _queue.RunAsync(
+                    () => ApplyAsync(device, name, slice, last, ct), ct);
+            }
+
+            // Porcja pusta też przesuwa kursor: bez tego pytalibyśmy o nią w kółko.
+            if (lines.Length == 0)
+            {
+                await _queue.RunAsync(() => ApplyAsync(device, name, [], true, ct), ct);
+            }
+        }
+
+        return applied;
     }
 
-    /// <summary>Nałożenie ściągniętych porcji — jednym blokiem, za bramą.</summary>
+    /// <summary>Ile linii nakładamy na jedno wejście do bramy.</summary>
+    /// <remarks>
+    /// Tyle, żeby jedno wejście trwało ułamek sekundy nawet na telefonie. Liczba jest
+    /// kompromisem: mniejsza znaczy więcej wejść i więcej zapisów, większa — dłuższą
+    /// chwilę, w której reszta aplikacji czeka.
+    /// </remarks>
+    private const int Block = 500;
+
+    /// <summary>
+    /// Nałożenie kawałka porcji — za bramą, jedno wejście na kawałek.
+    /// </summary>
+    /// <remarks>
+    /// Kursory czytane przy każdym wejściu od nowa i to jest konieczne, a nie
+    /// marnotrawne: między kawałkami brama jest puszczona, więc stan sprzed poprzedniego
+    /// nie jest już tym samym stanem.
+    /// </remarks>
     private async Task<int> ApplyAsync(
-        List<(string Device, string Name, string Content)> chunks, CancellationToken ct)
+        string device, string name, string[] lines, bool last, CancellationToken ct)
     {
         var applied = 0;
 
-        // Kursory odczytane **raz**, na własność tego bloku. Pytanie o kursor przy każdej
-        // porcji z osobna wyglądało niewinnie, a było błędem: kursor dołożony przy
-        // pierwszej porcji urządzenia nie jest jeszcze w bazie, więc drugie pytanie nie
-        // widziało go i dokładało drugi. Zapytanie nie widzi tego, co czeka na zapis.
-        //
-        // Czytane tutaj, a nie przekazane z góry: brama była puszczona na czas sieci,
-        // więc stan sprzed pobierania nie jest już tym samym stanem.
+        // Kursory odczytane **raz**, na własność tego wejścia. Pytanie o kursor przy
+        // każdej porcji z osobna wyglądało niewinnie, a było błędem: kursor dołożony
+        // przy pierwszej porcji urządzenia nie jest jeszcze w bazie, więc drugie
+        // pytanie nie widziało go i dokładało drugi.
         var cursors = await db.SyncCursors.ToDictionaryAsync(c => c.RemoteDeviceId, ct);
 
         using (SyncScope.Begin())
         {
-            foreach (var (device, name, content) in chunks)
+            if (!cursors.TryGetValue(device, out var cursor))
             {
-                if (!cursors.TryGetValue(device, out var cursor))
-                {
-                    cursor = new SyncCursor(device, string.Empty);
-                    db.SyncCursors.Add(cursor);
-                    cursors[device] = cursor;
-                }
+                cursor = new SyncCursor(device, string.Empty);
+                db.SyncCursors.Add(cursor);
+                cursors[device] = cursor;
+            }
 
-                foreach (var line in content.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            foreach (var line in lines)
+            {
+                if (ChangeLine.TryParse(line) is { } row && _applier.Apply(row))
                 {
-                    if (ChangeLine.TryParse(line) is { } row && _applier.Apply(row))
-                    {
-                        applied++;
-                    }
+                    applied++;
                 }
+            }
 
+            // Kursor dopiero po ostatnim kawałku. Przesunięty wcześniej zgubiłby resztę
+            // porcji, gdyby aplikacja zamknęła się w połowie.
+            if (last)
+            {
                 cursor.MoveTo(name);
             }
 
