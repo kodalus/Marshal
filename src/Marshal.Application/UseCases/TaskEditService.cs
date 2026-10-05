@@ -149,7 +149,21 @@ public sealed class TaskEditService(
         // nie nosi już reguły, więc porównanie z nim samym widziałoby zmianę przy każdym
         // zapisie i przy każdym zapisie nazwy stawiało okno serii od nowa.
         var standing = task.SeriesId is { } mine ? await series.FindAsync(mine, ct) : null;
-        var ruleChanged = edit.Recurrence != (standing?.Rule ?? task.Recurrence);
+
+        // **Dokładne pytanie, nie przybliżone.** Zapis karty niesie regułę zawsze, bo
+        // pora i długość są w niej zapamiętywane — więc samo porównanie reguł mówiło
+        // „zmieniło się" przy każdym zapisie, a każde takie „zmieniło się" wczytywało
+        // wszystkie wystąpienia serii i przechodziło je po kolei. Stąd zapis, który
+        // trwał tak długo, że wyglądał na niedziałający.
+        //
+        // Pytane jest więc o jedno i drugie: reguła i szablon. Gdy oba są te same,
+        // seria nie jest w ogóle dotykana i zapis kosztuje jeden wiersz.
+        var ruleChanged = standing is { } current
+            ? edit.Recurrence is null
+                || edit.Recurrence != current.Rule
+                || SeriesService.Blend(SeriesTemplate.From(task), edit.Recurrence)
+                    != current.Template
+            : edit.Recurrence != task.Recurrence;
 
         if (ruleChanged)
         {

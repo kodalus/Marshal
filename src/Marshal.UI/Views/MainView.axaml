@@ -3169,8 +3169,12 @@
 
           <Button Grid.Column="2" Classes="cichy" Padding="14,8" Margin="8,0"
                   Click="CloseTask" Content="Zamknij" />
+          <!-- Napis z modelu, a nie stały: zapis wystąpienia serii potrafi zrobić
+               więcej niż jeden wiersz, a przycisk bez odpowiedzi wygląda wtedy
+               dokładnie jak przycisk zepsuty — i był zgłoszony jako zepsuty. -->
           <Button Grid.Column="3" Classes="glowny" Padding="14,8"
-                  Click="SaveTask" Content="Zapisz" />
+                  Click="SaveTask" Content="{Binding SaveLabel}"
+                  IsEnabled="{Binding !IsSaving}" />
         </Grid>
 
       <ScrollViewer Name="SzczegolPrzewijanie">

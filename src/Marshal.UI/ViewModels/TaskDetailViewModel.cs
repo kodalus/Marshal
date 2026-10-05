@@ -223,6 +223,23 @@ public sealed partial class TaskDetailViewModel(
     [ObservableProperty]
     public partial string? Problem { get; set; }
 
+    /// <summary>
+    /// Czy zapis właśnie trwa.
+    /// </summary>
+    /// <remarks>
+    /// Zapis wystąpienia serii potrafi zrobić więcej niż jeden wiersz: zmieniona nazwa
+    /// albo pora jest decyzją o całej serii i dochodzi do dni, które już stoją w bazie.
+    /// Przycisk bez odpowiedzi wyglądał wtedy dokładnie jak przycisk zepsuty — i był
+    /// zgłaszany jako zepsuty. Napis i zablokowany przycisk mówią, że coś się dzieje;
+    /// blokada chroni przy okazji przed drugim zapisem w środku pierwszego.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool IsSaving { get; set; }
+
+    partial void OnIsSavingChanged(bool value) => OnPropertyChanged(nameof(SaveLabel));
+
+    public string SaveLabel => IsSaving ? "Zapisuję…" : "Zapisz";
+
     public bool HasProblem => !string.IsNullOrEmpty(Problem);
 
     /// <summary>
@@ -737,6 +754,21 @@ public sealed partial class TaskDetailViewModel(
             return;
         }
 
+        if (IsSaving)
+        {
+            // Drugie naciśnięcie w środku pierwszego zapisu. Odmowa cicha, bo ekran
+            // mówi już „Zapisuję…" — a drugie przejście przez tę metodę potrafiłoby
+            // zapisać stan z połowy pierwszego.
+            return;
+        }
+
+        IsSaving = true;
+
+        // Ile to trwało — do dziennika. Zapis wystąpienia serii bywa droższy niż jeden
+        // wiersz, a „bardzo powoli" bez liczby nie mówi, gdzie szukać: zgadywanie
+        // kosztowało w tym projekcie już dwie rundy.
+        var started = System.Diagnostics.Stopwatch.StartNew();
+
         try
         {
             if (_id == Guid.Empty)
@@ -792,6 +824,12 @@ public sealed partial class TaskDetailViewModel(
 
             return;
         }
+        finally
+        {
+            // Zawsze, także po wyjściu z powodu kłopotu: przycisk zablokowany na
+            // zawsze byłby gorszy od przycisku bez odpowiedzi.
+            IsSaving = false;
+        }
 
         // Ślad także po udanym zapisie: „zapisało się, ale nie widać" i „nie zapisało
         // się" wyglądają na ekranie tak samo, a to dwie różne rzeczy do zrobienia.
@@ -799,7 +837,8 @@ public sealed partial class TaskDetailViewModel(
             "Zadanie: zapis",
             $"{Title} — dzień {ToDate(DoDate)?.ToString("yyyy-MM-dd") ?? "brak"}, "
                 + $"godzina {(DoTime is { } g ? g.ToString(@"hh\:mm") : "brak")}, "
-                + $"miejsce {SelectedPlacement?.Label ?? "brak"}");
+                + $"miejsce {SelectedPlacement?.Label ?? "brak"}, "
+                + $"{started.ElapsedMilliseconds} ms");
 
         IsOpen = false;
         Saved?.Invoke(this, EventArgs.Empty);

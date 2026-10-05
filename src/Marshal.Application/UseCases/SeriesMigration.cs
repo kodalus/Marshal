@@ -7,7 +7,7 @@ using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.UseCases;
 
-public sealed record MigrationReport(int Converted, int Collapsed, int Spawned);
+public sealed record MigrationReport(int Converted, int Collapsed, int Spawned, int Twins = 0);
 
 /// <summary>
 /// Przeniesienie rytmów ze starego modelu do serii. Raz, przy pierwszym uruchomieniu.
@@ -46,13 +46,19 @@ public sealed class SeriesMigration(
 {
     public async Task<MigrationReport> RunAsync(CancellationToken ct = default)
     {
+        // Najpierw naprawa, potem przenoszenie. Serie bliźniacze powstały **u tych,
+        // którzy przenieśli rytmy, zanim tożsamość serii stała się wyliczana**: każde
+        // urządzenie zakładało wtedy własną. Krok jest tani przy kilkunastu seriach
+        // i po sprzątnięciu nie ma już czego sprzątać.
+        var twins = await CollapseSeriesAsync(ct);
+
         var carriers = (await tasks.RecurringAsync(ct))
             .Where(t => t.Recurrence is not null && t.SeriesId is null)
             .ToList();
 
         if (carriers.Count == 0)
         {
-            return new MigrationReport(0, 0, 0);
+            return new MigrationReport(0, 0, 0, twins);
         }
 
         // Bliźniaki sklejane **przed** zakładaniem serii. Dwie kopie tej samej serii
@@ -78,7 +84,14 @@ public sealed class SeriesMigration(
                 moved,
                 SeriesService.Blend(SeriesTemplate.From(carrier), moved),
                 clock.Now,
-                hlc.Next());
+                hlc.Next(),
+
+                // Tożsamość **wyliczona z zadania, które regułę niosło**, a nie losowana.
+                // Przeniesienie odbywa się na każdym urządzeniu osobno; przy losowanej
+                // telefon i pulpit zakładały dla tego samego starego rytmu dwie różne
+                // serie, każda z własnym oknem — czyli ten sam błąd, przed którym miała
+                // chronić cała przebudowa, tylko o warstwę wyżej.
+                SeriesId.Of(carrier.Id));
 
             series.Add(fresh);
 
@@ -96,13 +109,107 @@ public sealed class SeriesMigration(
         {
             await journal.RecordAsync(
                 "Rytmy: przeniesienie do serii",
-                $"{converted} serii, {collapsed} kopii do kosza, {filled.Added} wystąpień",
+                $"{converted} serii, {collapsed} kopii do kosza, {filled.Added} wystąpień"
+                    + (twins > 0 ? $", {twins} bliźniaczych serii zlanych" : string.Empty),
                 ActivityLevel.Ok,
                 null,
                 ct);
         }
 
         return new MigrationReport(converted, collapsed, filled.Added);
+    }
+
+    /// <summary>
+    /// Zlanie serii bliźniaczych — jednorazowa naprawa po losowanej tożsamości serii.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Przeniesienie rytmów chodzi na każdym urządzeniu osobno. Dopóki tożsamość serii
+    /// była losowana, telefon i pulpit zakładały dla tego samego starego rytmu dwie
+    /// różne serie — każda z własnym oknem, własnymi identyfikatorami dni i własnym
+    /// wierszem na każdy dzień. Rytm pojawiał się przez to dwa razy, dokładnie tak jak
+    /// przed przebudową, tylko z innego powodu.
+    /// </para>
+    /// <para>
+    /// <b>Zostaje ta, na którą wskazuje zadanie.</b> Nie najmniejszy identyfikator:
+    /// przynależność zadania jest polem scalanym, więc po synchronizacji oba urządzenia
+    /// czytają w nim to samo — a razem z tym zadaniem zostają jego załączniki, podzadania
+    /// i wszystko, co ktoś do niego dopisał. Dopiero przy remisie rozstrzyga identyfikator,
+    /// bo wybór musi wypaść tak samo po obu stronach.
+    /// </para>
+    /// <para>
+    /// Wystąpienia serii przegranej są duplikatami dni, które zostają: otwarte idą do
+    /// kosza, a minione i odhaczone przestają należeć do czegokolwiek i zostają zwykłymi
+    /// zadaniami. Historia ma zostać historią, a nie zniknąć razem z serią, której nigdy
+    /// nie miało być.
+    /// </para>
+    /// </remarks>
+    private async Task<int> CollapseSeriesAsync(CancellationToken ct)
+    {
+        var all = await series.ListAsync(ct);
+
+        if (all.Count < 2)
+        {
+            return 0;
+        }
+
+        var groups = all
+            .GroupBy(z => (
+                z.Template.Title,
+                z.Template.AreaId,
+                z.Template.ProjectId,
+                z.Rule.Shape))
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        if (groups.Count == 0)
+        {
+            return 0;
+        }
+
+        var occurrences = (await series.AllOccurrencesAsync(ct))
+            .Where(t => t.SeriesId is not null)
+            .GroupBy(t => t.SeriesId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var today = clock.Today;
+        var gone = 0;
+
+        foreach (var group in groups)
+        {
+            // Seria, na którą wskazuje jakiekolwiek zadanie zmienione z ręki — czyli to,
+            // które niosło rytm przed przeniesieniem. Przy remisie najmniejszy
+            // identyfikator, bo wybór musi wypaść tak samo na obu urządzeniach.
+            var keeper = group
+                .OrderByDescending(z => occurrences.GetValueOrDefault(z.Id, [])
+                    .Any(t => t.Overridden))
+                .ThenBy(z => z.Id)
+                .First();
+
+            foreach (var loser in group.Where(z => z.Id != keeper.Id))
+            {
+                foreach (var occurrence in occurrences.GetValueOrDefault(loser.Id, []))
+                {
+                    if (occurrence.DoDate >= today
+                        && occurrence.State is TaskState.Scheduled or TaskState.Next
+                            or TaskState.Waiting)
+                    {
+                        occurrence.Trash(hlc.Next());
+                    }
+                    else
+                    {
+                        occurrence.JoinSeries(null, hlc.Next());
+                    }
+                }
+
+                loser.MarkDeleted(hlc.Next());
+                gone++;
+            }
+        }
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return gone;
     }
 
     /// <summary>

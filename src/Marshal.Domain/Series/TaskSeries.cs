@@ -58,17 +58,28 @@ public sealed class TaskSeries : Entity
         TemplateJson = template.ToJson();
     }
 
+    /// <summary>
+    /// Nowa seria. Tożsamość podaje wołający, gdy ma być <b>tą samą rzeczą</b> co na
+    /// drugim urządzeniu.
+    /// </summary>
+    /// <remarks>
+    /// Przeniesienie starego rytmu podaje tożsamość wyliczoną (<see cref="SeriesId"/>),
+    /// bo odbywa się na każdym urządzeniu osobno i bez umawiania się. Nadanie rytmu
+    /// z ręki podaje losową: dzieje się z jednego kliknięcia, w jednym miejscu, i nie
+    /// ma bliźniaka.
+    /// </remarks>
     public static TaskSeries Create(
         DateOnly starts,
         RecurrenceRule rule,
         SeriesTemplate template,
         DateTimeOffset now,
-        Hlc stamp)
+        Hlc stamp,
+        Guid? id = null)
     {
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(template);
 
-        return new TaskSeries(Guid.CreateVersion7(), now, stamp, starts, rule, template);
+        return new TaskSeries(id ?? Guid.CreateVersion7(), now, stamp, starts, rule, template);
     }
 
     /// <summary>
