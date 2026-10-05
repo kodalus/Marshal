@@ -953,6 +953,9 @@ public sealed partial class CalendarViewModel(
     // Wolna praca ma być wolna, a nie zabierać drogi do siebie. To ta sama pułapka,
     // co martwy „Zapisz" i co wyszarzone zakładki — trzeci raz ta sama, w trzecim
     // miejscu.
+    //
+    // Dotyczy wyłącznie poleceń **asynchronicznych**: polecenie natychmiastowe nie ma
+    // czasu pracy, w którym mogłoby się wyłączyć, i tej opcji nie przyjmuje.
     [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task UndoMoveAsync()
     {
@@ -979,7 +982,7 @@ public sealed partial class CalendarViewModel(
         await RefreshAsync();
     }
 
-    [RelayCommand(AllowConcurrentExecutions = true)]
+    [RelayCommand]
     private void ForgetUndo()
     {
         Undo = null;
@@ -2385,7 +2388,7 @@ public sealed partial class CalendarViewModel(
     /// Nazwa, projekt i sam rytm należą do serii, a nie do jednego dnia — zmienia się je
     /// tam, gdzie mieszkają. Karta wystąpienia odpowiada wyłącznie za ten jeden raz.
     /// </remarks>
-    [RelayCommand(AllowConcurrentExecutions = true)]
+    [RelayCommand]
     private void ShowRhythm()
     {
         if (Opened is not { RhythmId: { } rhythm })
@@ -2520,7 +2523,7 @@ public sealed partial class CalendarViewModel(
         OnPropertyChanged(nameof(CanEditOpenedTimes));
     }
 
-    [RelayCommand(AllowConcurrentExecutions = true)]
+    [RelayCommand]
     private void CloseOpened()
     {
         Opened = null;
