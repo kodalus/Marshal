@@ -259,6 +259,10 @@ public sealed class SyncEngine(
             await db.SaveChangesAsync(ct);
         }
 
+        // Mapa znaczników zapomniana po zapisie: po nim śledzenie wygląda inaczej,
+        // a mapa trzymana dalej mówiłaby o stanie sprzed.
+        _applier.Forget();
+
         return applied;
     }
 

@@ -124,9 +124,42 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
         }
         else
         {
-            db.Add(new FieldStamp(table, id, pole, stamp));
+            var fresh = new FieldStamp(table, id, pole, stamp);
+            db.Add(fresh);
+            _tracked[(table, id, pole)] = fresh;
         }
     }
+
+    /// <summary>
+    /// Znaczniki dopisane w tym przebiegu — w mapie, nie do przeszukania po kolei.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tu siedziało zatkanie, przez które aplikacja stawała na minuty. Szukanie znacznika
+    /// przechodziło <b>całe śledzenie zmian kontekstu</b> — a kontekst jest w tej
+    /// aplikacji jeden na cały proces i żyje tak długo, jak ona. Po przeniesieniu rytmów
+    /// i postawieniu okien serii śledzonych znaczników były dziesiątki tysięcy, a to
+    /// przeszukanie wykonywało się <b>raz na każde pole każdego nakładanego wiersza</b>.
+    /// Scalanie rosło więc z kwadratem tego, ile już się nałożyło — stąd jedno wejście
+    /// do bramy trzymające ją sto sześćdziesiąt siedem sekund.
+    /// </para>
+    /// <para>
+    /// Mapa buduje się raz, przy pierwszym pytaniu, i jest dalej utrzymywana
+    /// dopisywaniem. Tę samą sztuczkę — jedno zapytanie na cały zapis zamiast jednego
+    /// na pole — robi już dziennik zmian po drugiej stronie; tutaj jej brakowało.
+    /// </para>
+    /// </remarks>
+    private Dictionary<(string Table, Guid Id, string Field), FieldStamp>? _known;
+
+    private Dictionary<(string Table, Guid Id, string Field), FieldStamp> _tracked =>
+        _known ??= db.ChangeTracker.Entries<FieldStamp>()
+            .Where(e => e.State != EntityState.Deleted)
+            .Select(e => e.Entity)
+            .GroupBy(s => (s.EntityType, s.EntityId, s.Field))
+            .ToDictionary(g => g.Key, g => g.First());
+
+    /// <summary>Zapomnienie mapy — po zapisie, bo wtedy śledzenie wygląda inaczej.</summary>
+    public void Forget() => _known = null;
 
     /// <summary>
     /// Znacznik pola — najpierw z tego, co już dopisane w tej transakcji, potem z bazy.
@@ -136,12 +169,25 @@ internal sealed class ChangeApplier(MarshalDbContext db, IHlcSource hlc)
     /// samego pola, a świeżo dodany znacznik nie jest jeszcze zapisany, więc zapytanie
     /// do bazy by go nie zobaczyło i starszy wiersz nadpisałby nowszy.
     /// </remarks>
-    private FieldStamp? Stamp(string table, Guid id, string pole) =>
-        db.ChangeTracker.Entries<FieldStamp>()
-            .Select(e => e.Entity)
-            .FirstOrDefault(s => s.EntityType == table && s.EntityId == id && s.Field == pole)
-        ?? db.FieldStamps.FirstOrDefault(
-            s => s.EntityType == table && s.EntityId == id && s.Field == pole);
+    private FieldStamp? Stamp(string table, Guid id, string pole)
+    {
+        if (_tracked.TryGetValue((table, id, pole), out var mine))
+        {
+            return mine;
+        }
+
+        // Z bazy po kluczu głównym, a nie zapytaniem po trzech polach: klucz tej tabeli
+        // jest właśnie tą trójką, więc „Find" trafia w niego wprost i po drodze zagląda
+        // do śledzenia bez przechodzenia go po kolei.
+        var fromDb = db.FieldStamps.Find(table, id, pole);
+
+        if (fromDb is not null)
+        {
+            _tracked[(table, id, pole)] = fromDb;
+        }
+
+        return fromDb;
+    }
 
     /// <summary>
     /// Z postaci bazodanowej na typ właściwości. Droga odwrotna do tej, którą wartość
