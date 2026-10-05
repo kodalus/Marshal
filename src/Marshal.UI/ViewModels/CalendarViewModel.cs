@@ -1934,7 +1934,7 @@ public sealed partial class CalendarViewModel(
     /// należy do czegoś innego i ma inne pola. Odhaczyć i przeciągnąć da się je wprost
     /// na siatce, a karta mówi, co to jest i z którego kalendarza pochodzi.
     /// </remarks>
-    [RelayCommand(AllowConcurrentExecutions = true, FlowExceptionsToTaskScheduler = true)]
+    [RelayCommand]
     private void OpenTask(SlotBox? block)
     {
         if (block is null)
