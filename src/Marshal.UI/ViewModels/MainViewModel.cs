@@ -306,10 +306,10 @@ public sealed partial class MainViewModel : ObservableObject
             // z góry byłaby decyzją, której nikt nie podjął.
             if (what is { IsFresh: true })
             {
-                var day = what.Day ?? Today;
+                var wanted = what.Day ?? Today;
 
-                await Calendar.ShowAsync(day);
-                await Detail.NewAsync(day, null);
+                await Calendar.ShowAsync(wanted);
+                await Detail.NewAsync(wanted, null);
                 return;
             }
 
