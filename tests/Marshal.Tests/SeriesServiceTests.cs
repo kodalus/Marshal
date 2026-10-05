@@ -316,6 +316,8 @@ public sealed class SeriesServiceTests : IDisposable
         // więc telefon i pulpit rozchodziły się na dwa rozłączne łańcuchy.
         var one = await Start();
 
+        await FillAsync(one);
+
         // Dni, nie identyfikatory: pierwszy dzień obsadza zadanie, które istniało przed
         // serią, i niesie swój dawny identyfikator. Okno to wie — pomija dzień już
         // zajęty — więc zgodność jest o dniach, nie o tożsamościach.
