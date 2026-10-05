@@ -109,6 +109,27 @@ public sealed class SeriesService(
     /// przejście dnia i z tego samego powodu: jest <b>powtarzalne bez skutków ubocznych</b>,
     /// więc dwa urządzenia robią to samo, niezależnie i bez umawiania się, które ma.
     /// </remarks>
+    /// <summary>
+    /// Ile wystąpień wolno postawić w jednym przebiegu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zasada wzięta stąd, gdzie już raz była: stare przejście dnia miało własny
+    /// ogranicznik i własne uzasadnienie — „reszta dojdzie przy kolejnym uruchomieniu;
+    /// nic nie ginie, tylko schodzi partiami". Wyrzuciłam go razem ze starym modelem
+    /// i powtórzyłam dokładnie ten błąd, przed którym chronił.
+    /// </para>
+    /// <para>
+    /// Liczy się tu nie liczba zadań, tylko liczba <b>wierszy dziennika
+    /// synchronizacji</b>: każde postawione wystąpienie dopisuje około sześćdziesięciu,
+    /// bo dziennik zapisuje osobno każde pole i osobno jego znacznik. Pierwszy przebieg
+    /// po przeniesieniu rytmów ma do postawienia całe okno wszystkich serii naraz —
+    /// bez sufitu jest to jeden zapis na dziesiątki tysięcy wierszy, trzymający bramę
+    /// na bazę przez cały swój czas.
+    /// </para>
+    /// </remarks>
+    public const int MaxPerRun = 30;
+
     public async Task<TopUpReport> TopUpAsync(CancellationToken ct = default)
     {
         var added = 0;
@@ -116,7 +137,9 @@ public sealed class SeriesService(
 
         foreach (var one in await series.ListAsync(ct))
         {
-            var (fresh, gone) = await ReconcileAsync(one, ct);
+            // Sprzątanie idzie dalej także po wyczerpaniu budżetu: zabranie dnia, którego
+            // okno nie chce, jest tanie i nie ma po co czekać z nim do jutra.
+            var (fresh, gone) = await ReconcileAsync(one, Math.Max(0, MaxPerRun - added), ct);
             added += fresh;
             pruned += gone;
         }
@@ -141,7 +164,7 @@ public sealed class SeriesService(
 
     public async Task<TopUpReport> TopUpAsync(TaskSeries one, CancellationToken ct = default)
     {
-        var (added, pruned) = await ReconcileAsync(one, ct);
+        var (added, pruned) = await ReconcileAsync(one, MaxPerRun, ct);
 
         if (added > 0 || pruned > 0)
         {
@@ -294,7 +317,7 @@ public sealed class SeriesService(
 
         // Stawiane od nowa **po** zapisaniu nagrobków: dopełnianie pomija dni już zajęte,
         // więc puszczone przed nimi nie postawiłoby ani jednego wiersza.
-        var (fresh, _) = await ReconcileAsync(one, ct);
+        var (fresh, _) = await ReconcileAsync(one, MaxPerRun, ct);
 
         if (fresh > 0)
         {
@@ -322,7 +345,7 @@ public sealed class SeriesService(
     /// </para>
     /// </remarks>
     private async Task<(int Added, int Pruned)> ReconcileAsync(
-        TaskSeries one, CancellationToken ct)
+        TaskSeries one, int budget, CancellationToken ct)
     {
         var today = clock.Today;
         var standing = await series.OccurrencesAsync(one.Id, ct);
@@ -338,6 +361,11 @@ public sealed class SeriesService(
 
         foreach (var slot in plan)
         {
+            if (added >= budget)
+            {
+                break;
+            }
+
             if (byId.Contains(slot.Id) || byDay.Contains(slot.Date))
             {
                 continue;
@@ -360,8 +388,17 @@ public sealed class SeriesService(
         // nami, jest jeszcze otwarty, nie został zmieniony z ręki i nie ma go w planie.
         // Minione i odhaczone zostają, bo to zapis tego, co było; zmienione z ręki
         // zostają, bo były ostatnią świadomą decyzją o swoim dniu.
+        // Zabieranie **tylko przy pełnym planie**. Przy wyczerpanym budżecie okno jest
+        // dopiero w połowie postawione, a dzień, którego jeszcze nie zdążyliśmy dołożyć,
+        // nie jest dniem niechcianym. Bez tego warunku pierwszy przebieg po przeniesieniu
+        // rytmów zabierałby to, co sam zaraz postawi.
         var wanted = plan.Select(z => z.Date).ToHashSet();
         var pruned = 0;
+
+        if (added >= budget && plan.Count > byDay.Count)
+        {
+            return (added, 0);
+        }
 
         foreach (var occurrence in standing)
         {

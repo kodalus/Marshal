@@ -91,8 +91,8 @@ public sealed class SeriesWindowTests
         // pokazywałoby przy codziennej serii pustkę.
         var codziennie = SeriesWindow.Plan(Series(Daily()), Today);
 
-        codziennie.Count.Should().BeGreaterThan(SeriesWindow.Ahead);
-        codziennie[^1].Date.Should().BeOnOrAfter(Today.AddDays(SeriesWindow.Days));
+        codziennie.Count.Should().BeGreaterThanOrEqualTo(SeriesWindow.Ahead);
+        codziennie[^1].Date.Should().BeOnOrAfter(Today.AddDays(SeriesWindow.Days - 1));
 
         // Przy tygodniowym kwartał kończy się wcześniej niż licznik, więc rządzi licznik.
         var tygodniowo = SeriesWindow.Plan(Series(Mondays()), Today);
@@ -197,7 +197,7 @@ public sealed class SeriesWindowTests
         // Przy odstępie jednego dnia zaczepienie na wykonaniu i na kalendarzu znaczą
         // to samo, więc „codziennie" domyślnie stoi na kalendarzu — i ma okno.
         SeriesWindow.Plan(Series(new RecurrenceRule(RecurrenceKind.Daily)), Today).Count
-            .Should().BeGreaterThan(SeriesWindow.Ahead);
+            .Should().BeGreaterThanOrEqualTo(SeriesWindow.Ahead);
     }
 
     [Fact]

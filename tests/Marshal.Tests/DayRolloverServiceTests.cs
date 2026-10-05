@@ -102,6 +102,15 @@ public sealed class DayRolloverServiceTests : IDisposable
         var rule = new RecurrenceRule(RecurrenceKind.Daily, onMissed: onMissed);
         var one = await _rhythms.StartAsync(first, rule);
 
+        // Okno schodzi partiami, a te testy pytają o dni, które mają już stać.
+        for (var guard = 0; guard < 20; guard++)
+        {
+            if ((await _rhythms.TopUpAsync(one)).Added == 0)
+            {
+                break;
+            }
+        }
+
         _clock.Now = was;
 
         return one;

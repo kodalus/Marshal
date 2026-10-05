@@ -33,11 +33,29 @@ public sealed record SeriesSlot(Guid Id, DateOnly Date, TimeOnly? Time, int? Min
 /// </remarks>
 public static class SeriesWindow
 {
-    /// <summary>Ile wystąpień trzymać do przodu.</summary>
-    public const int Ahead = 60;
+    /// <summary>
+    /// Ile wystąpień trzymać do przodu.
+    /// </summary>
+    /// <remarks>
+    /// Było sześćdziesiąt i to była liczba wzięta z wygody oglądania, bez policzenia,
+    /// ile kosztuje. Każdy wiersz zapisany to <b>około sześćdziesięciu wierszy dziennika
+    /// synchronizacji</b> — po jednym na każde pole, plus tyleż znaczników pól. Okno
+    /// kwartalne przy rytmie codziennym znaczyło więc blisko sześć tysięcy wierszy na
+    /// jedną serię, a kilkanaście serii zatrzymywało bazę na tyle długo, że aplikacja
+    /// nie wstawała ze splash-ekranu.
+    /// </remarks>
+    public const int Ahead = 30;
 
-    /// <summary>Ile dni do przodu trzymać, gdy licznik kończy się wcześniej.</summary>
-    public const int Days = 92;
+    /// <summary>
+    /// Ile dni do przodu trzymać, gdy licznik kończy się wcześniej.
+    /// </summary>
+    /// <remarks>
+    /// Miesiąc, nie kwartał. Przy rytmie codziennym to jest ta liczba, która rozstrzyga
+    /// o koszcie — bo dzień kosztuje wiersz — a okno przesuwa się przy każdym
+    /// uruchomieniu i przy każdym przejściu dnia, więc „miesiąc do przodu" znaczy
+    /// miesiąc liczony od dziś, a nie od instalacji.
+    /// </remarks>
+    public const int Days = 31;
 
     /// <summary>Sufit na jedną serię — ochrona przed rytmem założonym przez pomyłkę.</summary>
     public const int Ceiling = 400;

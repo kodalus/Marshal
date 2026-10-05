@@ -73,6 +73,18 @@ public sealed class SeriesServiceTests : IDisposable
     private List<TaskItem> Days(TaskSeries one) =>
         [.. _db.Tasks.Where(t => t.SeriesId == one.Id).OrderBy(t => t.DoDate)];
 
+    /// <summary>Domknięcie okna, które schodzi partiami — zob. <see cref="SeriesService.MaxPerRun"/>.</summary>
+    private async Task FillAsync(TaskSeries one)
+    {
+        for (var guard = 0; guard < 20; guard++)
+        {
+            if ((await _rhythms.TopUpAsync(one)).Added == 0)
+            {
+                return;
+            }
+        }
+    }
+
     [Fact]
     public async Task Zalozenie_serii_zostawia_zadanie_i_stawia_okno()
     {
@@ -86,7 +98,27 @@ public sealed class SeriesServiceTests : IDisposable
         first.Overridden.Should().BeTrue("pierwsze wystąpienie było zadaniem");
         first.Recurrence.Should().BeNull("regułę nosi teraz seria");
 
-        Days(one).Count.Should().BeGreaterThan(SeriesWindow.Ahead);
+        Days(one).Count.Should().BeGreaterThan(1, "okno schodzi partiami, ale rusza od razu");
+    }
+
+    [Fact]
+    public async Task Okno_schodzi_partiami_a_nie_jednym_zapisem()
+    {
+        // Każde postawione wystąpienie dopisuje około sześćdziesięciu wierszy dziennika
+        // synchronizacji — po jednym na pole i tyleż znaczników. Całe okno wszystkich
+        // serii naraz to jeden zapis na dziesiątki tysięcy wierszy, trzymający bramę
+        // na bazę przez cały swój czas; telefon nie wstawał wtedy ze splash-ekranu.
+        var one = await Start();
+
+        Days(one).Count.Should().BeLessThanOrEqualTo(
+            SeriesService.MaxPerRun + 1, "plus to jedno, które było zadaniem przed serią");
+
+        // Reszta dochodzi przy kolejnych przebiegach. Nic nie ginie.
+        var before = Days(one).Count;
+
+        (await _rhythms.TopUpAsync(one)).Added.Should().BeGreaterThan(0);
+
+        Days(one).Count.Should().BeGreaterThan(before);
     }
 
     [Fact]
@@ -95,6 +127,17 @@ public sealed class SeriesServiceTests : IDisposable
         // Warunek, nie wygoda: dwa urządzenia dopełniają okno niezależnie i bez
         // umawiania się, które ma.
         var one = await Start();
+
+        // Okno schodzi partiami, więc najpierw domykamy je do końca — i to samo
+        // w sobie jest sprawdzeniem, że partie mają koniec, a nie lecą bez końca.
+        for (var guard = 0; guard < 20; guard++)
+        {
+            if ((await _rhythms.TopUpAsync(one)).Added == 0)
+            {
+                break;
+            }
+        }
+
         var after = Days(one).Count;
 
         (await _rhythms.TopUpAsync(one)).Added.Should().Be(0);
@@ -110,6 +153,8 @@ public sealed class SeriesServiceTests : IDisposable
         // trwałym, a nie odwołaniem doklejonym do reguły, które przy pierwszym
         // obcięciu minionych zmian przepadało.
         var one = await Start();
+
+        await FillAsync(one);
         var day = Today.AddDays(3);
         var victim = Days(one).Single(z => z.DoDate == day);
 
@@ -129,6 +174,8 @@ public sealed class SeriesServiceTests : IDisposable
         // postawione wcześniej — czyli odpowiedziałaby „już nie będzie" na ekranie,
         // na którym widać, że będzie.
         var one = await Start();
+
+        await FillAsync(one);
         var last = Today.AddDays(2);
 
         await _rhythms.EndAsync(one, last);
@@ -148,6 +195,8 @@ public sealed class SeriesServiceTests : IDisposable
         // rozstrzygnięta na korzyść dnia: ten jeden wtorek, który ktoś świadomie
         // przestawił, był ostatnią świadomą decyzją o tym dniu.
         var one = await Start();
+
+        await FillAsync(one);
         var pinned = Days(one).Single(z => z.DoDate == Today.AddDays(4));
 
         pinned.Override(_hlc.Next());
@@ -208,6 +257,8 @@ public sealed class SeriesServiceTests : IDisposable
         // stawiało własny zestaw dat. Po scaleniu początek się uzgadniał, a oba zestawy
         // zostawały obok siebie — rozjazd, którego nic nie zamykało.
         var one = await Start(interval: 2);
+
+        await FillAsync(one);
         var before = Days(one).Count(z => z.State == TaskState.Scheduled);
 
         // Początek przestawiony o jeden dzień: wszystkie dni rytmu co drugi dzień
@@ -234,6 +285,8 @@ public sealed class SeriesServiceTests : IDisposable
     public async Task Uzgadnianie_nie_rusza_minionych_odhaczonych_ani_zmienionych_z_reki()
     {
         var one = await Start();
+
+        await FillAsync(one);
 
         var pinned = Days(one).Single(z => z.DoDate == Today.AddDays(5));
         pinned.Override(_hlc.Next());
