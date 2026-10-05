@@ -1,4 +1,5 @@
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Recurrence;
@@ -35,8 +36,35 @@ public sealed class SeriesService(
     IUnitOfWork unitOfWork,
     IClock clock,
     IHlcSource hlc,
-    IActivityLog? journal = null)
+    IActivityLog? journal = null,
+    ITaskMirror? mirror = null)
 {
+    /// <summary>
+    /// Nagrobek na wystąpieniu, a razem z nim skasowanie odbicia w kalendarzu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Seria zabiera wystąpienia w czterech miejscach — koniec serii, skasowanie serii,
+    /// zmiana rytmu i uzgodnienie okna — i w żadnym z nich nie pytała kalendarza.
+    /// Wystąpienie udostępnione zostawiało więc w Google wydarzenie bez właściciela po
+    /// naszej stronie: w Marshalu już go nie było, a w cudzym kalendarzu wisiało dalej.
+    /// </para>
+    /// <para>
+    /// Pytane <b>tylko wtedy, gdy jest o co</b>: wystąpienia stawiane z szablonu nie mają
+    /// odbicia, bo seria ich do kalendarza nie wysyła. Bez tego warunku uzgodnienie okna
+    /// sięgałoby po sieć kilkadziesiąt razy przy każdym uruchomieniu.
+    /// </para>
+    /// </remarks>
+    private async Task TombstoneAsync(TaskItem occurrence, CancellationToken ct)
+    {
+        occurrence.Trash(hlc.Next());
+
+        if (mirror is not null && occurrence.SharedEventId is { Length: > 0 })
+        {
+            await mirror.RemoveAsync(occurrence, ct);
+        }
+    }
+
     /// <summary>
     /// Nadanie rytmu zadaniu, które już istnieje.
     /// </summary>
@@ -144,7 +172,7 @@ public sealed class SeriesService(
         {
             if (occurrence.DoDate > last && Open(occurrence) && !occurrence.Overridden)
             {
-                occurrence.Trash(hlc.Next());
+                await TombstoneAsync(occurrence, ct);
                 gone++;
             }
         }
@@ -173,7 +201,7 @@ public sealed class SeriesService(
         {
             if (occurrence.DoDate >= today && Open(occurrence))
             {
-                occurrence.Trash(hlc.Next());
+                await TombstoneAsync(occurrence, ct);
                 gone++;
             }
         }
@@ -257,7 +285,7 @@ public sealed class SeriesService(
         {
             if (occurrence.DoDate >= today && Open(occurrence) && !occurrence.Overridden)
             {
-                occurrence.Trash(hlc.Next());
+                await TombstoneAsync(occurrence, ct);
                 retired++;
             }
         }
@@ -343,7 +371,7 @@ public sealed class SeriesService(
                 && !occurrence.Overridden
                 && !wanted.Contains(day))
             {
-                occurrence.Trash(hlc.Next());
+                await TombstoneAsync(occurrence, ct);
                 pruned++;
             }
         }

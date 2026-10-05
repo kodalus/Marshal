@@ -184,10 +184,6 @@ public sealed class TodayWidget : AppWidgetProvider
 
     private const int OpenCode = 1;
 
-    private const int CaptureCode = 2;
-
-    private const int TodayCode = 3;
-
     /// <summary>Od tego numeru w górę idą dotknięcia dni — po dziewięć na każdy kafelek.</summary>
     /// <remarks>
     /// Dziewięć: siedem kolumn paska tygodnia i dwie strzałki. Numer musi być różny dla
@@ -199,6 +195,24 @@ public sealed class TodayWidget : AppWidgetProvider
 
     /// <summary>Ile numerów żądania przypada na jeden kafelek.</summary>
     private const int CodesPerTile = 16;
+
+    /// <summary>
+    /// Numery kafelkowe zajęte przez pasek: siedem kolumn i dwie strzałki.
+    /// </summary>
+    /// <remarks>
+    /// Wypisane wprost, bo właśnie na tym się przejechałam: plusik i „dziś" dostały
+    /// numery 2 i 3, czyli te same, co czwarta i trzecia kolumna dnia. System porównuje
+    /// zamiary <b>bez patrzenia na dodatkowe dane</b>, więc rozgłoszenie „dziś" było dla
+    /// niego tym samym zamiarem co dotknięcie kolumny — i podmieniało jej treść. Numery
+    /// własne zaczynają się więc za paskiem, a stała mówi, gdzie pasek się kończy.
+    /// </remarks>
+    private const int StripSockets = WeekDays + 2;
+
+    /// <summary>Powrót na dzisiaj — pierwszy numer za paskiem.</summary>
+    private const int TodaySocket = StripSockets;
+
+    /// <summary>Plusik — drugi numer za paskiem.</summary>
+    private const int CaptureSocket = StripSockets + 1;
 
     /// <summary>Ile dni pokazuje pasek. Tydzień, bo tydzień jest jednostką planowania.</summary>
     private const int WeekDays = 7;
@@ -816,7 +830,7 @@ public sealed class TodayWidget : AppWidgetProvider
             shown.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
 
         return PendingIntent.GetActivity(
-            context, Socket(widgetId, CaptureCode), intent,
+            context, Socket(widgetId, CaptureSocket), intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
 
@@ -829,13 +843,21 @@ public sealed class TodayWidget : AppWidgetProvider
         intent.PutExtra(AppWidgetManager.ExtraAppwidgetId, widgetId);
 
         return PendingIntent.GetBroadcast(
-            context, Socket(widgetId, TodayCode), intent,
+            context, Socket(widgetId, TodaySocket), intent,
             PendingIntentFlags.UpdateCurrent | PendingIntentFlags.Immutable);
     }
 
-    /// <summary>Numer żądania własny dla kafelka — zob. <see cref="DayCode"/>.</summary>
+    /// <summary>
+    /// Numer żądania własny dla kafelka — zob. <see cref="DayCode"/>.
+    /// </summary>
+    /// <remarks>
+    /// Liczony <b>tą samą arytmetyką</b>, co numery paska. Własna, choćby i poprawna,
+    /// znaczyłaby dwa sposoby rozdawania tej samej przestrzeni numerów — a zderzenie
+    /// w niej nie wygląda jak zderzenie: wygląda jak przycisk, który robi coś innego,
+    /// niż mówi.
+    /// </remarks>
     private static int Socket(int widgetId, int slot) =>
-        DayCode + (Math.Abs(widgetId) % 10_000 * CodesPerTile) + slot;
+        DayCode + (widgetId * CodesPerTile) + slot;
 
     /// <summary>
     /// Zależności aplikacji razem z gotową bazą.
