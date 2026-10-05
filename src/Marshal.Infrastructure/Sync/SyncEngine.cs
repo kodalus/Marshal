@@ -31,11 +31,44 @@ public sealed class SyncEngine(
 
     private readonly IDbQueue _queue = queue ?? new DirectQueue();
 
+    /// <summary>
+    /// Jedna synchronizacja naraz. Druga nie czeka — odpuszcza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Synchronizacja woła się z czterech miejsc: minutnika, zapisu, powrotu do okna
+    /// i startu. Dopóki scalanie trzymało bramę na całość, druga synchronizacja stała
+    /// pod bramą i wchodziła dopiero po pierwszej — zamek był więc, tyle że przypadkowy
+    /// i cudzy. Odkąd scalanie puszcza bramę między kawałkami, ta szczelina się otworzyła
+    /// i druga synchronizacja zaczęła <b>nakładać te same porcje równolegle z pierwszą</b>:
+    /// kursor jeszcze nie przesunięty, więc obie widzą tę samą robotę do zrobienia.
+    /// Podwójna praca, podwójnie zajęta brama i przebieg, który nie ma jak się skończyć.
+    /// </para>
+    /// <para>
+    /// Odpuszcza, a nie czeka: przebiegi są równoważne, więc czekanie na poprzedni
+    /// znaczyłoby tylko zrobienie tego samego jeszcze raz, chwilę później. Minutnik
+    /// i tak zapyta za minutę.
+    /// </para>
+    /// </remarks>
+    private readonly SemaphoreSlim _alone = new(1, 1);
+
     public async Task<SyncReport> SyncAsync(CancellationToken ct = default)
     {
-        var sent = await PushAsync(ct);
-        var applied = await PullAsync(ct);
-        return new SyncReport(sent, applied);
+        if (!await _alone.WaitAsync(0, ct))
+        {
+            return new SyncReport(0, 0);
+        }
+
+        try
+        {
+            var sent = await PushAsync(ct);
+            var applied = await PullAsync(ct);
+            return new SyncReport(sent, applied);
+        }
+        finally
+        {
+            _alone.Release();
+        }
     }
 
     /// <summary>Dopisuje niewysłane zmiany na koniec własnego pliku.</summary>
@@ -167,8 +200,13 @@ public sealed class SyncEngine(
     /// Tyle, żeby jedno wejście trwało ułamek sekundy nawet na telefonie. Liczba jest
     /// kompromisem: mniejsza znaczy więcej wejść i więcej zapisów, większa — dłuższą
     /// chwilę, w której reszta aplikacji czeka.
+    ///
+    /// Zeszła z pięciuset na sto, bo pięćset nie wystarczyło: z dziennika telefonu
+    /// wyszło, że jedno wejście trzymało bramę <b>ponad trzydzieści sekund</b>. Nakładanie
+    /// jednej linii to odczyt rzeczy, której dotyczy, i jej znaczników pól — przy
+    /// pięciuset liniach to tysiące zapytań na jedno wejście.
     /// </remarks>
-    private const int Block = 500;
+    private const int Block = 100;
 
     /// <summary>
     /// Nałożenie kawałka porcji — za bramą, jedno wejście na kawałek.
