@@ -72,6 +72,29 @@ public sealed class PrzezCalaTraseTests : IDisposable
         return task;
     }
 
+    /// <summary>
+    /// Reguła, którą rządzi się zadanie — z serii, bo tam leży.
+    /// </summary>
+    /// <remarks>
+    /// Wystąpienie serii nie nosi reguły. Czytanie jej z zadania dawało „nie powtarza
+    /// się" i to był dokładnie ten objaw, który te testy mają łapać — tylko o warstwę
+    /// wyżej, niż stały.
+    /// </remarks>
+    private async Task<RecurrenceRule?> RuleOfAsync(Guid id)
+    {
+        if (await NewService<ITaskRepository>().FindAsync(id) is not { } task)
+        {
+            return null;
+        }
+
+        if (task.SeriesId is not { } mine)
+        {
+            return task.Recurrence;
+        }
+
+        return (await NewService<ITaskSeriesRepository>().FindAsync(mine))?.Rule;
+    }
+
     [Fact]
     public async Task Zadanie_zalozone_klikiem_w_siatke_pojawia_sie_na_siatce()
     {
@@ -590,16 +613,24 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         await detail.SaveAsync();
 
-        // Odczyt z bazy, nie z obiektu w pamięci: chodzi o to, czy reguła **przeżyła zapis**.
+        // Odczyt z bazy, nie z obiektu w pamięci: chodzi o to, czy reguła **przeżyła
+        // zapis**. Leży w serii, nie na zadaniu — zadanie wie tylko, czyim jest
+        // wystąpieniem.
         var saved = await NewService<ITaskRepository>().FindAsync(task.Id);
-        saved!.Recurrence.Should().NotBeNull();
-        saved.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
+        saved!.SeriesId.Should().NotBeNull();
 
+        var one = await NewService<ITaskSeriesRepository>().FindAsync(saved.SeriesId!.Value);
+        one!.Rule.Kind.Should().Be(RecurrenceKind.Daily);
+
+        // Następne wystąpienie stoi już w bazie — odhaczenie go nie rodzi, tylko
+        // odsłania. To jest różnica, od której zaczęła się cała przebudowa: rodzenie
+        // następnika liczyło jego tożsamość z dnia, w którym ktoś akurat kliknął.
         var next = await NewService<TaskEditService>().CompleteAsync(task.Id);
 
         next.Should().NotBeNull();
-        next!.Recurrence!.Kind.Should().Be(RecurrenceKind.Daily);
+        next!.SeriesId.Should().Be(one.Id);
         next.Title.Should().Be("Wynieść śmieci");
+        next.DoDate.Should().BeAfter(task.DoDate!.Value);
     }
 
     [Fact]
@@ -615,11 +646,11 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         await detail.SaveAsync();
 
-        var saved = await NewService<ITaskRepository>().FindAsync(task.Id);
+        var rule = await RuleOfAsync(task.Id);
 
-        saved!.Recurrence!.DaysOfWeek.Should().Be(Weekdays.Workdays);
-        saved.Recurrence.Until.Should().BeNull();
-        saved.Recurrence.Count.Should().BeNull();
+        rule!.DaysOfWeek.Should().Be(Weekdays.Workdays);
+        rule.Until.Should().BeNull();
+        rule.Count.Should().BeNull();
     }
 
     [Fact]
@@ -639,7 +670,11 @@ public sealed class PrzezCalaTraseTests : IDisposable
         await detail.SaveAsync();
 
         var tasks = NewService<ITaskRepository>();
-        (await tasks.FindAsync(task.Id))!.Recurrence!.Minutes
+        var series = NewService<ITaskSeriesRepository>();
+
+        var mine = (await tasks.FindAsync(task.Id))!.SeriesId!.Value;
+
+        (await series.FindAsync(mine))!.Template.EstimatedMinutes
             .Should().Be(480, "długość wpisana w karcie jest decyzją o całej serii");
 
         // Siatka: dziś siedzę sześć godzin, a nie osiem.
@@ -648,7 +683,9 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var after = await tasks.FindAsync(task.Id);
 
         after!.EstimatedMinutes.Should().Be(360, "to wystąpienie jest krótsze");
-        after.Recurrence!.Minutes.Should().Be(480, "seria zostaje przy swojej długości");
+
+        (await series.FindAsync(mine))!.Template.EstimatedMinutes
+            .Should().Be(480, "seria zostaje przy swojej długości");
     }
 
     [Fact]
@@ -865,7 +902,10 @@ public sealed class PrzezCalaTraseTests : IDisposable
         var tasks = NewService<ITaskRepository>();
         var saved = await tasks.FindAsync(task.Id);
 
-        saved!.Recurrence!.Leads.Should().Contain(30, "rytm niesie przypomnienie");
+        saved!.SeriesId.Should().NotBeNull();
+
+        (await RuleOfAsync(task.Id))!.Leads
+            .Should().Contain(30, "rytm niesie przypomnienie");
 
         var next = await NewService<TaskEditService>().CompleteAsync(task.Id);
 
@@ -989,21 +1029,22 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         var tasks = NewService<ITaskRepository>();
         var afterCount = await tasks.FindAsync(task.Id);
+        var counted = await RuleOfAsync(task.Id);
 
-        afterCount!.Recurrence!.Count.Should().Be(5);
-        afterCount.Recurrence.Until.Should().BeNull("odpowiedź jest jedna, nie dwie");
+        counted!.Count.Should().Be(5);
+        counted.Until.Should().BeNull("odpowiedź jest jedna, nie dwie");
 
         // Ta sama karta, druga odpowiedź: data zastępuje liczbę, a nie dokłada się do niej.
-        detail.Load(afterCount);
+        await detail.LoadAsync(afterCount!);
         detail.SelectedEnd = EndChoice.All.Single(k => k.Value == RepeatEnd.OnDate);
         detail.RhythmEnd = new DateTimeOffset(new DateTime(2027, 1, 31), TimeSpan.Zero);
 
         await detail.SaveAsync();
 
-        var afterDate = await tasks.FindAsync(task.Id);
+        var dated = await RuleOfAsync(task.Id);
 
-        afterDate!.Recurrence!.Until.Should().Be(new DateOnly(2027, 1, 31));
-        afterDate.Recurrence.Count.Should().BeNull();
+        dated!.Until.Should().Be(new DateOnly(2027, 1, 31));
+        dated.Count.Should().BeNull();
     }
 
     [Fact]
@@ -1023,8 +1064,8 @@ public sealed class PrzezCalaTraseTests : IDisposable
 
         await detail.SaveAsync();
 
-        (await NewService<ITaskRepository>().FindAsync(task.Id))!
-            .Recurrence.Should().BeNull("zapis z brakującą odpowiedzią nie doszedł do skutku");
+        (await RuleOfAsync(task.Id))
+            .Should().BeNull("zapis z brakującą odpowiedzią nie doszedł do skutku");
     }
 
     [Fact]

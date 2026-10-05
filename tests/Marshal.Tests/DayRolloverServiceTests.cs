@@ -83,13 +83,28 @@ public sealed class DayRolloverServiceTests : IDisposable
         return task;
     }
 
-    /// <summary>Seria z wystąpieniami postawionymi od podanego dnia.</summary>
+    /// <summary>
+    /// Seria założona w dniu <paramref name="from"/> — z zegarem przestawionym tam
+    /// i z powrotem.
+    /// </summary>
+    /// <remarks>
+    /// Okno stawia dni **od dziś w przód**: historia ma zostać taka, jaka była, a nie
+    /// dorosnąć wstecz o wystąpienia, których nigdy nie było. Seria mająca zaległe dni
+    /// musi więc zostać założona wtedy, kiedy te dni były jeszcze przyszłością — i tak
+    /// też dzieje się w życiu.
+    /// </remarks>
     private async Task<TaskSeries> Series(string title, string from, OnMissed onMissed)
     {
+        var was = _clock.Now;
+        _clock.Now = new DateTimeOffset(D(from).ToDateTime(new TimeOnly(9, 0)), was.Offset);
+
         var first = Add(title, from);
         var rule = new RecurrenceRule(RecurrenceKind.Daily, onMissed: onMissed);
+        var one = await _rhythms.StartAsync(first, rule);
 
-        return await _rhythms.StartAsync(first, rule);
+        _clock.Now = was;
+
+        return one;
     }
 
     private List<TaskItem> Occurrences(TaskSeries one) =>
@@ -209,6 +224,7 @@ public sealed class DayRolloverServiceTests : IDisposable
         var one = await Series("Podlać", "2026-09-16", OnMissed.Carry);
 
         var before = Occurrences(one).Count;
+
 
         // Dzień dalej: okno ma się przesunąć o jeden, a nie stać w miejscu.
         _clock.Now = _clock.Now.AddDays(1);

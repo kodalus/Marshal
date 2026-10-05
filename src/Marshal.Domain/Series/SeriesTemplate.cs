@@ -78,6 +78,33 @@ public sealed record SeriesTemplate(
                 : null);
     }
 
+    /// <summary>
+    /// Równość po wartościach, także dla listy wyprzedzeń.
+    /// </summary>
+    /// <remarks>
+    /// Rekord porównuje listę przez <b>referencję</b>, więc szablon odczytany z bazy
+    /// nigdy nie byłby równy temu, z którego powstał — a na tym porównaniu stoi pytanie
+    /// „czy rytm się zmienił", od którego zależy, czy okno serii zostanie postawione
+    /// od nowa. Ta sama poprawka i z tego samego powodu stoi przy regule powtarzania.
+    /// </remarks>
+    public bool Equals(SeriesTemplate? other) =>
+        other is not null
+        && Title == other.Title
+        && Note == other.Note
+        && AreaId == other.AreaId
+        && ProjectId == other.ProjectId
+        && ParentTaskId == other.ParentTaskId
+        && DoTime == other.DoTime
+        && EstimatedMinutes == other.EstimatedMinutes
+        && Priority == other.Priority
+        && Energy == other.Energy
+        && Color == other.Color
+        && DeadlineOffsetDays == other.DeadlineOffsetDays
+        && (Leads ?? []).SequenceEqual(other.Leads ?? []);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Title, Note, AreaId, ProjectId, DoTime, EstimatedMinutes, Priority);
+
     public string ToJson() => JsonSerializer.Serialize(this with { }, Json);
 
     /// <summary>Zwraca <c>null</c> zamiast rzucać: zapis z nowszej wersji aplikacji nie

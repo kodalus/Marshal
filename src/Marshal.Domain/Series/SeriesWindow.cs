@@ -70,26 +70,65 @@ public static class SeriesWindow
             : today.AddDays(Days);
         var slots = new List<SeriesSlot>(Ahead);
 
-        foreach (var slot in RecurrenceSchedule.Following(
-            series.Rule, series.Starts.AddDays(-1), today.AddYears(Reach)))
+        foreach (var (date, time, minutes) in Walk(series, today.AddYears(Reach)))
         {
             // Minione pomijane, ale **po przejściu przez nie**: licznik pozostałych
             // wystąpień zużywa się po drodze, więc seria „jeszcze pięć razy" liczona
             // od dziś dałaby pięć razy więcej, niż obiecano.
-            if (slot.Date < today)
+            if (date < today)
             {
                 continue;
             }
 
-            if (slots.Count >= Ceiling || (slots.Count >= reach && slot.Date > keep))
+            if (slots.Count >= Ceiling || (slots.Count >= reach && date > keep))
             {
                 break;
             }
 
-            slots.Add(new SeriesSlot(
-                OccurrenceId.For(series.Id, slot.Date), slot.Date, slot.Time, slot.Minutes));
+            slots.Add(new SeriesSlot(OccurrenceId.For(series.Id, date), date, time, minutes));
         }
 
         return slots;
+    }
+
+    /// <summary>
+    /// Dni serii od jej początku: najpierw sam początek, potem to, co po nim.
+    /// </summary>
+    /// <remarks>
+    /// <b>Początek jest wystąpieniem, nie zaczepieniem.</b> „Co drugi dzień od
+    /// poniedziałku" wypada w ten poniedziałek, a nie dopiero w środę — tak samo jak
+    /// w poprzednim modelu, gdzie zadanie niosące regułę <b>było</b> pierwszym
+    /// wystąpieniem, a kolejne liczyło się od niego. Liczenie wyłącznie przez „następne
+    /// po" gubiło ten jeden dzień, i gubiło go po cichu: przy rytmie codziennym następne
+    /// po dniu poprzednim wypada akurat na początku, więc błąd pokazywał się dopiero
+    /// przy odstępie większym od jednego.
+    ///
+    /// Reguła oddana dalszym dniom jest <b>pomniejszona o to jedno wystąpienie</b>:
+    /// seria „jeszcze pięć razy" liczy początek jako pierwszy z pięciu, a nie jako
+    /// darmowy szósty.
+    /// </remarks>
+    private static IEnumerable<(DateOnly Date, TimeOnly? Time, int? Minutes)> Walk(
+        TaskSeries series, DateOnly bound)
+    {
+        var rule = series.Rule;
+        var first = series.Starts;
+
+        if (rule.Until is null || first <= rule.Until)
+        {
+            var change = rule.ChangeOn(first);
+
+            if (change is not { Dropped: true })
+            {
+                yield return (
+                    change?.Day ?? first,
+                    change?.Time ?? rule.Time,
+                    change?.Minutes ?? rule.Minutes);
+            }
+        }
+
+        foreach (var slot in RecurrenceSchedule.Following(rule.Advance(first), first, bound))
+        {
+            yield return (slot.Date, slot.Time, slot.Minutes);
+        }
     }
 }

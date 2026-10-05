@@ -123,13 +123,40 @@ public sealed class TaskEditService(
             task.SetEstimate(edit.EstimatedMinutes, edit.Energy, hlc.Next());
         }
 
-        // Rytm porównywany z regułą **serii**, nie z regułą zadania. Wystąpienie serii
-        // nie nosi już reguły, więc porównanie z nim samym widziałoby zmianę przy każdym
-        // zapisie — i przy każdym zapisie nazwy stawiałoby okno serii od nowa.
-        var standing = task.SeriesId is { } mine ? await series.FindAsync(mine, ct) : null;
+        // Zmiana obszaru rusza stan tylko wtedy, gdy zadanie już wyszło ze skrzynki:
+        // przetwarzanie jest osobnym krokiem i zapisanie szczegółu nie ma go zastępować.
+        var areaChanged = edit.AreaId is { } created
+            && created != task.AreaId
+            && task.State != TaskState.Inbox;
 
-        if (edit.Recurrence != (standing?.Rule ?? task.Recurrence))
+        if (edit.DoDate != task.DoDate || areaChanged)
         {
+            await ApplyDoDateAsync(task, edit.DoDate, edit.AreaId, ct);
+        }
+
+        // Godzina po dniu, bo bez dnia nie ma czego trzymać — i po przejściu stanu,
+        // bo MakeNext ją czyści.
+        if (edit.DoTime != task.DoTime)
+        {
+            task.SetDoTime(edit.DoTime, hlc.Next());
+        }
+
+        // Rytm **na końcu**, po dniu i porze. Seria bierze z zadania początek i szablon,
+        // więc ustawiona wcześniej dostawała dzień i godzinę sprzed tego zapisu —
+        // wpisanie daty i rytmu naraz zakładało serię od starego dnia.
+        //
+        // Reguła porównywana z regułą **serii**, nie z regułą zadania. Wystąpienie serii
+        // nie nosi już reguły, więc porównanie z nim samym widziałoby zmianę przy każdym
+        // zapisie i przy każdym zapisie nazwy stawiało okno serii od nowa.
+        var standing = task.SeriesId is { } mine ? await series.FindAsync(mine, ct) : null;
+        var ruleChanged = edit.Recurrence != (standing?.Rule ?? task.Recurrence);
+
+        if (ruleChanged)
+        {
+            // Dzień i pora już zapisane, żeby szablon serii wyszedł z tego, co zapisane,
+            // a nie z tego, co było przed chwilą.
+            await unitOfWork.SaveChangesAsync(ct);
+
             switch (edit.Recurrence, standing)
             {
                 case ({ } fresh, null):
@@ -154,24 +181,6 @@ public sealed class TaskEditService(
             }
         }
 
-        // Zmiana obszaru rusza stan tylko wtedy, gdy zadanie już wyszło ze skrzynki:
-        // przetwarzanie jest osobnym krokiem i zapisanie szczegółu nie ma go zastępować.
-        var areaChanged = edit.AreaId is { } created
-            && created != task.AreaId
-            && task.State != TaskState.Inbox;
-
-        if (edit.DoDate != task.DoDate || areaChanged)
-        {
-            await ApplyDoDateAsync(task, edit.DoDate, edit.AreaId, ct);
-        }
-
-        // Godzina po dniu, bo bez dnia nie ma czego trzymać — i po przejściu stanu,
-        // bo MakeNext ją czyści.
-        if (edit.DoTime != task.DoTime)
-        {
-            task.SetDoTime(edit.DoTime, hlc.Next());
-        }
-
         // Zapisanie karty wystąpienia znaczy, że ten jeden dzień został zmieniony
         // świadomie — i od tej chwili zmiana szablonu serii go nie dotyka. Bez tego
         // znacznika poprawiona godzina jednego wtorku przepadałaby przy najbliższej
@@ -180,7 +189,7 @@ public sealed class TaskEditService(
         // Nie wtedy, gdy zapis zmieniał rytm: wtedy karta mówiła o całej serii, a nie
         // o tym dniu, i przypięcie zostawiłoby jeden wiersz na starym dniu obok okna
         // postawionego od nowa.
-        if (task.SeriesId is not null && edit.Recurrence == (standing?.Rule ?? task.Recurrence))
+        if (task.SeriesId is not null && !ruleChanged)
         {
             task.Override(hlc.Next());
         }

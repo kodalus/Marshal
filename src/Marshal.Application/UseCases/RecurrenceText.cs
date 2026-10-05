@@ -41,17 +41,19 @@ public static class RecurrenceText
 
         var sentence = new StringBuilder(Rhythm(rule));
 
-        if (rule.Anchor == RecurrenceAnchor.FromCompletion && rule.Kind is not
-            (RecurrenceKind.Daily or RecurrenceKind.EveryNDays))
+        // Dopisywane tylko wtedy, gdy zaczepienie odbiega od domyślnego dla rodzaju
+        // (spec 5.7). Powtarzanie oczywistości w każdym zdaniu zamienia je w szum.
+        //
+        // Pytane o domyślne **jedną funkcją**, a nie wyliczanką rodzajów powtórzoną
+        // tutaj. Dwie listy tych samych rodzajów rozjechały się przy pierwszej zmianie:
+        // „codziennie" przeszło na zaczepienie kalendarzowe i od tej chwili każde zdanie
+        // o rytmie codziennym dopisywało „licząc od planu" — czyli oczywistość, przed
+        // którą ten warunek miał chronić.
+        if (rule.Anchor != RecurrenceRule.DefaultAnchorFor(rule.Kind))
         {
-            sentence.Append(", licząc od wykonania");
-        }
-        else if (rule.Anchor == RecurrenceAnchor.FromScheduled && rule.Kind is
-            (RecurrenceKind.Daily or RecurrenceKind.EveryNDays))
-        {
-            // Dopisywane tylko wtedy, gdy zaczepienie odbiega od domyślnego dla rodzaju
-            // (spec 5.7). Powtarzanie oczywistości w każdym zdaniu zamienia je w szum.
-            sentence.Append(", licząc od planu");
+            sentence.Append(rule.Anchor == RecurrenceAnchor.FromCompletion
+                ? ", licząc od wykonania"
+                : ", licząc od planu");
         }
 
         if (rule.Until is { } end)
