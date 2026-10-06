@@ -35,5 +35,15 @@ public sealed class TaskSeriesRepository(MarshalDbContext db, IDbQueue? queue = 
             .Where(t => t.SeriesId != null)
             .ToListAsync(ct), ct);
 
+    // Bez „!Deleted": seria skasowana, której odbicia nie udało się jeszcze zdjąć,
+    // dalej wskazuje na żyjące wydarzenie w Google — i dalej trzeba je odsiewać.
+    public async Task<IReadOnlyList<string>> MirroredEventIdsAsync(
+        CancellationToken ct = default) =>
+        await _queue.RunAsync(() => db.TaskSeries
+            .Where(s => s.SharedEventId != null)
+            .Select(s => s.SharedEventId!)
+            .Distinct()
+            .ToListAsync(ct), ct);
+
     public void Add(TaskSeries series) => db.TaskSeries.Add(series);
 }

@@ -425,6 +425,11 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         Location = draft.Location,
         Start = When(draft.Start, draft.AllDay),
         End = When(draft.End, draft.AllDay),
+
+        // Powtarzalność tylko wtedy, gdy ją podano. Łatanie nie dotyka pól niepodanych,
+        // więc puste zostawia cudzą regułę w spokoju — a wyczyszczenie jej przy
+        // poprawianiu tytułu rozsypałoby wydarzenie cykliczne na jedno.
+        Recurrence = draft.Recurrence is { Count: > 0 } lines ? new List<string>(lines) : null,
     };
 
     /// <summary>

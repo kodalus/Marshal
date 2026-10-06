@@ -169,6 +169,12 @@ public static class DependencyInjection
             sp.GetRequiredService<TaskMirror>(),
             sp.GetRequiredService<IActivityLog>()));
 
+        // Odbicie serii nieodłożone, w odróżnieniu od odbicia zadania. Zadanie odbija
+        // się przy każdym odhaczeniu, więc odkładanie ratuje tam kliknięcie; seria
+        // odbija się tylko wtedy, gdy ktoś zmienia sam rytm — a to jest zapis, przy
+        // którym i tak czeka się na wynik, i jedna wyprawa po sieci, nie sześćdziesiąt.
+        services.AddSingleton<ISeriesMirror, SeriesMirror>();
+
         // Kanał iCal działa bez żadnych poświadczeń, więc jest podłączony od razu.
         services.AddSingleton<HttpClient>();
         services.AddSingleton<ICalendarFeed, IcalFeed>();

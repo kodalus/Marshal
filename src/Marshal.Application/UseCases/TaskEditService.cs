@@ -66,10 +66,25 @@ public sealed class TaskEditService(
     /// </remarks>
     private async Task MirrorAsync(TaskItem? task, CancellationToken ct)
     {
-        if (task is not null)
+        if (task is null)
         {
-            await mirror.PushAsync(task, ct);
+            return;
         }
+
+        // **Dzień z cyklu nie ma własnego odbicia.** Niesie je seria, jako jedno
+        // wydarzenie cykliczne, które Google rozwija u siebie. Własne wydarzenie dnia
+        // stałoby obok wystąpienia tego cyklu — ta sama rzecz dwa razy na jednym dniu,
+        // i to u każdego, kto ten kalendarz ogląda. Dotąd tak było: każdy dzień dotknięty
+        // z ręki dostawał w Google wydarzenie, a cyklu w Google nie było wcale.
+        //
+        // Dzień wyjęty z serii na osobne zadanie przestaje do niej należeć i odbicie
+        // dostaje normalnie — bo wtedy cykl go już nie produkuje.
+        if (task.SeriesId is not null)
+        {
+            return;
+        }
+
+        await mirror.PushAsync(task, ct);
     }
 
     /// <summary>

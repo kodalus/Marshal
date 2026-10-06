@@ -40,6 +40,7 @@ public sealed record CalendarRefreshReport(
 public sealed class CalendarSyncService(
     ICalendarStore store,
     ITaskRepository tasks,
+    ITaskSeriesRepository rhythms,
     IEnumerable<ICalendarFeed> feeds,
     IClock clock,
     IHlcSource hlc,
@@ -48,6 +49,31 @@ public sealed class CalendarSyncService(
     IProjectRepository projects,
     IAreaRepository areas)
 {
+    /// <summary>
+    /// Wydarzenie macierzyste wystąpienia cyklu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Google składa identyfikator wystąpienia z identyfikatora wydarzenia cyklicznego
+    /// i chwili jego początku, rozdzielonych podkreśleniem. Identyfikatory nadawane
+    /// przez Google podkreślenia nie zawierają — są zapisane trzydziestkądwójką, czyli
+    /// cyframi i literami od „a" do „v" — więc pierwsze podkreślenie jest granicą
+    /// pewną dla <b>każdego wydarzenia, które sami tam założyliśmy</b>, a tylko takie
+    /// tu porównujemy.
+    /// </para>
+    /// <para>
+    /// Identyfikator bez podkreślenia wraca nietknięty, więc to samo porównanie trafia
+    /// także w samo wydarzenie macierzyste — a wraca ono naszą własną kopią, odłożoną
+    /// przy wysyłce.
+    /// </para>
+    /// </remarks>
+    private static string Parent(string externalId)
+    {
+        var cut = externalId.IndexOf('_', StringComparison.Ordinal);
+
+        return cut > 0 ? externalId[..cut] : externalId;
+    }
+
     /// <summary>Czy do tego kalendarza da się pisać. Na ekran — żeby nie kusić przyciskiem bez skutku.</summary>
     public bool CanWrite(CalendarKind kind) => writers.Any(w => w.Kind == kind);
 
@@ -994,6 +1020,15 @@ public sealed class CalendarSyncService(
         // — wpis nie znika więc po cichu, tylko czeka na skutek.
         var mirrors = (await tasks.MirroredEventIdsAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
+        // Wydarzenia cykliczne serii — osobno, bo dopasowanie idzie po **wydarzeniu
+        // macierzystym**. Seria stoi w kalendarzu jako jedno wydarzenie z regułą
+        // powtarzania, a Google oddaje je rozwinięte: każde wystąpienie ma własny
+        // identyfikator, złożony z identyfikatora macierzystego i chwili początku.
+        // Porównanie po samym identyfikatorze wystąpienia nie trafiłoby w żadne z nich,
+        // więc siatka rysowałaby obok naszych dni jeszcze raz to samo, jako wydarzenia
+        // cudze — czyli dokładnie podwojenie, któremu wydarzenie cykliczne zapobiega.
+        var cycles = (await rhythms.MirroredEventIdsAsync(ct)).ToHashSet(StringComparer.Ordinal);
+
         // Ten sam wpis potrafi dojść dwiema drogami: kalendarz widziany z dwóch kont
         // albo raz podłączony wprost, a raz jako udostępniony. Podłączenia są wtedy
         // naprawdę różne — inne konto, inny wiersz — więc składanie powtórzonych
@@ -1015,7 +1050,7 @@ public sealed class CalendarSyncService(
 
         foreach (var ev in reachable)
         {
-            if (mirrors.Contains(ev.ExternalId))
+            if (mirrors.Contains(ev.ExternalId) || cycles.Contains(Parent(ev.ExternalId)))
             {
                 continue;
             }

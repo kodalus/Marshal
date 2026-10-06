@@ -72,6 +72,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly SeriesMigration _seriesMigration;
     private readonly SeriesService _rhythms;
+    private readonly ISeriesMirror _rhythmMirror;
 
     /// <summary>
     /// Czy okno serii ma jeszcze co dokładać.
@@ -180,6 +181,7 @@ public sealed partial class MainViewModel : ObservableObject
         DayRolloverService dayRollover,
         SeriesMigration seriesMigration,
         SeriesService rhythms,
+        ISeriesMirror rhythmMirror,
         ITaskSeriesRepository series,
         DailyBackup backup,
         IWriteSignal signal)
@@ -194,6 +196,7 @@ public sealed partial class MainViewModel : ObservableObject
         _dayRollover = dayRollover;
         _seriesMigration = seriesMigration;
         _rhythms = rhythms;
+        _rhythmMirror = rhythmMirror;
         _series = series;
 
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
@@ -857,6 +860,12 @@ public sealed partial class MainViewModel : ObservableObject
                 _filling = (await _rhythms.TopUpAsync()).Added > 0;
             });
         }
+
+        // Serie bez odbicia w kalendarzu — po kilka na przebieg. Wysyłka serii siedzi
+        // przy zmianie rytmu, a rytmów przeniesionych ze starego modelu nikt nie zmienia:
+        // bez dociągania trafiłyby do Google dopiero wtedy, gdyby ktoś otworzył ich kartę
+        // i nacisnął zapis.
+        await Try("Kalendarz: dociągnięcie serii", () => _rhythmMirror.CatchUpAsync());
 
         // Zaległe kasowania odbić: wydarzenie po zadaniu, którego już nie ma, wisi
         // w cudzym kalendarzu do skutku, a skutek ma tylko wtedy, gdy ktoś spróbuje

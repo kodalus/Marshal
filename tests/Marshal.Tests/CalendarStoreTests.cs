@@ -249,7 +249,8 @@ public sealed class CalendarStoreTests : IDisposable
         _sklad = new CalendarStore(_db);
 
         _service = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, new Settings(), [_writer],
+            _sklad, new TaskRepository(_db), new TaskSeriesRepository(_db), [_feed], _clock,
+            _hlc, new Settings(), [_writer],
             new ProjectRepository(_db), new AreaRepository(_db));
 
         _edit = new TaskEditService(
@@ -389,7 +390,8 @@ public sealed class CalendarStoreTests : IDisposable
         settings.SetMainCalendar(mlodsze.Id);
 
         var service = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, settings, [_writer],
+            _sklad, new TaskRepository(_db), new TaskSeriesRepository(_db), [_feed], _clock,
+            _hlc, settings, [_writer],
             new ProjectRepository(_db), new AreaRepository(_db));
 
         _feed.Next = new FeedResult([], null, true);
@@ -456,7 +458,8 @@ public sealed class CalendarStoreTests : IDisposable
         var settings = new Settings { MainCalendarId = mlodsze.Id };
 
         var service = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, settings, [_writer],
+            _sklad, new TaskRepository(_db), new TaskSeriesRepository(_db), [_feed], _clock,
+            _hlc, settings, [_writer],
             new ProjectRepository(_db), new AreaRepository(_db));
 
         _feed.Next = new FeedResult([], null, true);

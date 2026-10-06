@@ -160,6 +160,46 @@ public sealed class TaskSeries : Entity
         Touch(stamp);
     }
 
+    /// <summary>
+    /// Kalendarz, w którym seria stoi jako <b>jedno wydarzenie cykliczne</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wskazanie siedzi na serii, a nie na jej dniach, i to jest cała różnica wobec
+    /// sześćdziesięciu osobnych wydarzeń. Osobne znaczyłyby sześćdziesiąt wypraw po sieci
+    /// na każdą serię, sześćdziesiąt poprawek przy zmianie nazwy — i dwa wydarzenia na
+    /// ten sam dzień, bo pulpit i telefon stawiają okno niezależnie, a dopóki wskazanie
+    /// nie dojedzie synchronizacją, oba utworzyłyby własne. Przy jednym wydarzeniu na
+    /// serię pytanie „które urządzenie wysyła" znika: wysyłają to samo.
+    /// </para>
+    /// <para>
+    /// Pole scalane jak każde inne, więc po synchronizacji oba urządzenia czytają w nim
+    /// to samo i drugie przestaje mieć co tworzyć.
+    /// </para>
+    /// </remarks>
+    public Guid? SharedCalendarId { get; private set; }
+
+    /// <summary>Identyfikator wydarzenia cyklicznego u źródła.</summary>
+    public string? SharedEventId { get; private set; }
+
+    /// <summary>Zapamiętanie, gdzie ta seria stoi jako wydarzenie.</summary>
+    public void Share(Guid calendarId, string eventId, Hlc stamp)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(eventId);
+
+        SharedCalendarId = calendarId;
+        SharedEventId = eventId;
+        Touch(stamp);
+    }
+
+    /// <summary>Zapomnienie o powiązaniu. Samo wydarzenie kasuje warstwa wyżej.</summary>
+    public void Unshare(Hlc stamp)
+    {
+        SharedCalendarId = null;
+        SharedEventId = null;
+        Touch(stamp);
+    }
+
     public void MoveStart(DateOnly starts, Hlc stamp)
     {
         Starts = starts;

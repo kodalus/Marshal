@@ -37,8 +37,26 @@ public sealed class SeriesService(
     IClock clock,
     IHlcSource hlc,
     IActivityLog? journal = null,
-    ITaskMirror? mirror = null)
+    ITaskMirror? mirror = null,
+    ISeriesMirror? rhythmMirror = null)
 {
+    /// <summary>
+    /// Wyrównanie <b>jednego</b> wydarzenia cyklicznego serii w kalendarzu.
+    /// </summary>
+    /// <remarks>
+    /// Wołane z każdej drogi, która zmienia to, co widać w cyklu: założenie serii,
+    /// zmiana rytmu albo szablonu, koniec na dniu. Dni z cyklu nie mają własnych odbić,
+    /// więc postawienie czy zabranie jednego dnia nie ma tu czego wyrównywać — rytm
+    /// nadal jest ten sam, a rozwija go Google.
+    /// </remarks>
+    private async Task MirrorSeriesAsync(TaskSeries one, CancellationToken ct)
+    {
+        if (rhythmMirror is not null)
+        {
+            await rhythmMirror.PushAsync(one, ct);
+        }
+    }
+
     /// <summary>
     /// Nagrobek na wystąpieniu, a razem z nim skasowanie odbicia w kalendarzu.
     /// </summary>
@@ -97,6 +115,7 @@ public sealed class SeriesService(
 
         await unitOfWork.SaveChangesAsync(ct);
         await TopUpAsync(fresh, ct);
+        await MirrorSeriesAsync(fresh, ct);
 
         return fresh;
     }
@@ -201,6 +220,7 @@ public sealed class SeriesService(
         }
 
         await unitOfWork.SaveChangesAsync(ct);
+        await MirrorSeriesAsync(one, ct);
 
         return gone;
     }
@@ -231,6 +251,13 @@ public sealed class SeriesService(
 
         one.MarkDeleted(hlc.Next());
         await unitOfWork.SaveChangesAsync(ct);
+
+        // Wydarzenie cykliczne schodzi razem z serią. Zostawione wisiałoby w kalendarzu
+        // bez właściciela po naszej stronie — i rozwijałoby się w nim dalej, bez końca.
+        if (rhythmMirror is not null)
+        {
+            await rhythmMirror.RemoveAsync(one, ct);
+        }
 
         return gone;
     }
@@ -299,6 +326,8 @@ public sealed class SeriesService(
                 await unitOfWork.SaveChangesAsync(ct);
             }
 
+            await MirrorSeriesAsync(one, ct);
+
             return new TopUpReport(0, 0);
         }
 
@@ -323,6 +352,8 @@ public sealed class SeriesService(
         {
             await unitOfWork.SaveChangesAsync(ct);
         }
+
+        await MirrorSeriesAsync(one, ct);
 
         return new TopUpReport(fresh, retired);
     }

@@ -23,5 +23,16 @@ public interface ITaskSeriesRepository
     /// <summary>Wystąpienia wszystkich serii naraz — do dopełniania okna jednym przebiegiem.</summary>
     Task<IReadOnlyList<TaskItem>> AllOccurrencesAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Wskazania na wydarzenia cykliczne wszystkich serii — do odsiewu przy rysowaniu.
+    /// </summary>
+    /// <remarks>
+    /// Seria stoi w kalendarzu jako jedno wydarzenie cykliczne, a Google oddaje je przy
+    /// odczycie rozwinięte na wystąpienia. Bez tej listy siatka rysowałaby obok naszych
+    /// dni jeszcze raz to samo, jako wydarzenia cudze — czyli dokładnie podwojenie,
+    /// któremu wydarzenie cykliczne miało zapobiec.
+    /// </remarks>
+    Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default);
+
     void Add(TaskSeries series);
 }

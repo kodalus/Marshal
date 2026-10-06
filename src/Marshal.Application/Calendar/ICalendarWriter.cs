@@ -21,7 +21,26 @@ public sealed record CalendarDraft(
     /// Wysłane jako chwila stałoby o północy czasu lokalnego i u kogoś na wschód
     /// wypadałoby dzień wcześniej.
     /// </remarks>
-    bool AllDay = false);
+    bool AllDay = false,
+
+    /// <summary>
+    /// Linie powtarzalności iCal — wydarzenie cykliczne zamiast jednorazowego.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Puste znaczy „nie dotykaj powtarzalności", a nie „to jest jednorazowe": zapis
+    /// idzie łataniem, więc pole niepodane zostaje takie, jakie było. Rozróżnienie jest
+    /// potrzebne, bo łatanie służy też do poprawiania tytułu, a wyczyszczenie przy tej
+    /// okazji reguły powtarzania rozsypałoby cudze wydarzenie cykliczne na jedno.
+    /// </para>
+    /// <para>
+    /// Rozwijaniem powtórzeń zajmuje się źródło — tak samo jak przy odczycie, gdzie
+    /// pytamy je o gotowe wystąpienia. Jedna reguła zamiast sześćdziesięciu wydarzeń
+    /// to jedna wyprawa po sieci zamiast sześćdziesięciu i jedna rzecz do poprawienia
+    /// przy zmianie nazwy zamiast sześćdziesięciu.
+    /// </para>
+    /// </remarks>
+    IReadOnlyList<string>? Recurrence = null);
 
 /// <summary>
 /// Zapis do kalendarza zewnętrznego (spec 10.2).
