@@ -84,20 +84,17 @@ public sealed class SeriesWindowTests
     }
 
     [Fact]
-    public void Horyzont_to_pozniejsze_z_dwoch_liczby_i_kwartalu()
+    public void Cykl_bez_konca_to_szescdziesiat_zdarzen_niezaleznie_od_rytmu()
     {
-        // Sześćdziesiąt wystąpień to dwa miesiące przy codziennym i czternaście
-        // przy tygodniowym. Przy samym liczniku przewinięcie kalendarza o kwartał
-        // pokazywałoby przy codziennej serii pustkę.
-        var codziennie = SeriesWindow.Plan(Series(Daily()), Today);
+        // Liczba zdarzeń, nie zakres dni — i ta sama dla każdego rytmu. Horyzont liczony
+        // dniami dawał przy codziennym trzydzieści razy więcej wierszy niż przy
+        // tygodniowym, przy tym samym napisie w ustawieniach; a przy rytmie założonym
+        // przez pomyłkę tysiące, więc trzeba go było osobno zatrzymywać sufitem.
+        SeriesWindow.Plan(Series(Daily()), Today).Count
+            .Should().Be(SeriesWindow.Ahead);
 
-        codziennie.Count.Should().BeGreaterThanOrEqualTo(SeriesWindow.Ahead);
-        codziennie[^1].Date.Should().BeOnOrAfter(Today.AddDays(SeriesWindow.Days - 1));
-
-        // Przy tygodniowym kwartał kończy się wcześniej niż licznik, więc rządzi licznik.
-        var tygodniowo = SeriesWindow.Plan(Series(Mondays()), Today);
-
-        tygodniowo.Count.Should().Be(SeriesWindow.Ahead);
+        SeriesWindow.Plan(Series(Mondays()), Today).Count
+            .Should().Be(SeriesWindow.Ahead);
     }
 
     [Fact]
@@ -169,16 +166,6 @@ public sealed class SeriesWindowTests
     }
 
     [Fact]
-    public void Sufit_chroni_przed_rytmem_zalozonym_przez_pomylke()
-    {
-        // Rytm bez końca i bez licznika, z odstępem jednego dnia, przy horyzoncie
-        // liczonym dniami dałby tyle wierszy, ile dni w kwartale — ale seria godzinowa
-        // albo podniesiony horyzont nie mają już nic, co by je zatrzymało.
-        SeriesWindow.Plan(Series(Daily()), Today).Count
-            .Should().BeLessThanOrEqualTo(SeriesWindow.Ceiling);
-    }
-
-    [Fact]
     public void Rytm_od_wykonania_ma_okno_na_jedno_wystapienie()
     {
         // „Co 3 dni od wykonania" nie ma dat do wyliczenia, dopóki poprzednie nie
@@ -197,7 +184,7 @@ public sealed class SeriesWindowTests
         // Przy odstępie jednego dnia zaczepienie na wykonaniu i na kalendarzu znaczą
         // to samo, więc „codziennie" domyślnie stoi na kalendarzu — i ma okno.
         SeriesWindow.Plan(Series(new RecurrenceRule(RecurrenceKind.Daily)), Today).Count
-            .Should().BeGreaterThanOrEqualTo(SeriesWindow.Ahead);
+            .Should().Be(SeriesWindow.Ahead);
     }
 
     [Fact]

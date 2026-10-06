@@ -1,11 +1,8 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Marshal.Domain.Primitives;
-using Marshal.Domain.Series;
 using Marshal.Domain.Sync;
 using Microsoft.EntityFrameworkCore;
-using Marshal.Domain.Tasks;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -60,82 +57,33 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
         return base.SavingChanges(eventData, result);
     }
 
-    /// <summary>
-    /// Czy wiersz jest <b>wyliczalny z serii</b> — a więc nie musi jechać synchronizacją.
-    /// </summary>
+    /// <summary>Wpisy dziennika dla wszystkiego, co ten zapis dopisuje i zmienia.</summary>
     /// <remarks>
     /// <para>
-    /// To jest zdjęcie przyczyny, a nie kolejna łata na jej skutki. Zapisane okno serii
-    /// stawia w bazie kilkadziesiąt wystąpień na każdy rytm, a dziennik zapisuje osobno
-    /// każde pole i osobno jego znacznik — czyli około sześćdziesięciu wierszy na jedno
-    /// wystąpienie. Przy kilkunastu seriach to dziesiątki tysięcy wierszy do wysłania
-    /// i do nałożenia po drugiej stronie: stąd scalanie trwające minuty, zatkana brama,
-    /// martwe przyciski i aplikacja, która po minucie przestaje odpowiadać.
+    /// <b>Wystąpienie serii jedzie dziennikiem jak każde inne zdarzenie.</b> Był tu
+    /// warunek, który je pomijał: tożsamość wystąpienia liczy się z serii i z dnia,
+    /// więc drugie urządzenie dojdzie do tych samych wierszy samo, a dziennik zapisuje
+    /// osobno każde pole i osobno jego znacznik — około sześćdziesięciu wierszy na jedno
+    /// wystąpienie. Oszczędność była prawdziwa i okazała się nie warta swojej ceny.
     /// </para>
     /// <para>
-    /// A wysyłać tego nie trzeba. Tożsamość wystąpienia liczy się z serii i dnia, więc
-    /// <b>drugie urządzenie dojdzie do dokładnie tych samych wierszy samo</b> — po to
-    /// była cała przebudowa. Synchronizacji wymaga seria i to, co od wyliczenia odbiega:
-    /// dzień odhaczony, wyrzucony albo zmieniony z ręki.
+    /// Cena brała się z tego, że wiersz pomijany w dzienniku jest wierszem <b>gorszego
+    /// gatunku</b>, a żadna granica tego gatunku nie dała się utrzymać. Dzień zmieniony
+    /// z ręki wypadał z pomijania i trzeba było o tym pamiętać w każdej drodze, która
+    /// coś zmienia — raz się nie upilnowało i skrócenie jednego dnia pracy nie dojechało
+    /// nigdzie, a powstałe przy nim wskazanie na wydarzenie w Google tym bardziej, więc
+    /// telefon rysował obok swojego wystąpienia cudze wydarzenie. Wiersz, którego tamta
+    /// strona mogła nie mieć, wymagał osobnego trybu „całość, nie same zmienione pola".
+    /// Każda z tych rzeczy była do naprawienia osobno i każda była skutkiem tej samej
+    /// decyzji.
     /// </para>
     /// <para>
-    /// Pytanie zadane jest wąsko i po stanie, nie po intencji: wystąpienie serii, które
-    /// jest zaplanowane, nietknięte i nieodhaczone. Każde odstępstwo wypada z tej
-    /// definicji i jedzie dalej normalnie.
-    /// </para>
-    /// <para>
-    /// <b>I tylko wiersz dopisany.</b> Pominięcie było dobre dla wiersza, który to
-    /// urządzenie właśnie postawiło z okna — bo drugie postawi go sobie samo. Dla wiersza
-    /// <b>zmienianego</b> nie jest dobre nigdy: zmiany nie policzy nikt, więc pominięta
-    /// w dzienniku nie dochodzi nigdzie, a u siebie wygląda, jakby się udała.
-    /// Tak znikało skrócenie jednego dnia pracy zrobione na siatce: u siebie krótsze,
-    /// na telefonie pełnowymiarowe — a że skrócenie poszło przy tym do kalendarza
-    /// Google, telefon rysował obok swojego wystąpienia cudze wydarzenie, bo wskazania
-    /// na nie też nie dostał. Jedno zdarzenie widoczne dwa razy, raz nie do otwarcia
-    /// jak własne.
-    /// </para>
-    /// <para>
-    /// Wyjątkiem jest przepisanie wystąpień z szablonu po zmianie serii: tę zmianę niesie
-    /// sama seria i drugie urządzenie przepisze z niej swoje dni samo — zob.
-    /// <see cref="SeriesScope"/>.
+    /// Dzień z cyklu jest więc od teraz zdarzeniem i niczym mniej: jedzie w całości,
+    /// synchronizuje się jak wszystko, da się go odhaczyć, opisać i pokazać osobie.
+    /// Koszt pierwszego postawienia okna został — i jest po to <c>MaxPerRun</c>, które
+    /// rozkłada go na partie.
     /// </para>
     /// </remarks>
-    private static bool Derived(EntityEntry<Entity> entry) =>
-        entry.Entity is TaskItem
-        {
-            SeriesId: not null,
-            Overridden: false,
-            State: TaskState.Scheduled,
-            CompletedAt: null,
-            Deleted: false,
-        }
-        && (entry.State != EntityState.Modified || SeriesScope.IsRestamping);
-
-    /// <summary>
-    /// Czy wiersz <b>właśnie przestał</b> być wyliczalny z serii.
-    /// </summary>
-    /// <remarks>
-    /// Pytane o stan sprzed zapisu, bo po zapisie każdy już nie jest: oryginalne
-    /// wartości pól mówią, czym wiersz był, zanim ktoś go dotknął.
-    /// </remarks>
-    private static bool Emerging(EntityEntry<Entity> entry)
-    {
-        if (entry.Entity is not TaskItem { SeriesId: not null })
-        {
-            return false;
-        }
-
-        var before = entry.Property(nameof(TaskItem.State));
-        var pinned = entry.Property(nameof(TaskItem.Overridden));
-        var done = entry.Property(nameof(TaskItem.CompletedAt));
-        var gone = entry.Property(nameof(TaskItem.Deleted));
-
-        return before.OriginalValue is TaskState.Scheduled
-            && pinned.OriginalValue is false
-            && done.OriginalValue is null
-            && gone.OriginalValue is false;
-    }
-
     private static void Journal(DbContext context)
     {
         // Zmiany przychodzące ze scalania nie są zmianami tego urządzenia.
@@ -151,7 +99,6 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
         // przechodzenia kończy się wyjątkiem.
         var entries = context.ChangeTracker.Entries<Entity>()
             .Where(e => e.State is EntityState.Added or EntityState.Modified)
-            .Where(e => !Derived(e))
             .ToList();
 
         if (entries.Count == 0)
@@ -191,22 +138,11 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
             // że kolejne zmiany przegrają scalanie jako rzekomo starsze.
             LastHlcStore.Stage(context, entry.Entity.UpdatedAt);
 
-            // **Całe wystąpienie, gdy przestaje być wyliczalne.** Dzień postawiony
-            // z okna serii nie jedzie synchronizacją wcale — drugie urządzenie policzy
-            // go sobie samo. Ale w chwili, w której przestaje być tym, co okno
-            // wylicza — bo został odhaczony, wyrzucony albo zmieniony z ręki —
-            // drugie urządzenie musi dostać go **w całości**. Same zmienione pola
-            // opisywałyby wtedy wiersz, którego tamta strona może jeszcze nie mieć:
-            // jej okno bywa krótsze, a wtedy z „zrobione" bez nazwy i bez dnia
-            // powstałoby zadanie-widmo.
-            var whole = entry.State == EntityState.Modified && Emerging(entry);
-
             foreach (var property in entry.Properties)
             {
                 // Klucz główny pomijany: identyfikator jest w każdym wierszu dziennika
                 // jako EntityId, więc jako pole byłby powtórzeniem.
-                if (property.Metadata.IsPrimaryKey()
-                    || (!whole && !Changed(entry.State, property)))
+                if (property.Metadata.IsPrimaryKey() || !Changed(entry.State, property))
                 {
                     continue;
                 }

@@ -220,13 +220,12 @@ public sealed class SeriesServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Przepisane_dni_nie_jada_dziennikiem_a_zmienione_z_reki_jada()
+    public async Task Zmiana_szablonu_dochodzi_do_dni_i_jedzie_dziennikiem()
     {
-        // Dwie strony tej samej zasady. Dzień przepisany z szablonu dalej jest tym,
-        // co okno wylicza, więc druga strona dojdzie do niego sama — wysyłanie go
-        // byłoby sześćdziesięcioma wierszami dziennika na nic. Dzień zmieniony z ręki
-        // przestał być wyliczalny i nie policzy go nikt: pominięty w dzienniku
-        // nie dochodzi nigdzie, a u siebie wygląda, jakby się udało.
+        // Dzień z cyklu jest zdarzeniem, a nie zapowiedzią do policzenia — więc zmiana
+        // nazwy serii przepisuje stojące już dni i każdy z nich jedzie synchronizacją
+        // sam za siebie. Dawniej nie jechał żaden: druga strona miała je sobie policzyć,
+        // co znaczyło, że dzień istniał tylko tam, gdzie go policzono.
         var one = await Start();
         await FillAsync(one);
 
@@ -237,19 +236,10 @@ public sealed class SeriesServiceTests : IDisposable
 
         await _rhythms.ChangeAsync(one, template: one.Template with { Title = "Śmieci — szkło" });
 
-        _db.Changes.Should().NotContain(
-            w => w.EntityId == day.Id, "przepisanie niesie wiersz serii");
-        _db.Changes.Should().Contain(
-            w => w.EntityId == one.Id, "i ten wiersz jedzie");
+        _db.Tasks.Single(t => t.Id == day.Id).Title.Should().Be("Śmieci — szkło");
 
-        _db.Changes.RemoveRange(_db.Changes.ToList());
-        _db.SaveChanges();
-
-        day.SetEstimate(90, day.Energy, _hlc.Next());
-        _db.SaveChanges();
-
-        _db.Changes.Should().Contain(
-            w => w.EntityId == day.Id, "zmiany z ręki nie policzy druga strona sama");
+        _db.Changes.Should().Contain(w => w.EntityId == day.Id, "dzień jedzie");
+        _db.Changes.Should().Contain(w => w.EntityId == one.Id, "i seria też");
     }
 
     [Fact]

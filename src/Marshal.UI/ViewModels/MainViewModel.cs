@@ -71,6 +71,20 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly DayRolloverService _dayRollover;
 
     private readonly SeriesMigration _seriesMigration;
+    private readonly SeriesService _rhythms;
+
+    /// <summary>
+    /// Czy okno serii ma jeszcze co dokładać.
+    /// </summary>
+    /// <remarks>
+    /// Okno schodzi partiami — zob. <see cref="SeriesService.MaxPerRun"/> — a cykl bez
+    /// końca stoi na sześćdziesięciu zdarzeniach. Przy kilkunastu seriach pierwsze
+    /// postawienie okna to więc kilkanaście partii, a gdyby schodziły tylko przy
+    /// przejściu dnia, koniec okna dochodziłby przez dwa tygodnie. Minutnik dokłada je
+    /// do skutku i sam się wycisza: przebieg, który nic nie dołożył, gasi to pytanie
+    /// do następnej zmiany — nowej serii, przejścia dnia albo scalenia.
+    /// </remarks>
+    private bool _filling = true;
 
     private readonly ITaskSeriesRepository _series;
 
@@ -165,6 +179,7 @@ public sealed partial class MainViewModel : ObservableObject
         GoogleSyncService drive,
         DayRolloverService dayRollover,
         SeriesMigration seriesMigration,
+        SeriesService rhythms,
         ITaskSeriesRepository series,
         DailyBackup backup,
         IWriteSignal signal)
@@ -178,6 +193,7 @@ public sealed partial class MainViewModel : ObservableObject
         _drive = drive;
         _dayRollover = dayRollover;
         _seriesMigration = seriesMigration;
+        _rhythms = rhythms;
         _series = series;
 
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
@@ -830,6 +846,18 @@ public sealed partial class MainViewModel : ObservableObject
             CollectReminders();
         }
 
+        // Dokładanie okna serii, dopóki jest co dokładać. Partia to trzydzieści zdarzeń,
+        // bo każde kosztuje kilkadziesiąt wierszy dziennika synchronizacji, a cykl bez
+        // końca stoi na sześćdziesięciu — przy kilkunastu seriach pierwsze postawienie
+        // okna nie zmieści się w jednym zapisie i nie ma się w nim mieścić.
+        if (_filling)
+        {
+            await Try("Serie: dopełnienie okna", async () =>
+            {
+                _filling = (await _rhythms.TopUpAsync()).Added > 0;
+            });
+        }
+
         // Zaległe kasowania odbić: wydarzenie po zadaniu, którego już nie ma, wisi
         // w cudzym kalendarzu do skutku, a skutek ma tylko wtedy, gdy ktoś spróbuje
         // ponownie. To ta sama odpowiedź na upływ czasu, co reszta tutaj.
@@ -1076,6 +1104,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         _day = today;
+        _filling = true;
 
         await _dayRollover.RunAsync();
         await _focus.ExpireAsync();
@@ -1186,6 +1215,10 @@ public sealed partial class MainViewModel : ObservableObject
         // która właśnie coś na nim robi, jest kosztem bez pożytku.
         if (result is { Ok: true, Applied: > 0 })
         {
+            // Scalenie mogło przynieść serię założoną na drugim urządzeniu — a razem
+            // z nią okno do postawienia.
+            _filling = true;
+
             // Przypomnienia sprawdzane od razu, nie dopiero za minutę. Przyniesione
             // przez synchronizację bywa już zaległe — zadanie zmienione na drugim
             // urządzeniu przychodzi tu z godziną, która zdążyła minąć.

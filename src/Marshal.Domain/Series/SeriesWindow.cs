@@ -24,41 +24,34 @@ public sealed record SeriesSlot(Guid Id, DateOnly Date, TimeOnly? Time, int? Min
 /// zostać taka, jaka była, a nie dorosnąć wstecz o wystąpienia, których nigdy nie było.
 /// </para>
 /// <para>
-/// <b>Horyzont liczony dniami i wystąpieniami naraz.</b> Sześćdziesiąt wystąpień to
-/// dwa miesiące przy rytmie codziennym i czternaście przy tygodniowym — przy samym
-/// liczniku przewinięcie kalendarza o kwartał pokazywałoby przy codziennej serii pustkę.
-/// Stąd późniejsze z dwóch: sześćdziesiąt wystąpień albo kwartał. Sufit jest po to, żeby
-/// rytm godzinowy założony przez pomyłkę nie postawił dziesięciu tysięcy wierszy.
+/// <b>Horyzont liczony zdarzeniami.</b> Cykl bez końca stoi na sześćdziesięciu
+/// zdarzeniach do przodu — dwa miesiące przy rytmie codziennym, czternaście przy
+/// tygodniowym. Liczba, a nie zakres dni, bo zdarzenie jest tym, co kosztuje: przy
+/// horyzoncie liczonym dniami rytm codzienny kosztował trzydzieści razy więcej od
+/// tygodniowego przy tym samym napisie w ustawieniach.
 /// </para>
 /// </remarks>
 public static class SeriesWindow
 {
     /// <summary>
-    /// Ile wystąpień trzymać do przodu.
+    /// Ile zdarzeń trzymać do przodu w cyklu bez daty końca.
     /// </summary>
     /// <remarks>
-    /// Było sześćdziesiąt i to była liczba wzięta z wygody oglądania, bez policzenia,
-    /// ile kosztuje. Każdy wiersz zapisany to <b>około sześćdziesięciu wierszy dziennika
-    /// synchronizacji</b> — po jednym na każde pole, plus tyleż znaczników pól. Okno
-    /// kwartalne przy rytmie codziennym znaczyło więc blisko sześć tysięcy wierszy na
-    /// jedną serię, a kilkanaście serii zatrzymywało bazę na tyle długo, że aplikacja
-    /// nie wstawała ze splash-ekranu.
+    /// <para>
+    /// Liczba podana wprost i jedna dla wszystkich rytmów. Było trzydzieści wystąpień
+    /// albo miesiąc dni — późniejsze z dwóch — i to był kompromis podyktowany kosztem
+    /// dziennika synchronizacji, bo wystąpienie postawione z okna jechało wtedy na drugie
+    /// urządzenie w pięćdziesięciu kilku wierszach. Tamten koszt rozkłada dziś
+    /// <c>SeriesService.MaxPerRun</c>, a liczba zdarzeń jest tym, o czym da się
+    /// powiedzieć, ile ich jest.
+    /// </para>
+    /// <para>
+    /// Sufit niepotrzebny: licznik zdarzeń jest sufitem. Przy horyzoncie liczonym dniami
+    /// rytm godzinowy założony przez pomyłkę stawiał tysiące wierszy i trzeba było go
+    /// osobno zatrzymywać — tu stawia sześćdziesiąt, jak każdy inny.
+    /// </para>
     /// </remarks>
-    public const int Ahead = 30;
-
-    /// <summary>
-    /// Ile dni do przodu trzymać, gdy licznik kończy się wcześniej.
-    /// </summary>
-    /// <remarks>
-    /// Miesiąc, nie kwartał. Przy rytmie codziennym to jest ta liczba, która rozstrzyga
-    /// o koszcie — bo dzień kosztuje wiersz — a okno przesuwa się przy każdym
-    /// uruchomieniu i przy każdym przejściu dnia, więc „miesiąc do przodu" znaczy
-    /// miesiąc liczony od dziś, a nie od instalacji.
-    /// </remarks>
-    public const int Days = 31;
-
-    /// <summary>Sufit na jedną serię — ochrona przed rytmem założonym przez pomyłkę.</summary>
-    public const int Ceiling = 400;
+    public const int Ahead = 60;
 
     /// <summary>Jak daleko wolno szukać dni. Dalej niż ktokolwiek przewinie kalendarz.</summary>
     private const int Reach = 30;
@@ -83,10 +76,7 @@ public static class SeriesWindow
         // przy każdym spóźnieniu skasować i postawić od nowa, a kalendarz pokazywałby
         // do tej chwili rozkład, którego nikt nie obiecał.
         var reach = series.Rule.Anchor == RecurrenceAnchor.FromCompletion ? 1 : Ahead;
-        var keep = series.Rule.Anchor == RecurrenceAnchor.FromCompletion
-            ? today.AddDays(-1)
-            : today.AddDays(Days);
-        var slots = new List<SeriesSlot>(Ahead);
+        var slots = new List<SeriesSlot>(reach);
 
         foreach (var (date, time, minutes) in Walk(series, today.AddYears(Reach)))
         {
@@ -98,7 +88,7 @@ public static class SeriesWindow
                 continue;
             }
 
-            if (slots.Count >= Ceiling || (slots.Count >= reach && date > keep))
+            if (slots.Count >= reach)
             {
                 break;
             }

@@ -80,14 +80,8 @@ public sealed class TaskEditService(
     /// Znacznik „zmienione z ręki" rozstrzyga dwie rzeczy i obie są o tym dniu: że
     /// zmiana serii go nie przepisze i że dopełnianie okna go nie zabierze. Zapis karty
     /// i przełożenie na siatce stawiały go od początku; rozciągnięcie bloku, zmiana
-    /// oszacowania, wagi i projektu — nie, i stąd kłopot widoczny dopiero na drugim
-    /// urządzeniu: wiersz nietknięty nie jedzie synchronizacją, bo tamta strona ma go
-    /// policzyć sama, więc zmiana przepadała po cichu.
-    /// </para>
-    /// <para>
-    /// Dziennik pilnuje dziś tego sam — wiersz <b>zmieniany</b> jedzie synchronizacją
-    /// niezależnie od znacznika — ale to jest zabezpieczenie, nie odpowiedź. Odpowiedź
-    /// jest tutaj: ten jeden dzień naprawdę przestał być wyliczalny i ma to zapisane.
+    /// oszacowania, wagi i projektu — nie. Ten jeden skrócony dzień dawał się więc
+    /// przepisać z powrotem pierwszą zmianą nazwy całej serii, bez pytania i bez śladu.
     /// </para>
     /// </remarks>
     private void Pin(TaskItem task)

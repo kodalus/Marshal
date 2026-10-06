@@ -236,86 +236,41 @@ public sealed class ChangeJournalTests : IDisposable
     }
 
     [Fact]
-    public void Wystapienie_wyliczalne_z_serii_nie_wchodzi_do_dziennika()
+    public void Zdarzenie_z_cyklu_jedzie_dziennikiem_jak_kazde_inne()
     {
-        // Zdjęcie przyczyny, a nie łata na skutki. Dziennik zapisuje osobno każde pole
-        // i osobno jego znacznik — około sześćdziesięciu wierszy na jedno wystąpienie.
-        // Przy kilkunastu seriach po kilkadziesiąt dni to dziesiątki tysięcy wierszy
-        // do wysłania i do nałożenia po drugiej stronie: stąd scalanie trwające minuty
-        // i zatkana brama na bazę.
-        //
-        // A wysyłać tego nie trzeba: tożsamość wystąpienia liczy się z serii i dnia,
-        // więc drugie urządzenie dojdzie do tych samych wierszy samo.
+        // Był tu warunek, który wystąpienia serii z dziennika wyjmował: tożsamość
+        // liczy się z serii i z dnia, więc druga strona dojdzie do tych samych wierszy
+        // sama. Oszczędność była prawdziwa i nie była warta swojej ceny — wiersz
+        // pomijany w dzienniku jest wierszem gorszego gatunku, a granica tego gatunku
+        // nie dała się utrzymać ani w jednym miejscu.
         var (series, day) = Occurrence();
-
-        _db.Changes.Should().NotContain(
-            w => w.EntityId == day.Id, "dzień wyliczalny z serii nie jedzie synchronizacją");
-
-        _db.Changes.Should().Contain(
-            w => w.EntityId == series.Id, "ale sama seria jedzie — z niej liczy się reszta");
-    }
-
-    [Fact]
-    public void Odhaczone_wystapienie_jedzie_w_calosci()
-    {
-        // W chwili, w której dzień przestaje być tym, co okno wylicza, druga strona
-        // musi dostać go **w całości**. Same zmienione pola opisywałyby wiersz, którego
-        // tamta strona może jeszcze nie mieć — jej okno bywa krótsze — a wtedy
-        // z „zrobione" bez nazwy i bez dnia powstałoby zadanie-widmo.
-        var (_, day) = Occurrence();
-
-        day.Complete(DateTimeOffset.UtcNow, Stamp());
-        _db.SaveChanges();
 
         var pola = _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field).ToList();
 
-        pola.Should().Contain("State");
-        pola.Should().Contain("CompletedAt");
-        pola.Should().Contain(nameof(TaskItem.Title), "bez nazwy powstałoby zadanie-widmo");
-        pola.Should().Contain(nameof(TaskItem.DoDate), "i bez dnia też");
+        pola.Should().Contain(nameof(TaskItem.Title));
+        pola.Should().Contain(nameof(TaskItem.DoDate));
         pola.Should().Contain(nameof(TaskItem.SeriesId), "razem z przynależnością do serii");
+
+        _db.Changes.Should().Contain(w => w.EntityId == series.Id, "i sama seria też");
     }
 
     [Fact]
-    public void Dalsze_zmiany_odhaczonego_jada_juz_zwyklymi_polami()
+    public void Zmiana_zdarzenia_z_cyklu_jedzie_zmienionymi_polami()
     {
-        // Całość tylko przy wyjściu z wyliczalności. Potem wiersz jest po obu stronach
-        // i powtarzanie go w komplecie przy każdej zmianie byłoby tym samym marnotrawstwem,
-        // przed którym cała ta zmiana ma chronić.
+        // Skrócenie jednego dnia pracy rozciągnięciem bloku na siatce. Wiersz jest już
+        // po obu stronach, więc jadą same zmienione pola — a nie, jak dawniej, albo nic
+        // (bo dzień był „wyliczalny"), albo cała sześćdziesięciopolowa kopia.
         var (_, day) = Occurrence();
 
-        day.Complete(DateTimeOffset.UtcNow, Stamp());
+        _db.Changes.RemoveRange(_db.Changes.ToList());
         _db.SaveChanges();
-        _db.Changes.RemoveRange(_db.Changes.Where(w => w.EntityId == day.Id));
-        _db.SaveChanges();
-
-        day.Rename("Śmieci — szkło", Stamp());
-        _db.SaveChanges();
-
-        _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field)
-            .Should().BeEquivalentTo([nameof(TaskItem.Title), nameof(Entity.UpdatedAt)]);
-    }
-
-    [Fact]
-    public void Zmiana_wystapienia_z_reki_jedzie_w_calosci()
-    {
-        // Objaw, który to wymusił: skrócenie jednego dnia pracy rozciągnięciem bloku
-        // na siatce. Wiersz zostawał zaplanowany i nietknięty, więc wypadał z dziennika
-        // jako „wyliczalny" — a wyliczalny znaczy „druga strona policzy go sama",
-        // czego o zmianie powiedzieć nie można. Na telefonie dzień stał dalej
-        // pełnowymiarowy, a skrócenie poszło przy tym do kalendarza Google: ta sama
-        // rzecz widoczna dwa razy, przy czym krótsza jako wydarzenie cudze.
-        var (_, day) = Occurrence();
 
         day.SetEstimate(90, day.Energy, Stamp());
         _db.SaveChanges();
 
-        var pola = _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field).ToList();
-
-        pola.Should().Contain(nameof(TaskItem.EstimatedMinutes), "zmiana jedzie");
-        pola.Should().Contain(
-            nameof(TaskItem.Title), "i w całości, bo tamta strona może nie mieć wiersza");
-        pola.Should().Contain(nameof(TaskItem.DoDate), "i bez dnia też");
+        _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field)
+            .Should().BeEquivalentTo(
+                [nameof(TaskItem.EstimatedMinutes), nameof(Entity.UpdatedAt)]);
     }
 
     [Fact]
@@ -331,25 +286,5 @@ public sealed class ChangeJournalTests : IDisposable
 
         _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field)
             .Should().Contain(nameof(TaskItem.SharedEventId));
-    }
-
-    [Fact]
-    public void Przepisanie_z_szablonu_serii_nie_jedzie_dziennikiem()
-    {
-        // Jedyny wyjątek od „wiersz zmieniany jedzie": przepisanie wystąpień po zmianie
-        // serii, która nie przestawia dni. Zmianę niesie wtedy wiersz serii, a druga
-        // strona przepisze z niego swoje dni sama.
-        var (_, day) = Occurrence();
-
-        _db.Changes.RemoveRange(_db.Changes.ToList());
-        _db.SaveChanges();
-
-        using (SeriesScope.Begin())
-        {
-            day.Restamp(new SeriesTemplate("Śmieci — szkło", AreaId: _area), null, null, Stamp);
-            _db.SaveChanges();
-        }
-
-        _db.Changes.Should().NotContain(w => w.EntityId == day.Id);
     }
 }

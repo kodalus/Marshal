@@ -140,20 +140,21 @@ public sealed class SeriesMigration(
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Naprawa po tym, że wystąpienie zmienione z siatki nie dostawało znacznika
-    /// „zmienione z ręki". Wiersz nietknięty nie jedzie synchronizacją — drugie
-    /// urządzenie ma go policzyć samo — więc do tamtej strony nie docierała ani zmiana,
-    /// ani powstałe przy niej <b>wskazanie na wydarzenie w Google</b>. Wydarzenie jednak
-    /// powstawało, bo wysyłka do kalendarza idzie po każdym zapisie. Na drugim urządzeniu
-    /// stało więc obok policzonego przez nie wystąpienia jako wydarzenie cudze: ta sama
-    /// rzecz dwa razy, raz bez możliwości otwarcia jak własnej.
+    /// Naprawa po czasie, w którym wystąpienia serii nie jechały dziennikiem — bo miała
+    /// je policzyć druga strona. Dzień zmieniony z ręki wypadał z tego pomijania i miał
+    /// dostawać znacznik „zmienione z ręki", ale nie dostawał go na każdej drodze.
+    /// Zmiana nie docierała więc nigdzie, a powstałe przy niej <b>wskazanie na wydarzenie
+    /// w Google</b> tym bardziej — wydarzenie jednak powstawało, bo wysyłka do kalendarza
+    /// idzie po każdym zapisie. Na drugim urządzeniu stało obok policzonego przez nie dnia
+    /// jako wydarzenie cudze: ta sama rzecz dwa razy, raz bez możliwości otwarcia jak
+    /// własnej.
     /// </para>
     /// <para>
-    /// Sam znacznik wystarczy do naprawy: wiersz przestaje być wyliczalny, dziennik
-    /// zapisuje go <b>w całości</b> — razem ze wskazaniem — i druga strona rozpoznaje
-    /// wydarzenie jako odbicie swojego zadania, więc przestaje je rysować osobno.
-    /// Pytane wąsko, o wystąpienia zaplanowane: odhaczone i wyrzucone jechały dziennikiem
-    /// od początku, bo z definicji wyliczalnego wypadały same.
+    /// Dziś takie dni jadą dziennikiem same z siebie, ale te, które powstały wcześniej,
+    /// nie mają już czego zmienić — więc nic ich nie wyśle. Znacznik to zmienia: wiersz
+    /// idzie do dziennika razem ze wskazaniem, druga strona rozpoznaje wydarzenie jako
+    /// odbicie swojego zadania i przestaje rysować je osobno. Zapisuje przy tym prawdę,
+    /// bo taki dzień naprawdę został zmieniony z ręki.
     /// </para>
     /// </remarks>
     private async Task<int> ClaimMirrorsAsync(CancellationToken ct)

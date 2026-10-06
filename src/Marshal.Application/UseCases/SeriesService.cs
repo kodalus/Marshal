@@ -285,26 +285,18 @@ public sealed class SeriesService(
         {
             var touched = 0;
 
-            // Przepisywanie w zasięgu serii. Wystąpienie przepisane z szablonu dalej jest
-            // dokładnie tym, co okno wylicza, więc nie ma po co jechać synchronizacją:
-            // zmianę niesie wiersz serii, a drugie urządzenie przepisze z niego swoje dni
-            // samo. Bez tego znacznika dziennik nie odróżniłby tego od zmiany zrobionej
-            // z ręki — a zmiany z ręki pomijać nie wolno (zob. SeriesScope).
-            using (SeriesScope.Begin())
+            foreach (var occurrence in standing)
             {
-                foreach (var occurrence in standing)
+                if (occurrence.DoDate >= today && Open(occurrence) && !occurrence.Overridden)
                 {
-                    if (occurrence.DoDate >= today && Open(occurrence) && !occurrence.Overridden)
-                    {
-                        occurrence.Restamp(mine, one.Rule.Time, one.Rule.Minutes, hlc.Next);
-                        touched++;
-                    }
+                    occurrence.Restamp(mine, one.Rule.Time, one.Rule.Minutes, hlc.Next);
+                    touched++;
                 }
+            }
 
-                if (touched > 0)
-                {
-                    await unitOfWork.SaveChangesAsync(ct);
-                }
+            if (touched > 0)
+            {
+                await unitOfWork.SaveChangesAsync(ct);
             }
 
             return new TopUpReport(0, 0);
