@@ -52,12 +52,27 @@ public sealed class SeriesMigration(
         // i po sprzątnięciu nie ma już czego sprzątać.
         var twins = await CollapseSeriesAsync(ct);
 
+        // Osobna naprawa, przed wyjściem „nie ma czego przenosić": dotyczy serii już
+        // przeniesionych, więc po pierwszym uruchomieniu to jest jedyne miejsce,
+        // w którym jeszcze cokolwiek się tu dzieje.
+        var claimed = await ClaimMirrorsAsync(ct);
+
         var carriers = (await tasks.RecurringAsync(ct))
             .Where(t => t.Recurrence is not null && t.SeriesId is null)
             .ToList();
 
         if (carriers.Count == 0)
         {
+            if (claimed > 0 && journal is not null)
+            {
+                await journal.RecordAsync(
+                    "Serie: przyznanie odbić bez właściciela",
+                    $"{claimed} wystąpień",
+                    ActivityLevel.Ok,
+                    null,
+                    ct);
+            }
+
             return new MigrationReport(0, 0, 0, twins);
         }
 
@@ -110,13 +125,62 @@ public sealed class SeriesMigration(
             await journal.RecordAsync(
                 "Rytmy: przeniesienie do serii",
                 $"{converted} serii, {collapsed} kopii do kosza, {filled.Added} wystąpień"
-                    + (twins > 0 ? $", {twins} bliźniaczych serii zlanych" : string.Empty),
+                    + (twins > 0 ? $", {twins} bliźniaczych serii zlanych" : string.Empty)
+                    + (claimed > 0 ? $", {claimed} odbić przyznanych" : string.Empty),
                 ActivityLevel.Ok,
                 null,
                 ct);
         }
 
         return new MigrationReport(converted, collapsed, filled.Added);
+    }
+
+    /// <summary>
+    /// Przyznanie wystąpieniu odbicia, które w kalendarzu już stoi, a u nikogo nie należy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Naprawa po tym, że wystąpienie zmienione z siatki nie dostawało znacznika
+    /// „zmienione z ręki". Wiersz nietknięty nie jedzie synchronizacją — drugie
+    /// urządzenie ma go policzyć samo — więc do tamtej strony nie docierała ani zmiana,
+    /// ani powstałe przy niej <b>wskazanie na wydarzenie w Google</b>. Wydarzenie jednak
+    /// powstawało, bo wysyłka do kalendarza idzie po każdym zapisie. Na drugim urządzeniu
+    /// stało więc obok policzonego przez nie wystąpienia jako wydarzenie cudze: ta sama
+    /// rzecz dwa razy, raz bez możliwości otwarcia jak własnej.
+    /// </para>
+    /// <para>
+    /// Sam znacznik wystarczy do naprawy: wiersz przestaje być wyliczalny, dziennik
+    /// zapisuje go <b>w całości</b> — razem ze wskazaniem — i druga strona rozpoznaje
+    /// wydarzenie jako odbicie swojego zadania, więc przestaje je rysować osobno.
+    /// Pytane wąsko, o wystąpienia zaplanowane: odhaczone i wyrzucone jechały dziennikiem
+    /// od początku, bo z definicji wyliczalnego wypadały same.
+    /// </para>
+    /// </remarks>
+    private async Task<int> ClaimMirrorsAsync(CancellationToken ct)
+    {
+        var claimed = 0;
+
+        foreach (var occurrence in await series.AllOccurrencesAsync(ct))
+        {
+            if (occurrence is
+                {
+                    SeriesId: not null,
+                    Overridden: false,
+                    State: TaskState.Scheduled,
+                    SharedEventId: { Length: > 0 },
+                })
+            {
+                occurrence.Override(hlc.Next());
+                claimed++;
+            }
+        }
+
+        if (claimed > 0)
+        {
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        return claimed;
     }
 
     /// <summary>

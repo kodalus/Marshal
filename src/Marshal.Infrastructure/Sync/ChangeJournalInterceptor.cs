@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Marshal.Domain.Primitives;
+using Marshal.Domain.Series;
 using Marshal.Domain.Sync;
 using Microsoft.EntityFrameworkCore;
 using Marshal.Domain.Tasks;
@@ -82,6 +83,22 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
     /// jest zaplanowane, nietknięte i nieodhaczone. Każde odstępstwo wypada z tej
     /// definicji i jedzie dalej normalnie.
     /// </para>
+    /// <para>
+    /// <b>I tylko wiersz dopisany.</b> Pominięcie było dobre dla wiersza, który to
+    /// urządzenie właśnie postawiło z okna — bo drugie postawi go sobie samo. Dla wiersza
+    /// <b>zmienianego</b> nie jest dobre nigdy: zmiany nie policzy nikt, więc pominięta
+    /// w dzienniku nie dochodzi nigdzie, a u siebie wygląda, jakby się udała.
+    /// Tak znikało skrócenie jednego dnia pracy zrobione na siatce: u siebie krótsze,
+    /// na telefonie pełnowymiarowe — a że skrócenie poszło przy tym do kalendarza
+    /// Google, telefon rysował obok swojego wystąpienia cudze wydarzenie, bo wskazania
+    /// na nie też nie dostał. Jedno zdarzenie widoczne dwa razy, raz nie do otwarcia
+    /// jak własne.
+    /// </para>
+    /// <para>
+    /// Wyjątkiem jest przepisanie wystąpień z szablonu po zmianie serii: tę zmianę niesie
+    /// sama seria i drugie urządzenie przepisze z niej swoje dni samo — zob.
+    /// <see cref="SeriesScope"/>.
+    /// </para>
     /// </remarks>
     private static bool Derived(EntityEntry<Entity> entry) =>
         entry.Entity is TaskItem
@@ -91,7 +108,8 @@ public sealed class ChangeJournalInterceptor : SaveChangesInterceptor
             State: TaskState.Scheduled,
             CompletedAt: null,
             Deleted: false,
-        };
+        }
+        && (entry.State != EntityState.Modified || SeriesScope.IsRestamping);
 
     /// <summary>
     /// Czy wiersz <b>właśnie przestał</b> być wyliczalny z serii.

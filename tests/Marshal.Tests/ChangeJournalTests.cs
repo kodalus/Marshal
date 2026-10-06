@@ -295,4 +295,61 @@ public sealed class ChangeJournalTests : IDisposable
         _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field)
             .Should().BeEquivalentTo([nameof(TaskItem.Title), nameof(Entity.UpdatedAt)]);
     }
+
+    [Fact]
+    public void Zmiana_wystapienia_z_reki_jedzie_w_calosci()
+    {
+        // Objaw, który to wymusił: skrócenie jednego dnia pracy rozciągnięciem bloku
+        // na siatce. Wiersz zostawał zaplanowany i nietknięty, więc wypadał z dziennika
+        // jako „wyliczalny" — a wyliczalny znaczy „druga strona policzy go sama",
+        // czego o zmianie powiedzieć nie można. Na telefonie dzień stał dalej
+        // pełnowymiarowy, a skrócenie poszło przy tym do kalendarza Google: ta sama
+        // rzecz widoczna dwa razy, przy czym krótsza jako wydarzenie cudze.
+        var (_, day) = Occurrence();
+
+        day.SetEstimate(90, day.Energy, Stamp());
+        _db.SaveChanges();
+
+        var pola = _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field).ToList();
+
+        pola.Should().Contain(nameof(TaskItem.EstimatedMinutes), "zmiana jedzie");
+        pola.Should().Contain(
+            nameof(TaskItem.Title), "i w całości, bo tamta strona może nie mieć wiersza");
+        pola.Should().Contain(nameof(TaskItem.DoDate), "i bez dnia też");
+    }
+
+    [Fact]
+    public void Wskazanie_na_odbicie_w_kalendarzu_jedzie_razem_z_wierszem()
+    {
+        // To jest ta część objawu, która zostawała na ekranie: bez wskazania druga
+        // strona nie ma po czym poznać, że wydarzenie w Google jest odbiciem jej
+        // własnego zadania — więc rysuje je obok jako wydarzenie cudze.
+        var (_, day) = Occurrence();
+
+        day.Share(Guid.CreateVersion7(), "wydarzenie-google", Stamp());
+        _db.SaveChanges();
+
+        _db.Changes.Where(w => w.EntityId == day.Id).Select(w => w.Field)
+            .Should().Contain(nameof(TaskItem.SharedEventId));
+    }
+
+    [Fact]
+    public void Przepisanie_z_szablonu_serii_nie_jedzie_dziennikiem()
+    {
+        // Jedyny wyjątek od „wiersz zmieniany jedzie": przepisanie wystąpień po zmianie
+        // serii, która nie przestawia dni. Zmianę niesie wtedy wiersz serii, a druga
+        // strona przepisze z niego swoje dni sama.
+        var (_, day) = Occurrence();
+
+        _db.Changes.RemoveRange(_db.Changes.ToList());
+        _db.SaveChanges();
+
+        using (SeriesScope.Begin())
+        {
+            day.Restamp(new SeriesTemplate("Śmieci — szkło", AreaId: _area), null, null, Stamp);
+            _db.SaveChanges();
+        }
+
+        _db.Changes.Should().NotContain(w => w.EntityId == day.Id);
+    }
 }

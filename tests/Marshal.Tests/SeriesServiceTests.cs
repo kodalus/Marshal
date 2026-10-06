@@ -220,6 +220,39 @@ public sealed class SeriesServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Przepisane_dni_nie_jada_dziennikiem_a_zmienione_z_reki_jada()
+    {
+        // Dwie strony tej samej zasady. Dzień przepisany z szablonu dalej jest tym,
+        // co okno wylicza, więc druga strona dojdzie do niego sama — wysyłanie go
+        // byłoby sześćdziesięcioma wierszami dziennika na nic. Dzień zmieniony z ręki
+        // przestał być wyliczalny i nie policzy go nikt: pominięty w dzienniku
+        // nie dochodzi nigdzie, a u siebie wygląda, jakby się udało.
+        var one = await Start();
+        await FillAsync(one);
+
+        var day = Days(one).First(z => z.DoDate > Today);
+
+        _db.Changes.RemoveRange(_db.Changes.ToList());
+        _db.SaveChanges();
+
+        await _rhythms.ChangeAsync(one, template: one.Template with { Title = "Śmieci — szkło" });
+
+        _db.Changes.Should().NotContain(
+            w => w.EntityId == day.Id, "przepisanie niesie wiersz serii");
+        _db.Changes.Should().Contain(
+            w => w.EntityId == one.Id, "i ten wiersz jedzie");
+
+        _db.Changes.RemoveRange(_db.Changes.ToList());
+        _db.SaveChanges();
+
+        day.SetEstimate(90, day.Energy, _hlc.Next());
+        _db.SaveChanges();
+
+        _db.Changes.Should().Contain(
+            w => w.EntityId == day.Id, "zmiany z ręki nie policzy druga strona sama");
+    }
+
+    [Fact]
     public async Task Skasowanie_serii_zostawia_historie_a_zabiera_przyszlosc()
     {
         var one = await Start();

@@ -72,6 +72,32 @@ public sealed class TaskEditService(
         }
     }
 
+    /// <summary>
+    /// Wystąpienie serii dotknięte z ręki przestaje być tym, co okno wylicza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Znacznik „zmienione z ręki" rozstrzyga dwie rzeczy i obie są o tym dniu: że
+    /// zmiana serii go nie przepisze i że dopełnianie okna go nie zabierze. Zapis karty
+    /// i przełożenie na siatce stawiały go od początku; rozciągnięcie bloku, zmiana
+    /// oszacowania, wagi i projektu — nie, i stąd kłopot widoczny dopiero na drugim
+    /// urządzeniu: wiersz nietknięty nie jedzie synchronizacją, bo tamta strona ma go
+    /// policzyć sama, więc zmiana przepadała po cichu.
+    /// </para>
+    /// <para>
+    /// Dziennik pilnuje dziś tego sam — wiersz <b>zmieniany</b> jedzie synchronizacją
+    /// niezależnie od znacznika — ale to jest zabezpieczenie, nie odpowiedź. Odpowiedź
+    /// jest tutaj: ten jeden dzień naprawdę przestał być wyliczalny i ma to zapisane.
+    /// </para>
+    /// </remarks>
+    private void Pin(TaskItem task)
+    {
+        if (task.SeriesId is not null)
+        {
+            task.Override(hlc.Next());
+        }
+    }
+
     public async Task<TaskItem?> ApplyAsync(Guid id, TaskEdit edit, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(edit);
@@ -208,6 +234,7 @@ public sealed class TaskEditService(
         if (task.EstimatedMinutes != minutes || task.Energy != energy)
         {
             task.SetEstimate(minutes, energy, hlc.Next());
+            Pin(task);
             await unitOfWork.SaveChangesAsync(ct);
         }
 
@@ -243,6 +270,7 @@ public sealed class TaskEditService(
             }
 
             task.SetEstimate(minutes, task.Energy, hlc.Next());
+            Pin(task);
             await unitOfWork.SaveChangesAsync(ct);
             await MirrorAsync(task, ct);
         }
@@ -424,6 +452,7 @@ public sealed class TaskEditService(
         }
 
         task.MoveTo(areaId, projectId, hlc.Next());
+        Pin(task);
         await unitOfWork.SaveChangesAsync(ct);
 
         return task;
@@ -437,7 +466,18 @@ public sealed class TaskEditService(
             return null;
         }
 
+        var before = task.UpdatedAt;
+
         change(task);
+
+        // Znacznik tylko wtedy, gdy coś się naprawdę zmieniło: pola ruszane są warunkowo,
+        // a „zmienione z ręki" postawione na nic uodparniałoby dzień na zmianę serii bez
+        // żadnej decyzji o tym dniu.
+        if (!task.UpdatedAt.Equals(before))
+        {
+            Pin(task);
+        }
+
         await unitOfWork.SaveChangesAsync(ct);
 
         return task;
