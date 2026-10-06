@@ -1939,7 +1939,8 @@ public sealed class CalendarStoreTests : IDisposable
     public async Task Kalendarz_bez_pisarza_mowi_ze_jest_do_odczytu()
     {
         var withoutWriter = new CalendarSyncService(
-            _sklad, new TaskRepository(_db), [_feed], _clock, _hlc, new Settings(), [],
+            _sklad, new TaskRepository(_db), new TaskSeriesRepository(_db), [_feed], _clock,
+            _hlc, new Settings(), [],
             new ProjectRepository(_db), new AreaRepository(_db));
 
         var start = new DateTimeOffset(2026, 9, 17, 16, 0, 0, TimeSpan.FromHours(2));
