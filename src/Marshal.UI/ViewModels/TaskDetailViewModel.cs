@@ -283,24 +283,79 @@ public sealed partial class TaskDetailViewModel(
     [ObservableProperty]
     public partial bool IsSeries { get; set; }
 
-    partial void OnIsSeriesChanged(bool value)
+    partial void OnIsSeriesChanged(bool value) => Cards();
+
+    partial void OnIsOpenChanged(bool value) => Cards();
+
+    /// <summary>Która karta jest teraz na ekranie — bo są dwie i wykluczają się.</summary>
+    private void Cards()
     {
-        OnPropertyChanged(nameof(IsOccurrenceCard));
+        OnPropertyChanged(nameof(IsTaskCard));
+        OnPropertyChanged(nameof(IsSeriesCard));
         OnPropertyChanged(nameof(HasSeries));
-        OnPropertyChanged(nameof(Heading));
     }
 
     /// <summary>Czy to karta jednego dnia należącego do serii.</summary>
     public bool HasSeries => !IsSeries && _series != Guid.Empty;
 
-    /// <summary>Karta dnia: wszystko poza trybem serii.</summary>
-    public bool IsOccurrenceCard => !IsSeries;
+    /// <summary>
+    /// Karta dnia i karta serii — dwie karty, nie jedna o dwóch trybach.
+    /// </summary>
+    /// <remarks>
+    /// Model widoku jest wspólny i to jest świadome: rytm, pora, długość i przypomnienia
+    /// znaczą w obu miejscach to samo, więc drugi formularz obok byłby drugim miejscem
+    /// do utrzymywania tej samej rzeczy. <b>Widok</b> jest natomiast osobny, bo pytania
+    /// są osobne. Karta dnia pyta „co z tym jednym dniem": ma ptaszek, termin, kosz.
+    /// Karta serii pyta „czym ta rzecz jest za każdym razem" i pokazuje dni, które z niej
+    /// wyszły. Jedna karta na oba pytania miała ptaszek, którym nie dało się nic odhaczyć,
+    /// i kosz, po którym nie było wiadomo, co zabierze.
+    /// </remarks>
+    public bool IsTaskCard => IsOpen && !IsSeries;
 
-    public string Heading => IsSeries ? "Cała seria" : Title;
+    public bool IsSeriesCard => IsOpen && IsSeries;
 
     /// <summary>Zdanie o rytmie na karcie dnia — do czytania, nie do zmieniania.</summary>
     [ObservableProperty]
     public partial string? SeriesLabel { get; set; }
+
+    /// <summary>Dni, które seria postawiła — do oglądania i do wejścia w którykolwiek.</summary>
+    public ObservableCollection<SeriesDayRow> Days { get; } = [];
+
+    /// <summary>Ile tych dni jest i ile z nich jeszcze przed nami.</summary>
+    public string DaysLabel => Days.Count switch
+    {
+        0 => "Żadnego dnia jeszcze nie postawiono.",
+        _ => $"{Days.Count} {Word(Days.Count)}, z tego {Days.Count(d => !d.IsPast)} przed nami",
+    };
+
+    private static string Word(int many) => many == 1 ? "dzień" : "dni";
+
+    /// <summary>
+    /// Wejście w jeden dzień z listy na karcie serii.
+    /// </summary>
+    /// <remarks>
+    /// Karta serii odpowiada na pytanie „czym ta rzecz jest za każdym razem", a dzień
+    /// z listy na pytanie „a co z tym jednym" — więc wejście w dzień podmienia kartę
+    /// na kartę dnia. Bez tego lista byłaby wyłącznie do czytania, a najczęstszy powód,
+    /// żeby na nią patrzeć, jest taki, że z jednym z tych dni trzeba coś zrobić.
+    /// </remarks>
+    [RelayCommand]
+    private async Task OpenDayAsync(SeriesDayRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        if (await edit.ByIdAsync(row.Id) is { } task)
+        {
+            await LoadAsync(task);
+            return;
+        }
+
+        Problem = "Tego dnia już nie ma.";
+        OnPropertyChanged(nameof(HasProblem));
+    }
 
     /// <summary>Zgłoszenie tego, co zmienia się razem z otwartym zadaniem.</summary>
     /// <remarks>
@@ -767,6 +822,22 @@ public sealed partial class TaskDetailViewModel(
         IsOpen = false;
     }
 
+    /// <summary>Dni serii na jej ekran — w kolejności dni, od najstarszego.</summary>
+    private async Task LoadDaysAsync()
+    {
+        var today = clock.Today;
+
+        Days.Clear();
+
+        foreach (var day in (await edit.OccurrencesOfAsync(_series))
+            .OrderBy(t => t.DoDate ?? DateOnly.MaxValue))
+        {
+            Days.Add(SeriesDayRow.From(day, today));
+        }
+
+        OnPropertyChanged(nameof(DaysLabel));
+    }
+
     /// <summary>
     /// Otwarcie <b>serii</b>, do której należy otwarty dzień.
     /// </summary>
@@ -789,6 +860,7 @@ public sealed partial class TaskDetailViewModel(
         }
 
         await LoadSlotsAsync();
+        await LoadDaysAsync();
 
         _loading = true;
 
@@ -820,6 +892,66 @@ public sealed partial class TaskDetailViewModel(
         IsOpen = true;
 
         await log.RecordAsync("Seria: otwarcie", Title);
+    }
+
+    /// <summary>
+    /// Koniec serii na dziś: to, co dziś i wcześniej, zostaje — dalszych dni nie będzie.
+    /// </summary>
+    /// <remarks>
+    /// Najczęstszy koniec rytmu wygląda właśnie tak: dzisiejsze się odbędzie, a potem
+    /// już nie. Data końca w regule <b>i</b> nagrobki na dniach postawionych dalej —
+    /// sama data zatrzymałaby dokładanie, ale zostawiłaby na siatce dni postawione
+    /// wcześniej, czyli odpowiedziałaby „już nie będzie" na ekranie, na którym widać,
+    /// że będzie.
+    /// </remarks>
+    public async Task EndSeriesAsync()
+    {
+        if (_series == Guid.Empty)
+        {
+            return;
+        }
+
+        var gone = await edit.EndSeriesAsync(_series, clock.Today);
+
+        await log.RecordAsync("Seria: koniec na dziś", $"{Title} — {gone} dni zabranych");
+
+        // Reguła wczytana od nowa, bo zyskała datę końca: bez tego ekran pokazywałby
+        // rytm bez końca zaraz po tym, jak się go zakończyło.
+        if (await edit.SeriesByIdAsync(_series) is { } one)
+        {
+            _loading = true;
+            LoadRule(one.Rule);
+            _loading = false;
+        }
+
+        await LoadDaysAsync();
+        Refresh();
+
+        Saved?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Skasowanie całej serii z jej ekranu.
+    /// </summary>
+    /// <remarks>
+    /// Rytm znika, historia zostaje: dni minione i odhaczone są zapisem tego, co się
+    /// wydarzyło, i nie przestają być prawdą przez to, że rytmu już nie ma. Nagrobek
+    /// dostaje seria i to, co stało jeszcze przed nami.
+    /// </remarks>
+    public async Task DropSeriesAsync()
+    {
+        if (_series == Guid.Empty)
+        {
+            return;
+        }
+
+        var gone = await edit.DropSeriesAsync(_series);
+
+        await log.RecordAsync("Seria: skasowanie", $"{Title} — {gone} dni do kosza");
+
+        IsSeries = false;
+        IsOpen = false;
+        Saved?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

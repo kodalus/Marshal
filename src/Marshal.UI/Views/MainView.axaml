@@ -58,6 +58,94 @@
     <StreamGeometry x:Key="IkonaSil">M13,2 L5,14 L11,14 L11,22 L19,10 L13,10 Z</StreamGeometry>
 
     <StreamGeometry x:Key="IkonaRytmu">M5,11 C5,7.1 8.1,4 12,4 C14.6,4 16.9,5.4 18.1,7.5 M15,7 L18.5,7.5 L19,4 M19,13 C19,16.9 15.9,20 12,20 C9.4,20 7.1,18.6 5.9,16.5 M9,17 L5.5,16.5 L5,20</StreamGeometry>
+    <!--
+      Pola rytmu w jednym szablonie, bo pyta o nie i karta dnia, i karta serii.
+      Dwa razy przepisane znaczyłyby dwa miejsca do utrzymywania tej samej rzeczy,
+      a listy rodzajów rytmu rozjeżdżają się w takich parach przy pierwszej zmianie.
+    -->
+    <DataTemplate x:Key="PolaRytmu" x:DataType="vm:TaskDetailViewModel">
+      <StackPanel>
+
+        <TextBlock Text="Rytm" FontWeight="SemiBold"
+                   IsVisible="{Binding IsNarrow}" />
+
+        <TextBlock Classes="label" Text="Jak często" />
+        <ComboBox ItemsSource="{Binding Repeats}" SelectedItem="{Binding SelectedRepeat}"
+                  HorizontalAlignment="Stretch" />
+
+        <StackPanel IsVisible="{Binding NeedsInterval}">
+          <TextBlock Classes="label" Text="Co ile" />
+          <NumericUpDown Value="{Binding Interval}" Minimum="1" Maximum="99"
+                         Increment="1" FormatString="0" />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding NeedsWeekdays}">
+          <TextBlock Classes="label" Text="W które dni" />
+          <WrapPanel>
+            <ToggleButton Classes="day" IsChecked="{Binding Monday}" Content="pn" />
+            <ToggleButton Classes="day" IsChecked="{Binding Tuesday}" Content="wt" />
+            <ToggleButton Classes="day" IsChecked="{Binding Wednesday}" Content="śr" />
+            <ToggleButton Classes="day" IsChecked="{Binding Thursday}" Content="cz" />
+            <ToggleButton Classes="day" IsChecked="{Binding Friday}" Content="pt" />
+            <ToggleButton Classes="day" IsChecked="{Binding Saturday}" Content="sb" />
+            <ToggleButton Classes="day" IsChecked="{Binding Sunday}" Content="nd" />
+          </WrapPanel>
+
+          <!-- Najczęstszy zestaw jednym dotknięciem. Pięć małych kwadracików
+               to pięć okazji do chybienia, a „od poniedziałku do piątku" jest
+               tym, co wpisuje się najczęściej. -->
+          <Button Classes="nav" Margin="0,4,0,0" HorizontalAlignment="Left"
+                  Command="{Binding WorkdaysCommand}" Content="dni robocze" />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding NeedsDayOfMonth}">
+          <TextBlock Classes="label" Text="Którego dnia miesiąca" />
+          <NumericUpDown Value="{Binding DayOfMonth}" Minimum="1" Maximum="31"
+                         Increment="1" FormatString="0" />
+          <TextBlock Classes="hint" Margin="2,4,0,0"
+                     Text="31 znaczy ostatniego — w lutym wypadnie 28 albo 29." />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding IsRepeating}">
+          <TextBlock Classes="label" Text="Kolejne liczone" />
+          <ComboBox ItemsSource="{Binding Anchors}" SelectedItem="{Binding SelectedAnchor}"
+                    HorizontalAlignment="Stretch" />
+
+          <TextBlock Classes="label" Text="Gdy dzień minie niewykonany" />
+          <ComboBox ItemsSource="{Binding Missed}" SelectedItem="{Binding SelectedMissed}"
+                    HorizontalAlignment="Stretch" />
+
+          <!-- Koniec serii jednym pytaniem, choć model niesie to dwoma polami.
+               Dwa pola obok siebie pozwalałyby wpisać obie odpowiedzi naraz,
+               a wtedy nie dałoby się powiedzieć, która obowiązuje. -->
+          <TextBlock Classes="label" Text="Koniec" />
+          <ComboBox ItemsSource="{Binding Ends}" SelectedItem="{Binding SelectedEnd}"
+                    HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding NeedsOccurrences}">
+          <TextBlock Classes="label" Text="Ile jeszcze wystąpień" />
+          <NumericUpDown Value="{Binding Occurrences}" Minimum="1" Maximum="999"
+                         Increment="1" FormatString="0" />
+          <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                     Text="Licząc to, które jest teraz. Po każdym odhaczeniu liczba jest o jeden mniejsza — stan serii siedzi w samym wystąpieniu, nie w historii." />
+        </StackPanel>
+
+        <StackPanel IsVisible="{Binding NeedsEndDate}">
+          <TextBlock Classes="label" Text="Do dnia" />
+          <k:DateField Value="{Binding RhythmEnd}" />
+          <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                     Text="Ostatni dzień, w którym wolno wypaść wystąpieniu." />
+        </StackPanel>
+
+        <!-- Rytm zdaniem, nie formularzem. Sześć pól da się wypełnić źle i nie
+             zauważyć; zdanie da się przeczytać i od razu wiedzieć, czy o to chodziło. -->
+        <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource Panel}">
+          <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontStyle="Italic" />
+        </Border>
+
+      </StackPanel>
+    </DataTemplate>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -3134,7 +3222,7 @@
         </Border>
       </Canvas>
 
-      <Panel IsVisible="{Binding Detail.IsOpen}" Background="{DynamicResource Zaslona}"
+      <Panel IsVisible="{Binding Detail.IsTaskCard}" Background="{DynamicResource Zaslona}"
              PointerPressed="DetailBackground">
       <!-- Kliknięcie w przyciemnione tło zamyka okno, kliknięcie w samo okno nie:
            zdarzenie zatrzymuje się na ramce, więc do tła nie dociera. -->
@@ -3384,84 +3472,7 @@
           <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="{DynamicResource Panel}"
                   IsVisible="{Binding ShowRepeat}">
             <StackPanel>
-
-              <TextBlock Text="Rytm" FontWeight="SemiBold"
-                         IsVisible="{Binding IsNarrow}" />
-
-              <TextBlock Classes="label" Text="Jak często" />
-              <ComboBox ItemsSource="{Binding Repeats}" SelectedItem="{Binding SelectedRepeat}"
-                        HorizontalAlignment="Stretch" />
-
-              <StackPanel IsVisible="{Binding NeedsInterval}">
-                <TextBlock Classes="label" Text="Co ile" />
-                <NumericUpDown Value="{Binding Interval}" Minimum="1" Maximum="99"
-                               Increment="1" FormatString="0" />
-              </StackPanel>
-
-              <StackPanel IsVisible="{Binding NeedsWeekdays}">
-                <TextBlock Classes="label" Text="W które dni" />
-                <WrapPanel>
-                  <ToggleButton Classes="day" IsChecked="{Binding Monday}" Content="pn" />
-                  <ToggleButton Classes="day" IsChecked="{Binding Tuesday}" Content="wt" />
-                  <ToggleButton Classes="day" IsChecked="{Binding Wednesday}" Content="śr" />
-                  <ToggleButton Classes="day" IsChecked="{Binding Thursday}" Content="cz" />
-                  <ToggleButton Classes="day" IsChecked="{Binding Friday}" Content="pt" />
-                  <ToggleButton Classes="day" IsChecked="{Binding Saturday}" Content="sb" />
-                  <ToggleButton Classes="day" IsChecked="{Binding Sunday}" Content="nd" />
-                </WrapPanel>
-
-                <!-- Najczęstszy zestaw jednym dotknięciem. Pięć małych kwadracików
-                     to pięć okazji do chybienia, a „od poniedziałku do piątku" jest
-                     tym, co wpisuje się najczęściej. -->
-                <Button Classes="nav" Margin="0,4,0,0" HorizontalAlignment="Left"
-                        Command="{Binding WorkdaysCommand}" Content="dni robocze" />
-              </StackPanel>
-
-              <StackPanel IsVisible="{Binding NeedsDayOfMonth}">
-                <TextBlock Classes="label" Text="Którego dnia miesiąca" />
-                <NumericUpDown Value="{Binding DayOfMonth}" Minimum="1" Maximum="31"
-                               Increment="1" FormatString="0" />
-                <TextBlock Classes="hint" Margin="2,4,0,0"
-                           Text="31 znaczy ostatniego — w lutym wypadnie 28 albo 29." />
-              </StackPanel>
-
-              <StackPanel IsVisible="{Binding IsRepeating}">
-                <TextBlock Classes="label" Text="Kolejne liczone" />
-                <ComboBox ItemsSource="{Binding Anchors}" SelectedItem="{Binding SelectedAnchor}"
-                          HorizontalAlignment="Stretch" />
-
-                <TextBlock Classes="label" Text="Gdy dzień minie niewykonany" />
-                <ComboBox ItemsSource="{Binding Missed}" SelectedItem="{Binding SelectedMissed}"
-                          HorizontalAlignment="Stretch" />
-
-                <!-- Koniec serii jednym pytaniem, choć model niesie to dwoma polami.
-                     Dwa pola obok siebie pozwalałyby wpisać obie odpowiedzi naraz,
-                     a wtedy nie dałoby się powiedzieć, która obowiązuje. -->
-                <TextBlock Classes="label" Text="Koniec" />
-                <ComboBox ItemsSource="{Binding Ends}" SelectedItem="{Binding SelectedEnd}"
-                          HorizontalAlignment="Stretch" />
-              </StackPanel>
-
-              <StackPanel IsVisible="{Binding NeedsOccurrences}">
-                <TextBlock Classes="label" Text="Ile jeszcze wystąpień" />
-                <NumericUpDown Value="{Binding Occurrences}" Minimum="1" Maximum="999"
-                               Increment="1" FormatString="0" />
-                <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
-                           Text="Licząc to, które jest teraz. Po każdym odhaczeniu liczba jest o jeden mniejsza — stan serii siedzi w samym wystąpieniu, nie w historii." />
-              </StackPanel>
-
-              <StackPanel IsVisible="{Binding NeedsEndDate}">
-                <TextBlock Classes="label" Text="Do dnia" />
-                <k:DateField Value="{Binding RhythmEnd}" />
-                <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
-                           Text="Ostatni dzień, w którym wolno wypaść wystąpieniu." />
-              </StackPanel>
-
-              <!-- Rytm zdaniem, nie formularzem. Sześć pól da się wypełnić źle i nie
-                   zauważyć; zdanie da się przeczytać i od razu wiedzieć, czy o to chodziło. -->
-              <Border Margin="0,14,0,0" Padding="12,10" CornerRadius="6" Background="{DynamicResource Panel}">
-                <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" FontStyle="Italic" />
-              </Border>
+              <ContentControl Content="{Binding}" ContentTemplate="{StaticResource PolaRytmu}" />
 
               <!-- Koniec serii przy serii, nie w stopce. Kosz w stopce znaczy przy rytmie
                    „ten jeden raz" — bo tego chce się co tydzień, a skasowania rytmu raz
@@ -3534,6 +3545,166 @@
                        Text="{Binding Calendar.OpenedProblem}"
                        IsVisible="{Binding Calendar.HasOpenedProblem}" />
           </StackPanel>
+
+        </StackPanel>
+      </ScrollViewer>
+      </DockPanel>
+      </Border>
+      </Panel>
+
+      <!-- ——— Karta serii ———————————————————————————————————————————————————
+           Osobna karta, a nie tryb karty dnia. Model widoku jest wspólny i to jest
+           świadome: rytm, pora, długość i przypomnienia znaczą w obu miejscach to samo.
+           Osobne są **pytania**. Karta dnia pyta „co z tym jednym dniem" i ma do tego
+           ptaszek, termin i kosz; karta serii pyta „czym ta rzecz jest za każdym razem"
+           i pokazuje dni, które z niej wyszły. Jedna karta na oba pytania miała ptaszek,
+           którym nie dało się nic odhaczyć, i dwa przyciski końca rytmu celujące
+           w wystąpienie, którego tu nie ma. -->
+      <Panel IsVisible="{Binding Detail.IsSeriesCard}" Background="{DynamicResource Zaslona}"
+             PointerPressed="DetailBackground">
+      <Border Classes.pelny="{Binding IsNarrow}"
+              MaxWidth="560" MaxHeight="620" Margin="8" Padding="24" CornerRadius="14"
+              Background="{DynamicResource Karta}" VerticalAlignment="Center"
+              BorderThickness="1" BorderBrush="{DynamicResource Krawedz}"
+              PointerPressed="StopClick">
+      <DockPanel DataContext="{Binding Detail}" x:DataType="vm:TaskDetailViewModel">
+
+        <!-- Kasowanie serii z lewej, z dala od zapisu: zabiera wszystkie dni przed nami
+             naraz, a na telefonie kciuk ląduje po prawej. -->
+        <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,16,0,0">
+          <Button Grid.Column="0" Classes="cichy" Padding="14,8"
+                  Click="DropSeries" Content="Skasuj serię" />
+          <Button Grid.Column="2" Classes="cichy" Padding="14,8" Margin="8,0"
+                  Click="CloseTask" Content="Zamknij" />
+          <Button Grid.Column="3" Classes="glowny" Padding="14,8"
+                  Click="SaveTask" Content="{Binding SaveLabel}"
+                  IsEnabled="{Binding !IsSaving}" />
+        </Grid>
+
+      <ScrollViewer>
+        <StackPanel>
+
+          <TextBlock Text="Cała seria" FontSize="18" FontWeight="SemiBold" />
+          <TextBlock Classes="hint" Margin="0,2,0,0" TextWrapping="Wrap"
+                     Text="Odpowiedzi stąd dotyczą każdego dnia z tej serii. O jednym dniu rozstrzyga jego własna karta — na liście niżej." />
+
+          <TextBlock Classes="hint" Margin="2,10,0,0" TextWrapping="Wrap"
+                     Foreground="{DynamicResource Ostrzezenie}"
+                     Text="{Binding Problem}" IsVisible="{Binding HasProblem}" />
+
+          <TextBlock Classes="label" Text="Nazwa — tak nazywa się każdy dzień z serii" />
+          <TextBox Text="{Binding Title}" FontSize="18" Watermark="Co wraca?"
+                   KeyDown="OnNameKey" />
+
+          <TextBlock Classes="label" Text="Notatka" />
+          <TextBox Text="{Binding Note}" AcceptsReturn="True" MinHeight="60"
+                   TextWrapping="Wrap" Watermark="Cokolwiek, co pomoże zacząć" />
+
+          <TextBlock Classes="label" Text="Miejsce — obszar albo projekt w nim" />
+          <ComboBox ItemsSource="{Binding Placements}" SelectedItem="{Binding SelectedPlacement}"
+                    HorizontalAlignment="Stretch" PlaceholderText="jeszcze nierozstrzygnięte">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:PlacementChoice">
+                <StackPanel Orientation="Horizontal">
+                  <Border Width="{Binding Indent}" />
+                  <TextBlock Text="{Binding Label}" />
+                </StackPanel>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+
+          <!-- Początek serii, nie dzień wykonania: od niego liczy się faza rytmu.
+               „Co drugi dzień od wtorku" nie da się odtworzyć z żadnej późniejszej
+               daty, więc przestawienie początku przestawia wszystkie dni. -->
+          <TextBlock Classes="label" Text="Początek serii — od niego liczy się rytm" />
+          <k:DateField Value="{Binding DoDate}" />
+
+          <TextBlock Classes="label" Text="Od której do której" />
+          <Grid ColumnDefinitions="*,Auto,*">
+            <k:TimeField Grid.Column="0" Value="{Binding DoTime}" />
+            <TextBlock Grid.Column="1" Text="–" Margin="8,0" VerticalAlignment="Center" />
+            <k:TimeField Grid.Column="2" Value="{Binding EndTime}" />
+          </Grid>
+          <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                     Text="Bez godziny dni z serii idą na pasek całodniowy. Bez godziny końca trwają pół godziny." />
+
+          <TextBlock Classes="label" Text="Ile to zajmie (minuty)" />
+          <NumericUpDown Value="{Binding EstimatedMinutes}" Minimum="1" Maximum="600"
+                         Increment="5" FormatString="0" />
+
+          <TextBlock Classes="label" Text="Waga" />
+          <ComboBox ItemsSource="{Binding Priorities}" SelectedItem="{Binding SelectedPriority}"
+                    HorizontalAlignment="Stretch" />
+
+          <TextBlock Classes="label" Text="Ile trzeba mieć w sobie" />
+          <ComboBox ItemsSource="{Binding Energies}" SelectedItem="{Binding SelectedEnergyLevel}"
+                    HorizontalAlignment="Stretch" />
+
+          <!-- Przypomnienia są cechą serii i innej drogi do nich nie ma: liczą się od
+               godziny dnia, więc bez godziny nie ma od czego je liczyć. -->
+          <StackPanel IsVisible="{Binding HasTime}" Margin="0,10,0,0">
+            <TextBlock Classes="label" Text="Przypomnienie przed każdym dniem" />
+            <ItemsControl ItemsSource="{Binding Leads}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:LeadChoice">
+                  <CheckBox Margin="0,0,14,0" IsChecked="{Binding IsChecked}"
+                            Content="{Binding Label}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Grid ColumnDefinitions="Auto,Auto,Auto" Margin="0,8,0,0">
+              <NumericUpDown Grid.Column="0" Width="108" Value="{Binding CustomLead}"
+                             Minimum="1" Maximum="999" Increment="1" FormatString="0" />
+              <ComboBox Grid.Column="1" Margin="6,0,0,0" Width="108"
+                        ItemsSource="{Binding LeadUnits}" SelectedItem="{Binding SelectedLeadUnit}" />
+              <Button Grid.Column="2" Margin="6,0,0,0" Content="Dodaj"
+                      Command="{Binding AddLeadCommand}" />
+            </Grid>
+          </StackPanel>
+
+          <Border Margin="0,18,0,0" Padding="14" CornerRadius="8" Background="{DynamicResource Panel}">
+            <StackPanel>
+              <ContentControl Content="{Binding}" ContentTemplate="{StaticResource PolaRytmu}" />
+
+              <!-- Koniec serii tutaj, przy rytmie, a nie w stopce: stopka mówi o tym,
+                   co się zapisuje, a to jest czynność. Dwa końce różnią się jedną
+                   rzeczą — czy dni, które już były, zostają. -->
+              <Button Classes="nav" HorizontalAlignment="Left" Margin="0,14,0,0"
+                      Click="EndSeries" Content="Zakończ serię na dziś" />
+              <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                         Text="Dzisiejszy dzień i wcześniejsze zostają, dalszych nie będzie. Rytm dostaje datę końca." />
+            </StackPanel>
+          </Border>
+
+          <!-- Dni z serii: po to, żeby po założeniu rytmu było widać, co z niego wyszło.
+               Dotąd nie było tego widać nigdzie — rytm opisywało jedno zdanie, a dni
+               z niego stały rozsypane po kalendarzu, każdy w swoim tygodniu. -->
+          <TextBlock Classes="label" Margin="0,18,0,0" Text="Dni z tej serii" />
+          <TextBlock Classes="hint" Margin="2,0,0,6" TextWrapping="Wrap"
+                     Text="{Binding DaysLabel}" />
+
+          <ItemsControl ItemsSource="{Binding Days}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:SeriesDayRow">
+                <Button Classes="nav" Margin="0,0,0,4" Padding="12,8"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                        Command="{Binding $parent[ItemsControl].((vm:TaskDetailViewModel)DataContext).OpenDayCommand}"
+                        CommandParameter="{Binding}">
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{Binding When}" />
+                    <TextBlock Classes="hint" VerticalAlignment="Center"
+                               Text="{Binding Mark}" IsVisible="{Binding HasMark}" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
         </StackPanel>
       </ScrollViewer>

@@ -416,6 +416,14 @@ public partial class MainView : UserControl
     private void EndRhythm(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: koniec serii na tym wystąpieniu", m => m.EndRhythmAsync());
 
+    /// <summary>Koniec serii na dziś — z jej własnej karty.</summary>
+    private void EndSeries(object? sender, RoutedEventArgs e) =>
+        OnDetail("Seria: koniec na dziś z karty serii", m => m.EndSeriesAsync());
+
+    /// <summary>Skasowanie całej serii — z jej własnej karty.</summary>
+    private void DropSeries(object? sender, RoutedEventArgs e) =>
+        OnDetail("Seria: skasowanie z karty serii", m => m.DropSeriesAsync());
+
     private void CloseTask(object? sender, RoutedEventArgs e) =>
         OnDetail("Zadanie: zamknięcie okna", m =>
         {

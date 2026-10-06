@@ -340,6 +340,22 @@ public sealed class TaskEditService(
     public Task<TaskSeries?> SeriesByIdAsync(Guid seriesId, CancellationToken ct = default) =>
         series.FindAsync(seriesId, ct);
 
+    /// <summary>
+    /// Dni, które seria postawiła — razem z minionymi, odhaczonymi i wyrzuconymi.
+    /// </summary>
+    /// <remarks>
+    /// Na ekran serii, żeby było widać, co z niej wyszło. Lista z nagrobkami, bo
+    /// „tej środy nie będzie" jest tu zapisem trwałym i ma być widoczne razem z resztą —
+    /// inaczej dzień odwołany wyglądałby na dzień, którego nigdy nie zaplanowano.
+    /// </remarks>
+    public Task<IReadOnlyList<TaskItem>> OccurrencesOfAsync(
+        Guid seriesId, CancellationToken ct = default) =>
+        series.OccurrencesAsync(seriesId, ct);
+
+    /// <summary>Zadanie po identyfikatorze — do wejścia w dzień z ekranu serii.</summary>
+    public Task<TaskItem?> ByIdAsync(Guid id, CancellationToken ct = default) =>
+        tasks.FindAsync(id, ct);
+
     /// <summary>Seria, do której wystąpienie należy — albo <c>null</c>.</summary>
     public async Task<TaskSeries?> SeriesOfAsync(TaskItem task, CancellationToken ct = default)
     {
