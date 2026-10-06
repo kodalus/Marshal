@@ -22,7 +22,7 @@ public sealed class TaskSeriesConfiguration : IEntityTypeConfiguration<TaskSerie
         // Wskazanie na wydarzenie cykliczne w kalendarzu. Bez limitu długości:
         // identyfikatory Google są krótkie, ale nie my je nadajemy.
         builder.Property(s => s.SharedCalendarId);
-        builder.Property(s => s.SharedEventId);
+        builder.Property(s => s.SharedEventId).HasMaxLength(200);
 
         builder.Property(s => s.CreatedAt).IsRequired();
         builder.Property(s => s.UpdatedAt).IsRequired();

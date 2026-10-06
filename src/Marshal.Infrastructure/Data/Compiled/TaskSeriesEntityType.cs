@@ -21,7 +21,7 @@ namespace Marshal.Infrastructure.Data.Compiled
                 "Marshal.Domain.Series.TaskSeries",
                 typeof(TaskSeries),
                 baseEntityType,
-                propertyCount: 7,
+                propertyCount: 9,
                 keyCount: 1);
 
             var id = runtimeEntityType.AddProperty(
@@ -55,6 +55,23 @@ namespace Marshal.Infrastructure.Data.Compiled
                 typeof(string),
                 propertyInfo: typeof(TaskSeries).GetProperty("RuleJson", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 fieldInfo: typeof(TaskSeries).GetField("<RuleJson>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly));
+
+            var sharedCalendarId = runtimeEntityType.AddProperty(
+                "SharedCalendarId",
+                typeof(Guid?),
+                propertyInfo: typeof(TaskSeries).GetProperty("SharedCalendarId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(TaskSeries).GetField("<SharedCalendarId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                maxLength: 36,
+                valueConverter: new GuidToStringConverter());
+
+            var sharedEventId = runtimeEntityType.AddProperty(
+                "SharedEventId",
+                typeof(string),
+                propertyInfo: typeof(TaskSeries).GetProperty("SharedEventId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                fieldInfo: typeof(TaskSeries).GetField("<SharedEventId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+                nullable: true,
+                maxLength: 200);
 
             var starts = runtimeEntityType.AddProperty(
                 "Starts",
