@@ -30,7 +30,11 @@ public sealed class SeriesRruleTests
     [Fact]
     public void Co_ile_dni_to_czestotliwosc_dzienna_z_odstepem()
     {
-        Only(new RecurrenceRule(RecurrenceKind.EveryNDays, interval: 3))
+        // Zaczepienie podane wprost, bo „co N dni" domyślnie liczy się **od wykonania**
+        // (spec 5.7) — a takiego rytmu nie da się zapisać regułą i odbicia nie dostaje.
+        // Reguła wychodzi więc tylko z tego, co ktoś świadomie zaczepił na kalendarzu.
+        Only(new RecurrenceRule(
+                RecurrenceKind.EveryNDays, interval: 3, anchor: RecurrenceAnchor.FromScheduled))
             .Should().Be("RRULE:FREQ=DAILY;INTERVAL=3");
     }
 
