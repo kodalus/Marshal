@@ -102,7 +102,7 @@ public static class GoogleDriveFactory
             [CalendarScope, CalendarWriteScope],
             userKey,
             ct,
-            new FileDataStore(tokenFolder, fullPath: true),
+            new TokenStore(tokenFolder),
             CodeReceiver?.Invoke());
 
     /// <summary>Przepisanie żetonu spod klucza tymczasowego pod docelowy.</summary>
@@ -116,7 +116,7 @@ public static class GoogleDriveFactory
     public static async Task MoveTokenAsync(
         string tokenFolder, string fromKey, string byKey, CancellationToken ct = default)
     {
-        var store = new FileDataStore(tokenFolder, fullPath: true);
+        var store = new TokenStore(tokenFolder);
 
         var token = await store.GetAsync<TokenResponse>(fromKey)
             ?? throw new InvalidOperationException(
@@ -145,7 +145,7 @@ public static class GoogleDriveFactory
 
         try
         {
-            var token = await new FileDataStore(tokenFolder, fullPath: true)
+            var token = await new TokenStore(tokenFolder)
                 .GetAsync<TokenResponse>(userKey).WaitAsync(ct);
 
             return token is not null
@@ -195,7 +195,7 @@ public static class GoogleDriveFactory
             scopes,
             UserKey(withCalendar),
             ct,
-            new FileDataStore(tokenFolder, fullPath: true),
+            new TokenStore(tokenFolder),
             CodeReceiver?.Invoke());
     }
 
