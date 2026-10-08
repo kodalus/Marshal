@@ -73,6 +73,15 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly SeriesMigration _seriesMigration;
     private readonly SeriesService _rhythms;
     private readonly ISeriesMirror _rhythmMirror;
+    private readonly SyncState _syncState;
+
+    /// <summary>Czy przejście dnia zdążyło się w tym uruchomieniu odbyć.</summary>
+    /// <remarks>
+    /// Przy starcie przejście dnia odmawia, dopóki scalanie nie doszło do skutku —
+    /// zob. <see cref="SyncState"/> — więc trzeba pamiętać, że jest jeszcze do zrobienia,
+    /// i spróbować ponownie, kiedy synchronizacja wróci.
+    /// </remarks>
+    private bool _rolledOver;
 
     /// <summary>
     /// Czy okno serii ma jeszcze co dokładać.
@@ -182,6 +191,7 @@ public sealed partial class MainViewModel : ObservableObject
         SeriesMigration seriesMigration,
         SeriesService rhythms,
         ISeriesMirror rhythmMirror,
+        SyncState syncState,
         ITaskSeriesRepository series,
         DailyBackup backup,
         IWriteSignal signal)
@@ -197,6 +207,7 @@ public sealed partial class MainViewModel : ObservableObject
         _seriesMigration = seriesMigration;
         _rhythms = rhythms;
         _rhythmMirror = rhythmMirror;
+        _syncState = syncState;
         _series = series;
 
         // Znak z jednostki pracy przychodzi z cudzego wątku, więc wolno tu zrobić
@@ -844,6 +855,11 @@ public sealed partial class MainViewModel : ObservableObject
     {
         await DayRolloverAsync();
 
+        // Przejście dnia odłożone do chwili, w której scalanie doszło do skutku.
+        // Tutaj jest ta chwila dla uruchomienia, które zastało dzień już przestawiony:
+        // przy starcie przejście odmówiło, bo nie wiedziało jeszcze nic o wczoraj.
+        await RollOverWhenSettledAsync();
+
         if (await _reminders.RunAsync() > 0)
         {
             CollectReminders();
@@ -1114,12 +1130,47 @@ public sealed partial class MainViewModel : ObservableObject
 
         _day = today;
         _filling = true;
+        _rolledOver = false;
 
-        await _dayRollover.RunAsync();
+        await RollOverWhenSettledAsync();
         await _focus.ExpireAsync();
 
         await _activity.RecordAsync("Przejście dnia", $"nowy dzień: {today:yyyy-MM-dd}");
         await ReloadAsync();
+    }
+
+    /// <summary>
+    /// Przejście dnia — ale dopiero wtedy, gdy wiadomo, co zdarzyło się gdzie indziej.
+    /// </summary>
+    /// <remarks>
+    /// Odmowa nie jest błędem i nie zostawia śladu w dzienniku: to normalny stan przez
+    /// pierwsze kilka sekund po uruchomieniu. Zapamiętana jest natomiast jako „jeszcze
+    /// do zrobienia", więc wraca przy pierwszym udanym scaleniu, a gdyby synchronizacja
+    /// nie działała — przy każdym przebiegu minutnika.
+    /// </remarks>
+    private async Task RollOverWhenSettledAsync()
+    {
+        if (_rolledOver)
+        {
+            return;
+        }
+
+        await Try("Przejście dnia", async () =>
+        {
+            var report = await _dayRollover.RunAsync();
+
+            if (report.Deferred)
+            {
+                return;
+            }
+
+            _rolledOver = true;
+
+            if (report.Moved > 0 || report.Spawned > 0 || report.Dropped > 0 || report.Mended > 0)
+            {
+                await ReloadAsync();
+            }
+        });
     }
 
     /// <summary>
@@ -1190,6 +1241,9 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (!_drive.HasCredentials || !Directory.Exists(_drive.TokenFolder))
         {
+            // Bez poświadczeń nie ma na co czekać: to urządzenie jest jedynym źródłem
+            // prawdy o wczorajszym dniu, więc przejście dnia może ruszyć od razu.
+            _syncState.Settle();
             return;
         }
 
@@ -1222,6 +1276,12 @@ public sealed partial class MainViewModel : ObservableObject
 
         // Przeliczenie tylko wtedy, gdy coś przyszło: przerysowanie ekranu pod ręką,
         // która właśnie coś na nim robi, jest kosztem bez pożytku.
+        if (result.Ok)
+        {
+            // Scalanie doszło do skutku: od tej chwili wolno sądzić o wczorajszym dniu.
+            _syncState.Settle();
+        }
+
         if (result is { Ok: true, Applied: > 0 })
         {
             // Scalenie mogło przynieść serię założoną na drugim urządzeniu — a razem
@@ -1238,6 +1298,12 @@ public sealed partial class MainViewModel : ObservableObject
 
             await ReloadAsync();
         }
+
+        // Przejście dnia zaraz po scaleniu, a nie dopiero przy kolejnym przebiegu
+        // minutnika: po starcie odmówiło, bo nie wiedziało jeszcze nic o wczoraj,
+        // a czekanie na to całą minutę znaczyłoby minutę z zaległymi na wczorajszym
+        // dniu i bez dzisiejszych wystąpień.
+        await RollOverWhenSettledAsync();
     }
 
     /// <summary>

@@ -885,6 +885,35 @@ public sealed class TaskItem : Entity
         Touch(stamp);
     }
 
+    /// <summary>
+    /// Poprawienie dnia wykonania bez liczenia tego jako przeniesienia.
+    /// </summary>
+    /// <remarks>
+    /// Do prostowania po przejściu dnia, które zadziałało na nieaktualnych danych:
+    /// licznik przeniesień ma zostać taki, jaki był, bo nikt niczego nie przełożył —
+    /// zadanie wraca na dzień, w którym zostało zrobione.
+    /// </remarks>
+    public void CorrectDay(DateOnly day, Hlc stamp)
+    {
+        DoDate = day;
+        Touch(stamp);
+    }
+
+    /// <summary>
+    /// Zdjęcie nagrobka z czegoś, co było już odhaczone.
+    /// </summary>
+    /// <remarks>
+    /// Odhaczone i wyrzucone naraz to stan, którego nikt nie wybiera: powstaje, gdy
+    /// przejście dnia uzna za przegapione wystąpienie odhaczone na drugim urządzeniu,
+    /// zanim scalanie zdążyło o tym powiedzieć. Odhaczenie jest tu zapisem tego, co się
+    /// wydarzyło, więc wygrywa.
+    /// </remarks>
+    public void RestoreDone(Hlc stamp)
+    {
+        State = TaskState.Done;
+        Touch(stamp);
+    }
+
     /// <summary>Powrót do skrzynki — cofnięcie pochopnego przetworzenia.</summary>
     public void ReturnToInbox(Hlc stamp)
     {

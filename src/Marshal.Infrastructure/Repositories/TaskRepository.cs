@@ -154,6 +154,14 @@ public sealed class TaskRepository(MarshalDbContext db, IDbQueue? queue = null)
             .OrderBy(t => t.DoDate)
             .ToListAsync(ct), ct);
 
+    public async Task<IReadOnlyList<TaskItem>> MisrolledAsync(CancellationToken ct = default) =>
+        await _queue.RunAsync(() => db.Tasks
+            .Where(t => !t.Deleted
+                     && t.CompletedAt != null
+                     && ((t.SeriesId != null && t.State == TaskState.Trashed)
+                         || (t.State == TaskState.Done && t.RollCount > 0)))
+            .ToListAsync(ct), ct);
+
     public async Task<IReadOnlyList<TaskItem>> WithRemindersAsync(CancellationToken ct = default) =>
         await _queue.RunAsync(() => Open()
             .Where(t => t.ReminderAt != null || t.ReminderLeadsCsv != null)

@@ -6,7 +6,12 @@ using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.UseCases;
 
-public sealed record RolloverReport(int Moved, int Spawned, int Dropped = 0);
+/// <param name="Mended">Ile zadań wyprostowano po przejściu dnia na nieaktualnych danych.</param>
+/// <param name="Deferred">
+/// Czy przejście dnia <b>nie ruszyło</b>, bo scalanie jeszcze nie doszło do skutku.
+/// </param>
+public sealed record RolloverReport(
+    int Moved, int Spawned, int Dropped = 0, int Mended = 0, bool Deferred = false);
 
 /// <summary>
 /// Przejście dnia: zaległe zaplanowane i pominięte wystąpienia serii (spec 8.4, 8.7).
@@ -30,8 +35,80 @@ public sealed class DayRolloverService(
     IUnitOfWork unitOfWork,
     IClock clock,
     IHlcSource hlc,
-    IActivityLog? journal = null)
+    IActivityLog? journal = null,
+    SyncState? sync = null)
 {
+    /// <summary>
+    /// Czy wolno już sądzić o wczorajszym dniu.
+    /// </summary>
+    /// <remarks>
+    /// Brak bramki znaczy „wolno": tak jest w testach i na urządzeniu bez
+    /// synchronizacji, gdzie nie ma drugiego źródła prawdy, na które można by czekać.
+    /// </remarks>
+    private bool Settled => sync is null || sync.Settled;
+
+    /// <summary>
+    /// Wyprostowanie tego, co przejście dnia zrobiło na nieaktualnych danych.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zanim scalanie doszło do skutku, to urządzenie nie wiedziało o wczorajszym dniu
+    /// spędzonym z telefonem w ręku — a przejście dnia sądziło o nim mimo to. Dwa ślady
+    /// po tym wyglądają na różne usterki i są tą samą: zadanie odhaczone, a przeniesione
+    /// na dziś, i wystąpienie serii odhaczone, a z nagrobkiem. W obu wypadkach
+    /// odhaczenie jest zapisem tego, <b>co się wydarzyło</b>, a przejście dnia tylko
+    /// domysłem o tym, co się nie wydarzyło — więc odhaczenie wygrywa.
+    /// </para>
+    /// <para>
+    /// Prostowanie zapisuje się w dzienniku zmian jak każda inna zmiana, więc dochodzi
+    /// na drugie urządzenie i obie strony kończą tak samo. Liczy się z samego wiersza,
+    /// więc oba urządzenia doszłyby do niego i osobno.
+    /// </para>
+    /// <para>
+    /// <b>Czego to nie odróżnia:</b> wystąpienia serii odhaczonego, a potem świadomie
+    /// wyrzuconego do kosza. Taki dzień wróci — ale „odhaczone i wyrzucone" nie jest
+    /// stanem, który ktokolwiek wybiera, a utrata dnia, który się odbył, jest gorsza
+    /// od powrotu dnia, którego ktoś nie chciał widzieć.
+    /// </para>
+    /// </remarks>
+    private async Task<int> MendAsync(CancellationToken ct)
+    {
+        var mended = 0;
+
+        foreach (var task in await tasks.MisrolledAsync(ct))
+        {
+            if (task.CompletedAt is not { } done)
+            {
+                continue;
+            }
+
+            var day = DateOnly.FromDateTime(done.Date);
+
+            if (task.State == TaskState.Trashed)
+            {
+                task.RestoreDone(hlc.Next());
+                mended++;
+                continue;
+            }
+
+            // Dzień późniejszy od wykonania może znaczyć też „zrobione przed czasem"
+            // — ale wtedy nikt tego zadania nie przenosił, a tu są wyłącznie takie,
+            // które przejście dnia przesunęło.
+            if (task.DoDate is { } planned && planned > day)
+            {
+                task.CorrectDay(day, hlc.Next());
+                mended++;
+            }
+        }
+
+        if (mended > 0)
+        {
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        return mended;
+    }
+
     /// <summary>
     /// Co zrobić z zaległym wystąpieniem serii.
     /// </summary>
@@ -97,6 +174,19 @@ public sealed class DayRolloverService(
 
     public async Task<RolloverReport> RunAsync(CancellationToken ct = default)
     {
+        // **Nie przed scaleniem.** Przejście dnia sądzi o wczorajszym dniu z tego, co wie
+        // to urządzenie — a zaraz po uruchomieniu nie wie jeszcze nic o wczorajszym dniu
+        // spędzonym z telefonem w ręku. Sądy są przy tym nieodwracalne: nagrobek na
+        // przegapionym wystąpieniu i przeniesienie zaległego na dziś zapisują się
+        // świeższym znacznikiem niż odhaczenie, więc po scaleniu wygrywają je — zob.
+        // SyncState.
+        if (!Settled)
+        {
+            return new RolloverReport(0, 0, Deferred: true);
+        }
+
+        var mended = await MendAsync(ct);
+
         var now = clock.Now;
         var today = clock.Today;
 
@@ -161,7 +251,17 @@ public sealed class DayRolloverService(
                 ct);
         }
 
-        return new RolloverReport(moved, filled.Added, gone);
+        if (mended > 0 && journal is not null)
+        {
+            await journal.RecordAsync(
+                "Przejście dnia: wyprostowanie odhaczonych",
+                $"{mended} wróciło na swój dzień",
+                ActivityLevel.Ok,
+                null,
+                ct);
+        }
+
+        return new RolloverReport(moved, filled.Added, gone, mended);
     }
 
 }

@@ -61,6 +61,18 @@ public interface ITaskRepository
     /// </summary>
     Task<IReadOnlyList<TaskItem>> OverdueByDoDateAsync(DateOnly today, CancellationToken ct = default);
 
+    /// <summary>
+    /// Zadania, w których przejście dnia zadziałało <b>wbrew odhaczeniu</b>.
+    /// </summary>
+    /// <remarks>
+    /// Dwa kształty tej samej usterki, oba poznawalne po tym, że odhaczenie stoi obok
+    /// śladu po przejściu dnia: zadanie odhaczone, a mimo to przeniesione (licznik
+    /// przeniesień większy od zera), i wystąpienie serii odhaczone, a mimo to
+    /// z nagrobkiem. Zapytanie wąskie, bo chodzi po nim przejście dnia przy każdym
+    /// uruchomieniu.
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> MisrolledAsync(CancellationToken ct = default);
+
     /// <summary>Zadania otwarte z chwilą przypomnienia nie późniejszą niż podana.</summary>
     /// <summary>
     /// Zadania, które mają cokolwiek do przypomnienia — z godziną albo z chwilą.

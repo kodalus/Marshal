@@ -244,6 +244,73 @@ public sealed class DayRolloverServiceTests : IDisposable
         Occurrences(one).Count.Should().Be(before + 1);
     }
 
+    [Fact]
+    public async Task Przejscie_dnia_nie_rusza_przed_scaleniem()
+    {
+        // Zaraz po uruchomieniu to urządzenie nie wie nic o wczorajszym dniu spędzonym
+        // z telefonem w ręku — a sądy przejścia dnia są nieodwracalne i wygrywają potem
+        // scalanie, bo niosą świeższy znacznik niż odhaczenie.
+        var id = Add("Zadzwonić", "2026-09-10").Id;
+
+        var gate = new SyncState();
+
+        var waiting = new DayRolloverService(
+            new TaskRepository(_db), _series, _rhythms, new UnitOfWork(_db),
+            _clock, _hlc, null, gate);
+
+        (await waiting.RunAsync()).Deferred.Should().BeTrue();
+        _db.Tasks.Single(t => t.Id == id).DoDate
+            .Should().Be(D("2026-09-10"), "dopóki nie wiadomo, nic się nie rusza");
+
+        gate.Settle();
+
+        (await waiting.RunAsync()).Moved.Should().Be(1);
+        _db.Tasks.Single(t => t.Id == id).DoDate.Should().Be(D("2026-09-16"));
+    }
+
+    [Fact]
+    public async Task Odhaczone_a_przeniesione_wraca_na_swoj_dzien()
+    {
+        // Objaw: zadanie odhaczone wieczorem na telefonie, rano na pulpicie stoi na dziś.
+        // Przejście dnia zdążyło przed scaleniem i przeniosło je jako zaległe, a scalanie
+        // idzie po polach: stan wygrało odhaczenie, dzień wykonania — przeniesienie.
+        var task = Add("Zadzwonić", "2026-09-15");
+
+        task.RollTo(D("2026-09-16"), _hlc.Next());
+        task.Complete(Evening("2026-09-15"), _hlc.Next());
+        _db.SaveChanges();
+
+        (await _service.RunAsync()).Mended.Should().Be(1);
+
+        var mended = _db.Tasks.Single(t => t.Id == task.Id);
+
+        mended.DoDate.Should().Be(D("2026-09-15"), "zrobione w poniedziałek zostaje w poniedziałek");
+        mended.State.Should().Be(TaskState.Done);
+    }
+
+    [Fact]
+    public async Task Odhaczone_wystapienie_z_nagrobkiem_wraca()
+    {
+        // Ten sam wyścig, drugi kształt: lokalnie wczorajsze wystąpienie wyglądało na
+        // przegapione, a dzisiejsze już stało — więc przejście dnia postawiło na nim
+        // nagrobek. Po scaleniu zostaje dzień odhaczony i skasowany naraz.
+        var one = await Series("Wynieść śmieci", "2026-09-15", OnMissed.Carry);
+
+        var yesterday = Occurrences(one).Single(z => z.DoDate == D("2026-09-15"));
+
+        yesterday.Complete(Evening("2026-09-15"), _hlc.Next());
+        yesterday.Trash(_hlc.Next());
+        _db.SaveChanges();
+
+        (await _service.RunAsync()).Mended.Should().Be(1);
+
+        _db.Tasks.Single(t => t.Id == yesterday.Id).State
+            .Should().Be(TaskState.Done, "odhaczenie jest zapisem tego, co się wydarzyło");
+    }
+
+    private DateTimeOffset Evening(string iso) =>
+        new(D(iso).ToDateTime(new TimeOnly(20, 0)), _clock.Now.Offset);
+
     public void Dispose()
     {
         _db.Dispose();

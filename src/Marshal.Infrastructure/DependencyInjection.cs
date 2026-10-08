@@ -205,6 +205,8 @@ public static class DependencyInjection
         services.AddSingleton<FocusService>();
         services.AddSingleton<NowService>();
         services.AddSingleton<DayPlanService>();
+        // Jedna na uruchomienie: przejście dnia pyta ją, czy wolno mu już ruszyć.
+        services.AddSingleton<SyncState>();
         services.AddSingleton<DayRolloverService>();
         services.AddSingleton<ReminderService>();
         services.AddSingleton<NoteService>();
