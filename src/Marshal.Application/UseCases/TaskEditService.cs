@@ -367,6 +367,20 @@ public sealed class TaskEditService(
         Guid seriesId, CancellationToken ct = default) =>
         series.OccurrencesAsync(seriesId, ct);
 
+    /// <summary>
+    /// Zaległe otwarte zadania — na pasek nad siatką kalendarza.
+    /// </summary>
+    /// <remarks>
+    /// Zadanie zaległe zostaje na swoim dniu, bo przejście dnia przestało je przesuwać
+    /// na dziś. Na listach widać je dalej — biorą wszystko z dniem nie późniejszym niż
+    /// dziś — ale siatka pokazuje dzień po dniu, więc rzecz umówiona na zeszły wtorek
+    /// zniknęłaby z oczu z chwilą przewinięcia tygodnia. Pasek jest odpowiedzią na to
+    /// jedno: mówi, że coś wisi, i mówi, z którego dnia.
+    /// </remarks>
+    public Task<IReadOnlyList<TaskItem>> OverdueAsync(
+        DateOnly today, CancellationToken ct = default) =>
+        tasks.OverdueByDoDateAsync(today, ct);
+
     /// <summary>Zadanie po identyfikatorze — do wejścia w dzień z ekranu serii.</summary>
     public Task<TaskItem?> ByIdAsync(Guid id, CancellationToken ct = default) =>
         tasks.FindAsync(id, ct);

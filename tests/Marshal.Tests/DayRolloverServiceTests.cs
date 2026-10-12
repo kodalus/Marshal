@@ -126,14 +126,18 @@ public sealed class DayRolloverServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Zalegle_zaplanowane_laduja_na_dzis()
+    public async Task Zalegle_zaplanowane_zostaje_na_swoim_dniu()
     {
+        // Przejście dnia nie dotyka już zwykłych zadań wcale. Listy pokazują je mimo to
+        // — biorą wszystko z dniem nie późniejszym niż dziś — a na siatce mówi o nich
+        // pasek zaległych. Zyskiem jest to, że przejście dnia przestało cokolwiek
+        // zapisywać, więc nie ma już czym przegrać z odhaczeniem z drugiego urządzenia.
         var id = Add("Zadzwonić", "2026-09-10").Id;
 
         var report = await _service.RunAsync();
 
-        report.Moved.Should().Be(1);
-        _db.Tasks.Single(t => t.Id == id).DoDate.Should().Be(D("2026-09-16"));
+        report.Moved.Should().Be(0);
+        _db.Tasks.Single(t => t.Id == id).DoDate.Should().Be(D("2026-09-10"));
     }
 
     [Fact]
@@ -250,7 +254,8 @@ public sealed class DayRolloverServiceTests : IDisposable
         // Zaraz po uruchomieniu to urządzenie nie wie nic o wczorajszym dniu spędzonym
         // z telefonem w ręku — a sądy przejścia dnia są nieodwracalne i wygrywają potem
         // scalanie, bo niosą świeższy znacznik niż odhaczenie.
-        var id = Add("Zadzwonić", "2026-09-10").Id;
+        var one = await Series("Wynieść śmieci", "2026-09-09", OnMissed.Skip);
+        var missed = Occurrences(one).Single(z => z.DoDate == D("2026-09-09")).Id;
 
         var gate = new SyncState();
 
@@ -259,13 +264,13 @@ public sealed class DayRolloverServiceTests : IDisposable
             _clock, _hlc, null, gate);
 
         (await waiting.RunAsync()).Deferred.Should().BeTrue();
-        _db.Tasks.Single(t => t.Id == id).DoDate
-            .Should().Be(D("2026-09-10"), "dopóki nie wiadomo, nic się nie rusza");
+        _db.Tasks.Single(t => t.Id == missed).State
+            .Should().Be(TaskState.Scheduled, "dopóki nie wiadomo, nagrobek nie powstaje");
 
         gate.Settle();
 
-        (await waiting.RunAsync()).Moved.Should().Be(1);
-        _db.Tasks.Single(t => t.Id == id).DoDate.Should().Be(D("2026-09-16"));
+        (await waiting.RunAsync()).Dropped.Should().BeGreaterThan(0);
+        _db.Tasks.Single(t => t.Id == missed).State.Should().Be(TaskState.Trashed);
     }
 
     [Fact]
@@ -317,10 +322,10 @@ public sealed class DayRolloverServiceTests : IDisposable
         // wtedy słuszne — nieprawdziwe stało się przez to, co właśnie przyszło.
         var task = Add("Zadzwonić", "2026-09-15");
 
-        await _service.RunAsync();
-
-        _db.Tasks.Single(t => t.Id == task.Id).DoDate
-            .Should().Be(D("2026-09-16"), "w tej chwili nikt nie wiedział o odhaczeniu");
+        // Przeniesienie z czasów, gdy przejście dnia jeszcze je robiło: takie wiersze
+        // leżą w bazie u każdego, kto aplikacji używał wcześniej.
+        task.RollTo(D("2026-09-16"), _hlc.Next());
+        _db.SaveChanges();
 
         task.Complete(Evening("2026-09-15"), _hlc.Next());
         _db.SaveChanges();

@@ -68,6 +68,9 @@ public static class RecurrenceText
         return sentence.ToString();
     }
 
+    private static bool Open(TaskState state) =>
+        state is TaskState.Next or TaskState.Scheduled or TaskState.Waiting;
+
     /// <summary>Stan zadania po polsku: zaległość, przesunięcia, termin.</summary>
     public static IReadOnlyList<string> Badges(
         TaskItem task, DateOnly today, RecurrenceRule? rule = null)
@@ -75,7 +78,15 @@ public static class RecurrenceText
         ArgumentNullException.ThrowIfNull(task);
         var labels = new List<string>();
 
-        if (task.CarriedSince is { } od)
+        // Zaległość z dnia wykonania, bo on już się nie rusza: przejście dnia przestało
+        // przesuwać zadania na dziś. Pole „zaległe od" zostaje dla zapisów sprzed tej
+        // zmiany — tam dzień został nadpisany i prawdy nie ma już skąd wziąć.
+        var since = task.CarriedSince
+            ?? (Open(task.State) && task.DoDate is { } planned && planned < today
+                ? planned
+                : null);
+
+        if (since is { } od)
         {
             labels.Add($"zaległe od {od:yyyy-MM-dd}");
         }

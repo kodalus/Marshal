@@ -189,16 +189,26 @@ public sealed class ReviewQueries(MarshalDbContext db, IDbQueue? queue = null)
     public async Task<IReadOnlyList<CounterFlag>> CounterFlagsAsync(
         DateOnly today, CancellationToken ct = default)
     {
+        // Zaległość liczona z dnia wykonania, bo przejście dnia przestało go przesuwać:
+        // zadanie umówione miesiąc temu **ma** dzień sprzed miesiąca i to jest cała
+        // odpowiedź. Pole „zaległe od" zostaje dla zapisów sprzed tej zmiany — tam dzień
+        // został nadpisany na dzisiejszy i prawdy nie ma już skąd wziąć.
+        var stale = today.AddDays(-30);
+
         var open = await _queue.RunAsync(() => Open()
-            .Where(t => t.RollCount >= 4 || t.FocusMissCount >= 4 || t.CarriedSince != null)
+            .Where(t => t.RollCount >= 4
+                     || t.FocusMissCount >= 4
+                     || t.CarriedSince != null
+                     || (t.DoDate != null && t.DoDate < stale))
             .ToListAsync(ct), ct);
 
         var flags = new List<CounterFlag>();
 
         foreach (var task in open)
         {
-            // N12: przenoszone dłużej niż trzydzieści dni.
-            if (task.CarriedSince is { } od && today.DayNumber - od.DayNumber > 30)
+            // N12: zaległe dłużej niż trzydzieści dni.
+            if ((task.CarriedSince ?? task.DoDate) is { } od
+                && today.DayNumber - od.DayNumber > 30)
             {
                 flags.Add(new CounterFlag(
                     task,

@@ -153,14 +153,24 @@ public static class RecurrenceRunner
 
         if (rule is null)
         {
-            // Zwykłe zaplanowane zadanie: przesunięcie z licznikiem (spec 8.7).
-            // Termin (Deadline) celowo nie jest ruszany — to fakt zewnętrzny, świat się
-            // nie przesunął, więc minięcie zostaje przeterminowaniem (N5).
-            if (task.State == TaskState.Scheduled)
-            {
-                task.RollTo(today, stamp());
-            }
-
+            // **Zwykłe zadanie zostaje na swoim dniu.** Przesuwało się na dziś z licznikiem
+            // i to był najstarszy kawałek tego modelu — a nie zostało po nim ani jedno
+            // uzasadnienie, które by się obroniło:
+            //
+            // — „inaczej wypadnie z oczu" nieprawda: lista „Dzisiaj" bierze wszystko
+            //   z dniem **nie późniejszym** niż dziś, a plan dnia wprost przewiduje
+            //   zadanie z wcześniejszego dnia (pokazuje je bez godziny);
+            // — wystąpienia serii nie przesuwają się od przebudowy okna i nikomu tego
+            //   nie brakowało — dzień jest tam częścią tożsamości wiersza;
+            // — przesunięcie **kasuje fakt**: po nim nigdzie nie stoi, że rzecz była
+            //   umówiona na wtorek, bo samo nie zapisywało, od kiedy zadanie zalega;
+            // — a przede wszystkim był to automatyczny zapis do pola scalanego, robiony
+            //   przy starcie. Wygrywał przez to z odhaczeniem zrobionym ręką na drugim
+            //   urządzeniu — i to jest ta usterka, która wracała trzy razy.
+            //
+            // Zaległość liczy się dziś z samego dnia wykonania, bo on już się nie rusza.
+            // Termin (Deadline) nie był ruszany nigdy: to fakt zewnętrzny, świat się
+            // nie przesunął (N5).
             return null;
         }
 

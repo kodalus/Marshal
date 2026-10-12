@@ -149,7 +149,7 @@ public sealed class SeriesMirror(
                 "Kalendarz: wysłanie serii",
                 $"{template.Title} — pominięta",
                 ActivityLevel.Problem,
-                $"Strefy „{settings.Zone.Id}" nie da się przełożyć na nazwę, którą zna "
+                $"Strefy „{settings.Zone.Id}” nie da się przełożyć na nazwę, którą zna "
                 + "Google. Wydarzenie cykliczne bez strefy rozwijałoby się w złej porze, "
                 + "więc nie jedzie nic.",
                 ct);

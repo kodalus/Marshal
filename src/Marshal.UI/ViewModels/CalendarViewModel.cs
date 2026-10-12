@@ -248,6 +248,18 @@ public sealed record AllDayBox(
     public string Label => IsDone ? $"✓ {Title}" : Title;
 }
 
+/// <summary>
+/// Wpis na pasku zaległych — zadanie, które zostało na swoim dniu.
+/// </summary>
+/// <remarks>
+/// Pasek powstał razem ze zdjęciem przenoszenia zaległych na dziś. Siatka pokazuje dzień
+/// po dniu, więc rzecz umówiona na zeszły wtorek znika z oczu z chwilą przewinięcia
+/// tygodnia — a to był jedyny powód, dla którego przenoszenie w ogóle istniało. Pasek
+/// odpowiada na to wprost i taniej: mówi, że coś wisi, i mówi, z którego dnia, nie
+/// ruszając przy tym ani dnia zadania, ani niczego w bazie.
+/// </remarks>
+public sealed record OverdueBox(Guid TaskId, string Title, string When);
+
 /// <summary>Jeden dzień siatki gotowy do narysowania.</summary>
 public sealed record CalendarColumn(
     DateOnly Date,
@@ -736,6 +748,43 @@ public sealed partial class CalendarViewModel(
     /// </summary>
     public event Action<Guid>? TaskRequested;
 
+    /// <summary>Zaległe zadania — pasek nad siatką, w kolejności dni.</summary>
+    public ObservableCollection<OverdueBox> Overdue { get; } = [];
+
+    public bool HasOverdue => Overdue.Count > 0;
+
+    /// <summary>Wejście w zaległe zadanie prosto z paska.</summary>
+    [RelayCommand]
+    private void OpenOverdue(OverdueBox? entry)
+    {
+        if (entry is not null)
+        {
+            TaskRequested?.Invoke(entry.TaskId);
+        }
+    }
+
+    private async Task LoadOverdueAsync()
+    {
+        var today = clock.Today;
+
+        Overdue.Clear();
+
+        foreach (var task in await edit.OverdueAsync(today))
+        {
+            if (task.DoDate is not { } day)
+            {
+                continue;
+            }
+
+            Overdue.Add(new OverdueBox(
+                task.Id,
+                task.Title,
+                $"{DayNames[((int)day.DayOfWeek + 6) % 7]} {day.Day:00}.{day.Month:00}"));
+        }
+
+        OnPropertyChanged(nameof(HasOverdue));
+    }
+
     /// <summary>Otwarcie wpisu z paska całodniowego — zadania albo wydarzenia.</summary>
     public void OpenAllDay(AllDayBox? entry)
     {
@@ -1063,6 +1112,10 @@ public sealed partial class CalendarViewModel(
         var count = IsMonth ? GridDays() : VisibleDays;
 
         _days = await calendar.AgendaAsync(od, count);
+
+        // Zaległe niezależnie od pokazywanego zakresu: pasek ma mówić, że coś wisi,
+        // także wtedy, gdy ten dzień jest o trzy tygodnie wstecz.
+        await LoadOverdueAsync();
 
         if (IsMonth)
         {

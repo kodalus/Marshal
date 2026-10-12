@@ -163,39 +163,34 @@ public sealed class RecurrenceRunnerTests
     // --- przejście dnia (8.4 tabela, 8.7) ------------------------------------
 
     [Fact]
-    public void Zwykle_zaplanowane_przesuwa_sie_na_dzis_z_licznikiem()
+    public void Zwykle_zaplanowane_zostaje_na_swoim_dniu()
     {
+        // Przesuwało się na dziś z licznikiem i nie zostało po tym ani jedno
+        // uzasadnienie, które by się obroniło. „Inaczej wypadnie z oczu" jest
+        // nieprawdą — listy biorą wszystko z dniem nie późniejszym niż dziś —
+        // a przesunięcie kasowało fakt, że rzecz była umówiona na czwartek, i robiło
+        // automatyczny zapis do pola scalanego, który wygrywał z odhaczeniem
+        // zrobionym ręką na drugim urządzeniu.
         var task = Zaplanowane("2026-09-10");
 
         RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel).Should().BeNull();
 
-        task.DoDate.Should().Be(D("2026-09-16"));
-        task.RollCount.Should().Be(1);
+        task.DoDate.Should().Be(D("2026-09-10"), "dzień jest zapisem decyzji, nie stanem");
+        task.RollCount.Should().Be(0);
         task.State.Should().Be(TaskState.Scheduled);
     }
 
     [Fact]
-    public void Przesuniecie_nie_rusza_terminu()
+    public void Przejscie_dnia_nie_rusza_terminu()
     {
         // Termin to fakt zewnętrzny — świat się nie przesunął, więc minięcie zostaje
-        // przeterminowaniem (N5). Data wykonania to obietnica dana sobie, i to ona idzie.
+        // przeterminowaniem (N5).
         var task = Zaplanowane("2026-09-10");
         task.SetDeadline(D("2026-09-12"), Stempel());
 
         RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
 
         task.Deadline.Should().Be(D("2026-09-12"));
-    }
-
-    [Fact]
-    public void Przejscie_dnia_puszczone_dwa_razy_liczy_raz()
-    {
-        var task = Zaplanowane("2026-09-10");
-
-        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
-        RecurrenceRunner.Rollover(task, Moment("2026-09-16"), Stempel);
-
-        task.RollCount.Should().Be(1);
     }
 
     [Fact]
