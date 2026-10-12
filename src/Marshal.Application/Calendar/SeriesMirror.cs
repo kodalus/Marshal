@@ -92,7 +92,21 @@ public sealed class SeriesMirror(
 
         foreach (var one in pending)
         {
-            await PushAsync(one, ct);
+            // Wywrotka zjadana **tutaj**, a nie puszczana wyżej, i seria odkładana na
+            // bok. Bez tego jedna seria, której Google nie przyjmuje, wracała co minutę
+            // z tym samym komunikatem i dwoma wpisami w dzienniku — po godzinie dziennik
+            // nie zawierał już nic poza nią. Powód jest zapisany raz, w PushAsync, a
+            // kolejna próba należy do następnego uruchomienia: do tego czasu i tak nic
+            // się nie zmieni.
+            try
+            {
+                await PushAsync(one, ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                _hopeless.Add(one.Id);
+                continue;
+            }
 
             if (one.SharedEventId is null)
             {
@@ -124,6 +138,20 @@ public sealed class SeriesMirror(
                 ActivityLevel.Ok,
                 "Rytm liczony od wykonania nie ma dat do wysłania: kolejny dzień "
                 + "wyznacza się dopiero przy odhaczeniu poprzedniego.",
+                ct);
+
+            return;
+        }
+
+        if (Zone() is null)
+        {
+            await journal.RecordAsync(
+                "Kalendarz: wysłanie serii",
+                $"{template.Title} — pominięta",
+                ActivityLevel.Problem,
+                $"Strefy „{settings.Zone.Id}" nie da się przełożyć na nazwę, którą zna "
+                + "Google. Wydarzenie cykliczne bez strefy rozwijałoby się w złej porze, "
+                + "więc nie jedzie nic.",
                 ct);
 
             return;
@@ -292,6 +320,7 @@ public sealed class SeriesMirror(
         var template = one.Template;
         var name = EventMark.Strip(template.Title);
         var day = one.Starts;
+        var zone = Zone();
 
         // Bez godziny — wydarzenie całodniowe. Zgadnięta godzina zrobiłaby z cyklu
         // spotkanie o ósmej rano, którego nikt nie umawiał. Koniec dnia później, bo
@@ -301,13 +330,17 @@ public sealed class SeriesMirror(
             var dayStart = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
             return new CalendarDraft(
-                name, dayStart, dayStart.AddDays(1), AllDay: true, Recurrence: lines);
+                name, dayStart, dayStart.AddDays(1),
+                AllDay: true, Recurrence: lines, TimeZone: zone);
         }
 
         var local = day.ToDateTime(time);
         var start = new DateTimeOffset(local, settings.Zone.GetUtcOffset(local));
         var length = TimeSpan.FromMinutes(template.EstimatedMinutes ?? DefaultMinutes);
 
-        return new CalendarDraft(name, start, start + length, Recurrence: lines);
+        return new CalendarDraft(
+            name, start, start + length, Recurrence: lines, TimeZone: zone);
     }
+
+    private string? Zone() => SeriesRrule.IanaName(settings.Zone);
 }

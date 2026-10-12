@@ -102,6 +102,19 @@ public sealed class SeriesRruleTests
     }
 
     [Fact]
+    public void Strefa_idzie_nazwa_ktora_zna_Google()
+    {
+        // Wydarzenie cykliczne bez strefy Google odrzuca — „Missing time zone definition
+        // for start time" — bo rozwinięcie reguły wymaga wiedzy, czym jest „ósma rano"
+        // po zmianie czasu.
+        //
+        // Gałęzi windowsowej ten przebieg nie dotyka: na Linuksie, gdzie chodzi CI,
+        // strefa ma nazwę IANA od razu. Przekład z nazwy windowsowej sprawdzi dopiero
+        // pulpit — i to jest ta jedna rzecz tutaj, której nie zamyka test.
+        SeriesRrule.IanaName(Warsaw).Should().Be("Europe/Warsaw");
+    }
+
+    [Fact]
     public void Rytm_od_wykonania_nie_ma_czego_wyslac()
     {
         // „Co 3 dni od wykonania" nie ma dat, dopóki poprzednie wystąpienie nie zostanie

@@ -40,7 +40,24 @@ public sealed record CalendarDraft(
     /// przy zmianie nazwy zamiast sześćdziesięciu.
     /// </para>
     /// </remarks>
-    IReadOnlyList<string>? Recurrence = null);
+    IReadOnlyList<string>? Recurrence = null,
+
+    /// <summary>
+    /// Strefa czasowa początku i końca — nazwą IANA, na przykład „Europe/Warsaw".
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wydarzeniu jednorazowemu niepotrzebna: chwila z przesunięciem mówi wszystko,
+    /// co trzeba. <b>Wydarzenie cykliczne bez niej Google odrzuca</b> — i słusznie,
+    /// bo rozwinięcie reguły wymaga wiedzy, czym jest „ósma rano" po zmianie czasu.
+    /// Chwila z przesunięciem zna tylko to jedno przesunięcie, więc po ostatniej
+    /// niedzieli października cała seria wypadałaby godzinę obok.
+    /// </para>
+    /// <para>
+    /// Nazwą IANA, nie windowsową: Google nie zna „Central European Standard Time".
+    /// </para>
+    /// </remarks>
+    string? TimeZone = null);
 
 /// <summary>
 /// Zapis do kalendarza zewnętrznego (spec 10.2).

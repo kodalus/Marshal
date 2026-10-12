@@ -423,8 +423,8 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     {
         Summary = draft.Title,
         Location = draft.Location,
-        Start = When(draft.Start, draft.AllDay),
-        End = When(draft.End, draft.AllDay),
+        Start = When(draft.Start, draft.AllDay, draft.TimeZone),
+        End = When(draft.End, draft.AllDay, draft.TimeZone),
 
         // Powtarzalność tylko wtedy, gdy ją podano. Łatanie nie dotyka pól niepodanych,
         // więc puste zostawia cudzą regułę w spokoju — a wyczyszczenie jej przy
@@ -440,10 +440,14 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
     /// jako chwila o północy czasu lokalnego wypadałoby u kogoś na wschód dzień
     /// wcześniej — a „wzięte na dziś" ma znaczyć dziś u każdego, kto to widzi.
     /// </remarks>
-    private static EventDateTime When(DateTimeOffset moment, bool allDay) =>
+    private static EventDateTime When(DateTimeOffset moment, bool allDay, string? zone) =>
         allDay
-            ? new EventDateTime { Date = moment.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) }
-            : new EventDateTime { DateTimeDateTimeOffset = moment };
+            ? new EventDateTime
+            {
+                Date = moment.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                TimeZone = zone,
+            }
+            : new EventDateTime { DateTimeDateTimeOffset = moment, TimeZone = zone };
 
     /// <summary>Usługa konta — głównego, gdy konto puste.</summary>
     private async Task<CalendarService> ServiceAsync(string? account, CancellationToken ct)

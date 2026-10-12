@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.ObjectModel;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -63,7 +64,9 @@ public sealed partial class JournalViewModel(IActivityLog log, IClock clock) : O
         foreach (var entry in visible)
         {
             Rows.Add(new JournalRow(
-                entry.At.ToOffset(zone).ToString("MM-dd HH:mm:ss"),
+                // Dzień przed miesiącem, jak wszędzie tutaj. „10-12" czyta się
+                // w Polsce jako dziesiąty grudnia, a znaczyło dwunastego października.
+                entry.At.ToOffset(zone).ToString("dd-MM HH:mm:ss", CultureInfo.InvariantCulture),
                 entry.Operation,
                 entry.Outcome,
                 entry.Detail,

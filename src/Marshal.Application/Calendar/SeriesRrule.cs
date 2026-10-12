@@ -91,6 +91,35 @@ public static class SeriesRrule
         return [$"RRULE:{string.Join(';', parts)}"];
     }
 
+    /// <summary>
+    /// Strefa w postaci, którą rozumie Google — nazwą IANA. Puste, gdy się nie da.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wydarzenie cykliczne bez strefy Google odrzuca: <c>Missing time zone definition
+    /// for start time</c>. I ma rację — rozwinięcie reguły wymaga wiedzy, czym jest
+    /// „ósma rano" po zmianie czasu, a sama chwila z przesunięciem zna tylko to jedno
+    /// przesunięcie, w którym ją policzono. Bez strefy seria po ostatniej niedzieli
+    /// października wypadałaby godzinę obok.
+    /// </para>
+    /// <para>
+    /// Windows nazywa strefy po swojemu („Central European Standard Time") i tej nazwy
+    /// Google nie zna. Przekład jest w .NET; gdyby się nie udał, lepiej nie wysłać nic
+    /// niż wysłać serię rozwijającą się w złej porze — stąd pustka zamiast zgadywania.
+    /// </para>
+    /// </remarks>
+    public static string? IanaName(TimeZoneInfo zone)
+    {
+        ArgumentNullException.ThrowIfNull(zone);
+
+        if (zone.HasIanaId)
+        {
+            return zone.Id;
+        }
+
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(zone.Id, out var iana) ? iana : null;
+    }
+
     private static string Frequency(RecurrenceKind kind) => kind switch
     {
         RecurrenceKind.Daily or RecurrenceKind.EveryNDays => "DAILY",
