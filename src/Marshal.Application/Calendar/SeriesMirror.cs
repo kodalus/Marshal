@@ -181,10 +181,37 @@ public sealed class SeriesMirror(
             return;
         }
 
+        // Tożsamość wyliczona z serii — zob. SeriesEventId. Podawana **przy zakładaniu**,
+        // bo tylko tam jest czym rozstrzygnąć wyścig dwóch urządzeń; przy łataniu
+        // tożsamość wskazuje adres żądania, a podana w treści znaczyłaby prośbę o jej
+        // zmianę.
+        var wanted = SeriesEventId.For(one.Id);
+
         try
         {
-            var id = await calendar.SaveEventAsync(
-                calendarId, one.SharedEventId, Draft(one, lines), ct);
+            string id;
+
+            if (one.SharedEventId is { Length: > 0 } standing)
+            {
+                try
+                {
+                    id = await calendar.SaveEventAsync(
+                        calendarId, standing, Draft(one, lines), ct);
+                }
+                catch (EventGone)
+                {
+                    // Wydarzenia, na które wskazywaliśmy, już nie ma — ktoś skasował je
+                    // w kalendarzu. Zakładamy je od nowa i tym razem pod tożsamością
+                    // wyliczoną, żeby nie zależało to od tego, które urządzenie zdążyło.
+                    id = await calendar.SaveEventAsync(
+                        calendarId, null, Draft(one, lines, wanted), ct);
+                }
+            }
+            else
+            {
+                id = await calendar.SaveEventAsync(
+                    calendarId, null, Draft(one, lines, wanted), ct);
+            }
 
             if (id != one.SharedEventId || one.SharedCalendarId != calendarId)
             {
@@ -315,7 +342,7 @@ public sealed class SeriesMirror(
     /// działa tu tak samo jak nasze okno: dzień początku należy do rytmu z definicji,
     /// a nie dlatego, że pasuje do wzoru.
     /// </remarks>
-    private CalendarDraft Draft(TaskSeries one, IReadOnlyList<string> lines)
+    private CalendarDraft Draft(TaskSeries one, IReadOnlyList<string> lines, string? id = null)
     {
         var template = one.Template;
         var name = EventMark.Strip(template.Title);
@@ -331,7 +358,7 @@ public sealed class SeriesMirror(
 
             return new CalendarDraft(
                 name, dayStart, dayStart.AddDays(1),
-                AllDay: true, Recurrence: lines, TimeZone: zone);
+                AllDay: true, Recurrence: lines, TimeZone: zone, Id: id);
         }
 
         var local = day.ToDateTime(time);
@@ -339,7 +366,7 @@ public sealed class SeriesMirror(
         var length = TimeSpan.FromMinutes(template.EstimatedMinutes ?? DefaultMinutes);
 
         return new CalendarDraft(
-            name, start, start + length, Recurrence: lines, TimeZone: zone);
+            name, start, start + length, Recurrence: lines, TimeZone: zone, Id: id);
     }
 
     private string? Zone() => SeriesRrule.IanaName(settings.Zone);

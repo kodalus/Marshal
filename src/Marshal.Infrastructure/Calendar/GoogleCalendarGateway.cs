@@ -230,6 +230,15 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
         {
             throw new InvalidOperationException(ReadOnlyMessage, e);
         }
+        catch (GoogleApiException e)
+            when (e.HttpStatusCode == HttpStatusCode.Conflict && draft.Id is { Length: > 0 } mine)
+        {
+            // „Taki już jest" — czyli drugie urządzenie zdążyło pierwsze i założyło
+            // **to samo** wydarzenie, bo tożsamość liczy się z naszej strony, a nie
+            // z kolejności. To jest skutek, o który chodziło, nie awaria: przyjmujemy
+            // identyfikator za swój i treść dojdzie przy najbliższym wyrównaniu.
+            return mine;
+        }
 
         return created.Id
             ?? throw new InvalidOperationException(
@@ -421,6 +430,9 @@ public sealed class GoogleCalendarGateway(ISettings settings, string databasePat
 
     private static Event Build(CalendarDraft draft) => new()
     {
+        // Tożsamość tylko przy zakładaniu; przy łataniu wskazuje ją adres żądania,
+        // a podana w treści znaczyłaby prośbę o jej zmianę.
+        Id = draft.Id,
         Summary = draft.Title,
         Location = draft.Location,
         Start = When(draft.Start, draft.AllDay, draft.TimeZone),

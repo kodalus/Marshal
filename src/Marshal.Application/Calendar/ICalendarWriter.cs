@@ -57,7 +57,19 @@ public sealed record CalendarDraft(
     /// Nazwą IANA, nie windowsową: Google nie zna „Central European Standard Time".
     /// </para>
     /// </remarks>
-    string? TimeZone = null);
+    string? TimeZone = null,
+
+    /// <summary>
+    /// Tożsamość proponowana przy <b>zakładaniu</b> wydarzenia. Puste znaczy „nadaj sam".
+    /// </summary>
+    /// <remarks>
+    /// Po to, żeby dwa urządzenia zakładające to samo wydarzenie założyły <b>jedno</b>.
+    /// Bez niej każde dostaje od źródła własny identyfikator i w kalendarzu stają dwa
+    /// wpisy na jedną rzecz — a nasza strona zna tylko ten, który wygrał scalanie, więc
+    /// drugiego nie ma już jak ani rozpoznać, ani sprzątnąć. Z nią drugie urządzenie
+    /// dostaje odmowę „taki już jest" i przyjmuje go za swój.
+    /// </remarks>
+    string? Id = null);
 
 /// <summary>
 /// Zapis do kalendarza zewnętrznego (spec 10.2).
