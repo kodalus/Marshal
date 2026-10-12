@@ -1296,6 +1296,19 @@ public sealed partial class MainViewModel : ObservableObject
                 CollectReminders();
             }
 
+            // Prostowanie po **każdym** scaleniu, które coś przyniosło, a nie tylko przy
+            // przejściu dnia.
+            //
+            // Bramka przed przejściem dnia zamyka wyścig z własnym scalaniem, ale nie
+            // zamyka tego: telefon mógł odhaczyć wczoraj wieczorem, a wysłać dopiero
+            // teraz — bo leżał bez zasięgu albo jego synchronizacja nie zdążyła. W chwili
+            // przejścia dnia tej wiedzy nie było **u nikogo**, więc przeniesienie na dziś
+            // było wtedy słuszne i stało się nieprawdziwe dopiero przez to, co właśnie
+            // przyszło. Prostowanie jest więc odpowiedzią na nową wiedzę, nie na nowy
+            // dzień — i dlatego siedzi tutaj, a nie tylko w przejściu dnia, które w tym
+            // uruchomieniu już się odbyło i samo się nie powtórzy.
+            await Try("Przejście dnia: wyprostowanie", () => _dayRollover.MendAsync());
+
             await ReloadAsync();
         }
 

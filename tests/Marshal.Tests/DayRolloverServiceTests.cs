@@ -308,6 +308,30 @@ public sealed class DayRolloverServiceTests : IDisposable
             .Should().Be(TaskState.Done, "odhaczenie jest zapisem tego, co się wydarzyło");
     }
 
+    [Fact]
+    public async Task Odhaczenie_przyniesione_scalaniem_prostuje_przeniesienie_od_razu()
+    {
+        // Bramka przed przejściem dnia zamyka wyścig z własnym scalaniem, ale nie zamyka
+        // tego: telefon odhaczył wczoraj wieczorem, a wysłał dopiero teraz. W chwili
+        // przejścia dnia tej wiedzy nie było u nikogo, więc przeniesienie na dziś było
+        // wtedy słuszne — nieprawdziwe stało się przez to, co właśnie przyszło.
+        var task = Add("Zadzwonić", "2026-09-15");
+
+        await _service.RunAsync();
+
+        _db.Tasks.Single(t => t.Id == task.Id).DoDate
+            .Should().Be(D("2026-09-16"), "w tej chwili nikt nie wiedział o odhaczeniu");
+
+        task.Complete(Evening("2026-09-15"), _hlc.Next());
+        _db.SaveChanges();
+
+        // Prostowanie jako odpowiedź na nową wiedzę, a nie na nowy dzień: przejście dnia
+        // w tym uruchomieniu już się odbyło i samo się nie powtórzy.
+        (await _service.MendAsync()).Should().Be(1);
+
+        _db.Tasks.Single(t => t.Id == task.Id).DoDate.Should().Be(D("2026-09-15"));
+    }
+
     private DateTimeOffset Evening(string iso) =>
         new(D(iso).ToDateTime(new TimeOnly(20, 0)), _clock.Now.Offset);
 

@@ -71,7 +71,7 @@ public sealed class DayRolloverService(
     /// od powrotu dnia, którego ktoś nie chciał widzieć.
     /// </para>
     /// </remarks>
-    private async Task<int> MendAsync(CancellationToken ct)
+    public async Task<int> MendAsync(CancellationToken ct = default)
     {
         var mended = 0;
 
@@ -104,6 +104,16 @@ public sealed class DayRolloverService(
         if (mended > 0)
         {
             await unitOfWork.SaveChangesAsync(ct);
+
+            if (journal is not null)
+            {
+                await journal.RecordAsync(
+                    "Przejście dnia: wyprostowanie odhaczonych",
+                    $"{mended} wróciło na swój dzień",
+                    ActivityLevel.Ok,
+                    null,
+                    ct);
+            }
         }
 
         return mended;
@@ -199,6 +209,12 @@ public sealed class DayRolloverService(
         var moved = 0;
         var gone = 0;
 
+        // Nazwy przeniesionych do dziennika. Trzy rundy nad „odhaczone, a przeniesione
+        // na dziś" poszły na odtwarzanie z pamięci, co i kiedy się ruszyło; wpis
+        // z nazwami i godziną odpowiada na to sam, a porównany z godziną wpisu
+        // o synchronizacji mówi też, czy przeniesienie wyprzedziło scalanie.
+        var carried = new List<string>();
+
         // Wszystkie wystąpienia serii, nie tylko zaległe. Odpowiedź na „to już
         // przepadło" zależy od tego, czy ten rytm wypadł od tamtej pory jeszcze raz —
         // a wystąpienie, które je zastępuje, jest zwykle umówione **na dziś**, czyli
@@ -226,6 +242,7 @@ public sealed class DayRolloverService(
             if (before != (task.DoDate, task.RollCount, task.CarriedSince))
             {
                 moved++;
+                carried.Add(task.Title);
             }
         }
 
@@ -241,21 +258,21 @@ public sealed class DayRolloverService(
         // bez zaglądania do bazy. Brak takiego wpisu kosztował już jedną rundę przy
         // sklejaniu kopii serii: nie dało się odróżnić „nie było czego zabrać" od
         // „w ogóle nie doszło".
-        if (gone > 0 && journal is not null)
+        if (moved > 0 && journal is not null)
         {
             await journal.RecordAsync(
-                "Przejście dnia: zamknięcie zaległych wystąpień",
-                $"{gone} do kosza",
+                "Przejście dnia: przeniesione na dziś",
+                $"{moved}: {string.Join(", ", carried)}",
                 ActivityLevel.Ok,
                 null,
                 ct);
         }
 
-        if (mended > 0 && journal is not null)
+        if (gone > 0 && journal is not null)
         {
             await journal.RecordAsync(
-                "Przejście dnia: wyprostowanie odhaczonych",
-                $"{mended} wróciło na swój dzień",
+                "Przejście dnia: zamknięcie zaległych wystąpień",
+                $"{gone} do kosza",
                 ActivityLevel.Ok,
                 null,
                 ct);
