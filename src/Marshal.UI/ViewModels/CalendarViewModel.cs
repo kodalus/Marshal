@@ -2039,6 +2039,7 @@ public sealed partial class CalendarViewModel(
             && block.CanWrite;
 
         OnPropertyChanged(nameof(CanEditOpenedTimes));
+        OnPropertyChanged(nameof(CanAdoptOpened));
         OnPropertyChanged(nameof(HasOpenedProblem));
 
         _ = LoadAreasAsync(block);
@@ -2258,6 +2259,75 @@ public sealed partial class CalendarViewModel(
 
     /// <summary>Czy jest dokąd przekładać. Bez przypisanych obszarów pole nie ma sensu.</summary>
     public bool CanMoveOpened => CanEditOpened && EventAreas.Count > 0;
+
+    /// <summary>
+    /// Czy otwarte wydarzenie da się przejąć na własność.
+    /// </summary>
+    /// <remarks>
+    /// Tylko wydarzenie z godziną i tylko z kalendarza, do którego wolno pisać. Godzina,
+    /// bo pasek całodniowy otwiera kartę z dniem **oglądanego zakresu**, a nie z dniem
+    /// wpisu — przejęcie postawiłoby wtedy zadanie na złym dniu. Prawo zapisu, bo zadanie
+    /// od tej chwili łata swoje wydarzenie przy każdym zapisie, a do kalendarza
+    /// świątecznego czy cudzego udostępnionego nie ma czym.
+    /// </remarks>
+    public bool CanAdoptOpened =>
+        CanEditOpened && OpenedStart is not null && Opened is { IsTask: false, IsAhead: false };
+
+    /// <summary>
+    /// Przejęcie wydarzenia na własność: od teraz jest zadaniem Marshala.
+    /// </summary>
+    /// <remarks>
+    /// Bez zakładania drugiego wpisu — zadanie wskazuje to wydarzenie jako swoje odbicie,
+    /// więc siatka przestaje rysować je osobno, a wysyłka do kalendarza łata je zamiast
+    /// tworzyć obok. Karta zadania otwiera się od razu, bo po to się przejmuje: żeby
+    /// dopisać obszar, notatkę albo przypomnienie.
+    /// </remarks>
+    [RelayCommand]
+    private async Task AdoptOpenedAsync()
+    {
+        if (Opened is not { SourceId: { } source, ExternalId: { } id } block
+            || OpenedStart is not { } from)
+        {
+            return;
+        }
+
+        try
+        {
+            var day = DateOnly.ParseExact(block.DayText, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+            var area = await calendar.AreaOfCalendarAsync(source);
+
+            var minutes = OpenedEnd is { } to && to > from
+                ? (int)(to - from).TotalMinutes
+                : (int?)null;
+
+            var adopted = await edit.AdoptEventAsync(
+                source,
+                id,
+                EventMark.Strip(block.Title),
+                day,
+                TimeOnly.FromTimeSpan(from),
+                minutes,
+                area?.Id);
+
+            await log.RecordAsync("Kalendarz: przejęcie wydarzenia", block.Title);
+
+            Opened = null;
+            await RefreshAsync();
+
+            if (adopted is { } task)
+            {
+                TaskRequested?.Invoke(task.Id);
+            }
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            OpenedProblem = e.Message;
+            OnPropertyChanged(nameof(HasOpenedProblem));
+
+            await log.RecordAsync(
+                "Kalendarz: przejęcie wydarzenia", block.Title, ActivityLevel.Problem, e.Message);
+        }
+    }
 
     partial void OnEventAreaChanged(Area? value)
     {
@@ -2578,6 +2648,7 @@ public sealed partial class CalendarViewModel(
     partial void OnOpenedChanged(SlotBox? value)
     {
         OnPropertyChanged(nameof(HasOpened));
+        OnPropertyChanged(nameof(CanAdoptOpened));
         OnPropertyChanged(nameof(CanCompleteOpened));
         OnPropertyChanged(nameof(IsOpenedAhead));
         OnPropertyChanged(nameof(CanEditOpenedTimes));

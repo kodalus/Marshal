@@ -38,8 +38,14 @@ public sealed class TaskItem : Entity
     /// termin i reszta dochodzą dopiero przy przetwarzaniu, bo formularz przy wrzucaniu
     /// zabija zbieranie, a system bez zbierania jest pusty w ciągu tygodnia.
     /// </summary>
-    public static TaskItem Capture(string title, DateTimeOffset now, Hlc stamp) =>
-        new(Guid.CreateVersion7(), now, stamp, title);
+    /// <param name="id">
+    /// Tożsamość podana z zewnątrz — gdy zadanie ma być <b>tą samą rzeczą</b> co na
+    /// drugim urządzeniu. Tak powstaje zadanie przejmujące wydarzenie z kalendarza:
+    /// liczy się je z kalendarza i wydarzenia, więc dwa przejęcia składają się w jedno
+    /// zamiast stawać obok siebie. Puste znaczy „wylosuj", czyli zwykły wrzut.
+    /// </param>
+    public static TaskItem Capture(string title, DateTimeOffset now, Hlc stamp, Guid? id = null) =>
+        new(id ?? Guid.CreateVersion7(), now, stamp, title);
 
     public string Title { get; private set; }
 

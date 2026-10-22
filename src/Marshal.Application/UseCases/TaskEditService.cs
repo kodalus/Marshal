@@ -1,6 +1,7 @@
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
+using Marshal.Domain.Calendar;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Series;
 using Marshal.Domain.Tasks;
@@ -380,6 +381,84 @@ public sealed class TaskEditService(
     public Task<IReadOnlyList<TaskItem>> OverdueAsync(
         DateOnly today, CancellationToken ct = default) =>
         tasks.OverdueByDoDateAsync(today, ct);
+
+    /// <summary>
+    /// Przejęcie wydarzenia z kalendarza na własność — jako zadanie Marshala.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Wydarzenie z Google jest u nas <b>kopią</b>: wiersz pamięci podręcznej odczytu,
+    /// sprzątany przy każdym pełnym przeczytaniu kalendarza i nieniosący niczego, czego
+    /// Google nie ma — ani obszaru, ani notatki, ani przypomnienia. Zadanie jest czymś
+    /// odwrotnym: zapisem, który powstaje u nas i jedzie dziennikiem zmian.
+    /// </para>
+    /// <para>
+    /// Przejęcie zamienia jedno w drugie <b>bez zakładania drugiego wpisu</b>: zadanie
+    /// od razu wskazuje istniejące wydarzenie jako swoje odbicie, więc wysyłka do
+    /// kalendarza łata je zamiast tworzyć obok. Siatka przestaje przy tym rysować
+    /// wydarzenie osobno — dzień rysuje zadanie, bo wskazane wydarzenia są odsiewane.
+    /// </para>
+    /// <para>
+    /// <b>Tożsamość wyliczona</b> z kalendarza i wydarzenia, więc przejęcie tego samego
+    /// wpisu na dwóch urządzeniach daje jedno zadanie, nie dwa — zob. <see cref="AdoptedId"/>.
+    /// Powtórne przejęcie oddaje to, co już jest, i niczego nie zmienia.
+    /// </para>
+    /// </remarks>
+    /// <param name="areaId">
+    /// Obszar kalendarza, gdy go ma. Bez niego pierwszy czynny — zadanie z dniem musi
+    /// gdzieś należeć (N11), a wrzut bez obszaru nie miałby dnia.
+    /// </param>
+    public async Task<TaskItem?> AdoptEventAsync(
+        Guid calendarId,
+        string externalId,
+        string title,
+        DateOnly day,
+        TimeOnly? time,
+        int? minutes,
+        Guid? areaId = null,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(externalId);
+
+        var id = AdoptedId.For(calendarId, externalId);
+
+        if (await tasks.FindAsync(id, ct) is { } already)
+        {
+            return already;
+        }
+
+        if ((areaId ?? (await areas.ActiveAsync(ct)).FirstOrDefault()?.Id) is not { } where)
+        {
+            throw new InvalidOperationException(
+                "Nie ma żadnego czynnego obszaru, a zadanie z dniem musi do któregoś należeć.");
+        }
+
+        var task = TaskItem.Capture(title.Trim(), clock.Now, hlc.Next(), id);
+
+        task.Schedule(where, day, hlc.Next());
+
+        if (time is { } at)
+        {
+            task.SetDoTime(at, hlc.Next());
+        }
+
+        if (minutes is > 0)
+        {
+            task.SetEstimate(minutes, task.Energy, hlc.Next());
+        }
+
+        // Wskazanie **przed** zapisem i bez wysyłki: wydarzenie już stoi w kalendarzu
+        // i jest dokładnie tym, co zadanie opisuje. Wysłanie czegokolwiek tutaj byłoby
+        // łataniem wpisu tym samym, czym jest — a przy pominiętym wskazaniu założyłoby
+        // drugi i skończyło się duplikatem, czyli dokładnie tym, czemu przejęcie
+        // ma zapobiegać.
+        task.Share(calendarId, externalId, hlc.Next());
+
+        tasks.Add(task);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        return task;
+    }
 
     /// <summary>Zadanie po identyfikatorze — do wejścia w dzień z ekranu serii.</summary>
     public Task<TaskItem?> ByIdAsync(Guid id, CancellationToken ct = default) =>

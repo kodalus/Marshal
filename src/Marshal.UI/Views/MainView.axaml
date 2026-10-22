@@ -1907,6 +1907,9 @@
                        Text="Skasowanego wydarzenia nie da się odzyskać — ani w Marshalu, ani w Google." />
           </StackPanel>
 
+          <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding CanAdoptOpened}"
+                     Text="„Zamień w zadanie” przejmuje to wydarzenie na własność: dostaje obszar, notatkę, przypomnienie i podzadania, a w Google zostaje tym samym wpisem — Marshal od tej pory go poprawia, zamiast zakładać drugi." />
+
           <TextBlock Classes="hint" TextWrapping="Wrap" IsVisible="{Binding !CanEditOpenedTimes}"
                      Text="Ten kalendarz jest tylko do odczytu — zmiany rób tam, gdzie wydarzenie powstało." />
 
@@ -1927,6 +1930,13 @@
                     Command="{Binding SaveOpenedCommand}" Content="Zapisz" />
             <Button Classes="nav" IsVisible="{Binding CanEditOpened}"
                     Command="{Binding DeleteOpenedCommand}" Content="Skasuj" />
+            <!-- Przejęcie wydarzenia na własność. Wydarzenie z Google jest u nas kopią:
+                 wierszem pamięci podręcznej odczytu, bez obszaru, notatki i przypomnienia,
+                 sprzątanym przy każdym pełnym przeczytaniu kalendarza. Tędy staje się
+                 zadaniem — bez zakładania drugiego wpisu, bo zadanie wskazuje to samo
+                 wydarzenie jako swoje odbicie. -->
+            <Button Classes="nav" IsVisible="{Binding CanAdoptOpened}"
+                    Command="{Binding AdoptOpenedCommand}" Content="Zamień w zadanie" />
             <Button Classes="nav" IsVisible="{Binding IsOpenedAhead}"
                     Command="{Binding DetachOpenedCommand}" Content="Zamień w zadanie" />
             <Button Classes="nav" IsVisible="{Binding IsOpenedAhead}"

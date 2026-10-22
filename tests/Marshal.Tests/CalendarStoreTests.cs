@@ -622,6 +622,55 @@ public sealed class CalendarStoreTests : IDisposable
     /// zapisują: nie mają własnego identyfikatora, tylko wskazanie zadania z regułą.
     /// </remarks>
     [Fact]
+    public async Task Przejete_wydarzenie_wskazuje_ten_sam_wpis_i_znika_z_cudzych()
+    {
+        // Wydarzenie z Google jest u nas kopią: wierszem pamięci podręcznej odczytu,
+        // bez obszaru, notatki i przypomnienia. Przejęcie zamienia je w zadanie
+        // **bez zakładania drugiego wpisu** — zadanie wskazuje to samo wydarzenie jako
+        // swoje odbicie, więc wysyłka je łata, a siatka przestaje rysować je osobno.
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Zdrowie", 0);
+        _db.Areas.Add(area);
+        _db.SaveChanges();
+
+        var adopted = await _edit.AdoptEventAsync(
+            _source.Id, "sen-2026-09-16", "Sen",
+            new DateOnly(2026, 9, 16), new TimeOnly(23, 0), 480, area.Id);
+
+        adopted.Should().NotBeNull();
+        adopted!.SharedCalendarId.Should().Be(_source.Id);
+        adopted.SharedEventId.Should().Be("sen-2026-09-16", "to jest to samo wydarzenie");
+        adopted.DoDate.Should().Be(new DateOnly(2026, 9, 16));
+        adopted.DoTime.Should().Be(new TimeOnly(23, 0));
+        adopted.EstimatedMinutes.Should().Be(480);
+        adopted.AreaId.Should().Be(area.Id);
+
+        // Wskazane wydarzenia są odsiewane przy rysowaniu, więc dzień pokazuje zadanie,
+        // a nie zadanie **i** wydarzenie.
+        (await new TaskRepository(_db).MirroredEventIdsAsync())
+            .Should().Contain("sen-2026-09-16");
+    }
+
+    [Fact]
+    public async Task Przejecie_tego_samego_wydarzenia_dwa_razy_daje_jedno_zadanie()
+    {
+        // Przejąć ten sam wpis można na dwóch urządzeniach, zanim którekolwiek zdąży
+        // o tym powiedzieć drugiemu. Tożsamość liczy się z kalendarza i wydarzenia,
+        // więc oba dochodzą do tego samego wiersza zamiast stawiać dwa.
+        var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Zdrowie", 0);
+        _db.Areas.Add(area);
+        _db.SaveChanges();
+
+        var first = await _edit.AdoptEventAsync(
+            _source.Id, "sen", "Sen", new DateOnly(2026, 9, 16), new TimeOnly(23, 0), 480, area.Id);
+
+        var second = await _edit.AdoptEventAsync(
+            _source.Id, "sen", "Sen", new DateOnly(2026, 9, 16), new TimeOnly(23, 0), 480, area.Id);
+
+        second!.Id.Should().Be(first!.Id);
+        _db.Tasks.Count(t => t.SharedEventId == "sen").Should().Be(1);
+    }
+
+    [Fact]
     public async Task Rytm_rysuje_sie_na_przyszlych_dniach()
     {
         var area = new Area(Guid.CreateVersion7(), _clock.Now, _hlc.Next(), "Dom", 0);
