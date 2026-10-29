@@ -25,7 +25,7 @@ namespace Marshal.Application.Calendar;
 /// dnia, który okno wylicza.
 /// </para>
 /// <para>
-/// <b>Dni odwołane jadą razem z regułą</b>, jako <c>EXDATE</c>. Droga przez samo
+/// <b>Dni wyjęte z rytmu jadą razem z regułą</b>, jako <c>EXDATE</c>. Droga przez samo
 /// wystąpienie — odwołanie go w Google po jego identyfikatorze — wyglądała czyściej
 /// i jest w tym modelu gorsza: identyfikator wystąpienia nadaje Google, więc trzeba by
 /// go najpierw od niego wydobyć, a dwa urządzenia pomijające ten sam dzień wysłałyby

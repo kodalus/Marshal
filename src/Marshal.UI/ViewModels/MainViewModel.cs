@@ -2215,6 +2215,25 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Wyjęcie z kosza — z archiwum, bo tam się trafia, gdy czegoś brakuje.
+    /// </summary>
+    /// <remarks>
+    /// Pominięcie wystąpienia kosztuje jedno kliknięcie i do dziś nie dawało się cofnąć
+    /// niczym: dzień przepadał, a postawienie go z ręki zakładało obok zadanie bez
+    /// serii. Archiwum jest właściwym miejscem na tę czynność — pominięty dzień stoi
+    /// w nim na samej górze zaraz po pominięciu, bo porządek idzie po chwili zmiany.
+    /// </remarks>
+    [RelayCommand]
+    public async Task ReviveTaskAsync(TaskItem? task)
+    {
+        if (task is not null)
+        {
+            await _edit.ReviveAsync(task.Id);
+            await ReloadAsync();
+        }
+    }
+
+    /// <summary>
     /// Odhaczenie z listy. Idzie przez szczegół, bo zadanie powtarzalne musi przy
     /// okazji zrodzić kolejne wystąpienie (8.4) — a z listy tego nie widać.
     /// </summary>

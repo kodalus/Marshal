@@ -3186,17 +3186,25 @@
     <!-- Archiwum -->
     <DockPanel IsVisible="{Binding IsArchive}">
       <TextBlock DockPanel.Dock="Top" Classes="hint" Margin="0,0,0,8"
-                 Text="Wykonane i wyrzucone, najnowsze pierwsze. Nic nie znika z bazy." />
+                 Text="Wykonane i wyrzucone, ostatnie zmiany pierwsze. Nic nie znika z bazy." />
       <ListBox ItemsSource="{Binding ArchiveItems}" DoubleTapped="OpenFromList">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:TaskRow">
-            <Grid ColumnDefinitions="*,Auto" Margin="0,4">
-              <StackPanel Grid.Column="0">
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,4">
+              <StackPanel Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Opacity="0.75" />
                 <TextBlock Classes="hint" Text="{Binding Badges}"
                            IsVisible="{Binding HasBadges}" TextWrapping="Wrap" />
               </StackPanel>
-              <TextBlock Grid.Column="1" Classes="hint" Text="{Binding Fate}" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Classes="hint" Text="{Binding Fate}"
+                         VerticalAlignment="Center" Margin="0,0,8,0" />
+              <!-- Cofnięcie pominięcia i wyrzucenia. Stoi tutaj, bo tu się trafia,
+                   gdy dnia brakuje — a porządek archiwum stawia to, co właśnie
+                   przepadło, na samej górze. -->
+              <Button Grid.Column="2" Content="Przywróć" Padding="10,4"
+                      VerticalAlignment="Center" IsVisible="{Binding CanRevive}"
+                      Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).ReviveTaskCommand}"
+                      CommandParameter="{Binding Task}" />
             </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>

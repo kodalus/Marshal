@@ -128,7 +128,7 @@ public sealed class TaskQueryTests : IDisposable
     }
 
     [Fact]
-    public async Task Archiwum_zwraca_najnowsze_pierwsze_i_obejmuje_kosz()
+    public async Task Archiwum_zwraca_ostatnie_zmiany_pierwsze_i_obejmuje_kosz()
     {
         var clock = new Clock();
         Add("starsze", t => t.Complete(clock.Now.AddDays(-2), Stamp()));
@@ -137,8 +137,17 @@ public sealed class TaskQueryTests : IDisposable
 
         var result = await _tasks.ArchiveAsync(limit: 10);
 
-        result.Should().HaveCount(3);
-        result.First().Title.Should().Be("nowsze");
+        // Wyrzucone **pierwsze**, bo wyrzucenie było ostatnią z tych trzech rzeczy,
+        // które się stały. Porządek idzie po znaczniku zmiany, a nie po chwili
+        // wykonania — wyrzucone chwili wykonania nie ma, więc spadało na dzień
+        // utworzenia wiersza. Przy wystąpieniu serii to dzień, w którym okno je
+        // postawiło, często kilka tygodni wstecz: dzień pominięty dzisiaj lądował
+        // w środku listy albo za jej dwusetnym wierszem i z ekranu wyglądało to tak,
+        // jakby pominięcie nie zapisało się wcale.
+        //
+        // Ceną jest to, że zadanie poprawione długo po odhaczeniu wraca na górę.
+        // Tak ma być: archiwum odpowiada na pytanie „co się ostatnio stało".
+        result.Select(t => t.Title).Should().Equal("wyrzucone", "nowsze", "starsze");
     }
 
     [Fact]

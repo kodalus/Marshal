@@ -892,6 +892,37 @@ public sealed class TaskItem : Entity
     }
 
     /// <summary>
+    /// Wyjęcie z kosza — zadanie znowu jest do zrobienia.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Stan odtwarzany z tego, co w wierszu stoi, a nie pamiętany. Kolumna „stan przed
+    /// koszem" byłaby polem scalanym założonym dla jednej czynności, którą da się
+    /// rozstrzygnąć bez niej — i to tą samą regułą, co przy zdjęciu ptaszka: z dniem
+    /// do zaplanowanych, bez dnia do następnych akcji, bez obszaru do skrzynki.
+    /// </para>
+    /// <para>
+    /// <b>Pominięcie wystąpienia rytmu wraca tą samą drogą</b>, bo jest wyrzuceniem
+    /// jednego dnia. Znacznika „zmienione z ręki" nie stawia się tutaj, a w usłudze:
+    /// domena nie wie, czy dzień wraca z pomyłki, czy z uzgodnienia okna.
+    /// </para>
+    /// </remarks>
+    public void Revive(Hlc stamp)
+    {
+        if (State != TaskState.Trashed)
+        {
+            throw new InvalidOperationException("Wyjąć z kosza można tylko zadanie wyrzucone.");
+        }
+
+        State = AreaId is null
+            ? TaskState.Inbox
+            : DoDate is null ? TaskState.Next : TaskState.Scheduled;
+
+        CompletedAt = null;
+        Touch(stamp);
+    }
+
+    /// <summary>
     /// Poprawienie dnia wykonania bez liczenia tego jako przeniesienia.
     /// </summary>
     /// <remarks>

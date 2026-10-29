@@ -1065,6 +1065,48 @@ public sealed class PrzezCalaTraseTests : IDisposable
     }
 
     [Fact]
+    public async Task Pominiete_wystapienie_da_sie_wyjac_z_kosza()
+    {
+        // „Pomiń to wystąpienie" kosztuje jedno kliknięcie i nie dawało się cofnąć
+        // niczym: dzień przepadał, a postawienie go z ręki zakładało obok zadanie bez
+        // serii. Czynność jednego kliknięcia musi dać się cofnąć jednym kliknięciem.
+        var task = await ZaplanowaneAsync("Trening");
+
+        var detail = NewService<TaskDetailViewModel>();
+        await detail.LoadAsync(task);
+        detail.SelectedRepeat = RepeatChoice.All.Single(r => r.Kind == RecurrenceKind.Daily);
+
+        await detail.SaveAsync();
+
+        var tasks = NewService<ITaskRepository>();
+        var series = NewService<ITaskSeriesRepository>();
+        var mine = (await tasks.FindAsync(task.Id))!.SeriesId!.Value;
+
+        // Dzień z okna, a nie ten, od którego seria się zaczęła: tamten jest zmieniony
+        // z ręki od samego początku, więc nie pokazałby, co robi wyjęcie z kosza.
+        var day = (await series.OccurrencesAsync(mine))
+            .Where(z => z.Id != task.Id)
+            .OrderBy(z => z.DoDate)
+            .First();
+
+        var edit = NewService<TaskEditService>();
+
+        await edit.SkipOccurrenceAsync(day.Id);
+        (await tasks.FindAsync(day.Id))!.State.Should().Be(TaskState.Trashed);
+
+        await edit.ReviveAsync(day.Id);
+
+        var back = (await tasks.FindAsync(day.Id))!;
+
+        back.State.Should().Be(TaskState.Scheduled, "dzień z datą wraca jako zaplanowany");
+        back.DoDate.Should().Be(day.DoDate, "wraca na swój dzień, nie na dzisiejszy");
+        back.SeriesId.Should().Be(mine, "wraca jako wystąpienie serii, a nie zadanie obok niej");
+        back.Overridden.Should().BeTrue(
+            "wyjęcie z kosza jest świadomą decyzją o tym dniu — bez tego znacznika "
+            + "uzgodnienie okna zabrałoby go z powrotem");
+    }
+
+    [Fact]
     public async Task Koniec_rytmu_po_wystapieniach_i_po_dacie_dojezdza_do_bazy()
     {
         var task = await ZaplanowaneAsync("Kurs");

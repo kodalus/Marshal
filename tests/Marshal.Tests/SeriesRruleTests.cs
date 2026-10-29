@@ -115,7 +115,7 @@ public sealed class SeriesRruleTests
     }
 
     [Fact]
-    public void Dni_odwolane_ida_osobna_linia_jako_chwile_uniwersalne()
+    public void Dni_wyjete_z_rytmu_ida_osobna_linia_jako_chwile_uniwersalne()
     {
         // Wyjęcie musi trafić w wystąpienie co do sekundy, więc liczone jest
         // z przesunięcia strefy **tego dnia**: pierwszy z dni leży jeszcze w czasie
@@ -132,7 +132,7 @@ public sealed class SeriesRruleTests
     }
 
     [Fact]
-    public void Dni_odwolane_w_cyklu_calodniowym_ida_samymi_datami()
+    public void Dni_wyjete_w_cyklu_calodniowym_ida_samymi_datami()
     {
         // Postać musi zgadzać się z postacią początku wydarzenia. Chwila podana przy
         // wydarzeniu całodniowym nie trafia w nic i dzień zostaje w kalendarzu.
@@ -147,7 +147,7 @@ public sealed class SeriesRruleTests
     }
 
     [Fact]
-    public void Dni_odwolane_sa_uporzadkowane_i_bez_powtorzen()
+    public void Dni_wyjete_sa_uporzadkowane_i_bez_powtorzen()
     {
         // To samo wejście ma dawać ten sam napis niezależnie od kolejności, w jakiej
         // dni przyszły: inaczej dwa urządzenia z tą samą wiedzą wysyłałyby różne pola
@@ -163,7 +163,7 @@ public sealed class SeriesRruleTests
     }
 
     [Fact]
-    public void Bez_dni_odwolanych_nie_ma_osobnej_linii()
+    public void Bez_dni_wyjetych_nie_ma_osobnej_linii()
     {
         SeriesRrule.Lines(new RecurrenceRule(RecurrenceKind.Daily), null, null, Warsaw, [])
             .Should().ContainSingle();

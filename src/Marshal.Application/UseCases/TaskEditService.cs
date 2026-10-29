@@ -776,7 +776,7 @@ public sealed class TaskEditService(
         if (journal is not null)
         {
             await journal.RecordAsync(
-                "Zadanie: odwołane wystąpienie",
+                "Zadanie: pominięte wystąpienie",
                 task.DoDate is { } day ? $"{task.Title} — {day:dd-MM}" : task.Title,
                 ct: ct);
         }
@@ -785,37 +785,109 @@ public sealed class TaskEditService(
         // po co pokazywać osobie, której było udostępnione.
         //
         // Dzień z serii odbicia nie ma — niesie je samo wydarzenie cykliczne, więc
-        // odwołanie dnia jedzie do Google razem z nim, jako EXDATE. Wysyłka siedzi
+        // pominięcie dnia jedzie do Google razem z nim, jako EXDATE. Wysyłka siedzi
         // przy serii i stąd ją wołamy: bez tego pominięty dzień zostawał w cudzym
         // kalendarzu, choć w Marshalu już go nie było.
         await MirrorAsync(task, ct);
-
-        if (task.SeriesId is { } rhythm && await series.FindAsync(rhythm, ct) is { } one)
-        {
-            // Wywrotka zjadana tutaj. Pominięcie dnia zdarzyło się u nas i jest
-            // zapisane; nieudana wyprawa do Google nie ma prawa go cofnąć ani zabrać
-            // ze sobą przerysowania ekranu. Powód zapisuje sama wysyłka serii.
-            try
-            {
-                await rhythms.MirrorAsync(one, ct);
-            }
-            catch (Exception e) when (e is not OperationCanceledException)
-            {
-                if (journal is not null)
-                {
-                    await journal.RecordAsync(
-                        "Zadanie: odwołane wystąpienie",
-                        task.Title,
-                        ActivityLevel.Problem,
-                        $"Odwołanie nie dojechało do kalendarza ({e.GetType().Name}: "
-                        + $"{e.Message}). W Marshalu dnia nie ma, w kalendarzu zostaje "
-                        + "do najbliższej zmiany serii.",
-                        ct);
-                }
-            }
-        }
+        await MirrorRhythmAsync(task, ct);
 
         return next;
+    }
+
+    /// <summary>
+    /// Wyrównanie wydarzenia cyklicznego po zmianie jednego dnia.
+    /// </summary>
+    /// <remarks>
+    /// Pominięcie dnia i wyjęcie go z kosza zmieniają <b>zadanie</b>, a widać je
+    /// w kalendarzu przez serię — dzień z cyklu własnego wydarzenia nie ma. Lista dni
+    /// wyjętych z rytmu liczy się z nagrobków, więc jedno wysłanie serii wystarczy
+    /// w obie strony: pominięty dzień do niej wchodzi, wyjęty z kosza z niej wypada.
+    ///
+    /// <b>Wywrotka zjadana tutaj.</b> Zmiana zdarzyła się u nas i jest zapisana;
+    /// nieudana wyprawa do Google nie ma prawa jej cofnąć ani zabrać ze sobą
+    /// przerysowania ekranu.
+    /// </remarks>
+    private async Task MirrorRhythmAsync(TaskItem task, CancellationToken ct)
+    {
+        if (task.SeriesId is not { } rhythm || await series.FindAsync(rhythm, ct) is not { } one)
+        {
+            return;
+        }
+
+        try
+        {
+            await rhythms.MirrorAsync(one, ct);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            if (journal is not null)
+            {
+                await journal.RecordAsync(
+                    "Kalendarz: dzień z rytmu",
+                    task.Title,
+                    ActivityLevel.Problem,
+                    $"Zmiana nie dojechała do wydarzenia cyklicznego ({e.GetType().Name}: "
+                    + $"{e.Message}). W Marshalu jest zapisana, w kalendarzu zostaje "
+                    + "po staremu do najbliższej zmiany serii.",
+                    ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Wyjęcie z kosza — cofnięcie pominięcia wystąpienia albo wyrzucenia zadania.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// „Pomiń to wystąpienie" kosztuje jedno kliknięcie z menu podręcznego, a stoi
+    /// w nim obok odhaczenia — więc omyłkowe zdarza się tak samo łatwo jak właściwe.
+    /// Cofnięcia nie było <b>żadnego</b>: dzień przepadał, a postawienie go z ręki nie
+    /// przywracało wystąpienia, tylko zakładało obok zadanie bez serii. To jest ta sama
+    /// luka, co kiedyś przy odhaczeniu, i domyka się tą samą zasadą: czynność jednego
+    /// kliknięcia musi dać się cofnąć jednym kliknięciem.
+    /// </para>
+    /// <para>
+    /// <b>Dzień wrócony jest zmieniony z ręki.</b> Bez tego znacznika uzgadnianie okna
+    /// zabrałoby go z powrotem przy najbliższym przebiegu wszędzie tam, gdzie reguła
+    /// przestała go już wyznaczać — a wyjęcie z kosza jest świadomą decyzją o tym dniu,
+    /// czyli dokładnie tym, co ten znacznik znaczy.
+    /// </para>
+    /// <para>
+    /// Zadanie, które przy pominięciu zrodziło następnika (rytm ze starego modelu,
+    /// niesiony przez samo wystąpienie), wraca tu <b>bez reguły</b>: regułę ma już
+    /// następnik i zostaje przy nim. Cofnięcie jest więc pełne dla dnia z serii,
+    /// a dla takiego zadania oddaje sam dzień.
+    /// </para>
+    /// </remarks>
+    public async Task<TaskItem?> ReviveAsync(Guid id, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } task)
+        {
+            return null;
+        }
+
+        if (task.State != TaskState.Trashed)
+        {
+            return task;
+        }
+
+        task.Revive(hlc.Next());
+        Pin(task);
+
+        await unitOfWork.SaveChangesAsync(ct);
+
+        if (journal is not null)
+        {
+            await journal.RecordAsync(
+                task.SeriesId is null ? "Zadanie: wyjęte z kosza" : "Zadanie: wrócone wystąpienie",
+                task.DoDate is { } day ? $"{task.Title} — {day:dd-MM}" : task.Title,
+                ct: ct);
+        }
+
+        await MirrorAsync(task, ct);
+        await MirrorRhythmAsync(task, ct);
+
+        return task;
     }
 
     /// <summary>

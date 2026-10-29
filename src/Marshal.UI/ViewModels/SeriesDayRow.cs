@@ -43,12 +43,16 @@ public sealed record SeriesDayRow(Guid Id, string When, string Mark, bool IsGone
             : "bez dnia";
 
         // Jedno słowo na dzień i wybrane w tej kolejności: najpierw to, co się z dniem
-        // stało, potem to, co ktoś z nim zrobił. Dzień odwołany bywa jednocześnie
-        // zmieniony z ręki — bo odwołanie jest zmianą z ręki — a napis „zmienione"
+        // stało, potem to, co ktoś z nim zrobił. Dzień pominięty bywa jednocześnie
+        // zmieniony z ręki — bo pominięcie jest zmianą z ręki — a napis „zmienione"
         // na dniu, którego nie będzie, mówi o nim najmniej.
+        //
+        // „Pominięte", bo tak nazywa się czynność, którą się to robi. „Odwołane" znaczy
+        // w tym programie coś innego: wyjęcie z rytmu dnia, którego jeszcze nie ma,
+        // zapisane w regule, a nie nagrobek na istniejącym wierszu.
         var mark = task.State switch
         {
-            TaskState.Trashed => "odwołane",
+            TaskState.Trashed => "pominięte",
             TaskState.Done => "odhaczone",
             _ when task.Overridden => "zmienione z ręki",
             _ => string.Empty,

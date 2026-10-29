@@ -65,12 +65,21 @@ public sealed record TaskRow(TaskItem Task, string Badges)
     /// Dzień z cyklu idzie do kosza jedyną drogą, jaką ma — „pomiń to wystąpienie" —
     /// i „w koszu" mówi o nim nieprawdę: nikt go nie wyrzucił, ten jeden raz się nie
     /// odbył. W archiwum było to jedyne, co o takim dniu stało, i brzmiało jak pomyłka.
+    /// Słowo to samo, co w menu, którym się to robi: „odwołane" znaczy w tym programie
+    /// coś innego — odwołanie wystąpienia, którego jeszcze nie ma, zapisane w regule.
     /// </remarks>
     public string Fate => IsDone
         ? "zrobione"
         : IsTrashed
-            ? (Task.SeriesId is null ? "w koszu" : "odwołane")
+            ? (Task.SeriesId is null ? "w koszu" : "pominięte")
             : string.Empty;
+
+    /// <summary>Czy da się to wyjąć z kosza.</summary>
+    /// <remarks>
+    /// Przy wykonanym nie: zdjęcie ptaszka jest osobną czynnością i stoi przy zadaniu
+    /// na liście, a nie w archiwum. Tu chodzi o cofnięcie wyrzucenia.
+    /// </remarks>
+    public bool CanRevive => IsTrashed;
 
     public bool HasFate => Fate.Length > 0;
 
