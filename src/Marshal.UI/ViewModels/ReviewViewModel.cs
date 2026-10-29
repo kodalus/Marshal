@@ -193,31 +193,30 @@ public sealed partial class ReviewViewModel(
             return;
         }
 
+        // Najpierw odczyty, potem podmiana list — zob. NowViewModel.
+        var items = await review.ItemsAsync(Steps[StepIndex].Step, _session);
+        IReadOnlyList<Note> pinned = IsPinnedStep ? await notes.PinnedAsync() : [];
+        IReadOnlyList<AreaBalance> balance =
+            IsBalanceStep ? await queries.BalanceAsync(clock.Today) : [];
+
         Items.Clear();
-        foreach (var item in await review.ItemsAsync(Steps[StepIndex].Step, _session))
+        foreach (var item in items)
         {
             Items.Add(item);
         }
 
         Pinned.Clear();
-        if (IsPinnedStep)
+        foreach (var note in pinned)
         {
-            foreach (var note in await notes.PinnedAsync())
-            {
-                Pinned.Add(note);
-            }
+            Pinned.Add(note);
         }
 
         OnPropertyChanged(nameof(HasPinned));
 
         Balance.Clear();
-        if (IsBalanceStep)
+        foreach (var row in balance)
         {
-            foreach (var row in await queries.BalanceAsync(
-                clock.Today))
-            {
-                Balance.Add(row);
-            }
+            Balance.Add(row);
         }
 
         TotalRemaining = (await review.CountsAsync()).Total;

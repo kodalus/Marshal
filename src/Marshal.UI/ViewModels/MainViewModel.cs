@@ -446,7 +446,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public ObservableCollection<TaskItem> SomedayItems { get; } = [];
 
-    public ObservableCollection<TaskItem> ArchiveItems { get; } = [];
+    public ObservableCollection<TaskRow> ArchiveItems { get; } = [];
 
     public ObservableCollection<ProjectTreeRow> ProjectRows { get; } = [];
 
@@ -1773,7 +1773,11 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task ShowArchiveAsync()
     {
         Current = Screen.Archive;
-        await FillPlain(ArchiveItems, _tasks.ArchiveAsync(limit: 200));
+
+        // Wierszem listy, nie samym zadaniem: wiersz wie, co się z zadaniem stało,
+        // i umie to powiedzieć po polsku. Stała tu dotąd nazwa stanu wprost z typu,
+        // czyli „Done" i „Trashed" — jedyne dwa angielskie słowa w aplikacji.
+        await Fill(ArchiveItems, _tasks.ArchiveAsync(limit: 200));
     }
 
     /// <summary>Dzisiaj w strefie z ustawień — dla menu, które samo zegara nie ma.</summary>

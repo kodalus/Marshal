@@ -114,9 +114,13 @@ public sealed partial class NowViewModel(NowService now, TaskEditService edit) :
     {
         Unestimated = await now.UnestimatedCountAsync();
 
+        // Najpierw odczyt, potem podmiana: opróżnienie przed odczytem pokazuje pustą
+        // odpowiedź przez cały czas jego trwania, a przy wywrotce zostawia ją na stałe.
+        var picks = await now.PickAsync(
+            SelectedMinutes.Minutes, SelectedEnergy.Value, AlsoSomeday);
+
         Picks.Clear();
-        foreach (var pick in await now.PickAsync(
-            SelectedMinutes.Minutes, SelectedEnergy.Value, AlsoSomeday))
+        foreach (var pick in picks)
         {
             Picks.Add(pick);
         }

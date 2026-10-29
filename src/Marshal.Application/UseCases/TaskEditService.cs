@@ -1,7 +1,9 @@
+using System.Globalization;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Calendar;
+using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Series;
 using Marshal.Domain.Tasks;
@@ -48,7 +50,14 @@ public sealed class TaskEditService(
     IAreaRepository areas,
     ITaskMirror mirror,
     ITaskSeriesRepository series,
-    SeriesService rhythms)
+    SeriesService rhythms,
+
+    /// <summary>
+    /// Dziennik. Osobno zaznaczony jako nieobowiązkowy, bo ta usługa stawiana jest
+    /// w testach z ręki w kilkunastu miejscach, a wpis nie jest warunkiem poprawności
+    /// żadnej z tych ścieżek.
+    /// </summary>
+    IActivityLog? journal = null)
 {
     /// <summary>
     /// Wyrównanie odbicia w kalendarzu po zapisie.
@@ -761,9 +770,55 @@ public sealed class TaskEditService(
 
         await unitOfWork.SaveChangesAsync(ct);
 
+        // **Ślad w dzienniku stąd, a nie z okna.** Pominięcie robi się z dwóch miejsc —
+        // z menu podręcznego na liście i z kosza w karcie zadania — a zapisywało się
+        // tylko z drugiego. Dzień, który zniknął z siatki po kliknięciu w menu, nie
+        // zostawiał więc po sobie nic: ani w „Co się działo", ani w archiwum, bo wiersz
+        // wyrzucony nie ma chwili wykonania i leżał w nim na swoim dniu utworzenia.
+        // Czynność zapisuje się tam, gdzie się dzieje.
+        if (journal is not null)
+        {
+            await journal.RecordAsync(
+                "Zadanie: odwołane wystąpienie",
+                task.DoDate is { } day
+                    ? $"{task.Title} — {day.ToString("dd-MM", CultureInfo.InvariantCulture)}"
+                    : task.Title,
+                ct: ct);
+        }
+
         // Odbicie w kalendarzu idzie za zadaniem: wyrzuconego wystąpienia nie ma już
         // po co pokazywać osobie, której było udostępnione.
+        //
+        // Dzień z serii odbicia nie ma — niesie je samo wydarzenie cykliczne, więc
+        // odwołanie dnia jedzie do Google razem z nim, jako EXDATE. Wysyłka siedzi
+        // przy serii i stąd ją wołamy: bez tego pominięty dzień zostawał w cudzym
+        // kalendarzu, choć w Marshalu już go nie było.
         await MirrorAsync(task, ct);
+
+        if (task.SeriesId is { } rhythm && await series.FindAsync(rhythm, ct) is { } one)
+        {
+            // Wywrotka zjadana tutaj. Pominięcie dnia zdarzyło się u nas i jest
+            // zapisane; nieudana wyprawa do Google nie ma prawa go cofnąć ani zabrać
+            // ze sobą przerysowania ekranu. Powód zapisuje sama wysyłka serii.
+            try
+            {
+                await rhythms.MirrorAsync(one, ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                if (journal is not null)
+                {
+                    await journal.RecordAsync(
+                        "Zadanie: odwołane wystąpienie",
+                        task.Title,
+                        ActivityLevel.Problem,
+                        $"Odwołanie nie dojechało do kalendarza ({e.GetType().Name}: "
+                        + $"{e.Message}). W Marshalu dnia nie ma, w kalendarzu zostaje "
+                        + "do najbliższej zmiany serii.",
+                        ct);
+                }
+            }
+        }
 
         return next;
     }

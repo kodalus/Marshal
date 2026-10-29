@@ -763,13 +763,21 @@ public sealed partial class CalendarViewModel(
         }
     }
 
+    /// <remarks>
+    /// <b>Najpierw odczyt, potem podmiana.</b> Opróżnienie przed odczytem znaczyło pasek
+    /// pusty przez cały czas trwania zapytania — a gdy zapytanie się wywróciło, pasek
+    /// zostawał pusty do wejścia na zakładkę na nowo. Z ekranu wyglądało to tak, jakby
+    /// zaległych nie było: lista pusta jest przecież odpowiedzią, a nie brakiem
+    /// odpowiedzi. Zamiana w jednym kawałku, bez oddawania sterowania w środku.
+    /// </remarks>
     private async Task LoadOverdueAsync()
     {
         var today = clock.Today;
+        var overdue = await edit.OverdueAsync(today);
 
         Overdue.Clear();
 
-        foreach (var task in await edit.OverdueAsync(today))
+        foreach (var task in overdue)
         {
             if (task.DoDate is not { } day)
             {
@@ -1115,7 +1123,19 @@ public sealed partial class CalendarViewModel(
 
         // Zaległe niezależnie od pokazywanego zakresu: pasek ma mówić, że coś wisi,
         // także wtedy, gdy ten dzień jest o trzy tygodnie wstecz.
-        await LoadOverdueAsync();
+        //
+        // Osobno zabezpieczone, bo pasek jest dodatkiem, a siatka treścią. Nieudany
+        // odczyt zaległych zabierał ze sobą złożenie kolumn, które stało niżej — czyli
+        // psuł cały ekran, żeby nie pokazać jednego paska.
+        try
+        {
+            await LoadOverdueAsync();
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            await log.RecordAsync(
+                "Kalendarz: pasek zaległych", "odczyt", ActivityLevel.Problem, e.Message);
+        }
 
         if (IsMonth)
         {

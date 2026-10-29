@@ -58,6 +58,18 @@ public sealed class SeriesService(
     }
 
     /// <summary>
+    /// Wyrównanie wydarzenia cyklicznego po zmianie, która nie przeszła tędy.
+    /// </summary>
+    /// <remarks>
+    /// Pominięcie jednego dnia jest zmianą <b>zadania</b>, nie serii — a widać je
+    /// w kalendarzu właśnie przez serię, bo dzień z cyklu własnego wydarzenia nie ma.
+    /// Stąd droga z zewnątrz: żeby „tej środy nie będzie" dojechało do Google, nie
+    /// trzeba udawać zmiany rytmu.
+    /// </remarks>
+    public Task MirrorAsync(TaskSeries one, CancellationToken ct = default) =>
+        MirrorSeriesAsync(one, ct);
+
+    /// <summary>
     /// Nagrobek na wystąpieniu, a razem z nim skasowanie odbicia w kalendarzu.
     /// </summary>
     /// <remarks>

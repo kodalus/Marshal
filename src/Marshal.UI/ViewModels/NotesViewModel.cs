@@ -115,8 +115,11 @@ public sealed partial class NotesViewModel(NoteService notes) : ObservableObject
 
     private async Task ReloadAsync()
     {
+        // Najpierw odczyt, potem podmiana — zob. NowViewModel.
+        var found = await notes.SearchAsync(Query);
+
         Items.Clear();
-        foreach (var note in await notes.SearchAsync(Query))
+        foreach (var note in found)
         {
             Items.Add(new NoteCard(note, note.Title, Beginning(note.Content)));
         }

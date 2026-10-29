@@ -80,10 +80,23 @@ public sealed class TaskRepository(MarshalDbContext db, IDbQueue? queue = null)
             .OrderBy(t => t.DoDate ?? t.Deadline)
             .ToListAsync(ct), ct);
 
+    /// <summary>
+    /// Archiwum: wykonane i wyrzucone, najnowsze pierwsze.
+    /// </summary>
+    /// <remarks>
+    /// <b>Po znaczniku zmiany, nie po chwili wykonania.</b> Wyrzucone nie ma chwili
+    /// wykonania — bo nie zostało wykonane — więc szło tu po dniu <b>utworzenia</b>.
+    /// Przy wystąpieniu serii znaczyło to dzień, w którym okno je postawiło, czyli
+    /// często kilka tygodni wstecz: dzień pominięty dzisiaj lądował w środku listy albo
+    /// za jej dwusetnym wierszem, a z ekranu wyglądało to tak, jakby pominięcie nie
+    /// zapisało się wcale. Znacznik zmiany ma każdy wiersz i stoi na chwili tej zmiany,
+    /// która go tu wstawiła — a porządek napisu zegara logicznego pokrywa się z jego
+    /// porządkiem logicznym (zob. Hlc), więc baza sortuje go wprost.
+    /// </remarks>
     public async Task<IReadOnlyList<TaskItem>> ArchiveAsync(int limit, CancellationToken ct = default) =>
         await _queue.RunAsync(() => db.Tasks
             .Where(t => !t.Deleted && (t.State == TaskState.Done || t.State == TaskState.Trashed))
-            .OrderByDescending(t => t.CompletedAt ?? t.CreatedAt)
+            .OrderByDescending(t => t.UpdatedAt)
             .Take(limit)
             .ToListAsync(ct), ct);
 

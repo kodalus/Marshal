@@ -3189,10 +3189,14 @@
                  Text="Wykonane i wyrzucone, najnowsze pierwsze. Nic nie znika z bazy." />
       <ListBox ItemsSource="{Binding ArchiveItems}" DoubleTapped="OpenFromList">
         <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="tasks:TaskItem">
+          <DataTemplate x:DataType="vm:TaskRow">
             <Grid ColumnDefinitions="*,Auto" Margin="0,4">
-              <TextBlock Grid.Column="0" Text="{Binding Title}" TextWrapping="Wrap" Opacity="0.75" />
-              <TextBlock Grid.Column="1" Classes="hint" Text="{Binding State}" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="0">
+                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Opacity="0.75" />
+                <TextBlock Classes="hint" Text="{Binding Badges}"
+                           IsVisible="{Binding HasBadges}" TextWrapping="Wrap" />
+              </StackPanel>
+              <TextBlock Grid.Column="1" Classes="hint" Text="{Binding Fate}" VerticalAlignment="Center" />
             </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>

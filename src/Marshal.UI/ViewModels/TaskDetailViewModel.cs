@@ -827,10 +827,14 @@ public sealed partial class TaskDetailViewModel(
     {
         var today = clock.Today;
 
+        // Najpierw odczyt, potem podmiana — zob. NowViewModel.
+        var days = (await edit.OccurrencesOfAsync(_series))
+            .OrderBy(t => t.DoDate ?? DateOnly.MaxValue)
+            .ToList();
+
         Days.Clear();
 
-        foreach (var day in (await edit.OccurrencesOfAsync(_series))
-            .OrderBy(t => t.DoDate ?? DateOnly.MaxValue))
+        foreach (var day in days)
         {
             Days.Add(SeriesDayRow.From(day, today));
         }
@@ -1295,9 +1299,12 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     public async Task TrashAsync()
     {
-        await log.RecordAsync(
-            IsOccurrence ? "Zadanie: pominięcie wystąpienia z okna" : "Zadanie: do kosza z okna",
-            Title);
+        // Pominięcie wystąpienia zapisuje usługa, bo robi się je także z menu
+        // podręcznego na liście — dwa wpisy na jedną czynność byłyby szumem.
+        if (!IsOccurrence)
+        {
+            await log.RecordAsync("Zadanie: do kosza z okna", Title);
+        }
 
         if (_id == Guid.Empty)
         {

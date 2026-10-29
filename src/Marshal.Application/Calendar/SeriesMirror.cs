@@ -2,6 +2,7 @@ using Marshal.Application.Abstractions;
 using Marshal.Application.Repositories;
 using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Series;
+using Marshal.Domain.Tasks;
 
 namespace Marshal.Application.Calendar;
 
@@ -122,7 +123,13 @@ public sealed class SeriesMirror(
         ArgumentNullException.ThrowIfNull(one);
 
         var template = one.Template;
-        var lines = SeriesRrule.Lines(one.Rule, Last(one), template.DoTime, settings.Zone);
+
+        // Dni serii pod ręką raz: stąd bierze się i lista odwołanych, i sprzątanie
+        // po starych odbiciach pojedynczych dni na końcu.
+        var days = await series.OccurrencesAsync(one.Id, ct);
+
+        var lines = SeriesRrule.Lines(
+            one.Rule, Last(one), template.DoTime, settings.Zone, Cancelled(one, days));
 
         // Rytmu liczonego od wykonania nie da się zapisać regułą: nie ma dat, dopóki
         // poprzednie wystąpienie nie zostanie odhaczone. Wysłanie czegokolwiek byłoby
@@ -230,7 +237,43 @@ public sealed class SeriesMirror(
             throw;
         }
 
-        await DropDayMirrorsAsync(one, ct);
+        await DropDayMirrorsAsync(days, ct);
+    }
+
+    /// <summary>
+    /// Dni, które rytm wyznacza, a których w serii nie ma.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dwie drogi prowadzą do tego samego: „pomiń to wystąpienie" stawia nagrobek na
+    /// dniu, który w oknie stoi, a „odwołaj wystąpienie" zapisuje odwołanie w regule,
+    /// przy dniu, którego jeszcze nie ma. Pierwsza daje wiersz ze stanem wyrzuconego,
+    /// druga — zmianę w regule; w kalendarzu obie znaczą „tego dnia nie będzie".
+    /// </para>
+    /// <para>
+    /// <b>Tylko dni z okna i tylko od dziś.</b> Nagrobek zdarza się także wtedy, gdy
+    /// okno zabiera dzień, którego już nie chce — a taki dzień nie jest odwołany, tylko
+    /// przestał wypadać z rytmu, więc reguła sama go nie wyznaczy i wyjmowanie go byłoby
+    /// mówieniem Google o niczym. Przeszłość zostaje nietknięta: wystąpienia, które się
+    /// odbyły, są zapisem tego, co było.
+    /// </para>
+    /// </remarks>
+    private IReadOnlyList<DateOnly> Cancelled(TaskSeries one, IReadOnlyList<TaskItem> days)
+    {
+        var today = clock.Today;
+        var window = SeriesWindow.Plan(one, today).Select(z => z.Date).ToHashSet();
+
+        var skipped = days
+            .Where(z => z.State == TaskState.Trashed
+                     && z.DoDate is { } day
+                     && window.Contains(day))
+            .Select(z => z.DoDate!.Value);
+
+        var dropped = one.Rule.Changes
+            .Where(z => z.Dropped && z.Date >= today)
+            .Select(z => z.Date);
+
+        return [.. skipped.Concat(dropped).Distinct().Order()];
     }
 
     /// <summary>
@@ -245,12 +288,12 @@ public sealed class SeriesMirror(
     /// </para>
     /// <para>
     /// Pętla jest tania w stanie docelowym: po pierwszym sprzątnięciu żaden dzień nie
-    /// ma już wskazania, więc zostaje jedno zapytanie do bazy i zero wypraw po sieci.
+    /// ma już wskazania, więc zostaje sam przebieg po liście i zero wypraw po sieci.
     /// </para>
     /// </remarks>
-    private async Task DropDayMirrorsAsync(TaskSeries one, CancellationToken ct)
+    private async Task DropDayMirrorsAsync(IReadOnlyList<TaskItem> days, CancellationToken ct)
     {
-        foreach (var day in await series.OccurrencesAsync(one.Id, ct))
+        foreach (var day in days)
         {
             if (day.SharedEventId is { Length: > 0 })
             {

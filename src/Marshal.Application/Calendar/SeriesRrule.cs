@@ -25,9 +25,17 @@ namespace Marshal.Application.Calendar;
 /// dnia, który okno wylicza.
 /// </para>
 /// <para>
-/// Czego ta reguła <b>nie</b> niesie: dni odwołanych i zmienionych z ręki. Odwołanie
-/// jednego wystąpienia robi się w Google przez samo wystąpienie, nie przez regułę,
-/// i to jest osobna droga — zob. ISeriesMirror.
+/// <b>Dni odwołane jadą razem z regułą</b>, jako <c>EXDATE</c>. Droga przez samo
+/// wystąpienie — odwołanie go w Google po jego identyfikatorze — wyglądała czyściej
+/// i jest w tym modelu gorsza: identyfikator wystąpienia nadaje Google, więc trzeba by
+/// go najpierw od niego wydobyć, a dwa urządzenia pomijające ten sam dzień wysłałyby
+/// dwa osobne odwołania w nieokreślonej kolejności. <c>EXDATE</c> jest przeciwnie
+/// <b>funkcją tego, co u nas stoi</b>: oba urządzenia wyliczają tę samą listę dni
+/// z tych samych nagrobków i wysyłają dokładnie to samo pole.
+/// </para>
+/// <para>
+/// Czego ta reguła nadal <b>nie</b> niesie: dni przestawionych z ręki na inną porę
+/// albo inny dzień. Te stoją w Google tam, gdzie wypadały z rytmu.
 /// </para>
 /// </remarks>
 public static class SeriesRrule
@@ -42,12 +50,20 @@ public static class SeriesRrule
     /// </param>
     /// <param name="time">Pora dnia serii. Puste znaczy wydarzenie całodniowe.</param>
     /// <param name="zone">
-    /// Strefa okna — do policzenia <c>UNTIL</c>. Reguła iCal wymaga tam chwili
-    /// w czasie uniwersalnym, gdy wydarzenie ma godzinę, a samej daty, gdy jest
-    /// całodniowe. Pomylenie tych dwóch postaci Google odrzuca.
+    /// Strefa okna — do policzenia <c>UNTIL</c> i <c>EXDATE</c>. Reguła iCal wymaga
+    /// tam chwili w czasie uniwersalnym, gdy wydarzenie ma godzinę, a samej daty, gdy
+    /// jest całodniowe. Pomylenie tych dwóch postaci Google odrzuca.
+    /// </param>
+    /// <param name="cancelled">
+    /// Dni, których w serii nie ma, choć rytm je wyznacza — pominięte i odwołane.
+    /// Puste znaczy „rytm bez wyjątków".
     /// </param>
     public static IReadOnlyList<string>? Lines(
-        RecurrenceRule rule, DateOnly? last, TimeOnly? time, TimeZoneInfo zone)
+        RecurrenceRule rule,
+        DateOnly? last,
+        TimeOnly? time,
+        TimeZoneInfo zone,
+        IReadOnlyCollection<DateOnly>? cancelled = null)
     {
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(zone);
@@ -88,7 +104,48 @@ public static class SeriesRrule
             parts.Add($"UNTIL={Until(end, time, zone)}");
         }
 
-        return [$"RRULE:{string.Join(';', parts)}"];
+        var lines = new List<string>(2) { $"RRULE:{string.Join(';', parts)}" };
+
+        if (cancelled is { Count: > 0 })
+        {
+            lines.Add(Excluded(cancelled, time, zone));
+        }
+
+        return lines;
+    }
+
+    /// <summary>
+    /// Dni wyjęte z rytmu — jedna linia <c>EXDATE</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Postać jak przy <c>UNTIL</c> i z tego samego powodu: sama data przy wydarzeniu
+    /// całodniowym, chwila w czasie uniwersalnym przy wydarzeniu z godziną. Chwila
+    /// liczona z przesunięcia strefy <b>tego dnia</b>, bo wyjęcie musi trafić
+    /// w wystąpienie co do sekundy — po zmianie czasu dzień wyjęty z przesunięciem
+    /// letnim nie trafiłby w nic i wystąpienie zostałoby w kalendarzu.
+    /// </para>
+    /// <para>
+    /// Jedna linia z listą dat, nie linia na dzień: reguła iCal dopuszcza oba zapisy,
+    /// a pole wysyłane jest w całości przy każdym zapisie, więc liczba linii jest
+    /// wyłącznie kosztem.
+    /// </para>
+    /// </remarks>
+    private static string Excluded(
+        IReadOnlyCollection<DateOnly> days, TimeOnly? time, TimeZoneInfo zone)
+    {
+        // Uporządkowane i bez powtórzeń, żeby to samo wejście dawało zawsze ten sam
+        // napis: inaczej dwa urządzenia z tą samą wiedzą wysyłałyby różne pola
+        // i każde widziałoby zmianę tam, gdzie jej nie ma.
+        var sorted = days.Distinct().Order().ToList();
+
+        if (time is not { } at)
+        {
+            return "EXDATE;VALUE=DATE:" + string.Join(
+                ',', sorted.Select(z => z.ToString("yyyyMMdd", CultureInfo.InvariantCulture)));
+        }
+
+        return "EXDATE:" + string.Join(',', sorted.Select(z => Moment(z, at, zone)));
     }
 
     /// <summary>
@@ -163,7 +220,13 @@ public static class SeriesRrule
             return last.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
         }
 
-        var local = last.ToDateTime(at);
+        return Moment(last, at, zone);
+    }
+
+    /// <summary>Dzień i pora jako chwila w czasie uniwersalnym, w zapisie iCal.</summary>
+    private static string Moment(DateOnly day, TimeOnly at, TimeZoneInfo zone)
+    {
+        var local = day.ToDateTime(at);
         var moment = new DateTimeOffset(local, zone.GetUtcOffset(local)).ToUniversalTime();
 
         return moment.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);

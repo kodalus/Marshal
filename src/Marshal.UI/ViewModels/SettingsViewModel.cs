@@ -545,8 +545,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     private async Task ReloadCalendarsAsync()
     {
+        // Najpierw odczyt, potem podmiana — zob. NowViewModel.
+        var sources = await _calendars.SourcesAsync();
+
         Calendars.Clear();
-        foreach (var source in await _calendars.SourcesAsync())
+        foreach (var source in sources)
         {
             Calendars.Add(source);
         }

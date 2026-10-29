@@ -115,6 +115,61 @@ public sealed class SeriesRruleTests
     }
 
     [Fact]
+    public void Dni_odwolane_ida_osobna_linia_jako_chwile_uniwersalne()
+    {
+        // Wyjęcie musi trafić w wystąpienie co do sekundy, więc liczone jest
+        // z przesunięcia strefy **tego dnia**: pierwszy z dni leży jeszcze w czasie
+        // letnim (+2), drugi już w zimowym (+1), a pora dnia w obu jest ta sama.
+        var lines = SeriesRrule.Lines(
+            new RecurrenceRule(RecurrenceKind.Daily),
+            null,
+            new TimeOnly(8, 0),
+            Warsaw,
+            [new DateOnly(2026, 10, 24), new DateOnly(2026, 10, 27)]);
+
+        lines.Should().HaveCount(2);
+        lines![1].Should().Be("EXDATE:20261024T060000Z,20261027T070000Z");
+    }
+
+    [Fact]
+    public void Dni_odwolane_w_cyklu_calodniowym_ida_samymi_datami()
+    {
+        // Postać musi zgadzać się z postacią początku wydarzenia. Chwila podana przy
+        // wydarzeniu całodniowym nie trafia w nic i dzień zostaje w kalendarzu.
+        var lines = SeriesRrule.Lines(
+            new RecurrenceRule(RecurrenceKind.Daily),
+            null,
+            null,
+            Warsaw,
+            [new DateOnly(2026, 10, 27)]);
+
+        lines![1].Should().Be("EXDATE;VALUE=DATE:20261027");
+    }
+
+    [Fact]
+    public void Dni_odwolane_sa_uporzadkowane_i_bez_powtorzen()
+    {
+        // To samo wejście ma dawać ten sam napis niezależnie od kolejności, w jakiej
+        // dni przyszły: inaczej dwa urządzenia z tą samą wiedzą wysyłałyby różne pola
+        // i każde widziałoby zmianę tam, gdzie jej nie ma.
+        var lines = SeriesRrule.Lines(
+            new RecurrenceRule(RecurrenceKind.Daily),
+            null,
+            null,
+            Warsaw,
+            [new DateOnly(2026, 11, 3), new DateOnly(2026, 10, 27), new DateOnly(2026, 11, 3)]);
+
+        lines![1].Should().Be("EXDATE;VALUE=DATE:20261027,20261103");
+    }
+
+    [Fact]
+    public void Bez_dni_odwolanych_nie_ma_osobnej_linii()
+    {
+        SeriesRrule.Lines(new RecurrenceRule(RecurrenceKind.Daily), null, null, Warsaw, [])
+            .Should().ContainSingle();
+    }
+
+    [Fact]
     public void Rytm_od_wykonania_nie_ma_czego_wyslac()
     {
         // „Co 3 dni od wykonania" nie ma dat, dopóki poprzednie wystąpienie nie zostanie

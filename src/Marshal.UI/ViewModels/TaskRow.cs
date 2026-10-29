@@ -58,8 +58,19 @@ public sealed record TaskRow(TaskItem Task, string Badges)
     /// </summary>
     public bool CanComplete => !IsDone && !IsTrashed;
 
-    /// <summary>Jednym słowem, co się z tym stało. Puste, gdy nic — czyli gdy wciąż żyje.</summary>
-    public string Fate => IsDone ? "zrobione" : IsTrashed ? "w koszu" : string.Empty;
+    /// <summary>
+    /// Jednym słowem, co się z tym stało. Puste, gdy nic — czyli gdy wciąż żyje.
+    /// </summary>
+    /// <remarks>
+    /// Dzień z cyklu idzie do kosza jedyną drogą, jaką ma — „pomiń to wystąpienie" —
+    /// i „w koszu" mówi o nim nieprawdę: nikt go nie wyrzucił, ten jeden raz się nie
+    /// odbył. W archiwum było to jedyne, co o takim dniu stało, i brzmiało jak pomyłka.
+    /// </remarks>
+    public string Fate => IsDone
+        ? "zrobione"
+        : IsTrashed
+            ? Task.SeriesId is null ? "w koszu" : "odwołane"
+            : string.Empty;
 
     public bool HasFate => Fate.Length > 0;
 

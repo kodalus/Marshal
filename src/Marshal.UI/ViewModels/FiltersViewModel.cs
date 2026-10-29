@@ -144,9 +144,14 @@ public sealed partial class FiltersViewModel : ObservableObject
     {
         _loading = true;
 
+        // Najpierw wszystkie odczyty, potem podmiana list — zob. NowViewModel.
+        var areas = await _areas.AllAsync();
+        var projects = await _projects.AllAsync();
+        var tags = await _tags.AllAsync();
+
         Areas.Clear();
         Areas.Add(ScopeChoice.Any);
-        foreach (var area in await _areas.AllAsync())
+        foreach (var area in areas)
         {
             Areas.Add(new ScopeChoice(area.Id, area.Name));
         }
@@ -154,13 +159,13 @@ public sealed partial class FiltersViewModel : ObservableObject
         Projects.Clear();
         Projects.Add(ScopeChoice.Any);
         Projects.Add(ScopeChoice.None);
-        foreach (var project in await _projects.AllAsync())
+        foreach (var project in projects)
         {
             Projects.Add(new ScopeChoice(project.Id, project.Outcome));
         }
 
         Tags.Clear();
-        foreach (var tag in await _tags.AllAsync())
+        foreach (var tag in tags)
         {
             Add(Tags, tag.Id.ToString(), tag.Name);
         }
@@ -283,8 +288,10 @@ public sealed partial class FiltersViewModel : ObservableObject
         // przynależność, a etykieta ma brzmieć tak jak zawsze.
         var rules = (await _series.ListAsync()).ToDictionary(z => z.Id, z => z.Rule);
 
+        var found = await _filters.RunAsync(Build());
+
         Results.Clear();
-        foreach (var task in await _filters.RunAsync(Build()))
+        foreach (var task in found)
         {
             Results.Add(TaskRow.From(task, today, rules));
         }
@@ -384,8 +391,10 @@ public sealed partial class FiltersViewModel : ObservableObject
 
     private async Task ReloadFavouritesAsync()
     {
+        var favourites = await _filters.FavouritesAsync();
+
         Favourites.Clear();
-        foreach (var filter in await _filters.FavouritesAsync())
+        foreach (var filter in favourites)
         {
             Favourites.Add(filter);
         }
