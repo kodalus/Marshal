@@ -1,4 +1,3 @@
-using System.Globalization;
 using Marshal.Application.Abstractions;
 using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
@@ -52,11 +51,9 @@ public sealed class TaskEditService(
     ITaskSeriesRepository series,
     SeriesService rhythms,
 
-    /// <summary>
-    /// Dziennik. Osobno zaznaczony jako nieobowiązkowy, bo ta usługa stawiana jest
-    /// w testach z ręki w kilkunastu miejscach, a wpis nie jest warunkiem poprawności
-    /// żadnej z tych ścieżek.
-    /// </summary>
+    // Dziennik nieobowiązkowy, bo ta usługa stawiana jest w testach z ręki
+    // w kilkunastu miejscach, a wpis nie jest warunkiem poprawności żadnej z tych
+    // ścieżek. W aplikacji wstrzykuje się sam — jest zarejestrowany.
     IActivityLog? journal = null)
 {
     /// <summary>
@@ -780,9 +777,7 @@ public sealed class TaskEditService(
         {
             await journal.RecordAsync(
                 "Zadanie: odwołane wystąpienie",
-                task.DoDate is { } day
-                    ? $"{task.Title} — {day.ToString("dd-MM", CultureInfo.InvariantCulture)}"
-                    : task.Title,
+                task.DoDate is { } day ? $"{task.Title} — {day:dd-MM}" : task.Title,
                 ct: ct);
         }
 

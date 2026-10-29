@@ -69,7 +69,7 @@ public sealed record TaskRow(TaskItem Task, string Badges)
     public string Fate => IsDone
         ? "zrobione"
         : IsTrashed
-            ? Task.SeriesId is null ? "w koszu" : "odwołane"
+            ? (Task.SeriesId is null ? "w koszu" : "odwołane")
             : string.Empty;
 
     public bool HasFate => Fate.Length > 0;

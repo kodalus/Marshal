@@ -126,10 +126,10 @@ public sealed class SeriesMirror(
 
         // Dni serii pod ręką raz: stąd bierze się i lista odwołanych, i sprzątanie
         // po starych odbiciach pojedynczych dni na końcu.
-        var standing = await series.OccurrencesAsync(one.Id, ct);
+        var occurrences = await series.OccurrencesAsync(one.Id, ct);
 
         var lines = SeriesRrule.Lines(
-            one.Rule, Last(one), template.DoTime, settings.Zone, Cancelled(one, standing));
+            one.Rule, Last(one), template.DoTime, settings.Zone, Cancelled(one, occurrences));
 
         // Rytmu liczonego od wykonania nie da się zapisać regułą: nie ma dat, dopóki
         // poprzednie wystąpienie nie zostanie odhaczone. Wysłanie czegokolwiek byłoby
@@ -237,7 +237,7 @@ public sealed class SeriesMirror(
             throw;
         }
 
-        await DropDayMirrorsAsync(standing, ct);
+        await DropDayMirrorsAsync(occurrences, ct);
     }
 
     /// <summary>
@@ -258,12 +258,12 @@ public sealed class SeriesMirror(
     /// odbyły, są zapisem tego, co było.
     /// </para>
     /// </remarks>
-    private IReadOnlyList<DateOnly> Cancelled(TaskSeries one, IReadOnlyList<TaskItem> standing)
+    private IReadOnlyList<DateOnly> Cancelled(TaskSeries one, IReadOnlyList<TaskItem> occurrences)
     {
         var today = clock.Today;
         var window = SeriesWindow.Plan(one, today).Select(z => z.Date).ToHashSet();
 
-        var skipped = standing
+        var skipped = occurrences
             .Where(z => z.State == TaskState.Trashed
                      && z.DoDate is { } day
                      && window.Contains(day))
@@ -291,9 +291,9 @@ public sealed class SeriesMirror(
     /// ma już wskazania, więc zostaje sam przebieg po liście i zero wypraw po sieci.
     /// </para>
     /// </remarks>
-    private async Task DropDayMirrorsAsync(IReadOnlyList<TaskItem> standing, CancellationToken ct)
+    private async Task DropDayMirrorsAsync(IReadOnlyList<TaskItem> occurrences, CancellationToken ct)
     {
-        foreach (var day in standing)
+        foreach (var day in occurrences)
         {
             if (day.SharedEventId is { Length: > 0 })
             {
