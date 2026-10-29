@@ -126,10 +126,10 @@ public sealed class SeriesMirror(
 
         // Dni serii pod ręką raz: stąd bierze się i lista odwołanych, i sprzątanie
         // po starych odbiciach pojedynczych dni na końcu.
-        var days = await series.OccurrencesAsync(one.Id, ct);
+        var standing = await series.OccurrencesAsync(one.Id, ct);
 
         var lines = SeriesRrule.Lines(
-            one.Rule, Last(one), template.DoTime, settings.Zone, Cancelled(one, days));
+            one.Rule, Last(one), template.DoTime, settings.Zone, Cancelled(one, standing));
 
         // Rytmu liczonego od wykonania nie da się zapisać regułą: nie ma dat, dopóki
         // poprzednie wystąpienie nie zostanie odhaczone. Wysłanie czegokolwiek byłoby
@@ -237,7 +237,7 @@ public sealed class SeriesMirror(
             throw;
         }
 
-        await DropDayMirrorsAsync(days, ct);
+        await DropDayMirrorsAsync(standing, ct);
     }
 
     /// <summary>
@@ -258,12 +258,12 @@ public sealed class SeriesMirror(
     /// odbyły, są zapisem tego, co było.
     /// </para>
     /// </remarks>
-    private IReadOnlyList<DateOnly> Cancelled(TaskSeries one, IReadOnlyList<TaskItem> days)
+    private IReadOnlyList<DateOnly> Cancelled(TaskSeries one, IReadOnlyList<TaskItem> standing)
     {
         var today = clock.Today;
         var window = SeriesWindow.Plan(one, today).Select(z => z.Date).ToHashSet();
 
-        var skipped = days
+        var skipped = standing
             .Where(z => z.State == TaskState.Trashed
                      && z.DoDate is { } day
                      && window.Contains(day))
@@ -291,9 +291,9 @@ public sealed class SeriesMirror(
     /// ma już wskazania, więc zostaje sam przebieg po liście i zero wypraw po sieci.
     /// </para>
     /// </remarks>
-    private async Task DropDayMirrorsAsync(IReadOnlyList<TaskItem> days, CancellationToken ct)
+    private async Task DropDayMirrorsAsync(IReadOnlyList<TaskItem> standing, CancellationToken ct)
     {
-        foreach (var day in days)
+        foreach (var day in standing)
         {
             if (day.SharedEventId is { Length: > 0 })
             {
