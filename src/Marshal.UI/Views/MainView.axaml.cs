@@ -582,19 +582,30 @@ public partial class MainView : UserControl
     /// </remarks>
     private const double SwipeThreshold = 60;
 
-    /// <summary>Od ilu punktów w bok siatka zaczyna iść za palcem.</summary>
+    /// <summary>Po ilu punktach ruchu wiadomo, na której osi się odbywa.</summary>
     /// <remarks>
-    /// Dwanaście, bo tyle mieści się w drgnięciu ręki przy przewijaniu w pionie.
-    /// Niżej siatka drgałaby w bok przy każdym ruchu po godzinach.
+    /// Dwanaście, bo tyle mieści się w drgnięciu ręki. Niżej oś rozstrzygałaby się
+    /// z samego drgnięcia, czyli z niczego.
     /// </remarks>
     private const double TrackThreshold = 12;
 
     /// <summary>Zsumowane przesunięcie bieżącego gestu.</summary>
     private Vector _gesture;
 
-    /// <summary>Czy ten gest już przeskoczył. Jeden ruch to jeden zakres.</summary>
-    /// <remarks>Dotyczy wyłącznie drogi bez sąsiadów, gdzie rozstrzyga się w trakcie ruchu.</remarks>
-    private bool _gestureSpent;
+    /// <summary>Oś, na której odbywa się bieżący ruch.</summary>
+    private enum Axis
+    {
+        /// <summary>Jeszcze za mało ruchu, żeby wiedzieć.</summary>
+        Unknown,
+
+        Sideways,
+        Vertical,
+    }
+
+    private Axis _axis;
+
+    /// <summary>Czy palec jest na szkle.</summary>
+    private bool _touching;
 
     /// <summary>
     /// Czy bieżący gest jest już rozliczony i dalsze przesunięcia go nie dotyczą.
@@ -659,13 +670,12 @@ public partial class MainView : UserControl
         }
 
         _gesture += e.Delta;
+        Decide(_gesture);
 
-        var sideways = -_gesture.X;
-        var vertical = -_gesture.Y;
-
-        // W bok wyraźnie bardziej niż w pionie — inaczej dojeżdżanie do wieczora
-        // ciągnęłoby siatkę w bok przy każdym ukośnym ruchu.
-        if (Math.Abs(sideways) < TrackThreshold || Math.Abs(sideways) < 1.5 * Math.Abs(vertical))
+        // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, nie zakres.
+        // Warunek stał dotąd wyłącznie przy rozstrzyganiu, więc siatka jechała za palcem
+        // ciągnącym blok i wracała po puszczeniu.
+        if (_axis != Axis.Sideways || _dragging)
         {
             return;
         }
@@ -673,19 +683,55 @@ public partial class MainView : UserControl
         // **Za palcem tylko wtedy, gdy jest co odsłonić.** Bez złożonych sąsiadów
         // przeciąganie pokazuje puste tło, a to jest gorsze od braku ruchu: udaje
         // płynność i pokazuje dziurę tam, gdzie powinien być następny tydzień.
-        // Wtedy siatka po prostu przeskakuje — czyli robi to, co robiła zawsze.
+        //
+        // Zakres zmienia się wtedy **na podniesieniu palca**, tak samo jak zawsze —
+        // zob. FinishGesture. Dawniej przeskakiwał w połowie ruchu, pod palcem.
         if (_calendar?.NeighboursReady != true)
         {
-            if (!_gestureSpent)
-            {
-                _gestureSpent = Skip(sideways, vertical);
-            }
-
             return;
         }
 
         Watch();
-        Move(sideways);
+        Move(-_gesture.X);
+    }
+
+    /// <summary>
+    /// Oś ruchu rozstrzygnięta raz, przy pierwszym wyraźnym przesunięciu.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dawniej każda próbka pytała osobno, czy ruch jest „w bok wyraźnie bardziej niż
+    /// w pionie" — i porównywała przy tym przesunięcie <b>zsumowane od początku
+    /// gestu</b>. Jedno dotknięcie bywa jednak dwiema rzeczami po kolei: najpierw
+    /// dojechaniem do wieczora, potem przejechaniem w bok. Po tym pierwszym stało już
+    /// w pionie kilkaset punktów, których to drugie nie miało jak przebić, więc nie
+    /// działo się nic. Żeby gest wyszedł, trzeba było podnieść palec i zacząć od nowa —
+    /// czyli zrobić to, o czym ręka nie wie, że jest potrzebne. Stąd „łapie raz
+    /// na kilka razy".
+    /// </para>
+    /// <para>
+    /// Oś rozstrzygnięta raz zamyka to z obu stron: ruch zaczęty w bok zostaje
+    /// przejechaniem, choćby zniosło go potem w pionie, a ruch zaczęty w pionie zostaje
+    /// przewijaniem i zakresu nie zmieni, choćby palec zjechał na koniec w bok. Tak
+    /// zachowuje się każda przesuwana rzecz i tego ręka nie musi się uczyć.
+    /// </para>
+    /// </remarks>
+    private void Decide(Vector travel)
+    {
+        if (_axis != Axis.Unknown)
+        {
+            return;
+        }
+
+        var sideways = Math.Abs(travel.X);
+        var vertical = Math.Abs(travel.Y);
+
+        if (Math.Max(sideways, vertical) < TrackThreshold)
+        {
+            return;
+        }
+
+        _axis = sideways > vertical ? Axis.Sideways : Axis.Vertical;
     }
 
     private void AreaGestureDone(object? sender, ScrollGestureEndedEventArgs e) =>
@@ -795,30 +841,34 @@ public partial class MainView : UserControl
     /// </remarks>
     private void FinishGesture()
     {
+        // **Jeden ruch rozlicza się raz.** Koniec gestu ogłasza biblioteka, zgłasza go
+        // podniesienie palca i zgłasza minutnik — a każde z tych wejść liczyło potem
+        // własny dojazd siatki, więc dwa z nich znaczyły dwie animacje naraz.
+        if (_gestureOver)
+        {
+            return;
+        }
+
         var sideways = -_gesture.X;
-        var vertical = -_gesture.Y;
 
         _gesture = default;
         _gestureOver = true;
         _watch?.Stop();
 
-        if (_gestureSpent)
-        {
-            _gestureSpent = false;
-            return;
-        }
-
         var from = _gridOffset?.X ?? 0;
 
-        if (Math.Abs(from) < 0.5)
-        {
-            // Siatka nigdy nie ruszyła — to nie było przejechanie, tylko przewijanie
-            // albo dotknięcie. Nie ma czego kończyć.
-            return;
-        }
+        // **Rozstrzygnięcie zawsze tutaj**, także wtedy, gdy siatka wcale nie ruszyła
+        // za palcem — bo sąsiedzi nie byli złożeni albo bo próg śledzenia nie został
+        // przekroczony. Dawniej droga bez sąsiadów przeskakiwała w połowie ruchu, pod
+        // palcem i bez możliwości wycofania się: ten sam ruch zachowywał się dwojako,
+        // a o tym, które zachowanie dostaniesz, decydowało coś niewidocznego, co zdążyło
+        // albo nie zdążyło policzyć się w tle. Punkt rozstrzygnięcia jest teraz jeden.
+        Skip(sideways);
 
-        Skip(sideways, vertical);
-        SlideBack(from);
+        if (Math.Abs(from) >= 0.5)
+        {
+            SlideBack(from);
+        }
     }
 
     /// <summary>Sąsiedzi chowani po dojeździe, nie przed nim — inaczej znikliby w ruchu.</summary>
@@ -839,23 +889,65 @@ public partial class MainView : UserControl
     /// </remarks>
     private DispatcherTimer? _watch;
 
+    /// <summary>Ile razy minutnik może jeszcze poczekać na palec, zanim rozliczy gest.</summary>
+    /// <remarks>
+    /// Dwanaście razy po czterysta milisekund to około pięciu sekund — dłużej, niż trwa
+    /// przejechanie palcem, i krócej, niż cierpliwość do siatki, która została odsunięta
+    /// w bok i nie wraca.
+    /// </remarks>
+    private const int Patience = 12;
+
+    private int _patience;
+
     private void Watch()
     {
         _watch ??= new DispatcherTimer(
-            TimeSpan.FromMilliseconds(400),
-            DispatcherPriority.Input,
-            (_, _) => FinishGesture());
+            TimeSpan.FromMilliseconds(400), DispatcherPriority.Input, (_, _) => Tick());
 
+        _patience = Patience;
         _watch.Stop();
         _watch.Start();
+    }
+
+    /// <summary>
+    /// Minutnik: rozliczenie gestu, którego koniec nie przyszedł.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nie w trakcie ruchu.</b> Minutnik odmierzał czas od ostatniego przesunięcia,
+    /// więc wystarczyło przytrzymać palec w miejscu albo przeciągać dość wolno, żeby
+    /// rozliczył ruch wciąż trwający: siatka wracała sama spod palca, a reszta drogi
+    /// nie znaczyła już nic — bo gest był dla niej skończony. To jest to szarpnięcie
+    /// w środku przejechania. Palec na szkle znaczy „jeszcze nie koniec".
+    ///
+    /// Cierpliwość jest ograniczona, bo minutnik stoi tu po to, żeby zgubione
+    /// podniesienie palca nie zostawiło siatki odsuniętej w bok na stałe — a to jest
+    /// awaria widoczna i nie do naprawienia inaczej niż zamknięciem aplikacji.
+    /// </remarks>
+    private void Tick()
+    {
+        if (_touching && _patience > 0)
+        {
+            _patience--;
+            _watch?.Stop();
+            _watch?.Start();
+
+            return;
+        }
+
+        FinishGesture();
     }
 
     private (Point From, Point To, IPointer Pointer)? _swipe;
 
     private void AreaPressed(object? sender, PointerPressedEventArgs e)
     {
-        // Nowe dotknięcie zaczyna nowy gest, cokolwiek działo się przedtem.
+        // Nowe dotknięcie zaczyna nowy gest, cokolwiek działo się przedtem — razem
+        // z osią i zsumowaną drogą. Zerowanie samego znaku zostawiało tu przesunięcie
+        // poprzedniego ruchu, czyli pozwalało mu rozstrzygnąć o następnym.
         _gestureOver = false;
+        _touching = true;
+        _gesture = default;
+        _axis = Axis.Unknown;
 
         // Gest palca ma własną drogę; tu zostaje mysz, bo jej nikt nie przejmuje.
         if (sender is not Control area || e.Pointer.Type != PointerType.Mouse)
@@ -881,12 +973,11 @@ public partial class MainView : UserControl
         _swipe = touch with { To = to };
 
         var sideways = to.X - touch.From.X;
-        var vertical = to.Y - touch.From.Y;
 
-        // Mysz idzie za ręką tak samo jak palec — ten sam próg i ten sam warunek.
-        if (!_dragging
-            && Math.Abs(sideways) >= TrackThreshold
-            && Math.Abs(sideways) >= 1.5 * Math.Abs(vertical))
+        Decide(new Vector(sideways, to.Y - touch.From.Y));
+
+        // Mysz idzie za ręką tak samo jak palec i rozstrzyga się tą samą osią.
+        if (!_dragging && _axis == Axis.Sideways)
         {
             Move(sideways);
         }
@@ -894,6 +985,8 @@ public partial class MainView : UserControl
 
     private void AreaReleased(object? sender, PointerReleasedEventArgs e)
     {
+        _touching = false;
+
         var activity = _swipe;
         _swipe = null;
 
@@ -908,13 +1001,11 @@ public partial class MainView : UserControl
         var to = sender is Control area ? e.GetPosition(area) : touch.To;
 
         var sideways = to.X - touch.From.X;
-        var vertical = to.Y - touch.From.Y;
-
         var from = _gridOffset?.X ?? 0;
 
         // Obsłużone tylko wtedy, gdy naprawdę przejechano — inaczej zwykłe kliknięcie
         // bloku przestałoby go otwierać.
-        e.Handled = Skip(sideways, vertical);
+        e.Handled = Skip(sideways);
 
         if (Math.Abs(from) >= 0.5)
         {
@@ -923,7 +1014,7 @@ public partial class MainView : UserControl
     }
 
     /// <summary>Czy ruch o tyle punktów jest przejechaniem — i jeśli tak, przeskakuje.</summary>
-    private bool Skip(double sideways, double vertical)
+    private bool Skip(double sideways)
     {
         // Przeciąganie bloku też jedzie w bok — i to ono ma wtedy znaczenie, nie zakres.
         if (_dragging || _calendar is null)
@@ -931,9 +1022,9 @@ public partial class MainView : UserControl
             return false;
         }
 
-        // W bok **wyraźnie bardziej** niż w pionie: ukośny ruch przy przewijaniu dnia
-        // przeskakiwałby tydzień przy każdej próbie dojechania do wieczora.
-        if (Math.Abs(sideways) < SwipeThreshold || Math.Abs(sideways) < 1.5 * Math.Abs(vertical))
+        // O osi rozstrzygnięto na początku ruchu (zob. Decide), więc zostaje tu samo
+        // pytanie, czy dociągnięto dość daleko.
+        if (_axis != Axis.Sideways || Math.Abs(sideways) < SwipeThreshold)
         {
             return false;
         }
