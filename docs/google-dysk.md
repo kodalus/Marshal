@@ -99,8 +99,18 @@ To jest decyzja, nie formalność, i przy synchronizacji ma konkretną cenę.
 
 **W trybie testowym Google wydaje żeton odświeżalny na siedem dni.** Po tygodniu
 logowanie trzeba powtórzyć — niezależnie od zakresu i od tego, że nic się nie zmieniło.
-Aplikacja sobie z tym radzi (kasuje nieważny żeton i pyta o zgodę jeszcze raz), ale
-znaczy to przeglądarkę raz w tygodniu, na każdym urządzeniu.
+
+Stało tu kiedyś, że „aplikacja sobie z tym radzi: kasuje nieważny żeton i pyta o zgodę
+jeszcze raz". To była prawda o przebiegu **wywołanym ręką** i nieprawda o wszystkich
+pozostałych, a te są regułą. Pytanie o zgodę otwiera przeglądarkę, czego przebieg
+chodzący sam robić nie może i nie powinien — kasowanie żetonu zostaje więc wykonane,
+a odnowienie nie. Po tygodniu synchronizacja jest martwa aż do ręcznego kliknięcia
+w Ustawieniach, o którym nikt nie wie, że jest potrzebne.
+
+Wychodziło to na jaw dopiero po kilku dniach, po drugim urządzeniu. Od wydania
+z 4 listopada 2026 aplikacja mówi o tym sama: stan podłączenia stoi w linii „Start"
+w dzienniku, wygasła zgoda zapisuje się osobnym wpisem i podnosi pasek na ekranie.
+To jest jednak obejście objawu — lekarstwem jest tryb produkcyjny.
 
 **W trybie produkcyjnym żeton nie wygasa.** Przy samym `drive.file` przejście do
 produkcji **nie wymaga żadnej weryfikacji**, bo to uprawnienie nie jest wrażliwe —
