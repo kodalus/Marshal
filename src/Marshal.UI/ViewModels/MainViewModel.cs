@@ -1282,8 +1282,21 @@ public sealed partial class MainViewModel : ObservableObject
                 ? "Identyfikator klienta albo tajemnica nie są wpisane "
                     + "(Ustawienia → Konto Google)."
                 : $"Katalog żetonu „{_drive.TokenFolder}” nie istnieje, więc nie ma czym "
-                    + "się zalogować. Konto trzeba podłączyć na nowo "
-                    + "(Ustawienia → Konto Google).");
+                    + "się zalogować. Zgoda wygasa po siedmiu dniach, dopóki aplikacja "
+                    + "stoi w konsoli Google jako testowa — po wygaśnięciu bezużyteczny "
+                    + "żeton jest kasowany, a ponowne pytanie o zgodę wymaga ręki. "
+                    + "Konto trzeba podłączyć na nowo (Ustawienia → Konto Google).");
+
+        if (!missing)
+        {
+            // **Na ekran, nie tylko do dziennika.** Zgoda wygasa co tydzień, a automat
+            // nie ma jak jej odnowić: logowanie otwiera przeglądarkę, czego przebieg
+            // chodzący sam robić nie może. Zostawione w dzienniku znaczyło, że trzeba
+            // się domyślić, że jest czego tam szukać — a objawem jest cisza na drugim
+            // urządzeniu, zauważalna po kilku dniach.
+            Notice = "Synchronizacja z Dyskiem nie chodzi: zgoda wygasła. "
+                + "Ustawienia → Konto Google → „Zapisz i zsynchronizuj”.";
+        }
     }
 
     private async Task RunAsync(string what, bool quiet = false)
