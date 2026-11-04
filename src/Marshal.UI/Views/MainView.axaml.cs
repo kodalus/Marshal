@@ -2761,6 +2761,54 @@ public partial class MainView : UserControl
         _ = Try(what, () => work(model));
     }
 
+    /// <summary>Zaznaczenie całego dziennika — do przepisania go komuś w całości.</summary>
+    private void JournalSelectAll(object? sender, RoutedEventArgs e) =>
+        this.FindControl<ListBox>("DziennikLista")?.SelectAll();
+
+    /// <summary>
+    /// Zaznaczone wiersze dziennika do schowka.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Schowek należy do okna, nie do modelu — stąd obsługa tutaj, a składanie tekstu
+    /// w modelu, gdzie leżą wiersze. Bez zaznaczenia kopiuje się to, co widać.
+    /// </para>
+    /// <para>
+    /// Dziennik czyta się wtedy, gdy coś nie działa, i przepisuje komuś, kto go nie
+    /// widzi. Zrzut ekranu jest w tym najgorszą postacią: nie da się z niego wyszukać,
+    /// wkleić ani przeczytać komunikatu uciętego na brzegu — a komunikat biblioteki
+    /// to zwykle jedyna rzecz, która mówi, co się stało.
+    /// </para>
+    /// </remarks>
+    private void JournalCopy(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model)
+        {
+            return;
+        }
+
+        var chosen = this.FindControl<ListBox>("DziennikLista")?
+            .SelectedItems?
+            .OfType<JournalRow>();
+
+        var text = model.Journal.TextOf(chosen);
+
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        _ = Try(
+            "Dziennik: kopiowanie",
+            async () =>
+            {
+                if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+                {
+                    await clipboard.SetTextAsync(text);
+                }
+            });
+    }
+
     private async Task Try(string what, Func<Task> work)
     {
         try

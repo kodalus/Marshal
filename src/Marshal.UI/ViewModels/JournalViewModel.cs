@@ -18,6 +18,19 @@ public sealed record JournalRow(
 {
     public bool HasDetail => !string.IsNullOrWhiteSpace(Detail);
 
+    /// <summary>
+    /// Wiersz jako zwykły tekst — do schowka.
+    /// </summary>
+    /// <remarks>
+    /// Ten sam układ, co na ekranie: chwila i czynność w jednej linii, wynik w drugiej,
+    /// szczegół w trzeciej. Dziennik czyta się w kłopocie i przepisuje komuś, kto go
+    /// nie widzi — a zrzut ekranu jest wtedy najgorszą postacią, bo nie da się z niego
+    /// ani wyszukać, ani wkleić, ani przeczytać komunikatu uciętego na brzegu.
+    /// </remarks>
+    public string AsText => HasDetail
+        ? $"{When}  {Operation}\n{Outcome}\n{Detail}"
+        : $"{When}  {Operation}\n{Outcome}";
+
     /// <summary>Pasek z lewej: czerwony przy problemie, szary przy wyniku.</summary>
     public IBrush Mark => IsProblem
         ? new SolidColorBrush(Color.FromRgb(0xC0, 0x4A, 0x4A))
@@ -87,6 +100,21 @@ public sealed partial class JournalViewModel(IActivityLog log, IClock clock) : O
         }
 
         OnPropertyChanged(nameof(HasRows));
+    }
+
+    /// <summary>
+    /// Zaznaczone wiersze jako tekst — a gdy nic nie zaznaczono, wszystkie pokazane.
+    /// </summary>
+    /// <remarks>
+    /// Puste zaznaczenie znaczy „to, co widzę": tak najczęściej wygląda zamiar, bo
+    /// filtr „tylko problemy" już zawęził listę do tego, o co chodzi. Kazanie wtedy
+    /// zaznaczyć wszystko z ręki byłoby krokiem bez treści.
+    /// </remarks>
+    public string TextOf(IEnumerable<JournalRow>? chosen)
+    {
+        var rows = chosen?.ToList() is { Count: > 0 } picked ? picked : [.. Rows];
+
+        return string.Join("\n\n", rows.Select(w => w.AsText));
     }
 
     [RelayCommand]

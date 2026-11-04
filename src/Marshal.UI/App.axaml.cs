@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Marshal.Application.Abstractions;
 using Marshal.Domain.Diagnostics;
 using Marshal.Infrastructure.Notifications;
+using Marshal.Infrastructure.Sync.Google;
 using Marshal.UI.ViewModels;
 using Marshal.UI.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -225,6 +226,14 @@ public partial class App : Avalonia.Application
                         + $"powiadomienia systemowe: {InAppNotifier.SystemStatus}, "
                         + $"kalendarz główny: {settings.MainCalendarId?.ToString() ?? "nieustawiony"}, "
 
+                        // **Stan synchronizacji w pierwszej linii każdego uruchomienia.**
+                        // Synchronizacja, która nie rusza wcale, wygląda z zewnątrz tak
+                        // samo jak synchronizacja udana i niemająca nic do przeniesienia:
+                        // w dzienniku nie ma nic, na Dysku nie przybywa nic. Rozchodzą
+                        // się dopiero po kilku dniach, na drugim urządzeniu. Tu stoi
+                        // odpowiedź, zanim trzeba będzie o nią pytać.
+                        + $"synchronizacja: {DriveStatus(services)}, "
+
                         // Czasy startu w dzienniku, bo „aplikacja się zawiesza przy
                         // otwarciu" nie mówi, co ją trzyma — a trzy liczby mówią.
                         + $"start: przygotowanie {prepare} ms, "
@@ -287,6 +296,33 @@ public partial class App : Avalonia.Application
     /// i nie zależy od tego, czy cokolwiek leży na dysku. CI dokleja do niej skrót
     /// zapisu (zob. Directory.Build.props), więc z tej linijki da się trafić w commit.
     /// </remarks>
+    /// <summary>
+    /// Czy synchronizacja z Dyskiem ma czym ruszyć.
+    /// </summary>
+    /// <remarks>
+    /// Dwa warunki i obie odmowy wyglądają z ekranu tak samo — stąd osobne nazwy.
+    /// „Brak poświadczeń" znaczy urządzenie, którego nikt nie podłączał; „brak żetonu"
+    /// znaczy podłączenie, które przestało istnieć, i to jest kłopot do naprawienia
+    /// w Ustawieniach.
+    /// </remarks>
+    private static string DriveStatus(IServiceProvider services)
+    {
+        try
+        {
+            var drive = services.GetRequiredService<GoogleSyncService>();
+
+            return !drive.HasCredentials
+                ? "brak poświadczeń"
+                : Directory.Exists(drive.TokenFolder) ? "podłączona" : "brak żetonu";
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            // Wpis startowy jest tym, po co się tu sięga, gdy nic innego nie działa.
+            // Nie ma prawa paść przez ozdobę w swojej własnej treści.
+            return $"nie wiadomo ({e.GetType().Name})";
+        }
+    }
+
     private static string Release()
     {
         var version = typeof(App).Assembly

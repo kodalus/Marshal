@@ -1237,10 +1237,61 @@ public sealed partial class MainViewModel : ObservableObject
     /// pięćset — bez tego zjadłby sam siebie i nie byłoby w nim widać niczego innego.
     /// Awarie i przebiegi, które coś przeniosły, zostają zawsze.
     /// </param>
+    /// <summary>Żeby wyłączona synchronizacja odezwała się raz na uruchomienie.</summary>
+    private bool _syncOffTold;
+
+    /// <summary>
+    /// Zapis o tym, że synchronizacja w ogóle nie rusza.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>To jest jedyna droga, która kończyła się ciszą</b> — i dlatego kosztowała
+    /// najwięcej. Awarie przebiegu zapisują się zawsze, przebieg bez zmian zapisuje się
+    /// przy ręcznym wywołaniu, a odmowa <b>przed</b> przebiegiem nie zapisywała się
+    /// nigdzie. Z zewnątrz wyglądało to dokładnie tak samo jak synchronizacja udana
+    /// i niemająca nic do przeniesienia: w dzienniku nie ma nic, na Dysku nie przybywa
+    /// nic. Różnicę widać było dopiero po kilku dniach, po drugim urządzeniu.
+    /// </para>
+    /// <para>
+    /// Raz na uruchomienie, nie przy każdym przebiegu: automat chodzi co kilka minut,
+    /// a dziennik trzyma pięćset wpisów — powtarzany co przebieg wypchnąłby z niego
+    /// wszystko inne, czyli zamieniłby jedną ciszę na drugą.
+    /// </para>
+    /// <para>
+    /// Jako kłopot <b>tylko</b> wtedy, gdy poświadczenia są, a żetonu nie ma: to jest
+    /// podłączenie, które przestało działać. Brak poświadczeń jest stanem zwyczajnym
+    /// urządzenia, którego nikt nie podłączał, i kłopotem nie jest.
+    /// </para>
+    /// </remarks>
+    private async Task TellSyncOffAsync()
+    {
+        if (_syncOffTold)
+        {
+            return;
+        }
+
+        _syncOffTold = true;
+
+        var missing = !_drive.HasCredentials;
+
+        await _activity.RecordAsync(
+            "Synchronizacja: nie chodzi",
+            missing ? "brak poświadczeń" : "brak żetonu",
+            missing ? ActivityLevel.Ok : ActivityLevel.Problem,
+            missing
+                ? "Identyfikator klienta albo tajemnica nie są wpisane "
+                    + "(Ustawienia → Konto Google)."
+                : $"Katalog żetonu „{_drive.TokenFolder}” nie istnieje, więc nie ma czym "
+                    + "się zalogować. Konto trzeba podłączyć na nowo "
+                    + "(Ustawienia → Konto Google).");
+    }
+
     private async Task RunAsync(string what, bool quiet = false)
     {
         if (!_drive.HasCredentials || !Directory.Exists(_drive.TokenFolder))
         {
+            await TellSyncOffAsync();
+
             // Bez poświadczeń nie ma na co czekać: to urządzenie jest jedynym źródłem
             // prawdy o wczorajszym dniu, więc przejście dnia może ruszyć od razu.
             _syncState.Settle();

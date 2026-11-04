@@ -3128,6 +3128,10 @@
         <WrapPanel>
           <Button Classes="nav" Command="{Binding RefreshCommand}" Content="Odśwież" />
           <Button Classes="nav" Command="{Binding ClearCommand}" Content="Wyczyść" />
+          <!-- Kopiowanie przez kod okna, bo schowek należy do okna, nie do modelu.
+               Bez zaznaczenia kopiuje się to, co widać — zob. JournalViewModel.TextOf. -->
+          <Button Classes="nav" Content="Zaznacz wszystko" Click="JournalSelectAll" />
+          <Button Classes="nav" Content="Kopiuj" Click="JournalCopy" />
           <CheckBox Margin="8,0,0,0" VerticalAlignment="Center"
                     IsChecked="{Binding OnlyProblems}" Content="tylko problemy" />
         </WrapPanel>
@@ -3160,25 +3164,29 @@
                    Text="Zapis lokalny, nie wchodzi do synchronizacji ani do kopii. Trzymane jest ostatnie 500 wpisów." />
       </StackPanel>
 
-      <ScrollViewer x:DataType="vm:JournalViewModel">
-        <ItemsControl ItemsSource="{Binding Rows}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:JournalRow">
-              <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="6"
-                      Background="{DynamicResource PoleSlabe}" BorderThickness="3,0,0,0"
-                      BorderBrush="{Binding Mark}">
-                <StackPanel>
-                  <TextBlock Classes="hint" Text="{Binding When}" />
-                  <TextBlock Text="{Binding Operation}" FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding Outcome}" TextWrapping="Wrap" />
-                  <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap"
-                             Text="{Binding Detail}" IsVisible="{Binding HasDetail}" />
-                </StackPanel>
-              </Border>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </ScrollViewer>
+      <!-- Lista, nie ItemsControl: dziennik przepisuje się komuś, kto go nie widzi,
+           więc wiersze muszą dawać się zaznaczyć. „Multiple,Toggle" znaczy: kliknięcie
+           dokłada wiersz, Shift z kliknięciem bierze zakres — i jedno, i drugie bez
+           wciskania Ctrl, bo na dotyku Ctrl nie ma. -->
+      <ListBox x:Name="DziennikLista" x:DataType="vm:JournalViewModel"
+               ItemsSource="{Binding Rows}" SelectionMode="Multiple,Toggle"
+               Background="Transparent">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:JournalRow">
+            <Border Margin="0,0,0,6" Padding="10,6" CornerRadius="6"
+                    Background="{DynamicResource PoleSlabe}" BorderThickness="3,0,0,0"
+                    BorderBrush="{Binding Mark}">
+              <StackPanel>
+                <TextBlock Classes="hint" Text="{Binding When}" />
+                <TextBlock Text="{Binding Operation}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Outcome}" TextWrapping="Wrap" />
+                <TextBlock Classes="hint" Margin="0,4,0,0" TextWrapping="Wrap"
+                           Text="{Binding Detail}" IsVisible="{Binding HasDetail}" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
 
     </DockPanel>
     </Panel>
