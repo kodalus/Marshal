@@ -2761,6 +2761,34 @@ public partial class MainView : UserControl
         _ = Try(what, () => work(model));
     }
 
+    /// <summary>
+    /// Otwarcie adresu zgody — drugą drogą.
+    /// </summary>
+    /// <remarks>
+    /// Biblioteka Google otwiera przeglądarkę po swojemu i bywa, że nie robi tego
+    /// wcale, niczego przy tym nie zgłaszając. Tutaj idzie zwykłe uruchomienie
+    /// z powłoką systemową, czyli ta sama droga, którą otwiera się odnośnik
+    /// z dowolnego programu — inna niż tamta, więc warta osobnej próby.
+    /// Nie z automatu, tylko na kliknięcie: dwie próby naraz znaczyłyby dwie karty
+    /// u wszystkich, u których pierwsza droga działa.
+    /// </remarks>
+    private void OpenConsentAddress(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || model.Settings.ConsentAddress is not { Length: > 0 } address)
+        {
+            return;
+        }
+
+        _ = Try(
+            "Zgoda: otwarcie adresu",
+            () =>
+            {
+                Process.Start(new ProcessStartInfo(address) { UseShellExecute = true });
+                return Task.CompletedTask;
+            });
+    }
+
     /// <summary>Adres zgody do schowka — do wklejenia w przeglądarce.</summary>
     private void CopyConsentAddress(object? sender, RoutedEventArgs e)
     {

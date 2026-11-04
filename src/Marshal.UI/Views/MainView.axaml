@@ -2755,9 +2755,14 @@
              i porzucona. Wklejony z ręki kończy się dokładnie tym samym powrotem. -->
         <StackPanel IsVisible="{Binding HasConsentAddress}" Margin="0,10,0,0">
           <TextBlock Classes="label" Text="Przeglądarka się nie otworzyła?" />
-          <Grid ColumnDefinitions="*,Auto">
+          <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBox Grid.Column="0" Text="{Binding ConsentAddress}" IsReadOnly="True" />
-            <Button Grid.Column="1" Margin="6,0,0,0" Content="Kopiuj"
+            <!-- Druga próba otwarcia, inną drogą niż biblioteka. Nie zamiast niej,
+                 tylko obok i na kliknięcie: podwójne otwieranie z automatu znaczyłoby
+                 dwie karty u wszystkich, którym pierwsza droga działa. -->
+            <Button Grid.Column="1" Margin="6,0,0,0" Content="Otwórz"
+                    Click="OpenConsentAddress" />
+            <Button Grid.Column="2" Margin="6,0,0,0" Content="Kopiuj"
                     Click="CopyConsentAddress" />
           </Grid>
           <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
