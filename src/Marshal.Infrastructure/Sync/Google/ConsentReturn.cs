@@ -29,10 +29,49 @@ public static class ConsentReturn
     private static readonly Lock Lock = new();
     private static TaskCompletionSource<string>? _waiting;
 
+    private static string _address = string.Empty;
+
     /// <summary>Czy logowanie czeka właśnie na powrót z przeglądarki.</summary>
     public static bool Waiting
     {
         get { lock (Lock) { return _waiting is not null; } }
+    }
+
+    /// <summary>
+    /// Adres zgody — ten, który ma się otworzyć w przeglądarce. Pusty, gdy nikt nie pyta.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Otwieranie przeglądarki nie jest pewne i nie ma jak tego sprawdzić.</b>
+    /// Biblioteka Google uruchamia ją procesem systemowym, a ten potrafi nie zrobić
+    /// nic i niczego nie zgłosić — brak skojarzenia z przeglądarką, zasady systemowe,
+    /// aplikacja uruchomiona inaczej, niż system się spodziewa. Z aplikacji widać
+    /// wtedy dokładnie to samo, co przy przeglądarce otwartej i porzuconej: nasłuch
+    /// stoi, nikt nie wraca, po pięciu minutach „przerwane". Dwie różne przyczyny
+    /// i jeden objaw.
+    /// </para>
+    /// <para>
+    /// Adres pokazany wprost rozdziela je i jednocześnie obie naprawia: wkleja się go
+    /// do dowolnej przeglądarki, a powrót idzie tą samą pętlą zwrotną, co zawsze.
+    /// Zgoda przestaje zależeć od tego, czy uruchomienie procesu się powiodło.
+    /// </para>
+    /// </remarks>
+    public static string Address
+    {
+        get { lock (Lock) { return _address; } }
+    }
+
+    /// <summary>Kto otwiera przeglądarkę, ogłasza tu adres — zob. <see cref="Address"/>.</summary>
+    public static event Action<string>? Offered;
+
+    public static void Offer(string address)
+    {
+        lock (Lock)
+        {
+            _address = address;
+        }
+
+        Offered?.Invoke(address);
     }
 
     /// <summary>Zgłoszenie oczekiwania. Zwraca zadanie kończące się przepisanym adresem.</summary>
@@ -55,7 +94,10 @@ public static class ConsentReturn
         lock (Lock)
         {
             _waiting = null;
+            _address = string.Empty;
         }
+
+        Offered?.Invoke(string.Empty);
     }
 
     /// <summary>

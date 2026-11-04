@@ -1,5 +1,6 @@
 using Avalonia;
 using Marshal.Infrastructure.Notifications;
+using Marshal.Infrastructure.Sync.Google;
 using Marshal.UI;
 
 #if TOASTS
@@ -22,6 +23,11 @@ internal static class Program
         // powiadomień. Gdy któregoś zabraknie, aplikacja ma wstać tak samo — z paskiem
         // przypomnień w oknie, który działał do dziś.
         HookNotifications();
+
+        // Zgoda Google z adresem na wierzchu — zob. CodeReceiverLoopback. Podpinane tu,
+        // a nie we wspólnym kodzie okna: Android ma własnego odbiorcę i podpina go
+        // u siebie, a kto podpina później, ten wygrywa.
+        GoogleDriveFactory.CodeReceiver = () => new CodeReceiverLoopback();
 
         builder.StartWithClassicDesktopLifetime(args);
     }

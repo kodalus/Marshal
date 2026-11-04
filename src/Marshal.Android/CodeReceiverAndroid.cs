@@ -81,7 +81,13 @@ internal sealed class CodeReceiverAndroid(Context context) : ICodeReceiver
 
         try
         {
-            Open(url.Build());
+            var address = url.Build();
+
+            // Adres ogłoszony **przed** otwarciem: okno ustawień ma go pokazać także
+            // wtedy, gdy otwarcie przeglądarki nic nie zrobi.
+            ConsentReturn.Offer(address.ToString());
+
+            Open(address);
 
             // Dymek, bo przeglądarka przykrywa aplikację i bez niego nie widać, czy
             // Marshal w ogóle doszedł do tego kroku. Przy nieudanym powrocie to jest

@@ -2749,6 +2749,21 @@
              wrócić do aplikacji sama; na telefonie potrafi tego nie zrobić, bo system
              odkłada do zamrażarki proces, który zszedł w tło — wtedy strona wisi
              zamiast się zamknąć. Adres z jej paska zawiera ten sam kod zgody. -->
+        <!-- Adres zgody na wierzchu. Otwarcie przeglądarki robi biblioteka
+             uruchomieniem procesu systemowego, a ten potrafi nie zrobić nic i niczego
+             nie zgłosić — z ekranu wygląda to tak samo jak przeglądarka otwarta
+             i porzucona. Wklejony z ręki kończy się dokładnie tym samym powrotem. -->
+        <StackPanel IsVisible="{Binding HasConsentAddress}" Margin="0,10,0,0">
+          <TextBlock Classes="label" Text="Przeglądarka się nie otworzyła?" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0" Text="{Binding ConsentAddress}" IsReadOnly="True" />
+            <Button Grid.Column="1" Margin="6,0,0,0" Content="Kopiuj"
+                    Click="CopyConsentAddress" />
+          </Grid>
+          <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                     Text="Wklej ten adres do dowolnej przeglądarki i potwierdź zgodę. Powrót idzie tą samą drogą, co zawsze — Marshal czeka." />
+        </StackPanel>
+
         <StackPanel IsVisible="{Binding IsSyncing}" Margin="0,10,0,0">
           <TextBlock Classes="label" Text="Przeglądarka nie wróciła sama?" />
           <Grid ColumnDefinitions="*,Auto">

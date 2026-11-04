@@ -9,6 +9,7 @@ using Marshal.Infrastructure.Calendar;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
 using Marshal.Infrastructure.Sync.Google;
+using Avalonia.Threading;
 
 namespace Marshal.UI.ViewModels;
 
@@ -69,6 +70,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         _calendars = calendars;
         _google = google;
         _journal = journal;
+
+        // Adres zgody przychodzi ze środka logowania, z wątku roboczego — stąd podanie
+        // go oknu przez jego własną pętlę. Model ustawień jest jeden na całą aplikację,
+        // więc podpięcie do zdarzenia statycznego nie ma czego przeżyć.
+        ConsentReturn.Offered += address =>
+            Dispatcher.UIThread.Post(() => ConsentAddress = address);
     }
 
     /// <summary>
@@ -197,6 +204,24 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     public partial bool IsSyncing { get; set; }
+
+    /// <summary>
+    /// Adres zgody do otwarcia z ręki. Pusty, dopóki logowanie o niego nie poprosi.
+    /// </summary>
+    /// <remarks>
+    /// Otwarcie przeglądarki robi biblioteka uruchomieniem procesu systemowego, a ten
+    /// potrafi nie zrobić nic i niczego nie zgłosić. Z ekranu wygląda to identycznie
+    /// jak przeglądarka otwarta i porzucona — po pięciu minutach „przerwane", i tyle
+    /// wiadomo. Adres na wierzchu rozdziela te dwie przyczyny i obie naprawia:
+    /// wystarczy go wkleić gdziekolwiek, a powrót idzie tą samą pętlą zwrotną.
+    /// </remarks>
+    [ObservableProperty]
+    public partial string ConsentAddress { get; set; } = string.Empty;
+
+    public bool HasConsentAddress => ConsentAddress.Length > 0;
+
+    partial void OnConsentAddressChanged(string value) =>
+        OnPropertyChanged(nameof(HasConsentAddress));
 
     /// <summary>Adres przepisany z paska przeglądarki, gdy nie wróciła sama.</summary>
     [ObservableProperty]

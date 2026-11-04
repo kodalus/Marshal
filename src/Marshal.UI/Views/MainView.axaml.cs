@@ -2761,6 +2761,26 @@ public partial class MainView : UserControl
         _ = Try(what, () => work(model));
     }
 
+    /// <summary>Adres zgody do schowka — do wklejenia w przeglądarce.</summary>
+    private void CopyConsentAddress(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel model
+            || model.Settings.ConsentAddress is not { Length: > 0 } address)
+        {
+            return;
+        }
+
+        _ = Try(
+            "Zgoda: kopiowanie adresu",
+            async () =>
+            {
+                if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+                {
+                    await clipboard.SetTextAsync(address);
+                }
+            });
+    }
+
     /// <summary>Zaznaczenie całego dziennika — do przepisania go komuś w całości.</summary>
     private void JournalSelectAll(object? sender, RoutedEventArgs e) =>
         this.FindControl<ListBox>("DziennikLista")?.SelectAll();
