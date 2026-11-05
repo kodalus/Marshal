@@ -2,4 +2,10 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Testy sięgają po rachunki nieba (Meeus): chwile nowiu i przesilenia trzeba
+         porównać z tablicami wprost, a nie przez daty, które z nich wychodzą. Samo
+         to, co widać w aplikacji, nie odróżniłoby błędu o minutę od błędu o godzinę. -->
+    <InternalsVisibleTo Include="Marshal.Tests" />
+  </ItemGroup>
 </Project>
