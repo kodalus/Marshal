@@ -35,6 +35,7 @@ urządzeniu, a przy włączonej synchronizacji — na **Twoim** koncie Google, p
 poświadczeniach, które zakładasz sama.
 
 - [**Polityka prywatności**](prywatnosc)
+- [**Warunki korzystania**](warunki)
 
 ## Kod i zgłoszenia
 

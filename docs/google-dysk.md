@@ -77,6 +77,11 @@ Repozytorium Marshala wystawia katalog `docs/` jako stronę. Adresy wyglądają 
 |---|---|
 | Strona główna aplikacji | `https://<konto>.github.io/Marshal/` |
 | Polityka prywatności | `https://<konto>.github.io/Marshal/prywatnosc` |
+| Warunki korzystania | `https://<konto>.github.io/Marshal/warunki` |
+
+Warunki korzystania są w konsoli polem **nieobowiązkowym** — obowiązkowa jest sama
+polityka prywatności. Strona i tak istnieje, więc nie ma powodu zostawiać pustego
+pola: wypełnione zdejmuje pytanie, czy aby na pewno nie było potrzebne.
 
 Włączenie: **Settings → Pages → Source: Deploy from a branch → `main` / `/docs`**.
 
