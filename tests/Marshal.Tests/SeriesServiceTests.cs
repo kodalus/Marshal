@@ -19,8 +19,9 @@ namespace Marshal.Tests;
 /// </summary>
 /// <remarks>
 /// Trzy obietnice, od których zależy cała przebudowa, i każda ma tu swój test.
-/// Dopełnianie wolno puszczać ile razy się chce. Dzień skasowany nie wraca. Zmiana
-/// serii nie dotyka dnia, który ktoś zmienił z ręki.
+/// Dopełnianie wolno puszczać ile razy się chce. Dzień pominięty z ręki nie wraca,
+/// a zabrany przez samo okno wraca, gdy plan znowu go chce. Zmiana serii nie dotyka
+/// dnia, który ktoś zmienił z ręki.
 /// </remarks>
 public sealed class SeriesServiceTests : IDisposable
 {
@@ -147,17 +148,24 @@ public sealed class SeriesServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Skasowany_dzien_nie_wraca_przy_dopelnieniu()
+    public async Task Pominiety_dzien_nie_wraca_przy_dopelnieniu()
     {
         // Sedno różnicy wobec starego modelu: „tej środy nie będzie" jest zapisem
         // trwałym, a nie odwołaniem doklejonym do reguły, które przy pierwszym
         // obcięciu minionych zmian przepadało.
+        //
+        // Pominięcie to **dwie** rzeczy: nagrobek i znacznik „zmienione z ręki" —
+        // i to drugie jest tu treścią, nie szczegółem zapisu. Sam nagrobek mówi tylko
+        // tyle, że dnia nie ma; dopiero znacznik mówi, że ktoś tak postanowił, a okno
+        // potrzebuje właśnie tego, żeby wiedzieć, czego nie wolno mu odbudować.
+        // Tak stawia je TaskEditService.SkipOccurrenceAsync.
         var one = await Start();
 
         await FillAsync(one);
         var day = Today.AddDays(3);
         var victim = Days(one).Single(z => z.DoDate == day);
 
+        victim.Override(_hlc.Next());
         victim.Trash(_hlc.Next());
         _db.SaveChanges();
 
@@ -165,6 +173,32 @@ public sealed class SeriesServiceTests : IDisposable
 
         Days(one).Where(z => z.DoDate == day)
             .Should().ContainSingle().Which.State.Should().Be(TaskState.Trashed);
+    }
+
+    [Fact]
+    public async Task Dzien_zabrany_przez_okno_wraca_gdy_plan_znowu_go_chce()
+    {
+        // Druga strona tego samego rozróżnienia. Nagrobek **bez** znacznika nie jest
+        // decyzją, tylko rachunkiem: tak okno zabiera dzień, którego plan chwilowo nie
+        // chce. Rachunek przy zmienionej regule wychodzi inaczej — i wtedy dzień ma
+        // wrócić, bo nikt nigdy nie powiedział, że go nie ma być.
+        //
+        // Dopóki obie rzeczy były jednym nagrobkiem, nie wracał nigdy. Wystarczyło,
+        // żeby plan skurczył się na chwilę — przy zaczepieniu na wykonaniu okno liczy
+        // jedno wystąpienie — a wszystkie dalsze dni ginęły na zawsze, bo ich daty były
+        // już zajęte własnymi nagrobkami. Seria bez końca urywała się po cichu.
+        var one = await Start();
+
+        await FillAsync(one);
+        var day = Today.AddDays(3);
+        var asleep = Days(one).Single(z => z.DoDate == day);
+
+        asleep.Trash(_hlc.Next());
+        _db.SaveChanges();
+
+        (await _rhythms.TopUpAsync(one)).Added.Should().Be(1);
+
+        Days(one).Single(z => z.DoDate == day).State.Should().Be(TaskState.Scheduled);
     }
 
     [Fact]
