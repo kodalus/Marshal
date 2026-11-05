@@ -339,16 +339,16 @@ public sealed class SeriesService(
             // dokładnie tą chwilą, w której ktoś patrzy na serię i oczekuje, że jest
             // policzona. Jedyną drogą do dopełnienia był minutnik, a ten pyta o to
             // tylko wtedy, gdy poprzednie pytanie coś dołożyło.
-            var (fresh, _) = await ReconcileAsync(one, MaxPerRun, ct);
+            var (filled, _) = await ReconcileAsync(one, MaxPerRun, ct);
 
-            if (touched > 0 || fresh > 0)
+            if (touched > 0 || filled > 0)
             {
                 await unitOfWork.SaveChangesAsync(ct);
             }
 
             await MirrorSeriesAsync(one, ct);
 
-            return new TopUpReport(fresh, 0);
+            return new TopUpReport(filled, 0);
         }
 
         var retired = 0;
