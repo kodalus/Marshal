@@ -1,4 +1,5 @@
 using Marshal.Application.Abstractions;
+using Marshal.Domain.Lunar;
 using Marshal.Domain.Sync;
 
 namespace Marshal.Infrastructure.Data;
@@ -238,6 +239,96 @@ public sealed class LocalSettings(MarshalDbContext db) : ISettings
         {
             Write(DailyBackupKey, on ? "1" : "0");
             _dailyBackup = on;
+        }
+    }
+
+    public const string LunarKey = "lunar";
+
+    public const string LunarNamesKey = "lunar-names";
+
+    public const string LunarMonthNamesKey = "lunar-month-names";
+
+    private bool? _lunar;
+
+    private bool? _lunarNames;
+
+    private string? _lunarMonthNames;
+
+    /// <summary>
+    /// Kalendarz księżycowy — **wyłączony, dopóki nie włączony**.
+    /// </summary>
+    /// <remarks>
+    /// Odwrotnie niż przy kopii zapasowej i z tego samego powodu: tam brak decyzji
+    /// znaczy „chroń mnie”, bo zaniechanie kosztuje dane. Tutaj brak decyzji znaczy
+    /// „nie dodawaj mi niczego na ekran”, bo zaniechanie nie kosztuje nic.
+    /// </remarks>
+    public bool LunarShown
+    {
+        get { lock (_gate) { return _lunar ??= Read(LunarKey) == "1"; } }
+    }
+
+    public void SetLunarShown(bool on)
+    {
+        lock (_gate)
+        {
+            Write(LunarKey, on ? "1" : "0");
+            _lunar = on;
+        }
+    }
+
+    public bool LunarNamesShown
+    {
+        get { lock (_gate) { return _lunarNames ??= Read(LunarNamesKey) == "1"; } }
+    }
+
+    public void SetLunarNamesShown(bool on)
+    {
+        lock (_gate)
+        {
+            Write(LunarNamesKey, on ? "1" : "0");
+            _lunarNames = on;
+        }
+    }
+
+    /// <summary>
+    /// Nazwy miesięcy księżycowych. Trzynaście wierszy, pusty wiersz znaczy brak nazwy.
+    /// </summary>
+    /// <remarks>
+    /// Wiersze, nie JSON — tak samo jak lista kont kalendarzowych wyżej. Różnica jest
+    /// jedna i istotna: tutaj <b>pozycja znaczy numer miesiąca</b>, więc pustych wierszy
+    /// nie wolno pominąć przy czytaniu. Wyczyszczenie trzeciej nazwy nie może przesunąć
+    /// czwartej na trzecie miejsce.
+    /// </remarks>
+    public IReadOnlyList<string> LunarMonthNames
+    {
+        get
+        {
+            lock (_gate)
+            {
+                _lunarMonthNames ??= Read(LunarMonthNamesKey) ?? string.Empty;
+
+                return LunarNames.Padded(_lunarMonthNames.Split('\n'));
+            }
+        }
+    }
+
+    public void SetLunarMonthNames(IReadOnlyList<string> names)
+    {
+        ArgumentNullException.ThrowIfNull(names);
+
+        lock (_gate)
+        {
+            // Znak nowej linii zamieniany na odstęp, bo on jest tu separatorem: nazwa,
+            // która go niesie, rozsypałaby całą listę i przesunęła numery. Z pola
+            // jednowierszowego nie przyjdzie, ale z wklejenia albo z ręcznej poprawki
+            // bazy — owszem.
+            var rows = LunarNames.Padded(names)
+                .Select(z => z.Replace('\n', ' ').Replace('\r', ' ').Trim());
+
+            var patch = string.Join('\n', rows);
+
+            Write(LunarMonthNamesKey, patch);
+            _lunarMonthNames = patch;
         }
     }
 

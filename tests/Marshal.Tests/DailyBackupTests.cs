@@ -45,6 +45,20 @@ public sealed class DailyBackupTests : IDisposable
 
         public void SetBackupFolder(string? path) => BackupFolder = path;
 
+        public bool LunarShown { get; set; }
+
+        public void SetLunarShown(bool on) => LunarShown = on;
+
+        public bool LunarNamesShown { get; set; }
+
+        public void SetLunarNamesShown(bool on) => LunarNamesShown = on;
+
+        public List<string> MonthNames { get; private set; } = [.. Enumerable.Repeat(string.Empty, 13)];
+
+        public IReadOnlyList<string> LunarMonthNames => MonthNames;
+
+        public void SetLunarMonthNames(IReadOnlyList<string> names) => MonthNames = [.. names];
+
         public TimeZoneInfo Zone => TimeZoneInfo.Utc;
 
         public string? ZoneProblem => null;

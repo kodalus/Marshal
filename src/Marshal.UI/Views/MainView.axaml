@@ -2629,6 +2629,50 @@
                    Foreground="{DynamicResource Ostrzezenie}"
                    Text="{Binding ZoneProblem}" IsVisible="{Binding HasZoneProblem}" />
 
+        <!-- Kalendarz księżycowy: nakładka, nie druga oś. Stoi tuż pod strefą, bo to
+             strefa rozstrzyga, który dzień kalendarzowy dostaje nów — nów o 23:50
+             daje inny dzień niż nów dwadzieścia minut później. -->
+        <TextBlock Classes="label" Margin="0,18,0,0" Text="Kalendarz księżycowy" />
+        <TextBlock Classes="hint" Margin="2,0,0,8" TextWrapping="Wrap"
+                   Text="Miesiąc od nowiu do dnia przed następnym — 29 albo 30 dni. Rok od pierwszego nowiu po przesileniu zimowym, więc raz na dwa lub trzy lata wychodzi trzynaście miesięcy. Daty, terminy i rytmy liczą się tak samo niezależnie od tego ustawienia." />
+        <CheckBox IsChecked="{Binding LunarShown}"
+                  Content="Pokazuj kalendarz księżycowy" />
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="{Binding LunarState}" />
+
+        <!-- Niedostępny, nie ukryty, dopóki kalendarz jest wyłączony: ukryty kazałby się
+             domyślać, że istnieje. Wyłączenie kalendarza nie kasuje wpisanych nazw. -->
+        <CheckBox Margin="0,10,0,0" IsChecked="{Binding LunarNamesShown}"
+                  IsEnabled="{Binding LunarNamesAvailable}"
+                  Content="Pokazuj nazwy miesięcy zamiast numerów" />
+
+        <StackPanel Margin="0,8,0,0" IsVisible="{Binding LunarNamesEditable}">
+          <TextBlock Classes="hint" Margin="2,0,0,6" TextWrapping="Wrap"
+                     Text="Trzynaście pól, bo tyle miesięcy ma najdłuższy rok. Puste pole znaczy „bez nazwy” — zostaje wtedy numer. Nazwy są zapisane w tym urządzeniu i nie jadą na drugie." />
+          <ItemsControl ItemsSource="{Binding LunarMonths}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:LunarNameRow">
+                <Grid ColumnDefinitions="64,*" Margin="0,2">
+                  <TextBlock Grid.Column="0" Classes="hint" VerticalAlignment="Center"
+                             Text="{Binding Label}" />
+                  <TextBox Grid.Column="1" Text="{Binding Name}"
+                           Watermark="bez nazwy" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                     Text="Trzynasty miesiąc wypada tylko w latach, w których między dwoma przesileniami mieści się trzynaście nowiów — i jest wtedy zawsze ostatni." />
+          <WrapPanel Margin="0,8,0,0">
+            <Button Classes="nav" Margin="0,0,8,0" Command="{Binding PresetLunarNamesCommand}"
+                    Content="Wstaw propozycję" />
+            <Button Classes="cichy" Padding="14,8" Command="{Binding ClearLunarNamesCommand}"
+                    Content="Wyczyść nazwy" />
+          </WrapPanel>
+          <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                     Text="Propozycja nadpisuje wszystkie trzynaście pól, także wypełnione." />
+        </StackPanel>
+
         <TextBlock Classes="label" Margin="0,18,0,0" Text="Kopia zapasowa" />
         <TextBlock Classes="hint" Margin="2,0,0,8" TextWrapping="Wrap"
                    Text="Jeden plik JSON, bez konta i bez sieci. Synchronizacja chroni przed utratą urządzenia; kopia chroni przed utratą Dysku, konta albo zaufania do nich." />

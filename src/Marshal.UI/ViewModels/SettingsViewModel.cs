@@ -8,6 +8,7 @@ using Marshal.Application.Calendar;
 using Marshal.Infrastructure.Calendar;
 using Marshal.Domain.Calendar;
 using Marshal.Domain.Diagnostics;
+using Marshal.Domain.Lunar;
 using Marshal.Infrastructure.Sync.Google;
 using Avalonia.Threading;
 
@@ -103,6 +104,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         // ekranu zapisywałoby do bazy wartość, której nikt nie zmieniał.
         AutoBackup = _settings.DailyBackup;
 
+        LunarShown = _settings.LunarShown;
+        LunarNamesShown = _settings.LunarNamesShown;
+        FillLunarNames(_settings.LunarMonthNames);
+
         _loading = false;
 
         // Wejście na ekran zawsze zastaje przycisk czynny. Gdyby poprzednia próba
@@ -117,6 +122,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         AnnounceBackup();
 
         OnPropertyChanged(nameof(Now));
+        OnPropertyChanged(nameof(LunarState));
+        OnPropertyChanged(nameof(LunarNamesAvailable));
+        OnPropertyChanged(nameof(LunarNamesEditable));
     }
 
     /// <summary>Otwiera strumień do zapisu kopii albo zwraca <c>null</c>, gdy zrezygnowano.</summary>
@@ -1069,6 +1077,150 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Kalendarz księżycowy obok gregoriańskiego.
+    /// </summary>
+    /// <remarks>
+    /// Wyłączony domyślnie — odwrotnie niż codzienna kopia, i z odwrotnego powodu:
+    /// zaniechanie nic tu nie kosztuje, bo to podpis pod datą, a nie rachunek.
+    /// </remarks>
+    [ObservableProperty]
+    public partial bool LunarShown { get; set; }
+
+    partial void OnLunarShownChanged(bool value)
+    {
+        // Nazwy nie gasną i nie znikają razem z kalendarzem: ich przełącznik tylko
+        // przestaje być dostępny, a wpisane nazwy zostają w bazie. Wyłączenie
+        // kalendarza na pół dnia nie ma kosztować trzynastu pól do wpisania na nowo.
+        OnPropertyChanged(nameof(LunarNamesAvailable));
+        OnPropertyChanged(nameof(LunarNamesEditable));
+        OnPropertyChanged(nameof(LunarState));
+
+        if (!_loading)
+        {
+            _settings.SetLunarShown(value);
+        }
+    }
+
+    /// <summary>Czy przełącznik nazw jest w ogóle do ruszenia.</summary>
+    /// <remarks>
+    /// Nazwy bez kalendarza nie znaczą nic, więc ten przełącznik jest niedostępny,
+    /// dopóki kalendarz jest wyłączony — niedostępny, nie ukryty. Ukryty kazałby się
+    /// domyślać, że istnieje.
+    /// </remarks>
+    public bool LunarNamesAvailable => LunarShown;
+
+    /// <summary>Czy lista trzynastu pól na nazwy ma być widoczna.</summary>
+    /// <remarks>
+    /// Dwa warunki naraz, więc właściwość, a nie przelicznik w XAML-u: pola na nazwy
+    /// mają sens tylko wtedy, gdy kalendarz jest włączony i nazwy wybrane.
+    /// </remarks>
+    public bool LunarNamesEditable => LunarShown && LunarNamesShown;
+
+    [ObservableProperty]
+    public partial bool LunarNamesShown { get; set; }
+
+    partial void OnLunarNamesShownChanged(bool value)
+    {
+        OnPropertyChanged(nameof(LunarNamesEditable));
+        OnPropertyChanged(nameof(LunarState));
+
+        if (!_loading)
+        {
+            _settings.SetLunarNamesShown(value);
+        }
+    }
+
+    /// <summary>Trzynaście pól na nazwy miesięcy — pozycja znaczy numer.</summary>
+    public ObservableCollection<LunarNameRow> LunarMonths { get; } = [];
+
+    /// <summary>Jak dziś wygląda podpis, przy obecnych ustawieniach.</summary>
+    /// <remarks>
+    /// Podgląd na żywo, bo samo „Luna 10, dzień 27" nic nie mówi, dopóki nie stanie
+    /// obok daty, którą się zna. To także jedyne miejsce, w którym widać od razu, co
+    /// robi przełącznik nazw — bez chodzenia na kalendarz i z powrotem.
+    /// </remarks>
+    public string LunarState
+    {
+        get
+        {
+            if (!LunarShown)
+            {
+                return "Wyłączony — kalendarz pokazuje tylko daty gregoriańskie.";
+            }
+
+            var today = _clock.Today;
+            var date = LunarCalendar.Of(today, _settings.Zone);
+            var names = LunarNamesShown ? LunarMonths.Select(z => z.Name).ToList() : null;
+
+            var month = LunarNames.Of(names, date.Month) ?? $"Luna {date.Month}";
+
+            return $"Dzisiaj: {month}, dzień {date.Day} z {date.Length}.";
+        }
+    }
+
+    /// <summary>Wstawienie propozycji nazw.</summary>
+    /// <remarks>
+    /// Nadpisuje wszystkie trzynaście pól, także wypełnione. Scalanie — „wstaw tylko
+    /// w puste" — brzmi uprzejmiej, ale daje listę w połowie swoją, w połowie cudzą,
+    /// po której nie wiadomo już, co się wpisało samemu. Przycisk, który zabiera wpisane
+    /// nazwy, musi to robić jawnie i do końca.
+    /// </remarks>
+    [RelayCommand]
+    private void PresetLunarNames()
+    {
+        FillLunarNames(LunarNames.Preset);
+        _settings.SetLunarMonthNames(LunarNames.Preset);
+        Status = "Nazwy miesięcy księżycowych wstawione z propozycji.";
+        OnPropertyChanged(nameof(LunarState));
+    }
+
+    /// <summary>Wyczyszczenie wszystkich nazw — numery zostają, bo są zawsze.</summary>
+    [RelayCommand]
+    private void ClearLunarNames()
+    {
+        var empty = LunarNames.Padded(null);
+
+        FillLunarNames(empty);
+        _settings.SetLunarMonthNames(empty);
+        Status = "Nazwy miesięcy wyczyszczone — zostają numery.";
+        OnPropertyChanged(nameof(LunarState));
+    }
+
+    private void FillLunarNames(IReadOnlyList<string> names)
+    {
+        var padded = LunarNames.Padded(names);
+
+        // Lista stawiana raz i potem tylko wypełniana: wiersze są podpięte do pól
+        // tekstowych, a wymiana całej kolekcji przy każdym wczytaniu gasiłaby kursor
+        // w polu, w którym ktoś właśnie pisze.
+        if (LunarMonths.Count != LunarNames.Count)
+        {
+            LunarMonths.Clear();
+
+            for (var number = 1; number <= LunarNames.Count; number++)
+            {
+                LunarMonths.Add(new LunarNameRow(number, SaveLunarNames));
+            }
+        }
+
+        for (var index = 0; index < LunarNames.Count; index++)
+        {
+            LunarMonths[index].Fill(padded[index]);
+        }
+    }
+
+    private void SaveLunarNames()
+    {
+        if (_loading)
+        {
+            return;
+        }
+
+        _settings.SetLunarMonthNames([.. LunarMonths.Select(z => z.Name)]);
+        OnPropertyChanged(nameof(LunarState));
+    }
+
     partial void OnThemeChanged(ThemeOption? value)
     {
         if (value is not null && !_loading)
@@ -1098,4 +1250,52 @@ public sealed partial class SettingsViewModel : ObservableObject
 public sealed record MainCalendarChoice(Guid? Id, string Name)
 {
     public override string ToString() => Name;
+}
+
+/// <summary>
+/// Jedno pole na nazwę miesiąca księżycowego.
+/// </summary>
+/// <remarks>
+/// Osobny typ, a nie zwykły napis na liście, bo pole ma być edytowalne: wiązanie
+/// dwustronne potrzebuje czegoś, co umie powiedzieć, że się zmieniło. Numer jest
+/// niezmienny i to on jest tożsamością wiersza — nazwa może być pusta, numer nigdy.
+/// </remarks>
+public sealed partial class LunarNameRow(int number, Action changed) : ObservableObject
+{
+    /// <summary>Numer miesiąca, od 1 do 13.</summary>
+    public int Number { get; } = number;
+
+    /// <summary>Podpis pola: numer, bo on jest tym, co nazwa zastępuje.</summary>
+    public string Label => $"Luna {Number}";
+
+    /// <summary>
+    /// Czy to ten trzynasty, którego w większości lat nie ma.
+    /// </summary>
+    /// <remarks>
+    /// Warte odnotowania przy polu, bo inaczej trzynasta nazwa wygląda na pomyłkę —
+    /// miesięcy w roku widać dwanaście.
+    /// </remarks>
+    public bool IsThirteenth => Number == LunarNames.Count;
+
+    /// <summary>Wstrzymuje zapis w chwili wypełniania pola wartością z ustawień.</summary>
+    private bool _filling;
+
+    [ObservableProperty]
+    public partial string Name { get; set; } = string.Empty;
+
+    partial void OnNameChanged(string value)
+    {
+        if (!_filling)
+        {
+            changed();
+        }
+    }
+
+    /// <summary>Wpisanie wartości z ustawień, bez zapisu z powrotem.</summary>
+    internal void Fill(string name)
+    {
+        _filling = true;
+        Name = name;
+        _filling = false;
+    }
 }

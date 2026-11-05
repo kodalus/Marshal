@@ -120,6 +120,20 @@ public sealed class CalendarStoreTests : IDisposable
         public string? BackupFolder => null;
 
         public void SetBackupFolder(string? path) => throw new NotSupportedException();
+
+        public bool LunarShown { get; set; }
+
+        public void SetLunarShown(bool on) => LunarShown = on;
+
+        public bool LunarNamesShown { get; set; }
+
+        public void SetLunarNamesShown(bool on) => LunarNamesShown = on;
+
+        public List<string> MonthNames { get; private set; } = [.. Enumerable.Repeat(string.Empty, 13)];
+
+        public IReadOnlyList<string> LunarMonthNames => MonthNames;
+
+        public void SetLunarMonthNames(IReadOnlyList<string> names) => MonthNames = [.. names];
     }
 
     /// <summary>Pisarz, który tylko zapamiętuje, co by wysłał.</summary>

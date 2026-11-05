@@ -145,6 +145,52 @@ public interface ISettings
     void SetDailyBackup(bool on);
 
     /// <summary>
+    /// Czy obok daty gregoriańskiej pokazywać kalendarz księżycowy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Domyślnie wyłączone.</b> To nakładka, nie druga oś kalendarza: dzień, termin
+    /// i rytm liczą się tak samo niezależnie od tego ustawienia, a wyłączenie go nie
+    /// zmienia w danych niczego. Dlatego wolno je domyślnie wyłączyć — ustawienie, które
+    /// zmieniałoby rachunek, wyłączać domyślnie nie wolno.
+    /// </para>
+    /// <para>
+    /// <b>Lokalne, nie synchronizowane</b> — jak motyw i strefa. To decyzja o tym, co
+    /// pokazuje ten ekran, nie o danych. Cena jest znana i przyjęta: nazwy wpisane
+    /// na pulpicie trzeba wpisać na telefonie drugi raz.
+    /// </para>
+    /// </remarks>
+    bool LunarShown { get; }
+
+    void SetLunarShown(bool on);
+
+    /// <summary>
+    /// Czy podpisywać miesiące księżycowe nazwami zamiast samymi numerami.
+    /// </summary>
+    /// <remarks>
+    /// Osobno od <see cref="LunarShown"/> i też domyślnie wyłączone, bo to dwie różne
+    /// decyzje: kalendarz księżycowy bez nazw jest kompletny, nazwy bez kalendarza nie
+    /// znaczą nic. Przechowywane niezależnie — wyłączenie kalendarza nie gasi tego
+    /// przełącznika i nie kasuje nazw, więc włączenie z powrotem zastaje wszystko
+    /// na miejscu.
+    /// </remarks>
+    bool LunarNamesShown { get; }
+
+    void SetLunarNamesShown(bool on);
+
+    /// <summary>
+    /// Trzynaście nazw miesięcy księżycowych. Pozycja znaczy numer, pustka znaczy brak nazwy.
+    /// </summary>
+    /// <remarks>
+    /// Zawsze trzynaście pozycji, także w roku dwunastomiesięcznym: inaczej lista
+    /// w ustawieniach raz miałaby dwanaście pól, a raz trzynaście — zależnie od roku,
+    /// w którym ktoś ją otworzył.
+    /// </remarks>
+    IReadOnlyList<string> LunarMonthNames { get; }
+
+    void SetLunarMonthNames(IReadOnlyList<string> names);
+
+    /// <summary>
     /// Folder na codzienne kopie. Puste znaczy „domyślny dla tej platformy".
     /// </summary>
     /// <remarks>

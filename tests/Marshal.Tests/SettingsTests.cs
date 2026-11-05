@@ -105,6 +105,112 @@ public sealed class SettingsTests : IDisposable
     }
 
     /// <summary>Ustawienia o jednej wartości — na potrzeby sprawdzenia samego zegara.</summary>
+    [Fact]
+    public void Kalendarz_ksiezycowy_i_nazwy_sa_domyslnie_wylaczone()
+    {
+        // Odwrotnie niż codzienna kopia i z odwrotnego powodu: tam zaniechanie kosztuje
+        // dane, więc brak decyzji znaczy „chroń mnie”. Tutaj zaniechanie nie kosztuje
+        // nic, więc brak decyzji znaczy „nie dodawaj mi niczego na ekran”.
+        _settings.LunarShown.Should().BeFalse();
+        _settings.LunarNamesShown.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Bez_zapisu_jest_trzynascie_pustych_nazw_a_nie_pusta_lista()
+    {
+        // Pusta lista kazałaby każdemu, kto po nią sięga, liczyć pozycje samemu.
+        // Trzynaście pustych pól to gotowy formularz i gotowe wejście do podpisu.
+        _settings.LunarMonthNames.Should().HaveCount(13);
+        _settings.LunarMonthNames.Should().OnlyContain(z => z.Length == 0);
+    }
+
+    [Fact]
+    public void Nazwy_przezywaja_ponowne_otwarcie()
+    {
+        _settings.SetLunarMonthNames(["Luna Mrozu", "Luna Śniegu"]);
+
+        var znowu = new LocalSettings(_db);
+
+        znowu.LunarMonthNames.Should().HaveCount(13);
+        znowu.LunarMonthNames[0].Should().Be("Luna Mrozu");
+        znowu.LunarMonthNames[1].Should().Be("Luna Śniegu");
+        znowu.LunarMonthNames[2].Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Wyczyszczona_nazwa_nie_przesuwa_pozostalych()
+    {
+        // Tu pozycja znaczy numer miesiąca, więc pustych wierszy nie wolno pominąć
+        // przy czytaniu. Pominięte przesunęłyby czwartą nazwę na trzecie miejsce —
+        // czyli wyczyszczenie jednego pola przestawiłoby wszystkie następne.
+        _settings.SetLunarMonthNames(
+            ["Pierwsza", "Druga", "", "Czwarta", "", "", "", "", "", "", "", "", "Trzynasta"]);
+
+        var znowu = new LocalSettings(_db);
+
+        znowu.LunarMonthNames[2].Should().BeEmpty();
+        znowu.LunarMonthNames[3].Should().Be("Czwarta");
+        znowu.LunarMonthNames[12].Should().Be("Trzynasta");
+    }
+
+    [Fact]
+    public void Wylaczenie_kalendarza_nie_kasuje_nazw()
+    {
+        // Wyłączenie na pół dnia nie ma kosztować trzynastu pól do wpisania na nowo.
+        _settings.SetLunarShown(true);
+        _settings.SetLunarNamesShown(true);
+        _settings.SetLunarMonthNames(["Luna Mrozu"]);
+
+        _settings.SetLunarShown(false);
+
+        _settings.LunarMonthNames[0].Should().Be("Luna Mrozu");
+
+        // I przełącznik nazw też zostaje włączony: to osobna decyzja, więc gaszenie go
+        // za użytkownika kazałoby mu ją podejmować dwa razy.
+        _settings.LunarNamesShown.Should().BeTrue();
+
+        _settings.SetLunarShown(true);
+
+        _settings.LunarNamesShown.Should().BeTrue();
+        _settings.LunarMonthNames[0].Should().Be("Luna Mrozu");
+    }
+
+    [Fact]
+    public void Nazwa_dluzsza_niz_lista_jest_przycinana_a_nie_odrzucana()
+    {
+        _settings.SetLunarMonthNames([.. Enumerable.Range(1, 20).Select(z => $"Luna {z}")]);
+
+        _settings.LunarMonthNames.Should().HaveCount(13);
+        _settings.LunarMonthNames[12].Should().Be("Luna 13");
+    }
+
+    [Fact]
+    public void Znak_nowej_linii_w_nazwie_nie_rozsypuje_listy()
+    {
+        // Nowa linia jest tu separatorem. Z pola jednowierszowego nie przyjdzie, ale
+        // z wklejenia albo z ręcznej poprawki bazy — owszem, i wtedy przesunęłaby numery.
+        _settings.SetLunarMonthNames(["Luna\nMrozu", "Luna Śniegu"]);
+
+        var znowu = new LocalSettings(_db);
+
+        znowu.LunarMonthNames.Should().HaveCount(13);
+        znowu.LunarMonthNames[0].Should().Be("Luna Mrozu");
+        znowu.LunarMonthNames[1].Should().Be("Luna Śniegu");
+    }
+
+    [Fact]
+    public void Ustawienia_ksiezycowe_nie_trafiaja_do_dziennika_zmian()
+    {
+        // Tabela ustawień jest urządzeniowa i celowo niesynchronizowana — tak samo jak
+        // motyw i strefa. Nazwy wpisane na pulpicie nie mają jechać na telefon, bo to
+        // decyzja o tym, co pokazuje ten ekran.
+        _settings.SetLunarShown(true);
+        _settings.SetLunarNamesShown(true);
+        _settings.SetLunarMonthNames(["Luna Mrozu"]);
+
+        _db.Changes.Should().BeEmpty();
+    }
+
     private sealed class NewZone(string id) : ISettings
     {
         public TimeZoneInfo Zone { get; } = TimeZoneInfo.FindSystemTimeZoneById(id);
@@ -145,6 +251,20 @@ public sealed class SettingsTests : IDisposable
         public string? BackupFolder => null;
 
         public void SetBackupFolder(string? path) => throw new NotSupportedException();
+
+        public bool LunarShown { get; set; }
+
+        public void SetLunarShown(bool on) => LunarShown = on;
+
+        public bool LunarNamesShown { get; set; }
+
+        public void SetLunarNamesShown(bool on) => LunarNamesShown = on;
+
+        public List<string> MonthNames { get; private set; } = [.. Enumerable.Repeat(string.Empty, 13)];
+
+        public IReadOnlyList<string> LunarMonthNames => MonthNames;
+
+        public void SetLunarMonthNames(IReadOnlyList<string> names) => MonthNames = [.. names];
     }
 
     private sealed class StalyMoment(DateTimeOffset now) : IClock
