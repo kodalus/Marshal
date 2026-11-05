@@ -788,11 +788,24 @@ public sealed class TaskEditService(
         // pominięcie dnia jedzie do Google razem z nim, jako EXDATE. Wysyłka siedzi
         // przy serii i stąd ją wołamy: bez tego pominięty dzień zostawał w cudzym
         // kalendarzu, choć w Marshalu już go nie było.
+        // **Okno dopełniane po pominięciu, tak samo jak po odhaczeniu.** Samo pominięcie
+        // horyzontu nie przesuwa — okno liczy dni rytmu od dziś, a nie wystąpienia
+        // otwarte — ale dzień pominięty bywa dniem, po którym da się policzyć kolejny:
+        // przy rytmie zaczepionym na wykonaniu, przy serii z licznikiem i wszędzie tam,
+        // gdzie poprzedni przebieg wyczerpał budżet partii. Odhaczenie dopełniało okno
+        // od początku, pominięcie nie dopełniało go nigdy, a są to dwie drogi wyjścia
+        // z tego samego dnia.
+        if (await SeriesOfAsync(task, ct) is { } one)
+        {
+            await rhythms.TopUpAsync(one, ct);
+        }
+
         await MirrorAsync(task, ct);
         await MirrorRhythmAsync(task, ct);
 
         return next;
     }
+
 
     /// <summary>
     /// Wyrównanie wydarzenia cyklicznego po zmianie jednego dnia.
@@ -809,7 +822,7 @@ public sealed class TaskEditService(
     /// </remarks>
     private async Task MirrorRhythmAsync(TaskItem task, CancellationToken ct)
     {
-        if (task.SeriesId is not { } rhythm || await series.FindAsync(rhythm, ct) is not { } one)
+        if (await SeriesOfAsync(task, ct) is not { } one)
         {
             return;
         }
