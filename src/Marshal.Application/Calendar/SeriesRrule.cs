@@ -145,8 +145,31 @@ public static class SeriesRrule
                 ',', sorted.Select(z => z.ToString("yyyyMMdd", CultureInfo.InvariantCulture)));
         }
 
-        return "EXDATE:" + string.Join(',', sorted.Select(z => Moment(z, at, zone)));
+        // **W strefie wydarzenia, nie w czasie uniwersalnym.** Reguła iCal żąda, żeby
+        // wyjęcie było zapisane tak samo jak początek wydarzenia, a początek jedzie
+        // z nazwą strefy (zob. SeriesMirror.Draft). Chwila uniwersalna wskazuje ten sam
+        // punkt w czasie i jest innym zapisem — a przy niezgodnym zapisie wyjęcie nie
+        // jest odrzucane z komunikatem, tylko **pomijane po cichu**: wydarzenie zapisuje
+        // się bez błędu, w odpowiedzi nie ma śladu, a pominięty dzień stoi w kalendarzu
+        // dalej. Nie ma po czym poznać, że coś nie doszło.
+        if (IanaName(zone) is not { } named)
+        {
+            // Strefy nie da się nazwać — wydarzenia cyklicznego i tak nie wyślemy
+            // (zob. SeriesMirror), więc to jest wyłącznie zapis ostatniej szansy.
+            return "EXDATE:" + string.Join(',', sorted.Select(z => Moment(z, at, zone)));
+        }
+
+        return $"EXDATE;TZID={named}:" + string.Join(',', sorted.Select(z => Local(z, at)));
     }
+
+    /// <summary>Dzień i pora jako czas miejscowy, w zapisie iCal — bez strefy w treści.</summary>
+    /// <remarks>
+    /// Strefę niesie parametr <c>TZID</c>, więc pora zostaje taka, jaką widać w karcie:
+    /// ósma rano jest ósmą rano po obu stronach zmiany czasu, a przeliczeniem zajmuje
+    /// się Google — tak samo jak przy rozwijaniu samej reguły.
+    /// </remarks>
+    private static string Local(DateOnly day, TimeOnly at) =>
+        day.ToDateTime(at).ToString("yyyyMMdd'T'HHmmss", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Strefa w postaci, którą rozumie Google — nazwą IANA. Puste, gdy się nie da.

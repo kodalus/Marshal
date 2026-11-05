@@ -2617,10 +2617,21 @@ public partial class MainView : UserControl
     /// </remarks>
     /// <summary>Pominięcie bieżącego wystąpienia — tylko przy zadaniu z rytmem.</summary>
     /// <remarks>
+    /// <para>
     /// Pusto tam, gdzie rytmu nie ma: pozycja bez skutku uczy nieufności do całego menu.
+    /// </para>
+    /// <para>
+    /// <b>Rytm poznaje się po dwóch rzeczach, nie po jednej.</b> Pytanie o samą regułę
+    /// na zadaniu znaczyło „pokaż te pozycje wyłącznie przy rytmie ze starego modelu",
+    /// bo dzień z serii reguły <b>nie nosi</b> — leży ona w serii, a wiersz zna tylko
+    /// swoją przynależność. Menu podręczne na wystąpieniu serii nie miało więc ani
+    /// pominięcia, ani końca rytmu, choć jedno i drugie działa. Ta sama pomyłka wyszła
+    /// kiedyś przy etykietach listy i jest tu dokładnie ta sama: stan odczytany
+    /// z miejsca, w którym przestał mieszkać.
+    /// </para>
     /// </remarks>
     private IReadOnlyList<object> Skipping(MainViewModel model, TaskItem task) =>
-        task.Recurrence is null
+        task.Recurrence is null && task.SeriesId is null
             ? []
             :
             [

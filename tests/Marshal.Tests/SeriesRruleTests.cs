@@ -115,11 +115,16 @@ public sealed class SeriesRruleTests
     }
 
     [Fact]
-    public void Dni_wyjete_z_rytmu_ida_osobna_linia_jako_chwile_uniwersalne()
+    public void Dni_wyjete_z_rytmu_ida_osobna_linia_w_strefie_wydarzenia()
     {
-        // Wyjęcie musi trafić w wystąpienie co do sekundy, więc liczone jest
-        // z przesunięcia strefy **tego dnia**: pierwszy z dni leży jeszcze w czasie
-        // letnim (+2), drugi już w zimowym (+1), a pora dnia w obu jest ta sama.
+        // **Zapis musi zgadzać się z zapisem początku wydarzenia**, a ten jedzie
+        // z nazwą strefy. Chwila uniwersalna wskazuje ten sam punkt w czasie i jest
+        // innym zapisem — Google pomija taką po cichu, więc pominięty dzień zostaje
+        // w kalendarzu i nie ma po czym poznać, że coś nie doszło.
+        //
+        // Przy strefie w parametrze pora zostaje miejscowa i ta sama po obu stronach
+        // zmiany czasu: pierwszy z dni leży jeszcze w czasie letnim, drugi już
+        // w zimowym, a ósma rano jest ósmą rano w obu.
         var lines = SeriesRrule.Lines(
             new RecurrenceRule(RecurrenceKind.Daily),
             null,
@@ -128,7 +133,7 @@ public sealed class SeriesRruleTests
             [new DateOnly(2026, 10, 24), new DateOnly(2026, 10, 27)]);
 
         lines.Should().HaveCount(2);
-        lines![1].Should().Be("EXDATE:20261024T060000Z,20261027T070000Z");
+        lines![1].Should().Be("EXDATE;TZID=Europe/Warsaw:20261024T080000,20261027T080000");
     }
 
     [Fact]
