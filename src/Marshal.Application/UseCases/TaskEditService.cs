@@ -769,6 +769,14 @@ public sealed class TaskEditService(
         }
         else
         {
+            // **Pominięcie jest zmianą z ręki** i musi być tak oznaczone, bo inaczej
+            // nie da się go odróżnić od dnia zabranego przez okno — a to dwie
+            // przeciwne rzeczy. Dzień zabrany przez okno ma wrócić, gdy rachunek
+            // wyjdzie z powrotem; dzień pominięty ma zostać pominięty. Bez znacznika
+            // obie były jednym nagrobkiem i dopełnianie okna musiało traktować je tak
+            // samo: albo wskrzeszać decyzje, albo zabijać dni na zawsze. Robiło to
+            // drugie — zob. SeriesService.ReconcileAsync.
+            Pin(task);
             task.Trash(hlc.Next());
         }
 

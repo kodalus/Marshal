@@ -431,6 +431,13 @@ public sealed class SeriesService(
             .ToHashSet();
 
         var template = one.Template;
+
+        // Dni uśpione: zabrane przez okno, a nie pominięte z ręki. Tylko te wracają.
+        var asleep = standing
+            .Where(z => z.State == TaskState.Trashed && !z.Overridden && z.DoDate is not null)
+            .GroupBy(z => z.DoDate!.Value)
+            .ToDictionary(z => z.Key, z => z.First());
+
         var added = 0;
 
         foreach (var slot in plan)
@@ -438,6 +445,30 @@ public sealed class SeriesService(
             if (added >= budget)
             {
                 break;
+            }
+
+            // **Dzień zabrany przez okno wraca, dzień pominięty z ręki nie.**
+            //
+            // Obie rzeczy były dotąd jednym nagrobkiem i nie dało się ich rozróżnić —
+            // a są przeciwne. „Tej środy nie będzie" to decyzja i ma być trwała.
+            // „Okno już nie chce tego dnia" to rachunek, który przy zmienionej regule
+            // wychodzi inaczej; skoro wyszedł z powrotem, dzień ma wrócić.
+            //
+            // Z tego zlania się brała usterka: wystarczyło, żeby plan się na chwilę
+            // skurczył — na przykład przy zaczepieniu na wykonaniu, gdzie okno liczy
+            // jedno wystąpienie — a wszystkie dalsze dni szły do kosza i **nie wracały
+            // nigdy**, bo ich daty były już zajęte własnymi nagrobkami. Seria bez końca
+            // urywała się po cichu i nic jej nie prostowało.
+            //
+            // Rozróżnia je znacznik „zmienione z ręki", bo dokładnie tym pominięcie
+            // jest: świadomą decyzją o tym jednym dniu. Stawia go samo pominięcie.
+            if (asleep.TryGetValue(slot.Date, out var back))
+            {
+                back.Revive(hlc.Next());
+                back.Restamp(template, one.Rule.Time, one.Rule.Minutes, hlc.Next);
+                added++;
+
+                continue;
             }
 
             if (byId.Contains(slot.Id) || byDay.Contains(slot.Date))
