@@ -1281,7 +1281,7 @@ public sealed partial class MainViewModel : ObservableObject
             missing
                 ? "Identyfikator klienta albo tajemnica nie są wpisane "
                     + "(Ustawienia → Konto Google)."
-                : $"Katalog żetonu „{_drive.TokenFolder}” nie istnieje, więc nie ma czym "
+                : $"W katalogu „{_drive.TokenFolder}” nie ma żetonu, więc nie ma czym "
                     + "się zalogować. Zgoda wygasa po siedmiu dniach, dopóki aplikacja "
                     + "stoi w konsoli Google jako testowa — po wygaśnięciu bezużyteczny "
                     + "żeton jest kasowany, a ponowne pytanie o zgodę wymaga ręki. "
@@ -1301,7 +1301,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task RunAsync(string what, bool quiet = false)
     {
-        if (!_drive.HasCredentials || !Directory.Exists(_drive.TokenFolder))
+        if (!_drive.HasCredentials || !_drive.HasToken)
         {
             await TellSyncOffAsync();
 

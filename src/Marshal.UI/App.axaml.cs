@@ -313,7 +313,7 @@ public partial class App : Avalonia.Application
 
             return !drive.HasCredentials
                 ? "brak poświadczeń"
-                : Directory.Exists(drive.TokenFolder) ? "podłączona" : "brak żetonu";
+                : drive.HasToken ? "podłączona" : "brak żetonu";
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

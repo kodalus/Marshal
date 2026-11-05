@@ -49,6 +49,38 @@ public sealed class GoogleSyncService(
     /// </summary>
     public string TokenFolder => Path.Combine(Path.GetDirectoryName(databasePath)!, "google");
 
+    /// <summary>Czy w katalogu żetonu naprawdę coś leży.</summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Istnienie katalogu nie znaczy, że jest czym się zalogować.</b> Katalog
+    /// zakłada sama składnica żetonu przy pierwszym sięgnięciu — a sięga po nią także
+    /// kalendarz, własną drogą. Wystarczy więc jedna próba wysłania zadania do
+    /// kalendarza, żeby po wygasłej zgodzie został pusty katalog: żetonu nie ma,
+    /// a wszystko, co pytało o sam katalog, odpowiadało „podłączona".
+    /// </para>
+    /// <para>
+    /// Kosztowało to jeden dzień szukania nie tam, gdzie trzeba, i jeden fałszywy wpis
+    /// w dzienniku — czyli dokładnie to, przed czym ten wpis miał chronić.
+    /// </para>
+    /// </remarks>
+    public bool HasToken
+    {
+        get
+        {
+            try
+            {
+                return Directory.Exists(TokenFolder)
+                    && Directory.EnumerateFiles(TokenFolder).Any();
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Nie da się zajrzeć — a to nie jest powód, żeby cokolwiek przewracać.
+                // Nieudane logowanie powie o sobie samo i powie więcej.
+                return false;
+            }
+        }
+    }
+
     public async Task<SyncOutcome> SyncAsync(CancellationToken ct = default)
     {
         if (!HasCredentials)

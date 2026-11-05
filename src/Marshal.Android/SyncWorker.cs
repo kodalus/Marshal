@@ -134,7 +134,7 @@ public sealed class SyncWorker : Worker
 
         var drive = AppServices.Provider.GetRequiredService<GoogleSyncService>();
 
-        if (!drive.HasCredentials || !Directory.Exists(drive.TokenFolder))
+        if (!drive.HasCredentials || !drive.HasToken)
         {
             // Ze śladem, bo to jedyna droga, na której przebieg odpala się poprawnie
             // i nie robi nic. Bez wpisu wygląda identycznie jak przebieg, który nie
