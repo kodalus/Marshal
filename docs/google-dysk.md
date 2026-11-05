@@ -189,10 +189,18 @@ o dwa i o żadne więcej:
 Pełnego `calendar` **nie** ma, bo dokładałoby prawo do zmiany ustawień i udostępniania
 kalendarzy, czego ta aplikacja nie robi i nie ma powodu móc.
 
-Cena jest konkretna: aplikacji z tymi uprawnieniami **nie da się opublikować bez
-przeglądu** Google, więc trzeba zostać w trybie testowym, a tam żeton wygasa co siedem
-dni. Dlatego kalendarz jest osobnym polem wyboru, a nie częścią logowania — decyzja
-„wygoda kalendarza za cotygodniowe logowanie" jest Twoja, nie aplikacji.
+Cena jest konkretna, choć nie taka, jak stało tu kiedyś. Było: „aplikacji z tymi
+uprawnieniami nie da się opublikować bez przeglądu Google, więc trzeba zostać w trybie
+testowym". To zdanie przeczyło temu, co niżej mówi sekcja *Tryb testowy kontra
+produkcyjny* — i była to sprzeczność nie do zauważenia inaczej niż przy czytaniu obu
+naraz, a czyta się je w odstępie tygodni.
+
+Rozstrzygnięcie jest takie: **siedmiodniowe wygasanie żetonu jest cechą trybu
+testowego, a nie uprawnień** — zob. tamtą sekcję. Przeglądu Google wymaga dopiero
+zdjęcie ekranu „Google nie zweryfikował tej aplikacji" i wyjście poza sto kont,
+a nie samo przejście w produkcję. Dlatego kalendarz jest osobnym polem wyboru:
+decyzja „widzieć wydarzenia za cenę ostrzegawczego ekranu przy logowaniu" jest Twoja,
+nie aplikacji.
 
 Jeśli chodzi o kalendarze przedszkola albo zajęć, kanał `.ics` daje to samo na siatce
 godzinowej i nie kosztuje nic.
