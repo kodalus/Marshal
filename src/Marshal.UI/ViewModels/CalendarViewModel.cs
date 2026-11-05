@@ -267,7 +267,10 @@ public sealed record CalendarColumn(
     IReadOnlyList<AllDayBox> AllDay,
     IReadOnlyList<SlotBox> Slots,
     bool IsToday,
-    double NowTop)
+    double NowTop,
+
+    /// <summary>Podpis księżycowy dnia. Pusto, gdy kalendarz księżycowy wyłączony.</summary>
+    LunarMark? Lunar = null)
 {
     /// <summary>
     /// Liczba dnia — osobno od nazwy, bo nagłówek pisze je jedna pod drugą.
@@ -281,7 +284,8 @@ public sealed record CalendarColumn(
 
     public bool HasAllDay => AllDay.Count > 0;
 
-
+    /// <summary>Czy w nagłówku ma stanąć trzeci wiersz.</summary>
+    public bool HasLunar => Lunar is not null;
 }
 
 /// <summary>Jeden wpis w komórce miesiąca — jedna linijka, bo tyle się mieści.</summary>
@@ -341,9 +345,35 @@ public sealed record MonthCell(
     bool IsToday,
     bool IsOtherMonth,
     IReadOnlyList<MonthEntry> Entries,
-    int Overflow)
+    int Overflow,
+
+    /// <summary>Podpis księżycowy dnia. Pusto, gdy kalendarz księżycowy wyłączony.</summary>
+    LunarMark? Lunar = null)
 {
     public bool HasOverflow => Overflow > 0;
+
+    /// <summary>Czy komórka otwiera miesiąc księżycowy — po tym rysuje się kreska granicy.</summary>
+    /// <remarks>
+    /// Kreska u góry komórki, nie obramowanie całej: granica miesiąca księżycowego biegnie
+    /// przez środek tygodnia, więc obwiedziony miesiąc byłby kształtem, którego nie da się
+    /// narysować w siatce siedmiu kolumn. Kreska mówi „tu się zaczyna” i tyle wystarcza.
+    /// </remarks>
+    public bool OpensLunarMonth => Lunar is { Opens: true };
+
+    /// <summary>Nazwa miesiąca księżycowego — tylko w komórce, która go otwiera.</summary>
+    /// <remarks>
+    /// Raz na miesiąc, nie w każdej komórce. Tak samo jak nazwa miesiąca gregoriańskiego
+    /// nie stoi przy każdym dniu: powtórzona trzydzieści razy przestaje być wiadomością,
+    /// a zabiera wiersz, na którym mieści się wpis.
+    /// </remarks>
+    public string? LunarMonthName => Lunar is { Opens: true } opening ? opening.MonthName : null;
+
+    public bool HasLunarMonthName => LunarMonthName is not null;
+
+    /// <summary>Znak fazy przy numerze dnia: nów albo pełnia.</summary>
+    public string LunarGlyph => Lunar?.Glyph ?? string.Empty;
+
+    public bool HasLunarGlyph => Lunar is { HasGlyph: true };
 
     /// <summary>Licznik nadmiaru przy numerze dnia, nie pod listą.</summary>
     /// <remarks>
@@ -382,7 +412,11 @@ public sealed partial class CalendarViewModel(
     TaskEditService edit,
     IContactRepository? people = null,
     IUnitOfWork? work = null,
-    IHlcSource? logicalClock = null)
+    IHlcSource? logicalClock = null,
+
+    // Nieobowiązkowa, jak pozostałe trzy: kalendarz da się złożyć bez niej i wtedy
+    // po prostu nie ma na siatce drugiej daty. Testy siatki nie podają jej wcale.
+    LunarLabels? lunar = null)
     : ObservableObject
 {
     /// <summary>Wysokość godziny w punktach.</summary>
@@ -1644,7 +1678,8 @@ public sealed partial class CalendarViewModel(
                 day.Date == today,
                 day.Date.Month != month,
                 visible,
-                entries.Count - visible.Count));
+                entries.Count - visible.Count,
+                lunar?.Of(day.Date)));
         }
 
         for (var i = 0; i + 7 <= cells.Count; i += 7)
@@ -1788,7 +1823,8 @@ public sealed partial class CalendarViewModel(
                 e.RhythmId, e.RhythmDate)).ToList(),
             day.Timed.Select(Box).ToList(),
             day.Date == today,
-            now)).ToList();
+            now,
+            lunar?.Of(day.Date))).ToList();
     }
 
     /// <summary>

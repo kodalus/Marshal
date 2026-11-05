@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Marshal.Application.Abstractions;
+using Marshal.Application.Calendar;
 using Marshal.Application.Repositories;
 using Marshal.Application.UseCases;
 using Marshal.Domain.Recurrence;
@@ -21,7 +22,11 @@ namespace Marshal.UI.ViewModels;
 /// </remarks>
 public sealed partial class TaskDetailViewModel(
     TaskEditService edit, IClock clock, IAreaRepository areas, IProjectRepository projects,
-    InboxService inbox, IActivityLog log)
+    InboxService inbox, IActivityLog log,
+
+    // Nieobowiązkowa: karta zadania działa bez niej i wtedy po prostu nie ma pod dniem
+    // drugiej daty.
+    LunarLabels? lunar = null)
     : ObservableObject
 {
     private Guid _id;
@@ -118,6 +123,24 @@ public sealed partial class TaskDetailViewModel(
 
     [ObservableProperty]
     public partial DateTimeOffset? DoDate { get; set; }
+
+    /// <summary>
+    /// Dzień wykonania po księżycowemu — pod polem daty, nie zamiast niego.
+    /// </summary>
+    /// <remarks>
+    /// Tu jest miejsce na pełny podpis, bo karta ma szerokość okna, a nie jedną siódmą
+    /// ekranu jak kolumna siatki. Dlatego właśnie tutaj stoi nazwa miesiąca i jego
+    /// długość — czyli to, czego w nagłówku kolumny nie da się zmieścić.
+    /// </remarks>
+    public string? LunarWhen => ToDate(DoDate) is { } day ? lunar?.Full(day) : null;
+
+    public bool HasLunarWhen => LunarWhen is not null;
+
+    partial void OnDoDateChanged(DateTimeOffset? value)
+    {
+        OnPropertyChanged(nameof(LunarWhen));
+        OnPropertyChanged(nameof(HasLunarWhen));
+    }
 
     /// <summary>
     /// Godzina rozpoczęcia i zakończenia.

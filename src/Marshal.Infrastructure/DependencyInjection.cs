@@ -155,6 +155,12 @@ public static class DependencyInjection
         services.AddSingleton<ICalendarStore, CalendarStore>();
         services.AddSingleton<CalendarSyncService>();
 
+        // Podpisy księżycowe: jedno miejsce, w którym rachunek nieba spotyka się
+        // z ustawieniami. Pojedynczy egzemplarz, bo kalendarz księżycowy trzyma
+        // policzone granice miesięcy w pamięci podręcznej, a siatka miesiąca pyta
+        // o te same czterdzieści dwa dni przy każdym przerysowaniu.
+        services.AddSingleton<LunarLabels>();
+
         // Odbicie zadań w kalendarzu. Rejestrowane pod interfejsem i pod własnym typem:
         // edycja zadań zna wyłącznie interfejs (inaczej dwie usługi wskazywałyby na
         // siebie i kontener nie miałby od czego zacząć), a okno woła po udostępnienie

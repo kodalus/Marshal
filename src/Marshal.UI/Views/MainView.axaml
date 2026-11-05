@@ -1241,6 +1241,16 @@
                                  HorizontalAlignment="Center" />
                       <TextBlock Text="{Binding DayNumber}" FontWeight="SemiBold"
                                  Opacity="0.85" HorizontalAlignment="Center" />
+
+                      <!-- Dzień księżycowy pod gregoriańskim i mniejszy od niego, bo
+                           kalendarz księżycowy jest tu nakładką, a nie drugą osią.
+                           Bez nazwy miesiąca: kolumna ma na telefonie jedną siódmą
+                           szerokości ekranu i „Luna Listopada” zostawiłoby z niej trzy
+                           litery. Pełny podpis stoi w podpowiedzi i w widoku miesiąca. -->
+                      <TextBlock Text="{Binding Lunar.Mark}" FontSize="10" Opacity="0.55"
+                                 HorizontalAlignment="Center"
+                                 IsVisible="{Binding HasLunar}"
+                                 ToolTip.Tip="{Binding Lunar.Full}" />
                     </StackPanel>
                   </Border>
 
@@ -1411,6 +1421,13 @@
                     <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
                             Classes.dzisiaj="{Binding IsToday}">
                       <DockPanel>
+                        <!-- Podgląd sąsiedniego miesiąca dostaje tę samą kreskę granicy,
+                             co siatka główna: bez niej kreska gasłaby i zapalała się
+                             w trakcie przejechania palcem, czyli dokładnie wtedy, gdy
+                             patrzy się na ruch. -->
+                        <Border DockPanel.Dock="Top" Height="2" Margin="0,0,0,2"
+                                Background="{DynamicResource Blekit}" Opacity="0.55"
+                                IsVisible="{Binding OpensLunarMonth}" />
                         <TextBlock DockPanel.Dock="Top" Classes="numer" Text="{Binding Day}" />
                         <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
                           <ItemsControl.ItemTemplate>
@@ -1511,6 +1528,13 @@
                     <Border Classes="komorka" Classes.obcy="{Binding IsOtherMonth}"
                             Classes.dzisiaj="{Binding IsToday}">
                       <DockPanel>
+                        <!-- Podgląd sąsiedniego miesiąca dostaje tę samą kreskę granicy,
+                             co siatka główna: bez niej kreska gasłaby i zapalała się
+                             w trakcie przejechania palcem, czyli dokładnie wtedy, gdy
+                             patrzy się na ruch. -->
+                        <Border DockPanel.Dock="Top" Height="2" Margin="0,0,0,2"
+                                Background="{DynamicResource Blekit}" Opacity="0.55"
+                                IsVisible="{Binding OpensLunarMonth}" />
                         <TextBlock DockPanel.Dock="Top" Classes="numer" Text="{Binding Day}" />
                         <ItemsControl ItemsSource="{Binding Entries}" VerticalAlignment="Top">
                           <ItemsControl.ItemTemplate>
@@ -1747,12 +1771,35 @@
                               Classes.dzisiaj="{Binding IsToday}"
                               PointerReleased="OnMonthDay">
                         <DockPanel>
+                          <!-- Kreska granicy miesiąca księżycowego: u góry komórki, która
+                               go otwiera. Nie obramowanie całego miesiąca — granica biegnie
+                               przez środek tygodnia, więc obwiedziony miesiąc byłby
+                               kształtem, którego w siatce siedmiu kolumn nie da się
+                               narysować. Kreska mówi „tu się zaczyna" i tyle wystarcza. -->
+                          <Border DockPanel.Dock="Top" Height="2" Margin="0,0,0,2"
+                                  Background="{DynamicResource Blekit}" Opacity="0.55"
+                                  IsVisible="{Binding OpensLunarMonth}" />
+
+                          <!-- Nazwa miesiąca księżycowego raz, w dniu nowiu — tak samo jak
+                               nazwa miesiąca gregoriańskiego nie stoi przy każdym dniu.
+                               Powtórzona trzydzieści razy przestaje być wiadomością,
+                               a zabiera wiersz, na którym mieści się wpis. -->
+                          <TextBlock DockPanel.Dock="Top" Classes="hint" FontSize="10"
+                                     Opacity="0.7" TextTrimming="CharacterEllipsis"
+                                     Text="{Binding LunarMonthName}"
+                                     IsVisible="{Binding HasLunarMonthName}" />
+
                           <!-- Numer dnia i licznik nadmiaru w jednym wierszu u góry:
                                oba są wiadomością o komórce, a nie jej treścią, i oba
-                               mają przetrwać przycięcie. -->
-                          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*">
+                               mają przetrwać przycięcie. Znak fazy między nimi: nów
+                               wypełniony, pełnia pusta. -->
+                          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*">
                             <TextBlock Grid.Column="0" Classes="numer" Text="{Binding Day}" />
-                            <TextBlock Grid.Column="1" Classes="hint" HorizontalAlignment="Right"
+                            <TextBlock Grid.Column="1" Classes="numer" Margin="3,0,0,2"
+                                       FontSize="10" Text="{Binding LunarGlyph}"
+                                       IsVisible="{Binding HasLunarGlyph}"
+                                       ToolTip.Tip="{Binding Lunar.Full}" />
+                            <TextBlock Grid.Column="2" Classes="hint" HorizontalAlignment="Right"
                                        Text="{Binding OverflowLabel}"
                                        IsVisible="{Binding HasOverflow}" />
                           </Grid>
@@ -3445,6 +3492,11 @@
 
           <TextBlock Classes="label" Text="Dzień wykonania — obietnica dana sobie" />
           <k:DateField Value="{Binding DoDate}" />
+          <!-- Tu jest miejsce na pełny podpis księżycowy: karta ma szerokość okna,
+               a nie jedną siódmą ekranu jak kolumna siatki. Dlatego właśnie tutaj stoi
+               nazwa miesiąca i jego długość. -->
+          <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                     Text="{Binding LunarWhen}" IsVisible="{Binding HasLunarWhen}" />
 
           <TextBlock Classes="label" Text="Od której do której" />
           <Grid ColumnDefinitions="*,Auto,*">
@@ -3756,6 +3808,8 @@
                daty, więc przestawienie początku przestawia wszystkie dni. -->
           <TextBlock Classes="label" Text="Początek serii — od niego liczy się rytm" />
           <k:DateField Value="{Binding DoDate}" />
+          <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                     Text="{Binding LunarWhen}" IsVisible="{Binding HasLunarWhen}" />
 
           <TextBlock Classes="label" Text="Od której do której" />
           <Grid ColumnDefinitions="*,Auto,*">
