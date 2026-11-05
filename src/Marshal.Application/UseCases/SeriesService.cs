@@ -333,14 +333,22 @@ public sealed class SeriesService(
                 }
             }
 
-            if (touched > 0)
+            // **Okno dopełniane także tutaj.** Gałąź „dni się nie ruszyły" nie sięgała
+            // do uzgodnienia wcale — a „nie ruszyły się" nie znaczy „jest ich tyle, ile
+            // ma być". Okno krótsze od planu zostawało krótkie, choć zapis karty jest
+            // dokładnie tą chwilą, w której ktoś patrzy na serię i oczekuje, że jest
+            // policzona. Jedyną drogą do dopełnienia był minutnik, a ten pyta o to
+            // tylko wtedy, gdy poprzednie pytanie coś dołożyło.
+            var (fresh, _) = await ReconcileAsync(one, MaxPerRun, ct);
+
+            if (touched > 0 || fresh > 0)
             {
                 await unitOfWork.SaveChangesAsync(ct);
             }
 
             await MirrorSeriesAsync(one, ct);
 
-            return new TopUpReport(0, 0);
+            return new TopUpReport(fresh, 0);
         }
 
         var retired = 0;
