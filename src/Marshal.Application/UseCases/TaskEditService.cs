@@ -505,6 +505,13 @@ public sealed class TaskEditService(
             ? await rhythms.EndAsync(one, last, ct)
             : 0;
 
+    /// <summary>Przywrócenie pominiętych dni serii — zob. SeriesService.</summary>
+    public async Task<int> ReviveSeriesWindowAsync(
+        Guid seriesId, CancellationToken ct = default) =>
+        await series.FindAsync(seriesId, ct) is { } one
+            ? await rhythms.ReviveWindowAsync(one, ct)
+            : 0;
+
     /// <summary>Skasowanie serii z jej ekranu. Historia zostaje.</summary>
     public async Task<int> DropSeriesAsync(Guid seriesId, CancellationToken ct = default) =>
         await series.FindAsync(seriesId, ct) is { } one

@@ -3773,6 +3773,13 @@
                       Click="EndSeries" Content="Zakończ serię na dziś" />
               <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
                          Text="Dzisiejszy dzień i wcześniejsze zostają, dalszych nie będzie. Rytm dostaje datę końca." />
+
+              <!-- Naprawa, nie codzienna czynność. Z ręki, bo automat wskrzeszałby
+                   przy okazji każdy dzień pominięty świadomie. -->
+              <Button Classes="nav" HorizontalAlignment="Left" Margin="0,14,0,0"
+                      Click="ReviveWindow" Content="Przywróć pominięte dni" />
+              <TextBlock Classes="hint" Margin="2,6,0,0" TextWrapping="Wrap"
+                         Text="Dni, które rytm wyznacza, a których brakuje albo są pominięte, wracają na siatkę. Minione i zmienione z ręki zostają nietknięte. Przydaje się, gdy seria bez końca urywa się w przyszłości." />
             </StackPanel>
           </Border>
 

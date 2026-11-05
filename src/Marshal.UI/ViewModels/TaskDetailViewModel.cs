@@ -908,6 +908,34 @@ public sealed partial class TaskDetailViewModel(
     /// wcześniej, czyli odpowiedziałaby „już nie będzie" na ekranie, na którym widać,
     /// że będzie.
     /// </remarks>
+    /// <summary>
+    /// Przywrócenie dni, których rytm chce, a których nie ma.
+    /// </summary>
+    /// <remarks>
+    /// Naprawa po szkodzie, którą robiła zmiana rytmu: przyszłe dni szły do kosza
+    /// i nie wracały, bo dopełnianie widziało nagrobek pod tą samą datą i uznawało
+    /// dzień za zajęty. Przyczyna jest zamknięta, ale nagrobki już postawione zostają
+    /// i seria bez przyszłych dni nie naprawi się sama.
+    ///
+    /// Z ręki, bo automat wskrzeszałby przy okazji każdy dzień pominięty świadomie.
+    /// </remarks>
+    public async Task ReviveWindowAsync()
+    {
+        if (_series == Guid.Empty)
+        {
+            return;
+        }
+
+        var back = await edit.ReviveSeriesWindowAsync(_series);
+
+        await log.RecordAsync("Seria: przywrócenie dni", $"{Title} — {back} dni");
+
+        await LoadDaysAsync();
+        Refresh();
+
+        Saved?.Invoke(this, EventArgs.Empty);
+    }
+
     public async Task EndSeriesAsync()
     {
         if (_series == Guid.Empty)

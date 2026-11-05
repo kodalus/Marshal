@@ -417,6 +417,9 @@ public partial class MainView : UserControl
         OnDetail("Zadanie: koniec serii na tym wystąpieniu", m => m.EndRhythmAsync());
 
     /// <summary>Koniec serii na dziś — z jej własnej karty.</summary>
+    private void ReviveWindow(object? sender, RoutedEventArgs e) =>
+        OnDetail("Seria: przywrócenie dni z karty serii", m => m.ReviveWindowAsync());
+
     private void EndSeries(object? sender, RoutedEventArgs e) =>
         OnDetail("Seria: koniec na dziś z karty serii", m => m.EndSeriesAsync());
 

@@ -351,15 +351,38 @@ public sealed class SeriesService(
             return new TopUpReport(filled, 0);
         }
 
+        // **Dzień, który nowy rytm nadal wyznacza, zostaje.** Wyrzucany jest tylko ten,
+        // którego w nowym planie nie ma.
+        //
+        // Dotąd szły do kosza wszystkie przyszłe dni, a zaraz po nich uzgodnienie okna
+        // miało postawić nowe. Nie stawiało: tożsamość dnia liczy się z serii i z daty,
+        // więc dzień, który w nowym planie jest pod tą samą datą, ma **ten sam
+        // identyfikator** co nagrobek sprzed chwili — a dopełnianie pomija dni już
+        // zajęte, nagrobki wliczając. Każda zmiana rytmu, która zostawiała te same dni,
+        // zabijała je więc na zawsze: przestawienie samego zaczepienia albo odpowiedzi
+        // na minięcie przy rytmie codziennym kasowało całe okno i nic nie wracało.
+        // Z ekranu wyglądało to tak, jakby seria bez końca nagle się kończyła.
+        var keeping = SeriesWindow.Plan(one, today).Select(z => z.Date).ToHashSet();
         var retired = 0;
 
         foreach (var occurrence in standing)
         {
-            if (occurrence.DoDate >= today && Open(occurrence) && !occurrence.Overridden)
+            if (occurrence.DoDate is not { } day
+                || day < today
+                || !Open(occurrence)
+                || occurrence.Overridden)
             {
-                await TombstoneAsync(occurrence, ct);
-                retired++;
+                continue;
             }
+
+            if (keeping.Contains(day))
+            {
+                occurrence.Restamp(mine, one.Rule.Time, one.Rule.Minutes, hlc.Next);
+                continue;
+            }
+
+            await TombstoneAsync(occurrence, ct);
+            retired++;
         }
 
         await unitOfWork.SaveChangesAsync(ct);
@@ -465,6 +488,65 @@ public sealed class SeriesService(
         }
 
         return (added, pruned);
+    }
+
+    /// <summary>
+    /// Przywrócenie dni pominiętych, których rytm nadal chce.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Naprawa po szkodzie, którą robiła zmiana rytmu: dni szły do kosza i nie wracały,
+    /// bo dopełnianie widziało nagrobek pod tą samą datą i uznawało dzień za zajęty.
+    /// Sama przyczyna jest zamknięta — zob. ChangeAsync — ale nagrobki już postawione
+    /// zostają, a seria bez przyszłych dni nie naprawi się sama.
+    /// </para>
+    /// <para>
+    /// <b>Z ręki i tylko z ręki.</b> Automat nie ma prawa tego robić: pominięcie dnia
+    /// jest decyzją, a dopełnianie okna chodzi co chwilę i wskrzeszałoby każdą taką
+    /// decyzję przy najbliższym przebiegu. Tu odpowiada za to naciśnięcie przycisku,
+    /// czyli druga decyzja, tym razem o całym oknie.
+    /// </para>
+    /// <para>
+    /// Dni minione zostają nietknięte, a zmienione z ręki tym bardziej: jedno i drugie
+    /// jest zapisem tego, co się wydarzyło albo co ktoś o tym dniu postanowił.
+    /// </para>
+    /// </remarks>
+    public async Task<int> ReviveWindowAsync(TaskSeries one, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(one);
+
+        var today = clock.Today;
+        var wanted = SeriesWindow.Plan(one, today).Select(z => z.Date).ToHashSet();
+        var back = 0;
+
+        foreach (var occurrence in await series.OccurrencesAsync(one.Id, ct))
+        {
+            if (occurrence.DoDate is { } day
+                && day >= today
+                && occurrence.State == TaskState.Trashed
+                && !occurrence.Overridden
+                && wanted.Contains(day))
+            {
+                occurrence.Revive(hlc.Next());
+                back++;
+            }
+        }
+
+        if (back > 0)
+        {
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        var (added, _) = await ReconcileAsync(one, MaxPerRun, ct);
+
+        if (added > 0)
+        {
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        await MirrorSeriesAsync(one, ct);
+
+        return back + added;
     }
 
     /// <summary>
