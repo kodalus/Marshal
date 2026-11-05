@@ -2737,6 +2737,11 @@
           <Button Classes="nav" Margin="0,0,0,6" Padding="14,10"
                   Command="{Binding CancelSyncCommand}" IsVisible="{Binding IsSyncing}"
                   Content="Przerwij" />
+          <!-- Jedyna droga do ponownej zgody. Ścieżka katalogu poniżej jest prawdziwa,
+               ale na telefonie nieosiągalna — prywatne dane aplikacji. -->
+          <Button Classes="nav" Margin="8,0,0,6" Padding="14,10"
+                  Command="{Binding ForgetTokenCommand}" IsEnabled="{Binding !IsSyncing}"
+                  Content="Zaloguj od nowa" />
         </WrapPanel>
 
         <!-- Ręcznie, nie w tle. Pierwsze przebiegi na żywym koncie mają mieć widoczny
@@ -2784,7 +2789,10 @@
         <TextBlock Margin="0,8,0,0" TextWrapping="Wrap" Text="{Binding SyncStatus}" />
 
         <TextBlock Classes="hint" Margin="2,8,0,0" TextWrapping="Wrap"
-                   Text="{Binding TokenFolder, StringFormat='Żeton logowania: {0} — skasuj ten katalog, żeby zalogować się od nowa.'}" />
+                   Text="{Binding TokenFolder, StringFormat='Żeton logowania leży w {0}. Na telefonie jest to katalog prywatny aplikacji i nie da się do niego dostać — od kasowania żetonu jest „Zaloguj od nowa”.'}" />
+
+        <TextBlock Classes="hint" Margin="2,4,0,0" TextWrapping="Wrap"
+                   Text="„Zaloguj od nowa” przydaje się po opublikowaniu aplikacji w konsoli Google: żeton wydany w trybie testowym żyje siedem dni i zostaje przy tym czasie także po publikacji, bo czas życia ustala się przy wydaniu. Dopiero zgoda wydana po opublikowaniu jest bezterminowa." />
 
         <!-- Próba powiadomienia. To jedyny sposób, żeby czegokolwiek się dowiedzieć:
              brak powiadomienia ma trzy przyczyny wyglądające identycznie i bez

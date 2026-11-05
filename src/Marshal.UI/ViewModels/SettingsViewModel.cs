@@ -1002,6 +1002,46 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void CancelSync() => _break?.Cancel();
 
+    /// <summary>
+    /// Skasowanie żetonu, żeby następne logowanie zapytało o zgodę od nowa.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bez potwierdzenia, bo czynność jest odwracalna jednym kliknięciem obok:
+    /// pytanie „czy na pewno" przy czymś, co się cofa, uczy odklikiwać pytania
+    /// i psuje te, przy których potwierdzenie coś znaczy.
+    /// </para>
+    /// <para>
+    /// Dane zostają nietknięte — żeton to wyłącznie prawo do sięgania po Dysk.
+    /// Do chwili ponownego zalogowania synchronizacja nie chodzi i tyle.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private async Task ForgetTokenAsync()
+    {
+        try
+        {
+            var had = _drive.ForgetToken();
+
+            SyncStatus = had
+                ? "Żeton skasowany. Naciśnij „Zapisz i zsynchronizuj”, żeby zalogować "
+                    + "się od nowa."
+                : "Nie było czego kasować — żetonu na tym urządzeniu nie ma.";
+
+            await _journal.RecordAsync(
+                "Synchronizacja: żeton skasowany",
+                had ? "z ręki, w ustawieniach" : "nie było czego kasować");
+        }
+        catch (Exception e)
+        {
+            SyncStatus = e.Message;
+
+            await _journal.RecordAsync(
+                "Synchronizacja: żeton skasowany", "nie udało się",
+                ActivityLevel.Problem, e.Message);
+        }
+    }
+
     /// <summary>Wgranie kopii zmienia wszystko, więc ekran pod spodem musi się przeliczyć.</summary>
     public event EventHandler? Imported;
 

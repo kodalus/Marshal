@@ -81,6 +81,35 @@ public sealed class GoogleSyncService(
         }
     }
 
+    /// <summary>
+    /// Zapomnienie żetonu — następne logowanie pyta o zgodę od nowa.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Potrzebne częściej, niż się wydaje, i dotąd nie było na to drogi z aplikacji.
+    /// Żeton wydany, gdy aplikacja stała w konsoli jako testowa, żyje siedem dni —
+    /// i zostaje przy tym czasie także po opublikowaniu aplikacji, bo czas życia
+    /// ustala się przy wydaniu. Żeby dostać bezterminowy, trzeba poprosić o zgodę
+    /// na nowo, a żeby o nią poproszono, nie może być zapisanego żetonu.
+    /// </para>
+    /// <para>
+    /// <b>Na Androidzie nie było jak tego zrobić w ogóle.</b> Ekran ustawień mówił
+    /// „skasuj ten katalog" i podawał ścieżkę — prawdziwą, ale leżącą w prywatnych
+    /// danych aplikacji, do których telefon nie daje dostępu. Rada wykonalna na
+    /// komputerze i niewykonalna tam, gdzie ten sam ekran ją pokazywał.
+    /// </para>
+    /// </remarks>
+    public bool ForgetToken()
+    {
+        if (!Directory.Exists(TokenFolder))
+        {
+            return false;
+        }
+
+        Directory.Delete(TokenFolder, recursive: true);
+        return true;
+    }
+
     public async Task<SyncOutcome> SyncAsync(CancellationToken ct = default)
     {
         if (!HasCredentials)
