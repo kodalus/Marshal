@@ -1145,8 +1145,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// <remarks>
     /// Odmowa nie jest błędem i nie zostawia śladu w dzienniku: to normalny stan przez
     /// pierwsze kilka sekund po uruchomieniu. Zapamiętana jest natomiast jako „jeszcze
-    /// do zrobienia", więc wraca przy pierwszym udanym scaleniu, a gdyby synchronizacja
-    /// nie działała — przy każdym przebiegu minutnika.
+    /// do zrobienia", więc wraca przy pierwszym udanym scaleniu i przy przejściu na nowy
+    /// dzień.
+    ///
+    /// Stało tu wcześniej „a gdyby synchronizacja nie działała — przy każdym przebiegu
+    /// minutnika". Takiej drogi nie ma: wołają to uruchomienie, zmiana dnia i udane
+    /// scalanie, i tylko one. Dopóki bramka otwierała się przy samym braku żetonu,
+    /// nieprawda w tym zdaniu nie miała znaczenia — dziś ma, bo przy zepsutej
+    /// synchronizacji odmowa potrafi trwać tygodniami. Trzy drogi wystarczają, bo
+    /// wypadają dokładnie wtedy, kiedy jest co robić; zdanie o minutniku było opisem
+    /// zabezpieczenia, którego nikt nie napisał, i to jest ten sam rodzaj rozjazdu
+    /// między komentarzem a kodem, z którego wzięła się usterka bramki.
     /// </remarks>
     private async Task RollOverWhenSettledAsync()
     {
@@ -1159,17 +1168,20 @@ public sealed partial class MainViewModel : ObservableObject
         {
             var report = await _dayRollover.RunAsync();
 
+            // Przerysowanie zależy od tego, czy coś się zmieniło, a nie od tego, czy
+            // sądy się odbyły: przebieg odłożony nadal dopełnia okno serii i prostuje
+            // odhaczone, więc ma co pokazać.
+            if (report.Moved > 0 || report.Spawned > 0 || report.Dropped > 0 || report.Mended > 0)
+            {
+                await ReloadAsync();
+            }
+
             if (report.Deferred)
             {
                 return;
             }
 
             _rolledOver = true;
-
-            if (report.Moved > 0 || report.Spawned > 0 || report.Dropped > 0 || report.Mended > 0)
-            {
-                await ReloadAsync();
-            }
         });
     }
 
@@ -1285,7 +1297,11 @@ public sealed partial class MainViewModel : ObservableObject
                     + "się zalogować. Zgoda wygasa po siedmiu dniach, dopóki aplikacja "
                     + "stoi w konsoli Google jako testowa — po wygaśnięciu bezużyteczny "
                     + "żeton jest kasowany, a ponowne pytanie o zgodę wymaga ręki. "
-                    + "Konto trzeba podłączyć na nowo (Ustawienia → Konto Google).");
+                    + "Konto trzeba podłączyć na nowo (Ustawienia → Konto Google). "
+                    + "Dopóki żetonu nie ma, przejście dnia dopełnia okno serii i prostuje "
+                    + "odhaczone, ale nie zamyka zaległych wystąpień: bez scalania to "
+                    + "urządzenie nie wie, co zostało odhaczone na drugim, a nagrobek na "
+                    + "dniu minionym jest nieodwracalny.");
 
         if (!missing)
         {
@@ -1295,7 +1311,9 @@ public sealed partial class MainViewModel : ObservableObject
             // się domyślić, że jest czego tam szukać — a objawem jest cisza na drugim
             // urządzeniu, zauważalna po kilku dniach.
             Notice = "Synchronizacja z Dyskiem nie chodzi: zgoda wygasła. "
-                + "Ustawienia → Konto Google → „Zapisz i zsynchronizuj”.";
+                + "Ustawienia → Konto Google → „Zapisz i zsynchronizuj”. "
+                + "Do tego czasu przejście dnia nie zamyka zaległych wystąpień serii — "
+                + "żeby nie zabrać dnia odhaczonego na drugim urządzeniu.";
         }
     }
 
@@ -1305,9 +1323,30 @@ public sealed partial class MainViewModel : ObservableObject
         {
             await TellSyncOffAsync();
 
-            // Bez poświadczeń nie ma na co czekać: to urządzenie jest jedynym źródłem
-            // prawdy o wczorajszym dniu, więc przejście dnia może ruszyć od razu.
-            _syncState.Settle();
+            // **Brak żetonu to nie brak synchronizacji**, i na tym zlaniu się jedno
+            // z drugim traciło się dni.
+            //
+            // Bramka ma się otworzyć tylko wtedy, gdy nie ma na co czekać — czyli gdy
+            // to urządzenie jest jedynym źródłem prawdy o wczorajszym dniu. Tak jest
+            // bez poświadczeń. Przy poświadczeniach wpisanych, a żetonie wygasłym,
+            // drugie urządzenie istnieje i ma wiedzę, której tu nie ma: otwarcie bramki
+            // znaczyło wtedy, że przejście dnia sądzi o wczoraj z danych nieaktualnych
+            // od dni, i stawia nagrobek na wystąpieniu odhaczonym wieczorem na telefonie.
+            //
+            // Nagrobek na dniu minionym jest przy tym **nieodwracalny**: okno serii
+            // nigdy nie planuje dni przed dzisiejszym, więc taki dzień nie wraca ani
+            // sam przy dopełnianiu, ani przyciskiem „Przywróć pominięte dni". Prostowanie
+            // odhaczonych go nie ratuje, bo to urządzenie nie wie, że cokolwiek zostało
+            // odhaczone — chwila wykonania przyjdzie dopiero ze scaleniem, którego nie ma.
+            //
+            // Droga nie jest rzadka, jest cotygodniowa: zgoda w trybie testowym wygasa
+            // po siedmiu dniach, a wygasły żeton jest wtedy kasowany, czyli HasToken
+            // robi się fałszem co tydzień.
+            if (!_drive.HasCredentials)
+            {
+                _syncState.Settle();
+            }
+
             return;
         }
 

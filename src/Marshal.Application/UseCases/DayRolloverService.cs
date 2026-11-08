@@ -192,7 +192,24 @@ public sealed class DayRolloverService(
         // SyncState.
         if (!Settled)
         {
-            return new RolloverReport(0, 0, Deferred: true);
+            // **Nieodwracalne sądy czekają — ale nie wszystko jest sądem.**
+            //
+            // Dotąd bramka wstrzymywała cały przebieg, a w przebiegu są trzy różne
+            // rzeczy. Zamykanie zaległych wystąpień i przenoszenie zaległych zadań
+            // naprawdę sądzi o wczorajszym dniu i naprawdę musi czekać. Prostowanie
+            // odhaczonych tylko przywraca fakt, który już w bazie leży. Dopełnianie
+            // okna liczy się z serii i z dzisiejszej daty, czyli z rzeczy, o których
+            // scalanie nie ma nic do powiedzenia.
+            //
+            // Wstrzymywane razem dawały usterkę o zupełnie innym wyglądzie: serię, która
+            // po cichu kończy się na horyzoncie. Przy niedziałającej synchronizacji
+            // bramka nie otwiera się **nigdy**, więc okno nie rosło ani razu — i nie
+            // było w tym żadnego błędu w rachunku okna, tylko to, że rachunek nie był
+            // w ogóle wołany.
+            var repaired = await MendAsync(ct);
+            var pending = await rhythms.TopUpAsync(ct);
+
+            return new RolloverReport(0, pending.Added, 0, repaired, Deferred: true);
         }
 
         var mended = await MendAsync(ct);

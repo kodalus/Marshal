@@ -337,6 +337,86 @@ public sealed class DayRolloverServiceTests : IDisposable
         _db.Tasks.Single(t => t.Id == task.Id).DoDate.Should().Be(D("2026-09-15"));
     }
 
+    [Fact]
+    public async Task Przed_scaleniem_okno_serii_i_tak_sie_dopelnia()
+    {
+        // Objaw był zupełnie inny od przyczyny: seria bez końca, która po cichu kończy
+        // się na horyzoncie. Bramka wstrzymywała cały przebieg, a w przebiegu siedzi
+        // dopełnianie okna — rachunek z serii i z dzisiejszej daty, o którym scalanie
+        // nie ma nic do powiedzenia. Przy niedziałającej synchronizacji bramka nie
+        // otwiera się nigdy, więc okno nie rosło ani razu.
+        var one = await Series("Wziąć lek", "2026-09-16", OnMissed.Carry);
+        var before = Occurrences(one).Count;
+
+        var gate = new SyncState();
+
+        var waiting = new DayRolloverService(
+            new TaskRepository(_db), _series, _rhythms, new UnitOfWork(_db),
+            _clock, _hlc, null, gate);
+
+        _clock.Now = _clock.Now.AddDays(1);
+
+        var report = await waiting.RunAsync();
+
+        report.Deferred.Should().BeTrue("sądy o wczorajszym dniu nadal czekają");
+        report.Spawned.Should().Be(1, "okno przesuwa się o jeden dzień mimo bramki");
+        Occurrences(one).Count.Should().Be(before + 1);
+    }
+
+    [Fact]
+    public async Task Przed_scaleniem_odhaczone_z_nagrobkiem_i_tak_wraca()
+    {
+        // Prostowanie odhaczonych nie jest sądem: przywraca fakt, który już leży
+        // w bazie. Wstrzymywane razem z sądami znaczyło, że urządzenie z zepsutą
+        // synchronizacją nie prostuje niczego nigdy.
+        var one = await Series("Wziąć lek", "2026-09-15", OnMissed.Carry);
+
+        var yesterday = Occurrences(one).Single(z => z.DoDate == D("2026-09-15"));
+
+        yesterday.Complete(Evening("2026-09-15"), _hlc.Next());
+        yesterday.Trash(_hlc.Next());
+        _db.SaveChanges();
+
+        var gate = new SyncState();
+
+        var waiting = new DayRolloverService(
+            new TaskRepository(_db), _series, _rhythms, new UnitOfWork(_db),
+            _clock, _hlc, null, gate);
+
+        var report = await waiting.RunAsync();
+
+        report.Deferred.Should().BeTrue();
+        report.Mended.Should().Be(1);
+
+        _db.Tasks.Single(t => t.Id == yesterday.Id).State.Should().Be(TaskState.Done);
+    }
+
+    [Fact]
+    public async Task Przed_scaleniem_zalegle_wystapienie_zostaje_nietkniete()
+    {
+        // Druga strona tego samego: to, co nieodwracalne, nadal czeka. Nagrobek na dniu
+        // minionym nie wraca ani sam przy dopełnianiu, ani przyciskiem — okno serii
+        // nigdy nie planuje dni przed dzisiejszym. Dlatego właśnie zamykanie zaległych
+        // jest jedyną rzeczą z tego przebiegu, która musi poczekać na scalanie.
+        var one = await Series("Wziąć lek", "2026-09-15", OnMissed.Carry);
+        var yesterday = Occurrences(one).Single(z => z.DoDate == D("2026-09-15")).Id;
+
+        var gate = new SyncState();
+
+        var waiting = new DayRolloverService(
+            new TaskRepository(_db), _series, _rhythms, new UnitOfWork(_db),
+            _clock, _hlc, null, gate);
+
+        (await waiting.RunAsync()).Dropped.Should().Be(0);
+        _db.Tasks.Single(t => t.Id == yesterday).State.Should().Be(TaskState.Scheduled);
+
+        // I dopiero po scaleniu — bo dopiero wtedy wiadomo, czy ten dzień się odbył.
+        gate.Settle();
+
+        (await waiting.RunAsync()).Dropped.Should().Be(1);
+        _db.Tasks.Single(t => t.Id == yesterday).State.Should().Be(TaskState.Trashed);
+    }
+
     private DateTimeOffset Evening(string iso) =>
         new(D(iso).ToDateTime(new TimeOnly(20, 0)), _clock.Now.Offset);
 
