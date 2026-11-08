@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Marshal.Application.Abstractions;
 using Marshal.Application.UseCases;
+using Marshal.Domain.Diagnostics;
 using Marshal.Domain.Recurrence;
 using Marshal.Domain.Series;
 using Marshal.Domain.Tasks;
@@ -415,6 +416,55 @@ public sealed class DayRolloverServiceTests : IDisposable
 
         (await waiting.RunAsync()).Dropped.Should().Be(1);
         _db.Tasks.Single(t => t.Id == yesterday).State.Should().Be(TaskState.Trashed);
+    }
+
+    [Fact]
+    public async Task Dziennik_mowi_ktory_dzien_zabrano_a_nie_tylko_ile()
+    {
+        // Zamykanie zaległych jest jedyną czynnością w aplikacji, która zabiera dzień
+        // bezpowrotnie: nagrobek na dniu minionym nie wraca ani przy dopełnianiu okna,
+        // ani przyciskiem, bo okno nigdy nie planuje dni przed dzisiejszym. Sama liczba
+        // nie odpowiadała na jedyne pytanie, które się potem zadaje — „czy to był ten
+        // dzień, który odhaczyłam".
+        var notes = new Journal();
+
+        var one = await Series("Wziąć lek", "2026-09-15", OnMissed.Skip);
+
+        var telling = new DayRolloverService(
+            new TaskRepository(_db), _series, _rhythms, new UnitOfWork(_db),
+            _clock, _hlc, notes);
+
+        (await telling.RunAsync()).Dropped.Should().Be(1);
+
+        var entry = notes.Lines.Single(z => z.What.Contains("zamknięcie zaległych"));
+
+        entry.Outcome.Should().Contain("Wziąć lek");
+        entry.Outcome.Should().Contain("15.09");
+        entry.Outcome.Should().Contain("przepada", "powód też, bo to on rozstrzyga");
+
+        _ = one;
+    }
+
+    /// <summary>Dziennik, który tylko zapamiętuje, co by zapisał.</summary>
+    private sealed class Journal : IActivityLog
+    {
+        public List<(string What, string Outcome)> Lines { get; } = [];
+
+        public int Dropped => 0;
+
+        public Task RecordAsync(
+            string operation, string outcome, ActivityLevel level = ActivityLevel.Ok,
+            string? detail = null, CancellationToken ct = default)
+        {
+            Lines.Add((operation, outcome));
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ActivityEntry>> RecentAsync(
+            int count = 200, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ActivityEntry>>([]);
+
+        public Task ClearAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
     private DateTimeOffset Evening(string iso) =>

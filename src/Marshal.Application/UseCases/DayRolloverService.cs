@@ -145,7 +145,7 @@ public sealed class DayRolloverService(
     /// treningi to trzy treningi, których nie było, i tak ma być zapisane.</item>
     /// </list>
     /// </remarks>
-    private int Judge(TaskItem task, List<TaskItem> siblings, DateOnly today)
+    private int Judge(TaskItem task, List<TaskItem> siblings, DateOnly today, List<string> closed)
     {
         var rule = OnMissed.Carry;
 
@@ -164,9 +164,29 @@ public sealed class DayRolloverService(
             return 0;
         }
 
+        // **Z nazwą, dniem i powodem.** Dotąd szła do dziennika sama liczba, i to jest
+        // jedyna czynność w całej aplikacji, która **zabiera dzień bezpowrotnie**:
+        // nagrobek na dniu minionym nie wraca ani przy dopełnianiu okna, ani przyciskiem,
+        // bo okno nigdy nie planuje dni przed dzisiejszym.
+        //
+        // „Ile" nie odpowiada na żadne pytanie, które się potem zadaje. Pytanie brzmi
+        // „czy to był ten dzień, który odhaczyłam" — i żeby na nie odpowiedzieć, trzeba
+        // było odtwarzać z pamięci, co kiedy było otwarte. Przeniesione na dziś mają
+        // nazwy w dzienniku od dawna i z dokładnie tego powodu; zabrane nie miały,
+        // choć kosztują więcej.
+        closed.Add($"{task.Title} — {task.DoDate:dd.MM} ({Reason(rule)})");
+
         task.Trash(hlc.Next());
         return 1;
     }
+
+    /// <summary>Dlaczego ten dzień został zamknięty — słowem, nie nazwą z kodu.</summary>
+    private static string Reason(OnMissed rule) => rule switch
+    {
+        OnMissed.Skip => "przepada",
+        OnMissed.Carry => "rytm wypadł znowu",
+        _ => "zaległość",
+    };
 
     /// <summary>Czy ten rytm wypadł od tamtego dnia jeszcze raz — i ten dzień już nadszedł.</summary>
     /// <remarks>
@@ -226,6 +246,9 @@ public sealed class DayRolloverService(
         var moved = 0;
         var gone = 0;
 
+        // Nazwy i dni zabranych — zob. Judge.
+        var closed = new List<string>();
+
         // Nazwy przeniesionych do dziennika. Trzy rundy nad „odhaczone, a przeniesione
         // na dziś" poszły na odtwarzanie z pamięci, co i kiedy się ruszyło; wpis
         // z nazwami i godziną odpowiada na to sam, a porównany z godziną wpisu
@@ -248,7 +271,7 @@ public sealed class DayRolloverService(
         {
             if (task.SeriesId is { } id)
             {
-                gone += Judge(task, standing.GetValueOrDefault(id, []), today);
+                gone += Judge(task, standing.GetValueOrDefault(id, []), today, closed);
                 continue;
             }
 
@@ -289,7 +312,7 @@ public sealed class DayRolloverService(
         {
             await journal.RecordAsync(
                 "Przejście dnia: zamknięcie zaległych wystąpień",
-                $"{gone} do kosza",
+                $"{gone} do kosza: {string.Join(", ", closed)}",
                 ActivityLevel.Ok,
                 null,
                 ct);
