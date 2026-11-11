@@ -280,6 +280,23 @@ public sealed partial class TaskDetailViewModel(
     [ObservableProperty]
     public partial bool IsDone { get; set; }
 
+    /// <summary>
+    /// Wpisanie stanu ptaszka — <b>z powiadomieniem także wtedy, gdy się nie zmienił</b>.
+    /// </summary>
+    /// <remarks>
+    /// Kwadracik przełącza się sam przy kliknięciu, a wiązanie jednokierunkowe poprawia
+    /// go dopiero wtedy, gdy źródło powie, że coś się zmieniło. Dwa nieodhaczone zadania
+    /// otwarte po sobie dają tę samą wartość, więc powiadomienia nie było i kwadracik
+    /// zostawał taki, jakim zostawiło go poprzednie kliknięcie. Sam widok jest już na to
+    /// odporny — ptaszek nie przyjmuje kliknięć, bierze je przycisk pod spodem — ale
+    /// powiadomienie zostaje, bo to ono jest tu prawdą o stanie.
+    /// </remarks>
+    private void ShowDone(bool done)
+    {
+        IsDone = done;
+        OnPropertyChanged(nameof(IsDone));
+    }
+
     /// <summary>Czy okno pokazuje zadanie, które już istnieje.</summary>
     /// <remarks>
     /// Przy zakładaniu nie ma czego odhaczać, a przycisk „Zrobione" stojący obok
@@ -676,7 +693,7 @@ public sealed partial class TaskDetailViewModel(
         SeriesLabel = null;
         _series = Guid.Empty;
         IsSeries = false;
-        IsDone = false;
+        ShowDone(false);
         Deadline = null;
         ReminderDay = null;
         ReminderTime = null;
@@ -734,7 +751,7 @@ public sealed partial class TaskDetailViewModel(
         ReminderDay = task.ReminderAt is { } r ? ToOffset(DateOnly.FromDateTime(r.DateTime)) : null;
         ReminderTime = task.ReminderAt?.TimeOfDay;
         LoadLeads(task.ReminderLeads);
-        IsDone = task.State == TaskState.Done;
+        ShowDone(task.State == TaskState.Done);
         SelectedPriority = Priorities.First(p => p.Value == task.Priority);
         EstimatedMinutes = task.EstimatedMinutes;
         DoTime = task.DoTime?.ToTimeSpan();
@@ -895,7 +912,7 @@ public sealed partial class TaskDetailViewModel(
 
         Title = template.Title;
         Note = template.Note ?? string.Empty;
-        IsDone = false;
+        ShowDone(false);
         Deadline = null;
         ReminderDay = null;
         ReminderTime = null;
@@ -1292,9 +1309,6 @@ public sealed partial class TaskDetailViewModel(
     /// </remarks>
     public async Task CompleteAsync()
     {
-        await log.RecordAsync(
-            IsDone ? "Zadanie: zdjęcie ptaszka z okna" : "Zadanie: odhaczenie z okna", Title);
-
         if (_id == Guid.Empty)
         {
             Problem = "Nowe zadanie nie da się odhaczyć, zanim powstanie.";
@@ -1302,13 +1316,21 @@ public sealed partial class TaskDetailViewModel(
             return;
         }
 
-        if (IsDone)
+        // **Kierunek z wiersza, nie z kwadracika.** Kwadracik przełącza się sam przy
+        // kliknięciu i potrafi pokazywać stan, którego w danych nie ma — zob.
+        // TaskEditService.ToggleDoneAsync. Pytany o kierunek, odpowiadał wtedy
+        // czynnością odwrotną do tej, po którą ktoś sięgnął.
+        var done = await edit.ToggleDoneAsync(_id);
+
+        // Wpis po czynności i z jej wyniku, nie przed nią i z widoku: dziennik ma
+        // mówić, co się stało, a nie co okno sądziło, że się stanie.
+        await log.RecordAsync(
+            done == true ? "Zadanie: odhaczenie z okna" : "Zadanie: zdjęcie ptaszka z okna",
+            Title);
+
+        if (done is { } state)
         {
-            await edit.ReopenAsync(_id);
-        }
-        else
-        {
-            await edit.CompleteAsync(_id);
+            IsDone = state;
         }
 
         IsOpen = false;

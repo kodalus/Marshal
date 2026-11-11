@@ -1073,6 +1073,48 @@ public sealed class TaskEditService(
     /// jednym kliknięciem, więc omyłkowe zdarza się tak samo łatwo — i musi kosztować
     /// tyle samo.
     /// </remarks>
+    /// <summary>
+    /// Przełączenie ptaszka — w stronę wynikającą z tego, co zadanie ma <b>zapisane</b>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dotąd o kierunku rozstrzygał znacznik w oknie, a okno bierze go z kwadracika.
+    /// Kwadracik zaś przełącza się sam przy kliknięciu i przy wiązaniu jednokierunkowym
+    /// nie ma go jak sprostować, dopóki źródło nie powie, że coś się zmieniło — a nie
+    /// powie, gdy nowo otwarte zadanie ma ten sam stan co poprzednie. Wystarczyło więc
+    /// odhaczyć cokolwiek z karty, żeby następne nieodhaczone zadanie pokazało ptaszka,
+    /// którego nie ma w danych.
+    /// </para>
+    /// <para>
+    /// Skutek był najgorszy z możliwych i cichy: <b>otwarte zadanie wyglądało na
+    /// zrobione</b>. Kto je zamknął bez klikania, zostawiał je nierobione; kto kliknął,
+    /// dostawał czynność odwrotną do tego, co widział. Przy wystąpieniu serii z rytmem
+    /// „przepada" kosztowało to cały dzień, bo przejście dnia zabiera nazajutrz każde
+    /// zaległe otwarte wystąpienie.
+    /// </para>
+    /// <para>
+    /// Dlatego kierunek czytany jest tutaj, z wiersza. Widok może kłamać o stanie —
+    /// czynność nie ma prawa od tego kłamstwa zależeć.
+    /// </para>
+    /// </remarks>
+    /// <returns>Czy zadanie jest po tej czynności odhaczone. <c>null</c>, gdy go nie ma.</returns>
+    public async Task<bool?> ToggleDoneAsync(Guid id, CancellationToken ct = default)
+    {
+        if (await tasks.FindAsync(id, ct) is not { } task)
+        {
+            return null;
+        }
+
+        if (task.State == TaskState.Done)
+        {
+            await ReopenAsync(id, ct);
+            return false;
+        }
+
+        await CompleteAsync(id, ct);
+        return true;
+    }
+
     public async Task<TaskItem?> ReopenAsync(Guid id, CancellationToken ct = default)
     {
         if (await tasks.FindAsync(id, ct) is not { } task)

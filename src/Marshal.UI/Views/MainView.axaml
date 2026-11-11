@@ -447,6 +447,24 @@
       <Setter Property="BorderThickness" Value="2" />
     </Style>
 
+    <!-- Przycisk pod ptaszkiem. Kwadracik w środku **nie przyjmuje kliknięć**: sam się
+         przełącza, a wiązanie jednokierunkowe nie ma go jak sprostować, dopóki źródło nie
+         powie, że coś się zmieniło — i nie mówi, gdy nowo otwarte zadanie ma ten sam stan
+         co poprzednie. Kwadracik zostawał wtedy taki, jakim zostawiło go poprzednie
+         kliknięcie, czyli **pokazywał ptaszka na zadaniu nieodhaczonym**.
+
+         Kliknięcie bierze więc przycisk, a kwadracik tylko rysuje to, co mówi model.
+         Wygląd zostaje ten sam — to nadal jest ten kwadracik — zmienia się to, że nie
+         ma już własnego stanu, który mógłby się rozejść z danymi. -->
+    <Style Selector="Button.ptaszek">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
     <Style Selector="TextBlock.numer">
       <Setter Property="FontSize" Value="12" />
       <Setter Property="Opacity" Value="0.75" />
@@ -1863,10 +1881,13 @@
                  się także kwadracikiem na bloku; na telefonie tego kwadracika nie ma
                  i to pole jest jedynym miejscem, bo kartę i tak się otwiera, żeby
                  zobaczyć, o co chodzi. -->
-            <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
-                      IsVisible="{Binding CanCompleteOpened}"
-                      IsChecked="{Binding Opened.IsDone, Mode=OneWay}"
-                      Command="{Binding ToggleOpenedCommand}" />
+            <Button Grid.Column="0" Classes="ptaszek" Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding CanCompleteOpened}"
+                    Command="{Binding ToggleOpenedCommand}">
+              <CheckBox IsChecked="{Binding Opened.IsDone, Mode=OneWay}"
+                        IsHitTestVisible="False" Focusable="False" />
+            </Button>
             <TextBox Grid.Column="1" Text="{Binding OpenedTitle}" FontSize="18"
                      IsEnabled="{Binding CanEditOpened}" />
           </Grid>
@@ -3268,9 +3289,18 @@
             <DataTemplate x:DataType="tasks:TaskItem">
               <Border Margin="0,0,6,6" Padding="8,4" CornerRadius="6" Background="{DynamicResource Panel}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                  <CheckBox MinWidth="0" Padding="0"
-                            Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CompleteTaskCommand}"
-                            CommandParameter="{Binding}" />
+                  <!-- Ten sam powód, co przy kartach, plus drugi: pojemniki wierszy są
+                       poddawane recyklingowi, więc kwadracik zaznaczony kliknięciem wracał
+                       pod innym zadaniem. -->
+                  <Button Classes="ptaszek"
+                          Command="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).CompleteTaskCommand}"
+                          CommandParameter="{Binding}">
+                    <!-- Bez wiązania: w tej liście stoją wyłącznie zadania otwarte,
+                         a odhaczone znika z niej przy przeliczeniu. Kwadracik ma tu
+                         znaczyć „kliknij, żeby odhaczyć", a nie nieść stan. -->
+                    <CheckBox MinWidth="0" Padding="0"
+                              IsHitTestVisible="False" Focusable="False" />
+                  </Button>
                   <TextBlock Text="{Binding Title}" FontSize="12" VerticalAlignment="Center" />
                 </StackPanel>
               </Border>
@@ -3456,10 +3486,13 @@
           <Grid ColumnDefinitions="Auto,*">
             <!-- Ptaszek przy nazwie zamiast przycisku „Zrobione" na dole: odhaczenie
                  dotyczy tej jednej rzeczy, której nazwa stoi obok, a nie okna. -->
-            <CheckBox Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center"
-                      IsVisible="{Binding IsExisting}"
-                      IsChecked="{Binding IsDone, Mode=OneWay}"
-                      Click="CompleteTask" />
+            <Button Grid.Column="0" Classes="ptaszek" Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding IsExisting}"
+                    Click="CompleteTask">
+              <CheckBox IsChecked="{Binding IsDone, Mode=OneWay}"
+                        IsHitTestVisible="False" Focusable="False" />
+            </Button>
             <!-- Znak wodny, bo puste pole bez podpisu jest samym prostokątem:
                  nie widać po nim, że to jest miejsce na nazwę zadania. -->
             <TextBox Grid.Column="1" Text="{Binding Title}" FontSize="18"
