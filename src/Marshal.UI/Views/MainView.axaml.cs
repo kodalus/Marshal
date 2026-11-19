@@ -1467,6 +1467,40 @@ public partial class MainView : UserControl
     /// Z położenia wskaźnika, a nie z tego, co pod nim: przy przechwyconym wskaźniku
     /// zdarzenia trafiają do przeciąganego bloku niezależnie od tego, nad czym stoi.
     /// </remarks>
+    /// <summary>
+    /// Punkt, z którego liczy się dzień i godzina: <b>lewy górny róg bloku</b>,
+    /// a nie wskaźnik.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Były tu dotąd dwa punkty odniesienia naraz i to jest cała usterka. Cień rysował
+    /// się pod rogiem bloku — <c>wskaźnik − chwyt</c> — a dzień i godzina liczyły się
+    /// z samego wskaźnika. Różnica między jednym a drugim to <b>chwyt</b>, czyli to, jak
+    /// daleko od górnej krawędzi bloku trafiła ręka przy złapaniu: przy bloku
+    /// trzygodzinnym złapanym nisko wychodziły z tego trzy godziny.
+    /// </para>
+    /// <para>
+    /// Objaw był przez to mylący w obie strony. Kto celował <b>blokiem</b> w dwunastą,
+    /// dostawał napis i zapis o kilka godzin później; kto celował <b>wskaźnikiem</b>,
+    /// widział cień o tyle samo wcześniej. Ten sam błąd, raz w górę, raz w dół, zależnie
+    /// od tego, na co się patrzy — i zależny od wysokości bloku, więc przy krótkich
+    /// prawie niewidoczny, a przy długich ogromny.
+    /// </para>
+    /// <para>
+    /// Reguła jest teraz jedna i da się ją powiedzieć jednym zdaniem: <b>blok ląduje
+    /// tam, gdzie widać jego lewy górny róg</b>. Przy rozciąganiu odniesieniem zostaje
+    /// wskaźnik, bo tam ciągnie się dolną krawędź, a nie cały blok.
+    /// </para>
+    /// <para>
+    /// Chwyt i tryb podawane są tu z zewnątrz, nie czytane z pól: puszczenie bloku
+    /// liczy godzinę <b>po</b> <see cref="ReleaseBlock"/>, a ono zeruje
+    /// <c>_stretching</c>. Czytane z pola dałoby przy rozciąganiu odjęcie chwytu,
+    /// którego tam być nie powinno.
+    /// </para>
+    /// </remarks>
+    private static Point Anchor(Point pointer, Point grip, bool stretching) =>
+        stretching ? pointer : new Point(pointer.X - grip.X, pointer.Y - grip.Y);
+
     private (DateOnly Day, double Height)? Target(Point where)
     {
         if (_calendar is null
@@ -1495,12 +1529,14 @@ public partial class MainView : UserControl
     /// </remarks>
     private void ShowPreview(Point where, SlotBox slot)
     {
+        var anchor = Anchor(where, _grip, _stretching);
+
         if (this.FindControl<Border>("Podglad") is not { } preview
             || this.FindControl<TextBlock>("PodgladTytul") is not { } title
             || this.FindControl<TextBlock>("PodgladOd") is not { } od
             || this.FindControl<TextBlock>("PodgladDo") is not { } toHour
             || this.FindControl<StackPanel>("PodgladGodziny") is not { } hours
-            || Target(where) is not var (day, height))
+            || Target(anchor) is not var (day, height))
         {
             return;
         }
@@ -1548,8 +1584,11 @@ public partial class MainView : UserControl
             toHour.Text = $"{end:HH}:{end:mm}";
             hours.IsVisible = slot.Width >= 120;
 
-            Canvas.SetLeft(preview, where.X - _grip.X);
-            Canvas.SetTop(preview, where.Y - _grip.Y);
+            // Ten sam punkt, z którego policzono dzień i godzinę. Rysowanie i rachunek
+            // muszą iść z jednej wartości, bo inaczej cień pokazuje co innego, niż
+            // zapisze puszczenie — i nie ma po czym poznać, które z dwóch kłamie.
+            Canvas.SetLeft(preview, anchor.X);
+            Canvas.SetTop(preview, anchor.Y);
         }
 
         preview.IsVisible = true;
@@ -1632,6 +1671,10 @@ public partial class MainView : UserControl
         var dragged = _dragging;
         var stretched = _stretching;
 
+        // Chwyt też przed zwolnieniem i z tego samego powodu: ma z niego wyjść ten sam
+        // punkt odniesienia, co przy rysowaniu cienia.
+        var grip = _grip;
+
         ReleaseBlock();
 
         if (sender is Control block)
@@ -1657,7 +1700,8 @@ public partial class MainView : UserControl
             return;
         }
 
-        if (Target(e.GetPosition(this)) is not var (day, height) || _calendar is null)
+        if (Target(Anchor(e.GetPosition(this), grip, stretched)) is not var (day, height)
+            || _calendar is null)
         {
             return;
         }
