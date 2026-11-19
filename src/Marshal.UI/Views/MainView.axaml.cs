@@ -1279,6 +1279,10 @@ public partial class MainView : UserControl
         _grip = e.GetPosition(block);
         _blockOnScreen = block.TranslatePoint(new Point(0, 0), this);
 
+        // Ręka na siatce: dopóki trwa, ekran nie przerysowuje kolumn. Przerysowanie
+        // wymienia pojemniki, a razem z nimi trzymany blok — i chwyt umiera w połowie.
+        (DataContext as MainViewModel)?.HoldingBlock(true);
+
         // Za dolną krawędź ciągnie się koniec, nie cały blok. Przy zadaniach i przy
         // zapowiedziach rytmu — te drugie zapisują długość przy swoim jednym dniu.
         // Wydarzenie z cudzego kalendarza zmienia długość świadomą drogą, w karcie.
@@ -1450,6 +1454,11 @@ public partial class MainView : UserControl
         _dragging = false;
         _stretching = false;
         HidePreview();
+
+        // Ostatnia rzecz i celowo tutaj: to jest jedyne miejsce, przez które kończą się
+        // wszystkie chwyty — puszczenie, utrata przechwycenia, menu podręczne, zniknięcie
+        // bloku. Przeliczenie odłożone na czas gestu rusza właśnie stąd.
+        (DataContext as MainViewModel)?.HoldingBlock(false);
     }
 
     private void BlockLostPointer(object? sender, PointerCaptureLostEventArgs e)

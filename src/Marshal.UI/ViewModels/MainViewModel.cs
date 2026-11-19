@@ -1431,7 +1431,87 @@ public sealed partial class MainViewModel : ObservableObject
     /// ekranu, na którym akurat się było, i nic się nie przerysowywało — po zapisie,
     /// który się udał. Jedno popsute miejsce ma psuć jedno miejsce.
     /// </remarks>
-    private Task ReloadAsync() => _screen.RunAsync(RecomputeAsync);
+    private Task ReloadAsync()
+    {
+        // **Nie pod ręką.** Przeliczenie stawia kolumny kalendarza od nowa, a to znaczy
+        // nowe pojemniki w liście — więc blok, który ktoś właśnie trzyma, przestaje
+        // istnieć jako kontrolka. Avalonia zgłasza wtedy utratę przechwycenia wskaźnika,
+        // a okno kończy na niej chwyt: cień gaśnie w połowie ruchu, puszczenie nie ma
+        // już czego dotyczyć i wydarzenie zostaje tam, gdzie było.
+        //
+        // Z zewnątrz wyglądało to na usterkę przeciągania, a przeciąganie było całe
+        // w porządku — tyle że siatka znikała mu spod rąk. Powód bywał dowolny: każdy
+        // zapis, z którejkolwiek strony, prosi o przeliczenie sekundę później, więc
+        // wystarczyło, żeby w trakcie ciągnięcia doszło scalanie, dopełnienie rytmu
+        // albo odbicie do kalendarza.
+        //
+        // Przerysowanie w trakcie gestu jest zresztą złe samo w sobie, nawet gdyby
+        // przechwycenie przeżyło: bloki przeskakiwałyby pod palcem.
+        if (_handOnGrid && _clock.Now - _handSince < HandPatience)
+        {
+            _reloadAfterGesture = true;
+            return Task.CompletedTask;
+        }
+
+        return _screen.RunAsync(RecomputeAsync);
+    }
+
+    /// <summary>
+    /// Jak długo ręka na siatce może wstrzymywać przerysowanie.
+    /// </summary>
+    /// <remarks>
+    /// Pół minuty, bo tyle nie trwa żadne przeciągnięcie, a ogranicznik jest tu po to,
+    /// żeby zgubiony koniec chwytu nie zamroził ekranu na dobre. Chwyt kończy się
+    /// w jednym miejscu i to miejsce łapie wszystkie drogi wyjścia — ale wciśnięcie bez
+    /// przechwycenia, po którym okno traci pierwszy plan, potrafi nie zgłosić końca
+    /// wcale. **Ekran, który przestał się odświeżać, jest gorszy od gestu przerwanego
+    /// w połowie**, i to rozstrzyga, która z dwóch usterek ma zostać możliwa.
+    /// </remarks>
+    private static readonly TimeSpan HandPatience = TimeSpan.FromSeconds(30);
+
+    /// <summary>Czy na siatce trwa gest: blok w ręku albo rozciąganie.</summary>
+    private bool _handOnGrid;
+
+    /// <summary>Od kiedy — do rozstrzygnięcia, czy chwyt jeszcze trwa, czy się zgubił.</summary>
+    private DateTimeOffset _handSince;
+
+    /// <summary>Czy w trakcie gestu wypadło przeliczenie, które czeka na jego koniec.</summary>
+    private bool _reloadAfterGesture;
+
+    /// <summary>
+    /// Zgłoszenie z okna: ręka weszła na siatkę albo z niej zeszła.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Jedna wartość logiczna zamiast zawieszania minutników: przeliczenia nie są tu
+    /// gubione, tylko odkładane — to, które wypadło w trakcie, rusza natychmiast po
+    /// puszczeniu bloku. Kilka odłożonych daje jedno, bo czeka na nie jeden znacznik.
+    /// </para>
+    /// <para>
+    /// Zdejmowane w <c>ReleaseBlock</c>, czyli w jedynym miejscu, przez które kończą
+    /// się wszystkie chwyty — także te przerwane utratą przechwycenia, menu podręcznym
+    /// i zniknięciem bloku. Gdyby to miejsce kiedyś przestało być jedyne, ekran
+    /// przestałby się odświeżać i <b>tak wyglądałby objaw</b>.
+    /// </para>
+    /// </remarks>
+    public void HoldingBlock(bool holding)
+    {
+        _handOnGrid = holding;
+
+        if (holding)
+        {
+            _handSince = _clock.Now;
+        }
+
+        if (holding || !_reloadAfterGesture)
+        {
+            return;
+        }
+
+        _reloadAfterGesture = false;
+
+        _ = Try("Ekran: przeliczenie odłożone na czas gestu", ReloadAsync);
+    }
 
     /// <summary>
     /// Jeden przebieg naraz, na końcu zawsze najnowszy.
