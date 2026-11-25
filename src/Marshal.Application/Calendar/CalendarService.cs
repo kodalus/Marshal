@@ -635,9 +635,21 @@ public sealed class CalendarSyncService(
     /// dodany na komputerze nie istnieje na telefonie przez cały wieczór.
     /// </para>
     /// <para>
-    /// Pobranie przyrostowe jest tanie: znacznik z poprzedniego odczytu sprawia, że
-    /// Google oddaje samą różnicę, a najczęściej pustą. To jedno małe zapytanie
-    /// na kalendarz.
+    /// Pobranie przyrostowe jest tanie <b>treścią</b>: znacznik z poprzedniego odczytu
+    /// sprawia, że Google oddaje samą różnicę, a najczęściej pustą. Tanie nie znaczy
+    /// jednak „jedno". Na kalendarz na cykl idą <b>dwa</b> zapytania — lista wydarzeń
+    /// i wpis z listy kalendarzy po barwę oraz poziom dostępu, zob.
+    /// <c>GoogleCalendarFeed.EntryAsync</c> — a cykl przechodzi po <b>wszystkich</b>
+    /// podłączeniach, nie raz na siebie. Na każde podłączenie przypadają więc dwa
+    /// zapytania na minutę z każdego otwartego okna.
+    /// </para>
+    /// <para>
+    /// Stało tu wcześniej „to jedno małe zapytanie na kalendarz" i było nieprawdą
+    /// dwa razy naraz: drugie wywołanie doszło później, a odstęp zszedł z pięciu minut
+    /// na jedną. Zdanie zostało takie, jakie było, więc zaniżało koszt dziesięciokrotnie
+    /// — i to dokładnie w miejscu, w którym ten koszt się uzasadnia. Liczba zapytań
+    /// wpisana w komentarz przestaje być prawdziwa w chwili, w której ktoś ruszy kod
+    /// w innym pliku, więc warto ją przy każdej takiej zmianie przeliczyć.
     /// </para>
     /// <para>
     /// <b>Tyle samo, co odstęp synchronizacji zadań</b>, i to jest tu cała odpowiedź.
@@ -661,7 +673,11 @@ public sealed class CalendarSyncService(
     /// <summary>Jedno odświeżanie naraz — reszta odchodzi z kwitkiem, nie czeka w kolejce.</summary>
     /// <remarks>
     /// <para>
-    /// Odświeżenie ruszają trzy rzeczy: start aplikacji, wejście na kalendarz i minutnik.
+    /// Odświeżenie ruszy z sześciu miejsc: start aplikacji, minutnik, powrót do okna,
+    /// wejście na kalendarz i dwa przyciski pobierania — na kalendarzu i w ustawieniach,
+    /// te dwa z wymuszeniem, czyli z pominięciem odstępu. Stały tu wcześniej trzy, bo
+    /// tyle ich wtedy było; każde dołożone później dokładało też okazji do zajścia dwóch
+    /// przebiegów na siebie, czyli tego, przed czym ta brama stoi.
     /// Potrafią zajść na siebie, a wtedy oba przebiegi czytają z bazy ten sam brak wpisu,
     /// oba go dokładają i drugi dostaje odmowę śledzenia — <b>dwa obiekty o tym samym
     /// kluczu</b>. Brama na bazę tego nie łapie: każdy odczyt i zapis z osobna przechodzi

@@ -118,8 +118,17 @@ public sealed class GoogleCalendarFeed(GoogleCalendar service) : ICalendarFeed
     /// <remarks>
     /// <para>
     /// Żadnej z nich nie ma w odpowiedzi z wydarzeniami — siedzą na liście kalendarzy
-    /// konta, stąd osobne zapytanie. Jedno na kalendarz na odświeżenie, a odświeżenie
-    /// jest ręczne albo co pięć minut.
+    /// konta, stąd osobne zapytanie. Jedno na kalendarz na odświeżenie, czyli
+    /// <b>drugie</b> zaraz po liście wydarzeń — a odświeżenie jest ręczne albo chodzi
+    /// co <c>CalendarService.RefreshInterval</c> — w tym pliku nazwa <c>CalendarService</c>
+    /// jest aliasem na typ Google'a, więc chodzi o ten z <c>Marshal.Application.Calendar</c>.
+    /// </para>
+    /// <para>
+    /// Stało tu wcześniej „co pięć minut". Odstęp zacieśniono po stronie usługi do
+    /// minuty, a to zdanie zostało przy starym i zaniżało koszt pięciokrotnie. Dlatego
+    /// stoi tu teraz <b>nazwa stałej, a nie liczba</b>: liczba przepisana do komentarza
+    /// w innym pliku przestaje być prawdziwa po cichu, w chwili, w której ktoś ruszy
+    /// oryginał, i nic tego nie zgłasza.
     /// </para>
     /// <para>
     /// Poziom dostępu przy każdym pobraniu, a nie raz przy podłączaniu: dostęp się
