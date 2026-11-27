@@ -733,6 +733,29 @@ po prostu lekko nie taki.
 - `Accumulate` — każde niewykonane zostaje osobno. Trzy nieodhaczone treningi to trzy
   pozycje. Dla rzeczy naprawdę policzalnych.
 
+### 5.8 TaskSeries (agregat)
+
+Rytm jako osobny byt. Powstał przy przebudowie opisanej w 8.4a; przedtem reguła wędrowała
+po wystąpieniach.
+
+| Pole | Uwagi |
+|---|---|
+| `Id` | losowy, trwały przez całe życie rytmu |
+| `Starts` | pierwszy dzień serii — **od niego liczy się faza**, nie od ostatniego wystąpienia |
+| `Rule` | `Recurrence` (5.7), jedną decyzją, w jednym polu |
+| `Template` | tytuł, obszar, projekt, notatka, oszacowanie — to, co dostaje każde wystąpienie |
+| `SharedEventId` | odbicie całej serii w kalendarzu Google jako jedno wydarzenie z regułą |
+
+Wystąpienie to zwykłe zadanie ze wskazaniem `SeriesId` i tożsamością
+`OccurrenceId.For(SeriesId, dzień)`. Nie ma osobnego typu „wystąpienie": gdyby był, nie
+dałoby się mu dopisać notatki, podpiąć załącznika ani ustawić przypomnienia, a to są
+rzeczy, które robi się właśnie temu jednemu dniu.
+
+**Zmiana rytmu nie kasuje dni, których nowy rytm nadal chce.** Przeliczenie idzie przez
+porównanie starego zestawu z nowym planem, a nie przez skasowanie wszystkiego i
+postawienie od nowa — inaczej każda zmiana godziny zrywałaby ciągłość wystąpień, które
+się nie ruszyły, i gubiła to, co do nich dopisano.
+
 ---
 
 ## 6. Niezmienniki
@@ -755,7 +778,7 @@ Sprawdzane przy zapisie, nie podczas przeglądu. To jest realizacja zasady 1.2.
 | N12 | `Carry` przenoszone nie dłużej niż 30 dni | pozycja w przeglądzie: rytm do zmiany albo do skasowania |
 | N13 | `FocusMissCount` < 4 | pozycja w przeglądzie: wybierane co tydzień i nierobione |
 | N14 | Najwyżej 5 zadań z tym samym `FocusDate` | blokada zapisu, pytanie które schodzi |
-| N15 | `RollCount` < 4 | pozycja w przeglądzie: przesunięte cztery razy — czy to prawdziwe zadanie |
+| N15 | `RollCount` < 4 | pozycja w przeglądzie: przesunięte cztery razy — czy to prawdziwe zadanie. **Uśpiony:** licznika nie podnosi już nic, zob. 8.7 |
 
 N1 jest najważniejszy w całym dokumencie. „Projekt bez następnej akcji" to w klasycznym
 GTD rzecz, którą wyłapuje się okiem raz w tygodniu. Tutaj jest zapytaniem SQL.
@@ -937,81 +960,134 @@ i jest połową wartości tego mechanizmu.
 Bez presji terminu: nieukończony przegląd nie wygasa i nie generuje wyrzutu sumienia
 w postaci czerwonej plakietki.
 
-### 8.4 Rozwiązywanie powtórzeń
+### 8.4 Serie i okno wystąpień
 
-Przy odhaczeniu zadania z `Recurrence`:
+**Odhaczenie nie rodzi następnika.** Wystąpienia stoją w bazie z góry, a okno dopełnia
+się o jedno na drugim końcu.
+
+Rytm jest osobnym bytem — `TaskSeries` (5.8) — a wystąpienia są zwykłymi zadaniami ze
+wskazaniem na serię. Okno jest **czystą funkcją serii i dzisiejszej daty**:
 
 ```
-1. Bieżące → Status = Done, CompletedAt = teraz
-2. baza = (Anchor = FromCompletion) ? dziś : DoDate bieżącego
-3. następne = pierwsza data > baza zgodna z Kind/Interval/DaysOfWeek/DayOfMonth
-4. jeśli Until/Count wyczerpane → koniec, nie twórz
-5. utwórz nowe zadanie: kopia pól, nowe Id, DoDate = następne
+SeriesWindow.Plan(seria, dziś) → lista pozycji (tożsamość, dzień, godzina, długość)
 ```
 
-Odhaczone wystąpienie **zostaje odhaczone**, a następne jest nowym zadaniem z nowym
-identyfikatorem. Nie przestawiamy daty w tym samym zadaniu: historia „robiłam to w każdy
-poniedziałek prócz jednego" jest całą wartością powtarzalności, a zadanie wędrujące
-w przyszłość jej nie niesie.
+Dla każdej pozycji z planu, której jeszcze nie ma w bazie, powstaje zadanie. Dla dni,
+których plan już nie chce, a które są przyszłe, otwarte i nietknięte ręką, stawiany jest
+nagrobek. Dopełnianie wolno puszczać ile razy się chce i na ilu urządzeniach się chce.
 
-Termin i chwila przypomnienia przenoszą się na nowe wystąpienie **z zachowaniem odstępu**
-od daty wykonania. „Zapłacić do 10-go" przy racie robionej 5-go to pięć dni zapasu, co
-miesiąc tyle samo; skopiowane wprost byłyby od razu przeterminowane i N5 zacząłby kłamać.
+**Rytm liczony od początku serii, dni stawiane tylko od dziś.** Faza musi iść od
+`TaskSeries.Starts`, bo „co drugi dzień od wtorku" nie da się odtworzyć z żadnej
+późniejszej daty. Dni minione nie są dokładane: historia ma zostać taka, jaka była,
+a nie dorosnąć wstecz o wystąpienia, których nigdy nie było.
 
-### 8.4a Regułę nosi najnowsze wystąpienie
+**Horyzont liczony zdarzeniami, nie dniami.** `SeriesWindow.Ahead = 60` wystąpień do
+przodu — dwa miesiące przy rytmie codziennym, czternaście przy tygodniowym. Zdarzenie
+jest tym, co kosztuje; przy horyzoncie liczonym dniami rytm codzienny kosztował
+trzydzieści razy więcej od tygodniowego przy tym samym napisie w ustawieniach. Jedno
+dopełnienie stawia najwyżej `SeriesService.MaxPerRun = 30` wystąpień, bo każde kosztuje
+kilkadziesiąt wierszy dziennika synchronizacji.
 
-Przy tworzeniu kolejnego wystąpienia reguła **przechodzi na nie i znika z poprzedniego**.
+Rytm zaczepiony na wykonaniu (`Anchor = FromCompletion`) **nie ma dat do wyliczenia**,
+dopóki poprzednie wystąpienie nie zostanie odhaczone. Okno sięga wtedy na jedno
+wystąpienie, a odhaczenie przestawia `Starts` na dziś.
 
-To jedyna rzecz, która czyni przetwarzanie dnia powtarzalnym: zadanie bez reguły nie umie
-zrodzić następnika, więc przejście dnia puszczone dwa razy nie zrobi dwóch kopii. Bez tego
-`Accumulate` dokładałby po jednej pozycji na każde uruchomienie aplikacji — a aplikacja
-startuje wiele razy dziennie i na dwóch urządzeniach, które się ze sobą nie umawiają.
+Termin i chwila przypomnienia idą z szablonu serii, z zachowaniem odstępu od dnia
+wykonania. „Zapłacić do 10-go" przy racie robionej 5-go to pięć dni zapasu, co miesiąc
+tyle samo.
+
+### 8.4a Regułę nosi seria, nie wystąpienie
+
+Reguła siedzi w `TaskSeries` i nie wędruje. Wystąpienie wie tylko, do której serii należy.
+
+**Było odwrotnie i to jest najważniejsza zmiana w tym rozdziale.** W modelu poprzednim
+reguła przechodziła na najnowsze wystąpienie i znikała z poprzedniego, a następnik
+powstawał przy odhaczeniu, z tożsamością liczoną z poprzednika i z dnia odhaczenia.
+Funkcja była deterministyczna, ale jej wejścia nie były wspólne: dzień, w którym ktoś
+kliknął, zależał od tego, kiedy dane urządzenie zostało otwarte. Telefon odhaczający
+w poniedziałek i komputer w środę liczyły różne identyfikatory, czyli dwa rozłączne
+łańcuchy, które reguła sprowadzała z powrotem na te same dni. Seria podwajała się
+na siatce.
+
+Stąd dwie rzeczy, które trzymają dzisiejszy model i których nie wolno ruszyć bez
+zrozumienia skutków:
+
+- **Okno jest funkcją serii i daty**, a nie sumą tego, co kiedykolwiek którekolwiek
+  urządzenie policzyło.
+- **Tożsamość wystąpienia jest wyliczana, nie losowana**: `OccurrenceId.For(seria, dzień)`,
+  skrót z pary. Oba urządzenia dochodzą do tej samej tożsamości, więc scalanie składa
+  ich pracę w jedno zamiast rozstawiać ją obok siebie.
+
+Wyjątkiem jest **pierwsze** wystąpienie serii założonej z istniejącego zadania: zostaje
+przy swoim losowym identyfikatorze i dostaje znacznik „zmienione z ręki", bo skasowanie
+go i postawienie na nowo zabrałoby załączniki, podzadania i wszystko, co ktoś do niego
+dopisał.
 
 ### 8.4b Przejście dnia
 
-Dla zadań niewykonanych z `DoDate` w przeszłości:
+Dla wystąpień **otwartych**, z dniem wykonania w przeszłości:
 
 | `OnMissed` | Działanie |
 |---|---|
-| `Skip` | bieżące do kosza; tworzone **jedno** wystąpienie na dziś albo później |
-| `Carry` | `DoDate` przesuwane na dziś, `CarriedSince` ustawiane raz, **bez** tworzenia nowego |
-| `Accumulate` | bieżące zostaje jako zaległość bez dnia; tworzone następne |
+| `Skip` | nagrobek od razu, przy pierwszym przejściu dnia po terminie |
+| `Carry` | zostaje zaległe, **na swoim dniu**; nagrobek dopiero wtedy, gdy rytm wypadł znowu i tamten dzień już nadszedł |
+| `Accumulate` | zostaje na zawsze jako zaległość; nic go nie zabiera |
 
-**`Skip` nadrabia jednym krokiem.** Tydzień bez otwierania aplikacji ma dać jedno
-wystąpienie, a nie siedem utworzonych i wyrzuconych po kolei. Nagrobek każdego
-przeskoczonego dnia nie jest niczyją informacją, a rozjechałby się po wszystkich
-urządzeniach. Przeskoczone wystąpienia **zużywają licznik serii**: „pięć razy" przespane
-przez pięć dni jest serią skończoną, a nie serią czekającą na kolejne pięć okazji.
+**Dzień wystąpienia jest nietykalny.** Zaległe nie jest przenoszone na dziś. W modelu
+z zapisanym oknem dzień jest częścią tożsamości wiersza, więc przeniesienie postawiłoby
+go na dniu, który seria sama ma obsadzić — i to jest ta sama droga, którą wracały „po
+dwa wystąpienia na dzień", tylko wejściem od innej strony. Zaległe zostaje tam, gdzie
+było, i jest zaległe: po to są listy zaległości i dlatego widać je na czerwono.
 
-**`Carry` pamięta pierwszy przegapiony dzień.** `CarriedSince` ustawiane jest raz, przy
-pierwszym przeniesieniu — „zaległe od 14 września", nie „od wczoraj". Bez tego N12 nigdy
-nie doliczyłby trzydziestu dni i strażnik rytmu nie odezwałby się nigdy.
+**`Carry` zastępuje tylko wystąpieniem żywym.** Dzień, który sam został wyrzucony albo
+przepadł, nie jest następnym razem i nie ma prawa uciszać poprzedniego.
 
-**`Accumulate` zostawia zaległość, nie datę.** To rozstrzygnięcie sprzeczności między tą
-tabelą a 8.7: gdyby pominięte wystąpienie zostało zaplanowane na swoją dawną datę, 8.7
-przesunęłoby je nazajutrz na dziś, potem znowu, i po czterech dniach każde odpaliłoby N15.
-Mechanizm zjadałby sam siebie. Zaległe wystąpienie zostaje więc **następną akcją bez
-wyznaczonego dnia** — bo tym właśnie jest — a dzień, na który było umówione, zostaje
-w `CarriedSince` jako „zaległe od".
+**Przy rytmie codziennym `Carry` jest w praktyce bliskie `Skip`:** następny dzień
+zastępuje poprzedni nazajutrz. To nie jest usterka, tylko skutek definicji — ale warto
+o tym wiedzieć, wybierając ustawienie dla czegoś, czego pominięcie ma zostać widoczne.
 
-`Accumulate` domyka całą zaległość w jednym przebiegu, z **ogranicznikiem 120 wystąpień**.
-Rok bez otwarcia aplikacji przy powtarzaniu codziennym dałby trzysta pozycji naraz, czyli
-dokładnie to, przed czym ma chronić zasada 1.2. Reszta dochodzi przy kolejnym
-uruchomieniu; nic nie ginie, tylko schodzi partiami.
+**Nagrobek na dniu minionym jest nieodwracalny.** Okno nigdy nie planuje dni przed
+dzisiejszym, więc taki dzień nie wraca ani sam przy dopełnianiu, ani przyciskiem
+przywracania pominiętych. Wszystko, co zabiera przeszły dzień, wymaga pewności,
+a nie domysłu — stąd bramka w 8.4c.
+
+**Dzień zabrany przez okno wraca, dzień pominięty z ręki nie.** Obie rzeczy są nagrobkiem
+i trzeba je rozróżniać, bo są przeciwne: „tej środy nie będzie" to decyzja i ma być
+trwała, a „okno już nie chce tego dnia" to rachunek, który przy zmienionej regule wychodzi
+inaczej. Rozróżnia je znacznik „zmienione z ręki", stawiany przez samo pominięcie.
 
 ### 8.4c Kiedy to się dzieje
 
-Przy starcie aplikacji, przy powrocie z tła i po każdym scaleniu synchronizacji.
+Przy starcie aplikacji, przy powrocie z tła, po każdym scaleniu synchronizacji
+i przy przejściu na nowy dzień zauważonym przez minutnik okna — okno otwarte przez dobę
+inaczej nie zastałoby różnicy dat ani razu.
 
 **Nie ma wyzwalacza o północy i nie będzie.** Aplikacja nie chodzi w tle, a „przejście
 dnia" to nie zdarzenie w czasie, tylko zastana różnica między datą zapisaną a dzisiejszą.
 Wołanie jest powtarzalne bez skutków ubocznych i to jest warunek, nie wygoda: dwa
 urządzenia robią to samo, niezależnie, bez umawiania się, które ma.
 
+**Sądy czekają na scalanie, reszta nie.** Przejście dnia liczy z tego, co wie to
+urządzenie, a zaraz po uruchomieniu nie wie jeszcze nic o wczorajszym dniu spędzonym
+z telefonem w ręku. Zamykanie zaległych wystąpień i przenoszenie zaległych zadań są
+nieodwracalne i niosą świeższy znacznik niż odhaczenie, więc po scaleniu by je wygrały —
+czekają więc na pierwsze udane scalanie. Prostowanie odhaczonych i dopełnianie okna
+czekać nie muszą i nie czekają: pierwsze przywraca fakt, który już leży w bazie, drugie
+liczy się z serii i z daty, a o tych scalanie nie ma nic do powiedzenia.
+
+Bramka otwiera się od razu tylko tam, gdzie **nie ma na co czekać** — czyli przy braku
+poświadczeń do synchronizacji. Wygasły żeton jej nie otwiera: drugie urządzenie wtedy
+istnieje i ma wiedzę, której tu nie ma.
+
+**Odhaczone, a z nagrobkiem, wraca.** Jeżeli przejście dnia zdążyło przed scaleniem
+i postawiło nagrobek na wystąpieniu odhaczonym gdzie indziej, prostowanie zdejmuje ten
+nagrobek: odhaczenie jest zapisem tego, co się wydarzyło, a przejście dnia tylko domysłem
+o tym, co się nie wydarzyło.
+
 Przypadki brzegowe pokryte testami: 31. dnia w miesiącu 30-dniowym, 29 lutego, zmiana
 czasu, `Weekly` z pustym zbiorem dni, odhaczenie zadania z przyszłości, odhaczenie dwa
 razy tego samego dnia, `Carry` przez trzy tygodnie z rzędu, `Skip` i `Accumulate` po
-tygodniu nieobecności, przejście dnia puszczone dwa razy.
+tygodniu nieobecności, przejście dnia puszczone dwa razy, przejście dnia przed scaleniem.
 
 ### 8.4d Przypomnienia
 
@@ -1122,22 +1198,75 @@ szósty wybór i nie ma jak temu zapobiec bez ograniczeń między agregatami, kt
 model nie ma (9.1). Skutek jest nieszkodliwy: jednego dnia widać sześć pozycji zamiast
 pięciu, a nazajutrz wszystko wygasa.
 
-### 8.7 Przesuwanie zaplanowanych
+### 8.7 Zaległe zaplanowane zostaje na swoim dniu
 
-Zadanie `Scheduled` z `DoDate` w przeszłości, niewykonane, przy przejściu dnia:
+Zadanie `Scheduled` z `DoDate` w przeszłości, niewykonane: **przejście dnia nie dotyka go
+wcale.**
 
-```
-DoDate = dziś
-RollCount += 1
-```
+Przesuwało się na dziś z licznikiem i to był najstarszy kawałek tego modelu. Nie zostało
+po nim ani jedno uzasadnienie, które by się obroniło:
 
-Uzasadnienie rozróżnienia: `Deadline` to fakt zewnętrzny, więc jego minięcie **zostaje**
-przeterminowaniem (N5) — świat się nie przesunął. `DoDate` to obietnica dana sobie,
-więc jej minięcie jest czymś innym.
+- „inaczej wypadnie z oczu" jest nieprawdą: lista „Dzisiaj" bierze wszystko z dniem **nie
+  późniejszym** niż dziś, a plan dnia wprost przewiduje zadanie z wcześniejszego dnia;
+- wystąpienia serii nie przesuwają się od przebudowy okna (8.4) i nikomu tego nie
+  brakowało — dzień jest tam częścią tożsamości wiersza;
+- przesunięcie **kasuje fakt**: po nim nigdzie nie stoi, że rzecz była umówiona na wtorek;
+- a przede wszystkim był to automatyczny zapis do pola scalanego, robiony przy starcie.
+  Wygrywał przez to z odhaczeniem zrobionym ręką na drugim urządzeniu — i to jest ta
+  usterka, która wracała trzy razy.
 
-Zostawienie zaległego na zawsze buduje stertę. Ciche cofnięcie do `Next` gubi informację,
-że planowałaś i nie zrobiłaś. Przesunięcie z licznikiem zachowuje jedno i drugie —
-a po czwartym razie N15 zadaje pytanie w przeglądzie.
+Zyskiem jest to, że przejście dnia przestało cokolwiek zapisywać dla zwykłych zadań, więc
+nie ma już czym przegrać ze scalaniem.
+
+Rozróżnienie wobec terminu zostaje: `Deadline` to fakt zewnętrzny, więc jego minięcie jest
+przeterminowaniem (N5) — świat się nie przesunął. `DoDate` to obietnica dana sobie, więc
+jej minięcie znaczy co innego i pokazuje się jako zaległość, nie jako przeterminowanie.
+
+**Stąd otwarte pytanie o N15** (13.2): niezmiennik stoi na `RollCount`, a tego licznika nie
+podnosi już nic — `TaskItem.RollTo` nie ma wywołania w kodzie produkcyjnym. N15 łapie więc
+wyłącznie wiersze pozostałe po starym modelu i dla niczego nowego nie odezwie się nigdy.
+
+### 8.8 Kalendarz księżycowy
+
+Nakładka na kalendarz gregoriański, **nigdy zamiennik**. Dzień wykonania, termin i rytm
+liczą się tak samo niezależnie od tego, czy jest włączona.
+
+Dwie reguły i nic więcej:
+
+- **Miesiąc** trwa od dnia astronomicznego nowiu do dnia przed następnym — stąd 29 albo
+  30 dni, bez trzeciej możliwości.
+- **Rok** zaczyna się pierwszym nowiem po przesileniu zimowym i kończy dzień przed
+  pierwszym nowiem po przesileniu następnym — stąd 12 albo 13 miesięcy, a trzynasty jest
+  zawsze ostatni.
+
+**Dniem nowiu jest data kalendarzowa tej chwili w strefie użytkownika**, choćby nów wypadł
+o 23:50. To nie jest zaokrąglenie do najbliższego dnia: pytanie „który dziś dzień
+księżycowy" ma jedną odpowiedź dla całej doby, a doba zaczyna się o północy tam, gdzie ktoś
+stoi. Strefa jest więc wejściem rachunku — ta sama chwila nowiu daje w Warszawie i w Los
+Angeles różne daty.
+
+**Numeracja roku:** numer roku gregoriańskiego pierwszego dnia, powiększony o jeden, gdy
+ten dzień wypada w grudniu. Początek roku księżycowego wypada zawsze między 20 grudnia
+a 21 stycznia, więc warunek „grudzień" wystarcza i nie zostawia dziury.
+
+Rachunek: Meeus, *Astronomical Algorithms*, rozdział 49 (fazy Księżyca) i 27 (przesilenia),
+z poprawką ΔT — Meeus oddaje chwilę w czasie ziemskim, a różnica wobec zegarów wynosi dziś
+około 69 sekund i rozstrzyga przypadki tuż przy północy. Moduł nie ma żadnej zależności od
+interfejsu: wejściem jest data i strefa, wyjściem liczby.
+
+**Zakres obiecany i sprawdzony: 1900–2100.** Chwile nowiu, pełni i przesilenia porównane
+z rachunkiem niezależnym (silnik XEphem) na całym tym przedziale — rozbieżność najwyżej 34,
+35 i 56 sekund. Podział na dni sprawdzony przejściem dzień po dniu: siedemdziesiąt trzy
+tysiące dni bez dziur i powtórzeń.
+
+**Czego ten rachunek nie rozstrzyga:** przypadków, w których nów i przesilenie dzieli mniej
+niż minuta. W obsługiwanym zakresie jest jeden taki — w 2052 roku dzieli je dwie i pół
+minuty — i wisi na nim cały miesiąc różnicy. Oba niezależne rachunki zgadzają się co do
+kolejności, ale żadna reguła dokładna do minuty tego nie przesądza.
+
+Nazwy miesięcy są **warstwą podpisu**: rachunek chodzi po numerach, więc wyłączenie nazw
+nie może niczego policzyć inaczej. Trzynaście pozycji na stałe, zapisane w ustawieniach
+urządzenia, niesynchronizowane.
 
 ---
 
@@ -1601,11 +1730,17 @@ przyniesione z drugiego urządzenia działa normalnie.
 
 **Etykiety stanu na listach:** zaległość z datą pierwszego przegapienia, licznik
 przesunięć, termin, rytm. Pierwsze przesunięcie nie jest pokazywane — zdarza się każdemu
-i nie niesie informacji. Reszta bez czerwieni i bez wykrzykników, zgodnie z 11.1 i z
+i nie niesie informacji. Licznik przesunięć dotyczy dziś wyłącznie wierszy ze starego
+modelu, bo nic go już nie podnosi (8.7). Reszta bez czerwieni i bez wykrzykników, zgodnie z 11.1 i z
 uzasadnieniem przy N12–N15: to licznik, nie kara.
 
-**Odhaczenie z listy idzie tą samą drogą co ze szczegółu**, bo zadanie powtarzalne musi
-przy okazji zrodzić kolejne wystąpienie (8.4) — a z listy tego nie widać.
+**Odhaczenie z listy idzie tą samą drogą co ze szczegółu**, bo przy wystąpieniu serii
+pociąga za sobą dopełnienie okna i odbicie do kalendarza (8.4) — a z listy tego nie widać.
+
+**Kierunek odhaczenia czyta się z wiersza, nie z kwadracika.** Kwadracik przełącza się sam
+przy kliknięciu i potrafi pokazywać stan, którego w danych nie ma; czynność pytana o
+kierunek jego widok ignoruje. To nie jest ostrożność teoretyczna — tą drogą zginął dzień
+serii, bo otwarte zadanie wyglądało na zrobione.
 
 **Zapisywane są tylko pola naprawdę zmienione.** Zapis „na wszelki wypadek" trafiłby do
 dziennika jako świeża decyzja i wygrał scalanie ze zmianą, której naprawdę dokonano na
@@ -1775,20 +1910,28 @@ synchronizacji i pełni rolę kopii historycznej.
 | 3 | Priorytety a „Teraz" | Rozdzielone: waga bez limitu, wybór 5 na dobę | 1.6, 8.1, 8.6 |
 | 4 | Próg ponaglenia | Per obszar, nie globalny | 5.2 |
 | 5 | Zadania bez projektu | Dopuszczalne na stałe, bez zgłaszania | 5.3 |
-| 6 | `Scheduled` po terminie | Przesuwane na dziś z `RollCount`, N15 po czwartym | 8.7 |
+| 6 | `Scheduled` po terminie | Zostaje na swoim dniu jako zaległe; przejście dnia go nie rusza | 8.7 |
 | 7 | Nazwa | **Marshal** | — |
 | 8 | Próg ciszy obszaru | Różny per obszar, wartości wstępne | 5.2 |
 | 9 | Zadania bez obszaru | Nie istnieją — `AreaId` wymagany wszędzie | 5.3, N11 |
 
 ### 13.2 Otwarte
 
-1. **Czy `Accumulate` jest potrzebne w wersji 1?** Zaimplementowane w modelu razem
-   z ogranicznikiem 120 wystąpień na przebieg i z zamianą zaległego wystąpienia na
-   akcję bez dnia (8.4b) — obie rzeczy dokładnie po to, żeby sterty nie było.
-   **Otwarte zostaje, czy interfejs ma je w ogóle proponować.** Wstępnie nie: `Carry`
-   jest domyślne i pokrywa niemal wszystko, a wybór, którego nie widać, nie kusi.
+1. **Czy `Accumulate` jest potrzebne w wersji 1?** Jest w modelu i w interfejsie.
+   Sterty pilnuje dziś co innego niż zakładano: okno stawia najwyżej
+   `SeriesWindow.Ahead` wystąpień do przodu, a zaległe zostają na swoich dniach i nic
+   ich nie powiela (8.4b). **Otwarte zostaje, czy `Carry` przy rytmie codziennym nie
+   powinno zachowywać się inaczej niż dziś** — następny dzień zastępuje poprzedni
+   nazajutrz, więc przy rytmie dziennym `Carry` jest w praktyce nieodróżnialne od `Skip`,
+   a wybiera się je w przekonaniu, że pominięcie zostanie widoczne.
 2. **Wartości `QuietDays` i `DefaultNudgeDays`** są zgadnięte. Do korekty po miesiącu
    realnego używania — przed pierwszym kontaktem z życiem nie ma na czym oprzeć decyzji.
 3. **Heurystyka podpowiadania energii** w „Teraz". Zaczynamy od pory dnia; wersja oparta
    na historii odhaczeń dopiero wtedy, gdy będzie historia.
-4. **Repozytorium** — osobne czy katalog w Castellanie. Blokuje etap 0.
+4. **Co zrobić z N15.** Niezmiennik stoi na liczniku przesunięć, a od czasu, gdy
+   przejście dnia przestało przesuwać zwykłe zadania (8.7), nic tego licznika nie
+   podnosi — `TaskItem.RollTo` nie ma wywołania w kodzie produkcyjnym. Trzy drogi:
+   oprzeć pytanie na czymś, co nadal rośnie (na przykład na tym, od ilu dni zadanie jest
+   zaległe); zostawić N15 wyłącznie dla wierszy ze starego modelu i powiedzieć to wprost
+   w przeglądzie; albo go wycofać. **Nierozstrzygnięte** — dziś niezmiennik istnieje
+   i nie odzywa się nigdy, co jest najgorszym z trzech stanów.

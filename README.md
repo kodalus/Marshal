@@ -23,16 +23,19 @@ sprawa czekająca od trzech tygodni, obszar życia milczący od pół roku — j
 |--------|---------|
 | Skrzynka | Wrzucanie bez pól, przetwarzanie drzewkiem decyzyjnym GTD |
 | Dzisiaj | Pięć slotów wyboru na dzień, wydarzenia, ponaglenia, projekty zablokowane |
-| Teraz | 3–5 zadań dobranych po dostępnym czasie i energii |
+| Teraz | Do pięciu zadań dobranych po dostępnym czasie i energii |
 | Projekty | Drzewo: obszar → cel → projekt → zadania |
 | Obszary | Dziesięć obszarów odpowiedzialności, tabela równowagi |
 | Oczekiwane | Czekam na kogoś, z licznikiem dni i progiem per obszar |
 | Kalendarz | Godzinowo, dzień/3 dni/tydzień/miesiąc, z Google Calendar i kanałów iCal |
-| Przegląd | Kreator ośmiu kroków, wznawialny po każdej pojedynczej pozycji |
+| Kiedyś | Rzeczy odłożone bez daty, dojrzewające do przeglądu |
+| Przegląd | Kreator: krok zerowy i dziewięć kroków, wznawialny po każdej pojedynczej pozycji |
 | Notatki | Markdown z podglądem, załączniki |
 | Nawyki | Siatka dni, seria i rekord — osobno od zadań i kalendarza |
 | Szukaj | Jedno pole po nazwach i treściach zadań oraz notatek, razem z archiwum |
 | Filtry | Warunki łączone, zapisywane do ulubionych |
+| Archiwum | Zrobione i wyrzucone, od najnowszych, z przywracaniem |
+| Co się działo | Dziennik działań aplikacji: synchronizacja, przejście dnia, kalendarz |
 | Kopia | Eksport i import JSON, offline; codzienna kopia robiona sama |
 
 ## Kalendarz i udostępnianie
@@ -47,6 +50,12 @@ i dają się przełożyć gdzie indziej jedną zmianą pola.
 
 Dzięki temu obszar wydarzenia nie musi być nigdzie zapisany: wynika z tego, w którym
 kalendarzu ono stoi. To odpowiedź na pytanie, na które Google nie ma pola.
+
+**Kalendarz księżycowy jako nakładka.** Do włączenia w ustawieniach, domyślnie wyłączony:
+dzień miesiąca księżycowego pod datą w nagłówku kolumny, granica miesiąca i znak nowiu
+albo pełni w widoku miesiąca, pełny podpis na karcie zadania. Nakładka, nie druga oś —
+dzień wykonania, termin i rytm liczą się tak samo niezależnie od tego ustawienia.
+Szczegóły rachunku: [`docs/marshal-spec.md`](docs/marshal-spec.md), 8.8.
 
 **Udostępnianie idzie dwiema drogami Google, a nie trzecią własną.** Udostępniony
 kalendarz znaczy „ta półka jest nasza wspólna"; gość przy wydarzeniu znaczy „spójrz na
@@ -112,6 +121,7 @@ telefonie i tytułu na desktopie w trybie offline daje po scaleniu oba.
 | [`docs/google-dysk.md`](docs/google-dysk.md) | Własny projekt Google Cloud, zgody, poświadczenia — krok po kroku |
 | [`docs/android-podpis.md`](docs/android-podpis.md) | Podpisywanie APK i budowanie wydania |
 | [`docs/prywatnosc.md`](docs/prywatnosc.md) | Polityka prywatności |
+| [`docs/warunki.md`](docs/warunki.md) | Warunki korzystania — wymagane przy publikacji aplikacji w Google Cloud |
 
 ## Licencja
 
