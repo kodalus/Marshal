@@ -133,17 +133,17 @@ zerowy kreatora przeglądu. Koszt zerowy, jedna flaga.
 | Etap | Zawartość | Rezultat |
 |---|---|---|
 | 0 | Szkielet, BD, testy, CI, okno desktopowe i ekran Androida | ✅ Pusta aplikacja startuje na obu platformach (Android dopiero od 18.09, patrz niżej) |
-| 1 | Zadania, podzadania, projekty, skrzynka, drzewko przetwarzania, pierwsza migracja, APK tylko `arm64-v8a`, wydanie z APK | Działające GTD na jednym urządzeniu |
-| 2 | Dzisiaj, Plany, Kiedyś, Archiwum, **obszary**, zagnieżdżanie projektów, tagi, priorytety, kolory | Pełna nawigacja po sekcjach |
-| 3 | **Synchronizacja przez Dysk Google** | Telefon i desktop to jedna aplikacja — punkt bez odwrotu |
-| 4 | Powtarzalność, terminy, przypomnienia | Zadania cykliczne przestają wymagać pamięci |
-| 5 | Oczekiwane, wykrywanie zablokowanych projektów, równowaga obszarów, kreator przeglądu | Mechanizmy zastępujące dyscyplinę |
-| 6 | Widok „Teraz", szacowany czas i energia | Aplikacja wybiera za Ciebie |
-| 7 | Kalendarz godzinowy, odczyt z Google Calendar i iCal | Czas i zadania w jednym miejscu |
-| 8 | Notatki w Markdown, załączniki | Materiały referencyjne |
+| 1 | Zadania, podzadania, projekty, skrzynka, drzewko przetwarzania, pierwsza migracja, APK tylko `arm64-v8a`, wydanie z APK | ✅ Działające GTD na jednym urządzeniu |
+| 2 | Dzisiaj, Plany, Kiedyś, Archiwum, **obszary**, zagnieżdżanie projektów, tagi, priorytety, kolory | ✅ Pełna nawigacja po sekcjach |
+| 3 | **Synchronizacja przez Dysk Google** | ✅ Telefon i desktop to jedna aplikacja — punkt bez odwrotu |
+| 4 | Powtarzalność, terminy, przypomnienia | ✅ Zadania cykliczne przestają wymagać pamięci |
+| 5 | Oczekiwane, wykrywanie zablokowanych projektów, równowaga obszarów, kreator przeglądu | ✅ Mechanizmy zastępujące dyscyplinę |
+| 6 | Widok „Teraz", szacowany czas i energia | ✅ Aplikacja wybiera za Ciebie |
+| 7 | Kalendarz godzinowy, odczyt z Google Calendar i iCal | ✅ Czas i zadania w jednym miejscu |
+| 8 | Notatki w Markdown, załączniki | ✅ Materiały referencyjne |
 | 9 | Filtry łączone, filtry zapisane | ✅ Własne widoki |
-| 10 | Widget Androida, tryb ciemny, kopia zapasowa | Domknięcie — poza tym, co wymaga sprzętu |
-| Później | Dwustronny zapis do Google Calendar | Osobno, po przeżyciu etapu 7 |
+| 10 | Widget Androida, tryb ciemny, kopia zapasowa | ✅ Domknięcie — poza tym, co wymaga sprzętu |
+| Później | Dwustronny zapis do Google Calendar | ✅ Zrobiony — ograniczenie upadło, zob. 10.2 |
 
 **Etap 0 zamknięty 16.09.2026** — i zamknięty przedwcześnie w połowie androidowej.
 Okno na Windowsie otwierało się od tamtego dnia. Aplikacja na Androidzie **nie
@@ -232,14 +232,48 @@ czyli to, co się w tym pliku znajdzie i jak się scala, ma testy.
 kopią. Pierwsze odtworzenie na prawdziwych danych warto zrobić **zanim** będzie potrzebne
 — na drugim urządzeniu albo na świeżej instalacji, nie na tej, która ma dane.
 
+### 2.1 Po etapach
+
+Etapy skończyły się 16.09.2026. Poniżej to, co zmieniło się w modelu **po** nich — bo
+przez następne dwa miesiące zmieniły się rzeczy, których żaden etap nie przewidywał,
+a dwie z nich obaliły zapisy w tym dokumencie.
+
+**Przebudowa powtarzalności (10.2026).** Reguła przestała wędrować po wystąpieniach
+i zamieszkała w osobnym bycie, `TaskSeries` (5.8). Wystąpienia stoją w bazie z góry,
+okno jest czystą funkcją serii i daty, a tożsamość liczy się ze skrótu zamiast losować
+(8.4, 8.4a). Powodem były serie podwajające się na siatce: stary model liczył tożsamość
+następnika z dnia, w którym ktoś akurat kliknął, więc dwa urządzenia dochodziły do dwóch
+rozłącznych łańcuchów. **To jest największa zmiana od etapu 3** i to ona unieważniła
+rozdział 8.4 w jego poprzedniej postaci.
+
+**Zapis do kalendarza Google (10.2026).** Ograniczenie z etapu 7 upadło — zob. 10.2
+i akapit wyżej. Doszło odbijanie zadań i serii, adopcja cudzych wydarzeń, `EXDATE` przy
+pomijaniu wystąpień.
+
+**Przejście dnia przestało przesuwać zaległe (11.2026).** Automatyczny zapis do pola
+scalanego przy starcie wygrywał z odhaczeniem zrobionym ręką na drugim urządzeniu.
+Zaległe zostaje dziś na swoim dniu (8.7), a niezmiennik N15, który stał na liczniku
+przesunięć, jest przez to wycofany (6).
+
+**Bramka przed sądami o wczorajszym dniu (11.2026).** Zamykanie zaległych wystąpień
+czeka na pierwsze udane scalanie; prostowanie odhaczonych i dopełnianie okna nie czekają
+(8.4c).
+
+**Kalendarz księżycowy (11.2026)** jako nakładka do włączenia w ustawieniach (8.8).
+Pierwsza rzecz w tym projekcie, która nie wynika z GTD.
+
 **Ostrzeżenie dotyczące etapów 1–2.** Dają aplikację działającą na jednym urządzeniu.
 To jest gorsze niż Singularity i nie ma sensu z tym „żyć" — prawdziwa eksploatacja
 zaczyna się od etapu 3. Przerwa między etapem 2 a 3 to najbardziej prawdopodobny moment
 porzucenia projektu.
 
-**Ostrzeżenie dotyczące etapu 7.** Zapis do Google Calendar jest wyłączony z wersji 1
-celowo. Błąd w dwustronnej synchronizacji potrafi skasować wydarzenia w prawdziwym
-kalendarzu — jedyne miejsce w całym projekcie, gdzie awaria niszczy dane poza aplikacją.
+**Ostrzeżenie dotyczące etapu 7 — nieaktualne co do zakazu, aktualne co do powodu.**
+Zapis do Google Calendar był z wersji 1 wyłączony celowo, bo błąd w dwustronnej
+synchronizacji potrafi skasować wydarzenia w prawdziwym kalendarzu — jedyne miejsce
+w całym projekcie, gdzie awaria niszczy dane poza aplikacją. Ograniczenie upadło (10.2),
+ale powód nie, i to on wyznaczył zasady zapisu: łatamy zamiast nadpisywać, najpierw
+źródło, kasujemy wyłącznie to, co wskazano wprost, a odczyt nie dzieli z zapisem ani
+jednej linii, którą dałoby się pomylić.
 
 ---
 
