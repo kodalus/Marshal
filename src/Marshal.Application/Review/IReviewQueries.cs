@@ -37,7 +37,7 @@ public interface IReviewQueries
         DateOnly today, int days, CancellationToken ct = default);
 
     /// <summary>
-    /// N12, N13 i N15: zadania, których licznik przekroczył próg.
+    /// N12 i N13: zadania, których licznik przekroczył próg.
     /// </summary>
     /// <remarks>
     /// Jeden mechanizm w trzech miejscach: **licznik zamiast kary**. Zadanie przenoszone

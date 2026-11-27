@@ -778,7 +778,6 @@ Sprawdzane przy zapisie, nie podczas przeglądu. To jest realizacja zasady 1.2.
 | N12 | `Carry` przenoszone nie dłużej niż 30 dni | pozycja w przeglądzie: rytm do zmiany albo do skasowania |
 | N13 | `FocusMissCount` < 4 | pozycja w przeglądzie: wybierane co tydzień i nierobione |
 | N14 | Najwyżej 5 zadań z tym samym `FocusDate` | blokada zapisu, pytanie które schodzi |
-| N15 | `RollCount` < 4 | pozycja w przeglądzie: przesunięte cztery razy — czy to prawdziwe zadanie. **Uśpiony:** licznika nie podnosi już nic, zob. 8.7 |
 
 N1 jest najważniejszy w całym dokumencie. „Projekt bez następnej akcji" to w klasycznym
 GTD rzecz, którą wyłapuje się okiem raz w tygodniu. Tutaj jest zapytaniem SQL.
@@ -788,7 +787,12 @@ własnego zdrowia" to spostrzeżenie, które w klasycznym GTD przychodzi podczas
 miesięcznego albo nie przychodzi wcale. **N10 nigdy nie trafia do „Dzisiaj"** — to nie
 jest sprawa na dziś i codzienne przypominanie o niej zamieniłoby ją w szum.
 
-N12, N13 i N15 to jeden mechanizm w trzech miejscach: **licznik zamiast kary.** Zadanie
+**N15 był i został wycofany.** Stał na liczniku przesunięć, a ten przestał rosnąć, gdy
+przejście dnia przestało przesuwać zaległe zadania (8.7). Numer nie jest przydzielany
+ponownie: w kodzie i w tym dokumencie stoi kilkanaście odwołań do numerów niezmienników
+i przesunięcie ich wszystkich kosztowałoby więcej, niż warta jest ciągłość numeracji.
+
+N12 i N13 to jeden mechanizm w dwóch miejscach: **licznik zamiast kary.** Zadanie
 przenoszone od trzech miesięcy, wybierane co tydzień i nierobione, albo powtarzalne
 i wiecznie zaległe — to nie jest lenistwo do zgromienia, tylko informacja, że zapis jest
 nieprawdziwy. Zwykle odpowiedź brzmi „to nie jest jedno zadanie, tylko projekt" albo
@@ -924,7 +928,7 @@ Dziewięć kroków (zerowy i dwa bez odhaczania), każdy z licznikiem pozycji:
 | 5 | Projekty aktywne — nadal aktualne? | `Status = Active`, nietknięte od 14 dni |
 | 6 | Kiedyś-może — coś dojrzało? | N6 + przegląd losowych 10 |
 | 7 | Kalendarz — dwa tygodnie w przód | wydarzenia + `Deadline` |
-| 8 | Liczniki, które o coś pytają | N12, N13, N15 |
+| 8 | Liczniki, które o coś pytają | N12, N13 |
 | 9 | Równowaga obszarów | N10 + tabela z 8.5 |
 
 Krok zerowy, przed pierwszym: przypięte notatki (wizja, zasady) — sam tekst, bez
@@ -1222,9 +1226,11 @@ Rozróżnienie wobec terminu zostaje: `Deadline` to fakt zewnętrzny, więc jego
 przeterminowaniem (N5) — świat się nie przesunął. `DoDate` to obietnica dana sobie, więc
 jej minięcie znaczy co innego i pokazuje się jako zaległość, nie jako przeterminowanie.
 
-**Stąd otwarte pytanie o N15** (13.2): niezmiennik stoi na `RollCount`, a tego licznika nie
-podnosi już nic — `TaskItem.RollTo` nie ma wywołania w kodzie produkcyjnym. N15 łapie więc
-wyłącznie wiersze pozostałe po starym modelu i dla niczego nowego nie odezwie się nigdy.
+**Stąd wycofanie N15.** Niezmiennik stał na `RollCount`, a tego licznika nie podnosi już
+nic — `TaskItem.RollTo` nie ma wywołania poza testami, które odtwarzają wiersze sprzed tej
+zmiany. Pytanie w przeglądzie nie odezwałoby się więc nigdy dla niczego nowego, a wyglądało
+na działające. Samo pole zostaje: niezerowe wartości leżą w bazach, czyta z nich etykieta
+„przesunięte N razy" i wyszukiwanie wierszy ruszonych przez przejście dnia przed scaleniem.
 
 ### 8.8 Kalendarz księżycowy
 
@@ -1732,7 +1738,7 @@ przyniesione z drugiego urządzenia działa normalnie.
 przesunięć, termin, rytm. Pierwsze przesunięcie nie jest pokazywane — zdarza się każdemu
 i nie niesie informacji. Licznik przesunięć dotyczy dziś wyłącznie wierszy ze starego
 modelu, bo nic go już nie podnosi (8.7). Reszta bez czerwieni i bez wykrzykników, zgodnie z 11.1 i z
-uzasadnieniem przy N12–N15: to licznik, nie kara.
+uzasadnieniem przy N12 i N13: to licznik, nie kara.
 
 **Odhaczenie z listy idzie tą samą drogą co ze szczegółu**, bo przy wystąpieniu serii
 pociąga za sobą dopełnienie okna i odbicie do kalendarza (8.4) — a z listy tego nie widać.
@@ -1928,10 +1934,4 @@ synchronizacji i pełni rolę kopii historycznej.
    realnego używania — przed pierwszym kontaktem z życiem nie ma na czym oprzeć decyzji.
 3. **Heurystyka podpowiadania energii** w „Teraz". Zaczynamy od pory dnia; wersja oparta
    na historii odhaczeń dopiero wtedy, gdy będzie historia.
-4. **Co zrobić z N15.** Niezmiennik stoi na liczniku przesunięć, a od czasu, gdy
-   przejście dnia przestało przesuwać zwykłe zadania (8.7), nic tego licznika nie
-   podnosi — `TaskItem.RollTo` nie ma wywołania w kodzie produkcyjnym. Trzy drogi:
-   oprzeć pytanie na czymś, co nadal rośnie (na przykład na tym, od ilu dni zadanie jest
-   zaległe); zostawić N15 wyłącznie dla wierszy ze starego modelu i powiedzieć to wprost
-   w przeglądzie; albo go wycofać. **Nierozstrzygnięte** — dziś niezmiennik istnieje
-   i nie odzywa się nigdy, co jest najgorszym z trzech stanów.
+

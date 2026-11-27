@@ -196,8 +196,7 @@ public sealed class ReviewQueries(MarshalDbContext db, IDbQueue? queue = null)
         var stale = today.AddDays(-30);
 
         var open = await _queue.RunAsync(() => Open()
-            .Where(t => t.RollCount >= 4
-                     || t.FocusMissCount >= 4
+            .Where(t => t.FocusMissCount >= 4
                      || t.CarriedSince != null
                      || (t.DoDate != null && t.DoDate < stale))
             .ToListAsync(ct), ct);
@@ -216,14 +215,10 @@ public sealed class ReviewQueries(MarshalDbContext db, IDbQueue? queue = null)
                 continue;
             }
 
-            // N15: przesunięte cztery razy.
-            if (task.RollCount >= 4)
-            {
-                flags.Add(new CounterFlag(
-                    task,
-                    $"przesunięte {task.RollCount} razy — czy to jest prawdziwe zadanie?"));
-                continue;
-            }
+            // Stało tu N15: przesunięte cztery razy. Wycofany — licznika przesunięć nie
+            // podnosi już nic, odkąd przejście dnia przestało ruszać zaległe zadania
+            // (spec 8.7). Niezmiennik, który nie ma jak się odezwać, jest gorszy od
+            // braku niezmiennika, bo wygląda na działający.
 
             // N13: wybierane co tydzień i nierobione.
             if (task.FocusMissCount >= 4)

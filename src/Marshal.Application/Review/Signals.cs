@@ -46,7 +46,7 @@ public sealed record AreaBalance(
 }
 
 /// <summary>
-/// Zadanie, którego licznik przekroczył próg (N12, N13, N15).
+/// Zadanie, którego licznik przekroczył próg (N12, N13).
 /// </summary>
 /// <remarks>
 /// <see cref="Question"/> jest pytaniem, nie oceną. „Przesunięte cztery razy — czy to
@@ -91,7 +91,7 @@ public enum ReviewStep
     Someday = 6,
     Upcoming = 7,
 
-    /// <summary>N12, N13, N15 — liczniki, które o coś pytają.</summary>
+    /// <summary>N12 i N13 — liczniki, które o coś pytają.</summary>
     Counters = 8,
     Balance = 9,
 }

@@ -239,12 +239,21 @@ public sealed class TaskItem : Entity
     public DateOnly? CarriedSince { get; private set; }
 
     /// <summary>
-    /// Ile razy <see cref="DoDate"/> zostało przesunięte na dziś (spec 8.7, N15).
+    /// Ile razy <see cref="DoDate"/> zostało przesunięte na dziś — <b>pole zastane</b>.
     /// </summary>
     /// <remarks>
-    /// Licznik, nie kara. Po czwartym razie przegląd zadaje pytanie, czy to jest
-    /// prawdziwe zadanie — zwykle odpowiedź brzmi „to nie jedno zadanie, tylko projekt".
-    /// </remarks>
+    /// <para>
+    /// Nic go już nie podnosi. Przejście dnia przestało przesuwać zaległe zadania
+    /// (spec 8.7), a <see cref="RollTo"/> nie ma wywołania poza testami, które odtwarzają
+    /// wiersze sprzed tamtej zmiany. Niezmiennik N15, który na tym liczniku stał, jest
+    /// wycofany.
+    /// </para>
+    /// <para>
+    /// Pole zostaje, bo niezerowe wartości leżą w bazach i coś jeszcze z nich czyta:
+    /// etykieta „przesunięte N razy" na listach i wyszukiwanie wierszy, które przejście
+    /// dnia ruszyło przed scaleniem (<c>MisrolledAsync</c>). Skasowanie kolumny
+    /// zabrałoby obie te rzeczy i wymagałoby migracji.
+    /// </para>
     public int RollCount { get; private set; }
 
     private RecurrenceRule? _recurrence;
@@ -667,7 +676,9 @@ public sealed class TaskItem : Entity
     /// wystąpienie z pierwotną datą, ale osobno każe przesuwać na dziś każde zaplanowane
     /// zadanie z przeszłości — więc trzy nieodhaczone treningi wylądowałyby na dzisiaj,
     /// a nazajutrz znowu, i po czterech dniach każdy z nich odpaliłby N15. Mechanizm
-    /// zjadałby sam siebie.
+    /// zjadałby sam siebie. (Obie strony tej sprzeczności zniknęły od tamtej pory:
+    /// przejście dnia nie przesuwa już zaległych, a N15 jest wycofany. Zapis zostaje,
+    /// bo tłumaczy, skąd wzięła się ta metoda.)
     ///
     /// Zaległe wystąpienie zostaje więc następną akcją bez wyznaczonego dnia — bo tym
     /// właśnie jest — a dzień, na który było umówione, zostaje w
