@@ -135,6 +135,26 @@ public interface ITaskRepository
     /// </remarks>
     Task<IReadOnlyList<TaskItem>> RecurringAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Zadania niosące regułę starego modelu — do przeniesienia do serii.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Szersze niż „co rozwinąć na siatce": tamto pyta o rytmy, które mają się rysować,
+    /// a to o wiersze, które zostały w starym modelu. Rytm odłożony na kiedyś-może albo
+    /// leżący w skrzynce nie rysuje się nigdzie i właśnie dlatego nie wolno go pominąć —
+    /// przeniesienie jest jednorazowe, a pominięty wiersz zostaje w starym modelu na
+    /// stałe. Bez dnia wykonania też: dzień serii potrafi wyjść z dnia utworzenia.
+    /// </para>
+    /// <para>
+    /// Odhaczone i wyrzucone pominięte celowo. Przy odhaczeniu reguła schodzi na
+    /// następnik, więc odhaczony wiersz z regułą jest śladem zapisu, który doszedł
+    /// w innej kolejności, niż powstał — przeniesienie zrobiłoby z niego żywą serię,
+    /// czyli wskrzesiłoby rytm porzucony albo domknięty.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<TaskItem>> LegacyRhythmsAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default);
 
     void Add(TaskItem task);

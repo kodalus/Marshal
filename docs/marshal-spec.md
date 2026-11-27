@@ -1061,6 +1061,21 @@ przy swoim losowym identyfikatorze i dostaje znacznik „zmienione z ręki", bo 
 go i postawienie na nowo zabrałoby załączniki, podzadania i wszystko, co ktoś do niego
 dopisał.
 
+**Przeniesienie starego modelu jest siecią, nie jednym krokiem.** W tej wersji nic nie
+zakłada reguły na wystąpieniu: każda droga, którą da się rytm założyć albo zmienić,
+prowadzi do serii. Stary wiersz potrafi jednak **dojść** — dziennikiem synchronizacji
+z urządzenia jeszcze nieprzebudowanego albo z wczytanej kopii zapasowej. Oba wejścia
+piszą wprost do kolumn scalanych, więc mijają tę drogę. Dlatego przenoszenie stoi
+przy każdym starcie i po każdym scaleniu, które coś przyjęło — przed prostowaniem
+i przed przejściem dnia, bo wiersz nieprzeniesiony zostałby potraktowany po staremu.
+
+Pytanie „co zostało w starym modelu" jest przy tym **szersze** niż „co rozwinąć na
+siatce": bierze też rytm bez dnia wykonania, odłożony na kiedyś-może i leżący
+w skrzynce, bo wiersz raz pominięty zostaje w starym modelu na stałe. Odhaczony
+i wyrzucony pomija: przy odhaczeniu reguła schodzi na następnik, więc odhaczony wiersz
+z regułą jest śladem zapisu doszłego nie w swojej kolejności, a przeniesienie
+wskrzesiłoby z niego rytm już domknięty.
+
 ### 8.4b Przejście dnia
 
 Dla wystąpień **otwartych**, z dniem wykonania w przeszłości:

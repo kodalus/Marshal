@@ -10,7 +10,7 @@ namespace Marshal.Application.UseCases;
 public sealed record MigrationReport(int Converted, int Collapsed, int Spawned, int Twins = 0);
 
 /// <summary>
-/// Przeniesienie rytmów ze starego modelu do serii. Raz, przy pierwszym uruchomieniu.
+/// Przeniesienie rytmów ze starego modelu do serii. Sieć, nie jednorazowy krok.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -34,6 +34,14 @@ public sealed record MigrationReport(int Converted, int Collapsed, int Spawned, 
 /// więc drugie uruchomienie nie ma czego przenosić — ten sam warunek, co przy przejściu
 /// dnia, i z tego samego powodu: dwa urządzenia robią to samo, nie umawiając się.
 /// </para>
+/// <para>
+/// <b>A jednak nie jest to krok jednorazowy.</b> Stary wiersz nie powstaje już z niczego
+/// w tej wersji, ale potrafi **dojść**: dziennikiem synchronizacji z urządzenia, które
+/// jeszcze nie zostało przebudowane, albo z wczytanej kopii zapasowej. Oba wejścia
+/// pomijają drogę, którą zakłada się serię, bo piszą wprost do kolumn. Przenoszenie
+/// stoi więc przy każdym starcie i po każdym scaleniu, które coś przyjęło — tam, gdzie
+/// taki wiersz może się pojawić. Gdy nie ma czego przenosić, wychodzi od razu.
+/// </para>
 /// </remarks>
 public sealed class SeriesMigration(
     ITaskRepository tasks,
@@ -44,6 +52,9 @@ public sealed class SeriesMigration(
     SeriesService rhythms,
     IActivityLog? journal = null)
 {
+    /// <summary>
+    /// Przy starcie: naprawy po dawnych wersjach i przeniesienie tego, co zostało.
+    /// </summary>
     public async Task<MigrationReport> RunAsync(CancellationToken ct = default)
     {
         // Najpierw naprawa, potem przenoszenie. Serie bliźniacze powstały **u tych,
@@ -57,8 +68,26 @@ public sealed class SeriesMigration(
         // w którym jeszcze cokolwiek się tu dzieje.
         var claimed = await ClaimMirrorsAsync(ct);
 
-        var carriers = (await tasks.RecurringAsync(ct))
-            .Where(t => t.Recurrence is not null && t.SeriesId is null)
+        return await ConvertAsync(twins, claimed, ct);
+    }
+
+    /// <summary>
+    /// Po scaleniu: przeniesienie starego wiersza, który właśnie przyszedł dziennikiem.
+    /// </summary>
+    /// <remarks>
+    /// Bez napraw ze <see cref="RunAsync"/>. Tamte przeglądają **wszystkie** wystąpienia
+    /// wszystkich serii, a dotyczą stanu zastanego przy starcie — raz przejrzany, nie
+    /// zmieni się od tego, co przyniosło scalenie. Scalanie chodzi co minutę, więc
+    /// przeglądanie całości przy każdym byłoby kosztem rosnącym z historią, bez pożytku.
+    /// </remarks>
+    public Task<MigrationReport> CatchUpAsync(CancellationToken ct = default) =>
+        ConvertAsync(0, 0, ct);
+
+    private async Task<MigrationReport> ConvertAsync(
+        int twins, int claimed, CancellationToken ct)
+    {
+        var carriers = (await tasks.LegacyRhythmsAsync(ct))
+            .Where(t => t.Recurrence is not null)
             .ToList();
 
         if (carriers.Count == 0)
@@ -84,7 +113,7 @@ public sealed class SeriesMigration(
 
         foreach (var carrier in carriers)
         {
-            if (carrier.State == TaskState.Trashed || carrier.Recurrence is not { } rule)
+            if (carrier.Recurrence is not { } rule)
             {
                 continue;
             }

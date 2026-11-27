@@ -808,10 +808,16 @@ public sealed partial class MainViewModel : ObservableObject
 
     public async Task InitializeAsync()
     {
-        // Przeniesienie rytmów do serii — raz, przy pierwszym uruchomieniu po
-        // przebudowie. Przed wczytaniem czegokolwiek, bo zmienia to, co się wczyta:
-        // zadanie niosące regułę staje się pierwszym wystąpieniem serii, a za nim
-        // staje okno dni, których do tej pory nie było w bazie.
+        // Przeniesienie rytmów do serii — przy **każdym** starcie, nie raz po
+        // przebudowie. Stary wiersz nie powstaje już z niczego, ale potrafi dojść:
+        // dziennikiem z urządzenia jeszcze nieprzebudowanego albo z wczytanej kopii
+        // zapasowej. Oba wejścia piszą wprost do kolumn, więc mijają drogę, którą
+        // zakłada się serię — i tylko ten krok je dogania. Gdy nie ma czego przenosić,
+        // wychodzi od razu.
+        //
+        // Przed wczytaniem czegokolwiek, bo zmienia to, co się wczyta: zadanie niosące
+        // regułę staje się pierwszym wystąpieniem serii, a za nim staje okno dni,
+        // których do tej pory nie było w bazie.
         //
         // Z czekaniem, inaczej niż synchronizacja niżej: ekran startowy jest
         // kalendarzem, a kalendarz pokazywałby wtedy stan sprzed przeniesienia —
@@ -1398,6 +1404,13 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 CollectReminders();
             }
+
+            // Przed prostowaniem i przed przejściem dnia: scalenie mogło przynieść
+            // wiersz w starym modelu — z urządzenia jeszcze nieprzebudowanego. Dopóki
+            // nie jest serią, przejście dnia potraktuje go po staremu, czyli przeniesie
+            // zaległy dzień na dziś; a przeniesienie go najpierw znaczy, że dzień
+            // zostaje na swoim miejscu. Start tego nie załatwia: wiersz doszedł po nim.
+            await Try("Rytmy: przeniesienie do serii", () => _seriesMigration.CatchUpAsync());
 
             // Prostowanie po **każdym** scaleniu, które coś przyniosło, a nie tylko przy
             // przejściu dnia.

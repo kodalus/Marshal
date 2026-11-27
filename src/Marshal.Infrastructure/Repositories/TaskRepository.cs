@@ -246,6 +246,23 @@ public sealed class TaskRepository(MarshalDbContext db, IDbQueue? queue = null)
                       || t.State == TaskState.Waiting))
             .ToListAsync(ct), ct);
 
+    /// <remarks>
+    /// Bez warunku dnia i bez zawężenia do stanów otwartych — inaczej niż przy
+    /// rozwijaniu na siatce, i z innego powodu: tu nie chodzi o to, co ma się rysować,
+    /// tylko o to, co zostało w starym modelu. Odhaczone i wyrzucone zostają poza:
+    /// reguła przy odhaczeniu schodzi na następnik, więc wiersz odhaczony z regułą
+    /// to ślad zapisu doszłego nie w swojej kolejności, a nie żywy rytm.
+    /// </remarks>
+    public async Task<IReadOnlyList<TaskItem>> LegacyRhythmsAsync(
+        CancellationToken ct = default) =>
+        await _queue.RunAsync(() => db.Tasks
+            .Where(t => !t.Deleted
+                     && t.RecurrenceJson != null
+                     && t.SeriesId == null
+                     && t.State != TaskState.Done
+                     && t.State != TaskState.Trashed)
+            .ToListAsync(ct), ct);
+
     public async Task<IReadOnlyList<string>> MirroredEventIdsAsync(CancellationToken ct = default) =>
         await _queue.RunAsync(() => db.Tasks
             .Where(t => t.SharedEventId != null)
